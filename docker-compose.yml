@@ -1,0 +1,29 @@
+gerrit:
+    restart: always
+    build: gerrit
+    ports:
+        - "29418:29418"
+    environment:
+        - VIRTUAL_HOST=gerrit.int.xcalar.com
+        - VIRTUAL_PORT=8080
+
+
+
+nproxy:
+    restart: always
+    image:  jwilder/nginx-proxy
+    volumes:
+        - "/var/run/docker.sock:/tmp/docker.sock:ro"
+        - "./nproxy/certs:/etc/nginx/certs:ro"
+    ports:
+        - "80:80"
+        - "443:443"
+
+
+
+
+certified:
+    build: certified
+    volumes:
+        - "xcalar_root_ca:/var/lib/certified"
+    working_dir: '/var/lib/certified'
