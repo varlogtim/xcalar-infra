@@ -4,10 +4,10 @@ gerrit:
     ports:
         - "29418:29418"
     environment:
-        - VIRTUAL_HOST=gerrit.int.xcalar.com
+        - VIRTUAL_HOST=gerrit.int.xcalar.com,gerrit
         - VIRTUAL_PORT=8080
-
-
+    volumes:
+        - "gerrit2:/home/gerrit2/gerrit"
 
 nproxy:
     restart: always
