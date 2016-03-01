@@ -6,8 +6,19 @@ gerrit:
     environment:
         - VIRTUAL_HOST=gerrit.int.xcalar.com,gerrit
         - VIRTUAL_PORT=8080
+        - AUTH_TYPE=oauth
+        - GERRIT_SITE=/home/gerrit2/gerrit
     volumes:
         - "gerrit2:/home/gerrit2/gerrit"
+
+# reviewdb:
+# - AUTH_TYPE=development_become_any_account
+#     restart: always
+#     build: gerrit/reviewdb
+#     environment:
+#         - PGDATA=/var/lib/postgresql/data/pgdata
+#     volumes:
+#         - "reviewdb:/var/lib/postgresql/data"
 
 nproxy:
     restart: always

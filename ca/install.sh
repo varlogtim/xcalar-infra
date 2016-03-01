@@ -94,8 +94,10 @@ elif [ "$uname_s" = "Linux" ]; then
 		. /etc/os-release
 		case "$ID_LIKE" in
 			debian)
-			$sudo mkdir -p /usr/local/share/ca-certificates && \
-			$sudo cp $cert /usr/local/share/ca-certificates/XcalarInc_CA_Combined.crt && \
+			$sudo mkdir -p /usr/share/ca-certificates/xcalar && \
+			$sudo cp $cert /usr/share/ca-certificates/xcalar/XcalarInc_CA_Combined.crt && \
+			$sudo chown -R root:root /usr/share/ca-certificates/xcalar && \
+			if ! grep -q 'xcalar/XcalarInc_CA_Combined.crt' /etc/ca-certificates.conf; then echo 'xcalar/XcalarInc_CA_Combined.crt' | $sudo tee -a /etc/ca-certificates.conf; fi && \
 			$sudo DEBIAN_FRONTEND=noninteractive update-ca-certificates
 			rc=$?
 			;;

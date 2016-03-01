@@ -1,7 +1,7 @@
 FROM isuper/java-oracle:jre_8
 MAINTAINER Xcalar <info@xcalar.com>
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git curl
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git curl vim-nox postgresql-client
 
 ENV GERRIT_USER gerrit2
 ENV GERRIT_HOME /home/${GERRIT_USER}
@@ -22,15 +22,18 @@ WORKDIR $GERRIT_HOME
 
 #ENV JAVA_HOME /usr/lib/jvm/java-7-openjdk-amd64/jre
 RUN java -jar $GERRIT_WAR init --batch -d ${GERRIT_HOME}/gerrit
+RUN java -jar $GERRIT_WAR reindex -d ${GERRIT_HOME}/gerrit
 
+RUN curl -sSL https://github.com/davido/gerrit-oauth-provider/releases/download/v2.11.3/gerrit-oauth-provider.jar > ${GERRIT_HOME}/gerrit/plugins/gerrit-oauth-provider.jar
 # clobber the gerrit config. set the URL to localhost:8080
-ADD gerrit.config $GERRIT_HOME/gerrit/etc/gerrit.config
+#ADD gerrit.config $GERRIT_HOME/gerrit/etc/gerrit.config
+#ADD secure.config $GERRIT_HOME/gerrit/etc/secure.config
 
 # https://gerrit-documentation.storage.googleapis.com/Documentation/2.9.3/config-gerrit.html#auth
 # ENV AUTH_TYPE OpenID
 
 ENV AUTH_TYPE DEVELOPMENT_BECOME_ANY_ACCOUNT
 
-ADD . /app
+ADD start.sh /app/start.sh
 EXPOSE 8080 29418
 CMD ["/app/start.sh"]
