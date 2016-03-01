@@ -25,6 +25,7 @@ RUN java -jar $GERRIT_WAR init --batch -d ${GERRIT_HOME}/gerrit
 RUN java -jar $GERRIT_WAR reindex -d ${GERRIT_HOME}/gerrit
 
 RUN curl -sSL https://github.com/davido/gerrit-oauth-provider/releases/download/v2.11.3/gerrit-oauth-provider.jar > ${GERRIT_HOME}/gerrit/plugins/gerrit-oauth-provider.jar
+RUN curl -sSL http://netstore.int.xcalar.com/users/amit/events-log.jar > ${GERRIT_HOME}/gerrit/plugins/events-log.jar
 # clobber the gerrit config. set the URL to localhost:8080
 #ADD gerrit.config $GERRIT_HOME/gerrit/etc/gerrit.config
 #ADD secure.config $GERRIT_HOME/gerrit/etc/secure.config
