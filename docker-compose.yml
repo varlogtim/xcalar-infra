@@ -9,7 +9,7 @@ gerrit:
         - AUTH_TYPE=oauth
         - GERRIT_SITE=/home/gerrit2/gerrit
     volumes:
-        - "gerrit2:/home/gerrit2/gerrit"
+        - "gerrit:/home/gerrit2/gerrit"
 
 # reviewdb:
 # - AUTH_TYPE=development_become_any_account
@@ -30,11 +30,32 @@ nproxy:
         - "80:80"
         - "443:443"
 
-
-
-
 certified:
     build: certified
     volumes:
         - "xcalar_root_ca:/var/lib/certified"
-    working_dir: '/var/lib/certified'
+    working_dir: "/var/lib/certified"
+
+gitlab:
+    build: gitlab
+    volumes:
+        - "gitlab:/var/opt/gitlab"
+    environment:
+        - VIRTUAL_HOST=gitlab,gitlab.int.xcalar.com
+        - VIRTUAL_PORT=80
+    ports:
+        - "2022:22"
+
+
+phabricator_db:
+    image: yesnault/docker-phabricator-mysql
+
+phabricator:
+    image: yesnault/docker-phabricator
+    links:
+        - phabricator_db:database
+    expose:
+        - "80"
+    environment:
+        - VIRTUAL_HOST=phabricator.int.xcalar.com,phabricator
+
