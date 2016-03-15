@@ -1,2 +1,7 @@
 packer_cache/
 box/
+repo/apt/
+repo/rpm/
+repo/patches/
+pkg/*.deb
+pkg/*.rpm
