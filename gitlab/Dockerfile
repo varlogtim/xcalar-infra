@@ -1,3 +1,3 @@
 FROM gitlab/gitlab-ce
 
-ADD ./gitlab.rb /etc/gitlab/
+ADD etc/gitlab.rb /etc/gitlab/
