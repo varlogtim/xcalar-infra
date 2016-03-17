@@ -44,7 +44,7 @@ cd $DOCKERPWD && rm -rf /usr/src/thrift-0.9.2 && curl -sSL https://www.apache.or
 # 8b.Install the 2906 patch
 #RUN cd /usr/src/thrift-0.9.2 && patch -p1 < ../thrift.xcalar-build.patch
 cd $DOCKERPWD && cd /usr/src/thrift-0.9.2 && ./configure --without-tests --prefix=/usr --enable-static --disable-shared --enable-boost --enable-silent-rules --without-ruby || exit $?
-cd $DOCKERPWD && cd /usr/src/thrift-0.9.2 && mkdir -p /var/tmp/thrift_rootfs && make DESTDIR=/var/tmp/thrift_rootfs install || exit $?
+cd $DOCKERPWD && cd /usr/src/thrift-0.9.2 && mkdir -p /var/tmp/thrift_rootfs && make -j`nproc` DESTDIR=/var/tmp/thrift_rootfs install || exit $?
 cd $DOCKERPWD && cd /usr/src && rm -f thrift-dev*.deb thrift-dev*.rpm && fpm -s dir -t deb --name thrift-dev -v 0.9.2 --iteration 3 -C /var/tmp/thrift_rootfs usr/include usr/lib usr/bin && fpm -s deb -t rpm --name thrift-dev -v 0.9.2 --iteration 2 thrift-dev*.deb || exit $?
 cd $DOCKERPWD && cd /usr/src && dpkg -i /usr/src/thrift*.deb || exit $?
 
@@ -54,7 +54,7 @@ cd $DOCKERPWD && rm -rf /usr/src/pmd-src-5.0.5* && wget -q -O /usr/src/pmd-src-5
 
 DOCKERPWD="/usr/src"
 echo export LIBHDFS3=/usr/src/libhdfs3 | tee -a /etc/profile.d/buildenv.sh && source /etc/profile.d/buildenv.sh
-cd $DOCKERPWD && rm -rf $LIBHDFS3 && git clone -q https://github.com/PivotalRD/libhdfs3.git $LIBHDFS3 && mkdir -p $LIBHDFS3/build && cd $LIBHDFS3 && git checkout -f tags/v2.2.31 && cd $LIBHDFS3/build && ../bootstrap --enable-boost --prefix=/usr && make -j2 DESTDIR=/var/tmp/libhdfs3 install && rm -f /usr/src/libhdfs3*.deb /usr/src/libhdfs3*.rpm && fpm -s dir -t deb --name libhdfs3-dev --version 2.2.31 --iteration 3 -C /var/tmp/libhdfs3 usr && mv *.deb /usr/src || exit $?
+cd $DOCKERPWD && rm -rf $LIBHDFS3 && git clone -q https://github.com/PivotalRD/libhdfs3.git $LIBHDFS3 && mkdir -p $LIBHDFS3/build && cd $LIBHDFS3 && git checkout -f tags/v2.2.31 && cd $LIBHDFS3/build && ../bootstrap --enable-boost --prefix=/usr && make -j`nproc` DESTDIR=/var/tmp/libhdfs3 install && rm -f /usr/src/libhdfs3*.deb /usr/src/libhdfs3*.rpm && fpm -s dir -t deb --name libhdfs3-dev --version 2.2.31 --iteration 3 -C /var/tmp/libhdfs3 usr && mv *.deb /usr/src || exit $?
 
 cd $DOCKERPWD && for i in libhdfs3*.deb; do fpm -s deb -t rpm "$i"; done || exit $?
 cd $DOCKERPWD && dpkg -i libhdfs3*.deb || exit $?

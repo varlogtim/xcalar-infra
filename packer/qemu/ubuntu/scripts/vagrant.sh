@@ -3,6 +3,10 @@
 # Store build time
 date > /etc/vagrant_box_build_time
 
+if ! id vagrant >/dev/null; then
+    useradd -m -s /bin/bash vagrant
+fi
+
 # Set up sudo
 echo 'vagrant ALL=NOPASSWD:ALL' > /etc/sudoers.d/vagrant
 
