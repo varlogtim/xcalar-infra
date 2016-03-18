@@ -1,2 +1,2 @@
-#!/bin/sh
+#!/bin/bash
 curl -sSL https://get.docker.io | bash

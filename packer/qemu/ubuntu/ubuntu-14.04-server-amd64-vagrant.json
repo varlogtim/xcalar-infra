@@ -2,7 +2,8 @@
     "variables": {
         "user": "vagrant",
         "password": "vagrant",
-        "disk_size": "100000"
+        "disk_size": "100000",
+        "output_directory": "output"
     },
 
     "builders":
@@ -39,6 +40,7 @@
             "ssh_wait_timeout": "20m",
             "shutdown_command": "echo '{{user `password`}}'|sudo -S shutdown -P now",
 
+			"output_directory": "{{ user `output_directory`}}-qemu-kvm",
             "boot_wait": "2s",
             "boot_command": [
                 "<esc><esc><enter><wait><wait>",
@@ -57,7 +59,54 @@
 
                 "initrd=/install/initrd.gz -- <enter>"
             ]
-        }
+        },
+		{
+			"type": "virtualbox-iso",
+			"headless": false,
+			"boot_wait": "5s",
+            "disk_size": "{{ user `disk_size`}}",
+			"boot_command": [
+				"<esc><esc><enter><wait>",
+				"/install/vmlinuz ",
+				"preseed/url=http://{{.HTTPIP}}:{{.HTTPPort}}/preseed.cfg ",
+				"debian-installer=en_US auto locale=en_US kbd-chooser/method=us ",
+				"hostname={{ .Name }} ",
+				"fb=false debconf/frontend=noninteractive ",
+				"keyboard-configuration/modelcode=SKIP keyboard-configuration/layout=USA ",
+				"keyboard-configuration/variant=USA console-setup/ask_detect=false ",
+                "passwd/user-fullname={{user `user`}} ",
+                "passwd/user-password-again={{user `password`}} ",
+                "passwd/user-password={{user `password`}} ",
+                "passwd/username={{user `user`}} ",
+				"initrd=/install/initrd.gz -- <enter>"
+			],
+			"shutdown_command": "echo 'vagrant' | sudo -S -E shutdown -P now",
+			"output_directory": "{{ user `output_directory`}}-virtualbox-iso",
+			"hard_drive_interface": "sata",
+			"guest_os_type": "Ubuntu_64",
+			"http_directory": "http",
+            "iso_url": "http://netstore.int.xcalar.com/isos/ubuntu-14.04.4-server-amd64.iso",
+            "iso_checksum": "2ac1f3e0de626e54d05065d6f549fa3a",
+            "iso_checksum_type": "md5",
+			"ssh_username": "vagrant",
+			"ssh_password": "vagrant",
+			"ssh_port": 22,
+			"ssh_wait_timeout": "10000s",
+			"vboxmanage": [
+				[
+					"modifyvm",
+					"{{.Name}}",
+					"--memory",
+					"2048"
+				],
+				[
+					"modifyvm",
+					"{{.Name}}",
+					"--cpus",
+					"4"
+				]
+			]
+		}
     ],
 
     "provisioners": [

@@ -3,11 +3,11 @@ DOCKERPWD=$PWD
 DOCKERUSER="`id -un`"
 SRCDIR=$PWD
 if [ `id -u` -ne 0 ]; then sudo "$0" "$@"; exit $?; fi
-if [ -z "$APT_PROXY" ]; then echo >&2 "WARNING: \$APT_PROXY not specified in the environment!"; export APT_PROXY=http://apt-cacher:3142; fi
+if [ -z "$APT_PROXY" ]; then echo >&2 "WARNING: \$APT_PROXY not specified in the environment!"; export APT_PROXY=http://apt-cacher.int.xcalar.com:3142; fi
 if [ -z "$CONTAINER_USER" ]; then echo >&2 "WARNING: \$CONTAINER_USER not specified in the environment!"; fi
 if [ -z "$CONTAINER_UID" ]; then echo >&2 "WARNING: \$CONTAINER_UID not specified in the environment!"; fi
 rm -f /etc/profile.d/buildenv.sh
-if [ "$(curl -sL -w "%{http_code}\\n" "$APT_PROXY" -o /dev/null)" != "200" ]; then
+if [ "$(curl -sL -w "%{http_code}\\n" $APT_PROXY -o /dev/null)" != "200" ]; then
     unset APT_PROXY
 fi
 
@@ -23,7 +23,7 @@ cd $DOCKERPWD && export DEBIAN_FRONTEND=noninteractive && apt-get update -y && h
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf-dev protobuf-compiler debhelper || exit $?
 ## fpm deps
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby unixodbc-bin libmyodbc unixodbc-dev curl vim-nox bash-completion bc || exit $?
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y --no-install-recommends maven2 || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y --no-install-recommends maven2 libarchive-dev || exit $?
 
 
 cd $DOCKERPWD && printf 'source %s\n\ngem %s' "'https://rubygems.org'" "'fpm'" > /tmp/Gemfile && cd /tmp && bundle install || exit $?
@@ -59,12 +59,6 @@ cd $DOCKERPWD && rm -rf $LIBHDFS3 && git clone -q https://github.com/PivotalRD/l
 cd $DOCKERPWD && for i in libhdfs3*.deb; do fpm -s deb -t rpm "$i"; done || exit $?
 cd $DOCKERPWD && dpkg -i libhdfs3*.deb || exit $?
 
-cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG sudo $CONTAINER_USER; fi || exit $?
-cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG docker $CONTAINER_USER; fi || exit $?
-cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG disk $CONTAINER_USER; fi || exit $?
-cd $DOCKERPWD && mkdir -p /var/opt/xcalar /opt/xcalar /var/opt/xcalarTest || exit $?
-cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then chown $CONTAINER_USER:$CONTAINER_USER /var/opt/xcalar /var/opt/xcalarTest /opt/xcalar ; else chmod 0777 /var/opt/xcalar /opt/xcalar /var/opt/xcalarTest; fi || exit $?
-
 cd $DOCKERPWD && echo 'add-auto-load-safe-path /' | tee -a /etc/gdb/gdbinit || exit $?
 cd $SRCDIR && curl -sSL http://repo.xcalar.net/patches/conf/xcalar-sysctl.conf > /etc/sysctl.d/99-xcalar.conf && cd - || exit $?
 cd $SRCDIR && curl -sSL http://repo.xcalar.net/patches/conf/xcalar-limits.conf > /etc/security/limits.d/99-xcalar.conf && cd - || exit $?
@@ -74,9 +68,14 @@ cd $SRCDIR && curl -sSL http://repo.xcalar.net/patches/conf/xcalar-rsyslog.conf 
 # ARG CONTAINER_USER
 # ARG CONTAINER_UID
 
+cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG sudo $CONTAINER_USER; fi || exit $?
+cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG docker $CONTAINER_USER; fi || exit $?
+cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG disk $CONTAINER_USER; fi || exit $?
+cd $DOCKERPWD && mkdir -p /var/opt/xcalar /opt/xcalar /var/opt/xcalarTest || exit $?
+cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then chown $CONTAINER_USER:$CONTAINER_USER /var/opt/xcalar /var/opt/xcalarTest /opt/xcalar ; else chmod 0777 /var/opt/xcalar /opt/xcalar /var/opt/xcalarTest; fi || exit $?
+
 # EXPOSE 80 443 18552-18567 5000-5015 9090
 
-#cd $SRCDIR && cp -a ./bin/docker-entrypoint.sh / && cd - || exit $?
 
 # ENTRYPOINT ["/init"]
 # CMD ["/bin/bash","-l"]
