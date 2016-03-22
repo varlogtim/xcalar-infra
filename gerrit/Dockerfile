@@ -6,7 +6,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git curl
 ENV GERRIT_USER gerrit2
 ENV GERRIT_HOME /home/${GERRIT_USER}
 ENV GERRIT_WAR ${GERRIT_HOME}/gerrit.war
-ENV GERRIT_VERSION 2.12
+ENV GERRIT_VERSION 2.12.2
 
 RUN useradd -m ${GERRIT_USER}
 
