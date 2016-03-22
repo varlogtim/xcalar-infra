@@ -1,6 +1,8 @@
 gerrit:
     restart: always
     build: gerrit
+    hostname: gerrit
+    domainname: int.xcalar.com
     ports:
         - "29418:29418"
     environment:
