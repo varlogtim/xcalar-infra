@@ -1,7 +1,9 @@
 packer_cache/
 box/
 repo/apt/
+repo/apt-deps/
 repo/rpm/
+repo/rpm-deps/
 repo/patches/
 pkg/*.deb
 pkg/*.rpm

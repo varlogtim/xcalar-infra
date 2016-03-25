@@ -11,10 +11,12 @@ download:
 	gsutil -m rsync -d -R gs://repo.xcalar.net/apt/ ./apt/
 	gsutil -m rsync -d -R gs://repo.xcalar.net/patches/ ./patches/
 	gsutil -m rsync -d -R gs://repo.xcalar.net/rpm/ ./rpm/
+	gsutil -m rsync -d -R gs://repo.xcalar.net/rpm-deps/ ./rpm-deps/
 
 
 upload:
 	gsutil -m rsync -d -R ./apt/ gs://repo.xcalar.net/apt/
 	gsutil -m rsync -d -R ./patches/ gs://repo.xcalar.net/patches/
 	gsutil -m rsync -d -R ./rpm/ gs://repo.xcalar.net/rpm/
+	gsutil -m rsync -d -R ./rpm-deps/ gs://repo.xcalar.net/rpm-deps/
 
