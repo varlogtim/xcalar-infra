@@ -5,7 +5,7 @@ say () {
 }
 
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    echo "usage: $0 <installer-url> <cluster (default: `whoami`-xcalar)> <count (default: 3)>" >&2
+    echo "usage: $0 <installer-url> <count (default: 3)> <cluster (default: `whoami`-xcalar)>" >&2
     exit 1
 fi
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
