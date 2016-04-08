@@ -14,6 +14,15 @@ gerrit:
         - "gerrit:/home/gerrit2/gerrit"
 
 
+wetty:
+    restart: always
+    image: nathanleclaire/wetty
+    environment:
+        - VIRTUAL_HOST=wetty.int.xcalar.com,wetty
+        - VIRTUAL_PORT=3000
+    hostname: wetty
+    domainname: int.xcalar.com
+
 jenkins2:
     image: jenkinsci/jenkins:2.0-beta-1
     hostname: jenkins2
