@@ -16,6 +16,7 @@ xdc subcommand [options]
 subcommands:
 
 gce      - Google Compute Engine
+gce create-image - Create image subcommand
 cluster  - Operate on a cluster
 mkbundle - generate a bundle with the game tar and config relative to the servers / dir
 mkrpm    - generate a rpm from the given tar-file
@@ -49,8 +50,6 @@ disk-type=    Type of primary/boot disk (default: ssd)
 zone=         datacenter region or zone (default: us-central1-f)
 instance-id=  instance-id or name
 image-name=   image name
- options for 'gce'
-create-image  create an image from a running instance
 "
 
 NONGIT_OK=1 source $(git --exec-path)/git-sh-setup

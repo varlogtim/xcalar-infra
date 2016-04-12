@@ -1,3 +1,5 @@
 requests[secure]
 awscli
 git-review
+setuptools
+crcmod
