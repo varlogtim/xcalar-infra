@@ -18,12 +18,16 @@ set -ex
 # ARG APT_PROXY
 echo export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64 | tee -a /etc/profile.d/buildenv.sh && source /etc/profile.d/buildenv.sh
 
-cd $DOCKERPWD && export DEBIAN_FRONTEND=noninteractive && apt-get update -y && http_proxy=$APT_PROXY apt-get upgrade -y && http_proxy=$APT_PROXY apt-get install -y gcc sg3-utils openssh-server git pmccabe fio libaio1 libaio1-dbg libaio-dev sysstat iotop nmap traceroute valgrind strace libtool m4 wget clang ant openjdk-7-jdk zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs nodejs npm node-less apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip node-uglify dpkg-dev || exit $?
+cd $DOCKERPWD && export DEBIAN_FRONTEND=noninteractive && apt-get update -y && http_proxy=$APT_PROXY apt-get upgrade -y && http_proxy=$APT_PROXY apt-get install -y gcc sg3-utils openssh-server git pmccabe fio libaio1 libaio1-dbg libaio-dev sysstat iotop nmap traceroute valgrind strace libtool m4 wget clang ant openjdk-7-jdk zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip dpkg-dev libcap-dev || exit $?
 ## libhdfs3 deps
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf-dev protobuf-compiler debhelper || exit $?
 ## fpm deps
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby unixodbc-bin libmyodbc unixodbc-dev curl vim-nox bash-completion bc || exit $?
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y --no-install-recommends maven2 libarchive-dev || exit $?
+
+cd $DOCKERPWD && groupadd --non-unique --force --gid 999 docker || exit $?
+cd $DOCKERPWD && curl -sL https://deb.nodesource.com/setup_5.x | /bin/bash - && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs || exit $?
+cd $DOCKERPWD && for pkg in less grunt-cli uglify-js; do npm install -g $pkg; done || exit $?
 
 cd $DOCKERPWD && curl -sL http://repo.xcalar.net/pubkey.gpg | sudo apt-key add - || exit $?
 cd $DOCKERPWD && curl -sLO http://repo.xcalar.net/xcalar-release-trusty.deb && dpkg -i xcalar-release-trusty.deb && rm -f xcalar-release-trusty.deb || exit $?
@@ -33,7 +37,6 @@ cd $DOCKERPWD && apt-get update -y && DEBIAN_FRONTEND=noninteractive http_proxy=
 ## Since we don't dynamically link against these anymore, we don't need to worry about shipping their packages.
 cd $DOCKERPWD && echo 'add-auto-load-safe-path /' | tee -a /etc/gdb/gdbinit || exit $?
 #
-cd $DOCKERPWD && groupadd --non-unique --force --gid 999 docker || exit $?
 cd $DOCKERPWD && echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-sudo && chmod 0440 /etc/sudoers.d/99-sudo || exit $?
 
 DOCKERPWD="/usr/src"
@@ -42,6 +45,7 @@ cd $DOCKERPWD && printf 'source %s\n\ngem %s' "'https://rubygems.org'" "'fpm'" >
 
 cd $DOCKERPWD && curl -o /usr/bin/gosu -fsSL "https://github.com/tianon/gosu/releases/download/1.7/gosu-$(dpkg --print-architecture)" && chmod +x /usr/bin/gosu || exit $?
 
+# Download the static docker binary. The one that is installed via the package manager has dependencies on some host libs
 
 cd $DOCKERPWD && for pkg in fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil; do pip install -U ${pkg}; done || exit $?
 
