@@ -97,7 +97,7 @@ xc2_gce () {
             die "Failed to snapshot ${boot_disk}"
 
         say "Creating disk => ${disk}"
-        gcloud compute disks create ${disk} --description --type pd-${disk_type} --source-snapshot ${snapshot} --description "For ${gce_image}. Created by $(git config user.name) <$(git config user.email)>" || \
+        gcloud compute disks create ${disk} --type pd-${disk_type} --source-snapshot ${snapshot} --description "For ${gce_image}. Created by $(git config user.name) <$(git config user.email)>" || \
             die "Failed to create disk $disk from $snapshot"
 
         say "Creating image => ${gce_image}"
