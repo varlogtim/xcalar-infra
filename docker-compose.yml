@@ -13,6 +13,39 @@ gerrit:
     volumes:
         - "gerrit:/home/gerrit2/gerrit"
 
+graphite:
+    restart: always
+    image: hopsoft/graphite-statsd
+    hostname: statsd
+    domainname: int.xcalar.com
+    ports:
+        - "2003:2003"
+        - "8125:8125/udp"
+        - "8126:8126"
+    environment:
+        - VIRTUAL_HOST=graphite.int.xcalar.com,graphite,statsd.int.xcalar.com,statsd
+        - VIRTUAL_PORT=80
+    volumes:
+        - graphite_config:/opt/graphite/conf
+        - graphite_stat_storage:/opt/graphite/storage
+        - graphite_nginx_config:/etc/nginx
+        - statsd_config:/opt/statsd
+        - graphite_logrotate_config:/etc/logrotate.d
+        - graphite_log:/var/log
+
+grafana:
+    restart: always
+    image: grafana/grafana
+    hostname: grafana
+    domainname: int.xcalar.com
+    links:
+        - graphite:graphite
+    environment:
+        - VIRTUAL_HOST=grafana.int.xcalar.com,grafana
+        - VIRTUAL_PORT=3000
+    volumes:
+        - grafana_storage:/var/lib/grafana
+        - grafana_config:/etc/grafana
 
 wetty:
     restart: always
@@ -86,4 +119,3 @@ phabricator:
         - "80"
     environment:
         - VIRTUAL_HOST=phabricator.int.xcalar.com,phabricator
-
