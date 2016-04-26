@@ -24,6 +24,9 @@ push     - push out a tar to the specified servers
 deploy   - calls mkbundle and push to deploy to servers
 lgrep    - Distributed log grep
 
+options for 'gce':
+  create-image  - create an image from a running instance
+
 --
 h,help        show the help
 version       show version info (v@VERSION@)
