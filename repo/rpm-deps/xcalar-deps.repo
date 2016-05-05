@@ -1,4 +1,4 @@
 [xcalar-deps]
 name = Xcalar Dependencies
 baseurl = http://repo.xcalar.net/rpm-deps/el$releasever/$basearch/
-gpgcheck = 1
+gpgcheck = 0
