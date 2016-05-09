@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 cert=/tmp/XcalarInc_CA_Combined_$$.crt
 
 cat > $cert <<'EOF'
@@ -77,36 +75,33 @@ EOF
 uname_s="$(uname -s | sed -e 's/-.*$//g')"
 set +e
 if [ `id -u` -ne 0 ]; then
-    sudo="$(type sudo 2>/dev/null | awk '{print $3}')"
-    if [ "$sudo" = "" ]; then
-        echo "This script needs to be run as root or have sudo installed" >&2
-        exit 1
-    fi
-else
-    sudo=
+	echo "This script needs to be run as root or have sudo installed" >&2
+	exit 1
 fi
 
 if [ "$uname_s" = "Darwin" ]; then
-	$sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain $cert
+	security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain $cert
 	rc=$?
 elif [ "$uname_s" = "Linux" ]; then
 	if [ -r /etc/os-release ]; then
 		. /etc/os-release
 		case "$ID_LIKE" in
 			debian)
-			$sudo mkdir -p /usr/share/ca-certificates/xcalar && \
-			$sudo cp $cert /usr/share/ca-certificates/xcalar/XcalarInc_CA_Combined.crt && \
-			$sudo chown -R root:root /usr/share/ca-certificates/xcalar && \
-			if ! grep -q 'xcalar/XcalarInc_CA_Combined.crt' /etc/ca-certificates.conf; then echo 'xcalar/XcalarInc_CA_Combined.crt' | $sudo tee -a /etc/ca-certificates.conf; fi && \
-			$sudo DEBIAN_FRONTEND=noninteractive update-ca-certificates
+			mkdir -p /usr/share/ca-certificates/xcalar && \
+			cp $cert /usr/share/ca-certificates/xcalar/XcalarInc_CA_Combined.crt && \
+			chown -R root:root /usr/share/ca-certificates/xcalar && \
+			if ! grep -q 'xcalar/XcalarInc_CA_Combined.crt' /etc/ca-certificates.conf; then echo 'xcalar/XcalarInc_CA_Combined.crt' | tee -a /etc/ca-certificates.conf; fi && \
+			c_rehash && \
+			DEBIAN_FRONTEND=noninteractive update-ca-certificates
 			rc=$?
 			;;
 
 			rhel*)
-			$sudo update-ca-trust force-enable && \
-			$sudo mkdir -p /etc/pki/ca-trust/source/anchors && \
-			$sudo cp $cert /etc/pki/ca-trust/source/anchors/XcalarInc_CA_Combined.crt && \
-			$sudo update-ca-trust extract
+			update-ca-trust force-enable && \
+			mkdir -p /etc/pki/ca-trust/source/anchors && \
+			cp $cert /etc/pki/ca-trust/source/anchors/XcalarInc_CA_Combined.crt && \
+			c_rehash && \
+			update-ca-trust extract
 			rc=$?
 			;;
 
