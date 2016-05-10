@@ -57,7 +57,7 @@ set -x
 gcloud compute instances create ${INSTANCES[@]} \
     --image ${IMAGE:-xcbuilder-ubuntu-1404-1458251279} \
     --zone ${ZONE:-us-central1-f} \
-    --machine-type ${INSTANCE_TYPE:-n1-standard-4} \
+    --machine-type ${INSTANCE_TYPE:-n1-highmem-8} \
     --network=private \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
     --metadata-from-file user-data=$DIR/gce-userdata.sh,config=$CONFIG \
