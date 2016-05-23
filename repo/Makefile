@@ -1,4 +1,5 @@
 TMP:=$(shell mktemp -u -d --tmpdir repoXXXXXX)
+BUILD=2
 
 all: help
 
@@ -16,7 +17,15 @@ download:
 	gsutil -m rsync -d -R gs://repo.xcalar.net/rpm-deps/ ./rpm-deps/
 
 
-upload:
+upload-el6-deps:
+	gsutil -m mv gs://repo.xcalar.net/rpm-deps/el6 gs://repo.xcalar.net/rpm-deps/backup/${BUILD}/
+	gsutil -m mv gs://repo.xcalar.net/rpm-deps/el6Server gs://repo.xcalar.net/rpm-deps/backup/${BUILD}/
+	gsutil -m cp -r ./rpm-deps/el6/ gs://repo.xcalar.net/rpm-deps/el6/
+	gsutil -m cp -r ./rpm-deps/el6/ gs://repo.xcalar.net/rpm-deps/el6Server/
+
+#gsutil rm -R gs://repo.xcalar.net/rpm/el6/x86_64/repodata/
+
+upload-all:
 	gsutil -m rsync -c -d -R ./apt/ gs://repo.xcalar.net/apt/
 	gsutil -m rsync -c -d -R ./patches/ gs://repo.xcalar.net/patches/
 	gsutil rm -R gs://repo.xcalar.net/rpm/el6/x86_64/repodata/ gs://repo.xcalar.net/rpm/el7/x86_64/repodata/
