@@ -15,11 +15,13 @@ echo 'nfs:/srv/share/nfs /mnt/nfs   nfs defaults 0   0' | sudo tee -a /etc/fstab
 sudo mount -a
 
 CLUSTERDIR=/mnt/nfs/cluster/$CLUSTER
+NFSMOUNT=/mnt/xcalar
 
 mkdir -p $CLUSTERDIR/members
-sudo mkdir -m 0777 -p /var/opt/xcalar
+sudo mkdir -m 0777 -p /var/opt/xcalar /var/opt/xcalar/stats
+sudo mkdir -m 0777 $NFSMOUNT
 sudo sed -i "/$CLUSTER/d" /etc/fstab
-echo "nfs:/srv/share/nfs/cluster/$CLUSTER /var/opt/xcalar   nfs defaults 0   0" | sudo tee -a /etc/fstab
+echo "nfs:/srv/share/nfs/cluster/$CLUSTER   $NFSMOUNT nfs defaults 0   0" | sudo tee -a /etc/fstab
 sudo mount -a
 
 test -f /etc/hosts.orig || cp /etc/hosts /etc/hosts.orig
@@ -31,9 +33,9 @@ curl -sSL "$(/usr/share/google/get_metadata_value attributes/installer)" > xcala
 chmod +x ./xcalar-installer
 set +e
 set -x
-./xcalar-installer
 /usr/share/google/get_metadata_value attributes/config > xcalar-config
-sudo service xcalar stop || true
-sudo killall childnode
-sudo cp xcalar-config /etc/xcalar/default.cfg
+sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath=nfs://'$NFSMOUNT'@g' xcalar-config > xcalar-config-nfs
+sudo mkdir -p /etc/xcalar
+sudo cp xcalar-config-nfs /etc/xcalar/default.cfg
+sudo bash ./xcalar-installer
 sudo service xcalar start

@@ -65,8 +65,7 @@ for i in `seq 0 $(($NumPhysicalNodes - 1))`; do
         Output+="Node.$ii.Port=$(($StartPort + $j))\n"
         Output+="Node.$ii.ApiPort=$(($StartApiPort + $j))\n"
         # TODO: MonitorPort isn't working at the moment
-        Output+="Node.$ii.MonitorPort=0\n"
-        #Output+="Node.$ii.MonitorPort=$(($StartMonPort + $j))\n"
+        Output+="// Node.$ii.MonitorPort=$(($StartMonPort + $j))\n"
         ii=$(($ii + 1))
     done
 done
