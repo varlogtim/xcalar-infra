@@ -94,7 +94,7 @@ CLUSTERDIR=/mnt/nfs/cluster/$CLUSTER
 NFSMOUNT=/mnt/xcalar
 
 $sh_c 'mkdir -p /mnt/nfs'
-$sh_c 'sed -i "@/mnt/nfs@d" /etc/fstab'
+$sh_c 'sed -i -e "/\/mnt\/nfs/d" /etc/fstab'
 $sh_c 'echo "nfs:/srv/share/nfs /mnt/nfs   nfs defaults 0   0" >> /etc/fstab'
 $sh_c 'mount -a'
 
