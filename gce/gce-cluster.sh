@@ -51,14 +51,15 @@ fi
 rm -f $CONFIG
 $DIR/../bin/genConfig.sh $DIR/../bin/template.cfg $CONFIG ${INSTANCES[@]}
 
+ARGS=()
+ARGS+=(--image ${IMAGE:-xcbuilder-ubuntu-1404-1458251279})
 
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
-gcloud compute instances create ${INSTANCES[@]} \
-    --image ${IMAGE:-xcbuilder-ubuntu-1404-1458251279} \
+gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --zone ${ZONE:-us-central1-f} \
     --machine-type ${INSTANCE_TYPE:-n1-highmem-8} \
     --network=private \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
-    --metadata-from-file user-data=$DIR/gce-userdata.sh,config=$CONFIG \
+    --metadata-from-file startup-script=$DIR/gce-userdata.sh,user-data=$DIR/gce-userdata.sh,config=$CONFIG \
     --preemptible
