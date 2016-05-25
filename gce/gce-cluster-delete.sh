@@ -18,5 +18,5 @@ if [ -z "$INSTANCES" ]; then
 else
     gcloud compute instances delete $INSTANCES
 fi
-echo "Deleting nfs::/srv/share/nfs/cluster/$CLUSTER"
+echo "Deleting nfs:/srv/share/nfs/cluster/$CLUSTER"
 gcloud compute ssh nfs --zone us-central1-f --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER

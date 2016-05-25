@@ -9,7 +9,7 @@ if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     exit 1
 fi
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
-INSTALLER="${1}"
+INSTALLER="$(readlink -f ${1})"
 INSTALLER_FNAME="$(basename $INSTALLER)"
 COUNT="${2:-3}"
 CLUSTER="${3:-`whoami`-xcalar}"
@@ -54,6 +54,10 @@ $DIR/../bin/genConfig.sh $DIR/../bin/template.cfg $CONFIG ${INSTANCES[@]}
 ARGS=()
 ARGS+=(--image ${IMAGE:-xcbuilder-ubuntu-1404-1458251279})
 
+if [ "$NOTPREEMPTIBLE" != "1" ]
+    ARGS+=(--preemptible)
+fi
+
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
@@ -62,4 +66,3 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --network=private \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
     --metadata-from-file startup-script=$DIR/gce-userdata.sh,user-data=$DIR/gce-userdata.sh,config=$CONFIG \
-    --preemptible
