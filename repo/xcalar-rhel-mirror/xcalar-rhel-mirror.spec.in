@@ -1,0 +1,37 @@
+Name:		xcalar-rhel-mirror
+BuildArch:  noarch
+Version:	@@VERSION@@
+Release:	@@RELEASE@@%{?dist}
+Summary:	Xcalar RHEL6 Mirror
+License:	GPLv2
+URL:		@@URL@@
+Source0:	%{name}-%{version}.tar
+
+#BuildRequires:
+#Requires:
+
+%description
+Xcalar RHEL Mirror
+%prep
+%setup -n %{name}-%{version}
+%build
+exit 0
+
+%install
+mkdir -p %{buildroot}/etc/yum.repos.d/
+mkdir -p %{buildroot}/etc/pki/rpm-gpg/
+sed -e 's,@URL@,'%{url}',g' xcalar-rhel-mirror.repo.in  > %{buildroot}/etc/yum.repos.d/xcalar-rhel-mirror.repo
+cp RPM-GPG-KEY-redhat-release %{buildroot}/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-RHEL-Mirror
+cp RPM-GPG-KEY-EPEL-6 %{buildroot}/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-EPEL6-Mirror
+cp IUS-COMMUNITY-GPG-KEY %{buildroot}/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-IUS-Mirror
+
+%clean
+rm -rf $RPM_BUILD_ROOT
+
+%files
+%config(noreplace) /etc/yum.repos.d/xcalar-rhel-mirror.repo
+%config(noreplace) /etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-RHEL-Mirror
+%config(noreplace) /etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-EPEL6-Mirror
+%config(noreplace) /etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-IUS-Mirror
+
+
