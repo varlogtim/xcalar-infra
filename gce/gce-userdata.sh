@@ -4,6 +4,10 @@ command_exists() {
     command -v "$@" > /dev/null 2>&1
 }
 
+get_metadata_value () {
+    curl -sSL -H 'Metadata-Flavor: Google' "http://metadata.google.internal/computeMetadata/v1/instance/$1"
+}
+
 os_version () {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -69,12 +73,12 @@ do_install () {
     case "$(os_version)" in
         rhel*|el*)
             $sh_c 'yum update -y'
-            $sh_c 'yum install -y nfs-utils'
+            $sh_c 'yum install -y nfs-utils curl'
             ;;
         ub*)
             export DEBIAN_FRONTEND=noninteractive
             $sh_c 'apt-get update -y'
-            $sh_c 'apt-get install -y nfs-common'
+            $sh_c 'apt-get install -y nfs-common curl'
             ;;
     esac
 }
@@ -83,11 +87,11 @@ do_install
 
 cd /tmp
 IP="$(ifconfig eth0 | grep inet | awk '{print $2}' | awk -F':' '{print $2}')"
-CLUSTER=$(/usr/share/google/get_metadata_value attributes/cluster)
+CLUSTER=$(get_metadata_value attributes/cluster)
 if [ -z "$cluster" ]; then
     CLUSTER="${HOSTNAME%%-[0-9]*}"
 fi
-COUNT=$(/usr/share/google/get_metadata_value attributes/count)
+COUNT=$(get_metadata_value attributes/count)
 
 
 CLUSTERDIR=/mnt/nfs/cluster/$CLUSTER
@@ -112,11 +116,11 @@ test -f /etc/hosts.orig || $sh_c 'cp /etc/hosts /etc/hosts.orig'
 $sh_c "echo '$IP   $(hostname -f) $(hostname -s)' | tee $CLUSTERDIR/members/$(hostname -f)"
 
 # Download and run the installer
-curl -sSL "$(/usr/share/google/get_metadata_value attributes/installer)" > xcalar-installer
+curl -sSL "$(get_metadata_value attributes/installer)" > xcalar-installer
 chmod +x ./xcalar-installer
 set +e
 set -x
-/usr/share/google/get_metadata_value attributes/config > xcalar-config
+get_metadata_value attributes/config > xcalar-config
 sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath=nfs://'$NFSMOUNT'@g' xcalar-config > xcalar-config-nfs
 $sh_c 'mkdir -p /etc/xcalar'
 $sh_c 'cp xcalar-config-nfs /etc/xcalar/default.cfg'
