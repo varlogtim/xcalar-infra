@@ -8,6 +8,7 @@ if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "usage: $0 <installer-url> <count (default: 3)> <cluster (default: `whoami`-xcalar)>" >&2
     exit 1
 fi
+export PATH="$PATH:$HOME/google-cloud-sdk/bin"
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 INSTALLER="$(readlink -f ${1})"
 INSTALLER_FNAME="$(basename $INSTALLER)"
@@ -18,6 +19,29 @@ UPLOADLOG=/tmp/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
 EMAIL="$(git config user.email)"
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
+GCLOUD_SDK_URL="https://sdk.cloud.google.com"
+
+
+if ! command -v gcloud; then
+    if test -e "$XLRDIR/bin/gcloud-sdk.sh"; then
+        say "gcloud command not found, attemping to install via $XLRDIR/bin/gcloud-sdk.sh ..."
+        bash "$XLRDIR/bin/gcloud-sdk.sh"
+        if [ $? -ne 0 ]; then
+            say "Failed to install gcloud sdk..."
+            exit 1
+        fi
+    else
+        echo "\$XLRDIR/bin/gcloud-sdk.sh not found, attempting to install from $GCLOUD_SDK_URL ..."
+        export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+        set -o pipefail
+        curl -sSL $GCLOUD_SDK_URL | bash -e
+        if [ $? -ne 0 ]; then
+            say "Failed to install gcloud sdk..."
+            exit 1
+        fi
+        set +o pipefail
+    fi
+fi
 if test -f "$INSTALLER"; then
     INSTALLER_URL="repo.xcalar.net/builds/$INSTALLER_FNAME"
     if ! gsutil ls gs://$INSTALLER_URL &>/dev/null; then
