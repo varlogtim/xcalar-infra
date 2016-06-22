@@ -1,4 +1,6 @@
 #!/bin/bash
+export CLOUDSDK_COMPUTE_REGION=${CLOUDSDK_COMPUTE_REGION-us-central1}
+export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
 
 say () {
     echo >&2 "$*"

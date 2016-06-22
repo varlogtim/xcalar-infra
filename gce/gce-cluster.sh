@@ -1,11 +1,14 @@
 #!/bin/bash
+export CLOUDSDK_COMPUTE_REGION=${CLOUDSDK_COMPUTE_REGION-us-central1}
+export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
+GCLOUD_SDK_URL="https://sdk.cloud.google.com"
 
 say () {
     echo >&2 "$*"
 }
 
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    echo "usage: $0 <installer-url> <count (default: 3)> <cluster (default: `whoami`-xcalar)>" >&2
+    say "usage: $0 <installer-url> <count (default: 3)> <cluster (default: `whoami`-xcalar)>"
     exit 1
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
@@ -19,7 +22,6 @@ UPLOADLOG=/tmp/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
 EMAIL="$(git config user.email)"
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
-GCLOUD_SDK_URL="https://sdk.cloud.google.com"
 
 
 if ! command -v gcloud; then
@@ -85,7 +87,6 @@ fi
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
-    --zone ${ZONE:-us-central1-f} \
     --machine-type ${INSTANCE_TYPE:-n1-highmem-8} \
     --network=private \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
