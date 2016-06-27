@@ -10,7 +10,8 @@ apt-get update && apt-get upgrade -y
 apt-get install -y dkms
 
 cd /usr/src
-wget "sourceforge.net/projects/e1000/files/ixgbevf stable/$VER/ixgbevf-$VER.tar.gz"
+#wget "sourceforge.net/projects/e1000/files/ixgbevf stable/$VER/ixgbevf-$VER.tar.gz"
+wget http://repo.xcalar.net/drivers/ixgbevf-$VER.tar.gz
 tar -xzf ixgbevf-$VER.tar.gz
 cat > /usr/src/ixgbevf-$VER/dkms.conf<<EOF
 PACKAGE_NAME="ixgbevf"
