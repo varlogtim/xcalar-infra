@@ -89,5 +89,6 @@ set -x
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --machine-type ${INSTANCE_TYPE:-n1-highmem-8} \
     --network=private \
+    --boot-disk-size 256GB \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
     --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG \
