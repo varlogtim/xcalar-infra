@@ -22,7 +22,7 @@ INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
 PIDS=()
 
 for host in ${INSTANCES[@]}; do
-    gcloud compute ssh $host --command "sudo service xcalar restart" </dev/null &
+    gcloud compute ssh $host --command "sudo service xcalar stop" </dev/null &
     PIDS+=($!)
 done
 ret=0
@@ -32,4 +32,24 @@ for pid in ${PIDS[@]}; do
         ret=1
     fi
 done
-exit $ret
+if [ $ret -eq 1 ]; then
+    echo "service xcalar stop failed"
+    exit $ret
+fi
+PIDS=()
+
+for host in ${INSTANCES[@]}; do
+    gcloud compute ssh $host --command "sudo service xcalar start" </dev/null &
+    PIDS+=($!)
+done
+ret=0
+for pid in ${PIDS[@]}; do
+    wait $pid
+    if [ $? -ne 0 ]; then
+        ret=1
+    fi
+done
+if [ $ret -eq 1 ]; then
+    echo "service xcalar start failed"
+    exit $ret
+fi
