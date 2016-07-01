@@ -3,6 +3,8 @@
 databaseName="odbcTest"
 tableName="Persons"
 
+sudo service mysql start || true
+
 mysql -uroot -e "help" 2>&1 | grep -q "Access denied"
 requiresPassword=$?
 if [ "$requiresPassword" = "1" ]; then

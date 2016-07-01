@@ -28,6 +28,7 @@ fi
 
 log "Moving to $DIR"
 cd "$DIR"
+sudo service mysql start || true
 
 antiRequesites="libodbc1 unixodbc"
 log "Cleaning up anti-requesites: $antiRequesites"
