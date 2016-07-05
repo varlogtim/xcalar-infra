@@ -12,7 +12,7 @@ else
     CLUSTER="`whoami`-xcalar"
 fi
 
-HOSTS="$(gcloud compute instances list | grep RUNNING | grep ${CLUSTER}- | awk '{print $5}')"
+HOSTS="$(gcloud compute instances list | grep RUNNING | grep ${CLUSTER}- | awk '{print $(NF-1)}')"
 
 
 pssh -i -H "$HOSTS" "$@"
