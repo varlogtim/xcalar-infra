@@ -21,8 +21,18 @@ CONFIG=/tmp/$CLUSTER-config.cfg
 UPLOADLOG=/tmp/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
 EMAIL="$(git config user.email)"
+DISK_TYPE="${DISK_TYPE:-pd-standard}"
+INSTANCE_TYPE=${INSTANCE_TYPE:-n1-highmem-8}
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
-
+if [ -z "$DISK_SIZE" ]; then
+    case "$INSTANCE_TYPE" in
+        n1-highmem-16) DISK_SIZE=100GB ;;
+        n1-highmem-8) DISK_SIZE=50GB ;;
+        n1-standard*) DISK_SIZE=32GB ;;
+        g1-*) DISK_SIZE=20GB ;;
+        *) DISK_SIZE=20GB ;;
+    esac
+fi
 
 if ! command -v gcloud; then
     if test -e "$XLRDIR/bin/gcloud-sdk.sh"; then
@@ -87,8 +97,9 @@ fi
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
-    --machine-type ${INSTANCE_TYPE:-n1-highmem-8} \
+    --machine-type ${INSTANCE_TYPE} \
     --network=private \
-    --boot-disk-size 256GB \
+    --boot-disk-type $DISK_TYPE \
+    --boot-disk-size $DISK_SIZE \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
     --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG \
