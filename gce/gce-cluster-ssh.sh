@@ -15,4 +15,4 @@ fi
 HOSTS="$(gcloud compute instances list | grep RUNNING | grep ${CLUSTER}- | awk '{print $(NF-1)}')"
 
 
-pssh -i -H "$HOSTS" "$@"
+pssh -O StrictHostKeyChecking=no -O UserKnownHostsFile=/dev/null -O LogLevel=ERROR -i -H "$HOSTS" "$@"
