@@ -13,7 +13,14 @@ if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
-INSTALLER="$(readlink -f ${1})"
+if test -f "$1"; then
+    INSTALLER="$(readlink -f ${1})"
+elif [[ $1 =~ ^http[s]?:// ]]; then
+    INSTALLER="$1"
+else
+    say "Can't find the installer $1"
+    exit 1
+fi
 INSTALLER_FNAME="$(basename $INSTALLER)"
 COUNT="${2:-3}"
 CLUSTER="${3:-`whoami`-xcalar}"

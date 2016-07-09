@@ -24,7 +24,7 @@ cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get up
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf-dev protobuf-compiler debhelper || exit $?
 ## fpm deps
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby unixodbc-bin libmyodbc unixodbc-dev curl vim-nox bash-completion bc || exit $?
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y --no-install-recommends maven2 libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev libjemalloc-dev || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y --no-install-recommends maven2 libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev libjemalloc-dev sysvinit-utils sysv-rc || exit $?
 
 cd $DOCKERPWD && groupadd --non-unique --force --gid 999 docker || exit $?
 cd $DOCKERPWD && curl -sL https://deb.nodesource.com/setup_5.x | /bin/bash - && sed -i 's/https/http/g' /etc/apt/sources.list.d/* && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs || exit $?
