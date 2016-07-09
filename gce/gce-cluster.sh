@@ -95,7 +95,7 @@ rm -f $CONFIG
 $DIR/../bin/genConfig.sh $DIR/../bin/template.cfg $CONFIG ${INSTANCES[@]}
 
 ARGS=()
-ARGS+=(--image ${IMAGE:-xcbuilder-ubuntu-1404-1458251279})
+ARGS+=(--image ${IMAGE:-xcbuilder-ubuntu-1404-1468027041})
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
     ARGS+=(--preemptible)
