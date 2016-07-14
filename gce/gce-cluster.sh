@@ -97,6 +97,10 @@ $DIR/../bin/genConfig.sh $DIR/../bin/template.cfg $CONFIG ${INSTANCES[@]}
 ARGS=()
 ARGS+=(--image ${IMAGE:-xcbuilder-ubuntu-1404-1468027041})
 
+if [ $COUNT -gt 3 ]; then
+    NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
+fi
+
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
     ARGS+=(--preemptible)
 fi
@@ -109,4 +113,4 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size $DISK_SIZE \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
-    --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG \
+    --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG
