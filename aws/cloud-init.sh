@@ -49,29 +49,26 @@ XC_INSTANCEID="$(get_metadata instance-id)"
 XC_LAUNCHINDEX="$(get_metadata ami-launch-index)"
 XC_LOCALIPV4="$(get_metadata local-ipv4)"
 export AWS_DEFAULT_REGION=$XC_REGION
-TAGS=/tmp/tags.dynamic
+TAGS=/etc/profile.d/ec2tags.sh
 
 pip install -U awscli
 hash -r
 
-aws ec2 describe-tags --filter Name=resource-id,Values=$XC_INSTANCEID --query 'Tags[].[Key,Value]' --output text | sed -Ee 's/^([^\s]+)\s+(.*)$/EC2TAG_\U\1=\E"\2"/g'
+aws ec2 describe-tags --filter Name=resource-id,Values=$XC_INSTANCEID --query 'Tags[].[Key,Value]' --output text | sed -Ee 's/^([^\s]+)\s+(.*)$/EC2TAG_\U\1=\E"\2"/g' > $TAGS
+. $TAGS
 
-XC_FSID="$(awk '$2 == "FSID" {print $(NF)}' $TAGS)"
-XC_NAME="$(awk '$2 == "Name" {print $(NF)}' $TAGS)"
-XC_CLUSTER="$(awk '$2 == "Cluster" {print $(NF)}' $TAGS)"
-
-if [ -n "$XC_FSID" ]; then
-    XC_EFSNAME="$(aws efs describe-file-systems --file-system-id "$XC_FSID" --query 'FileSystems[].Name' --output text)"
-    if [ $? -ne 0 ] || [ -z "$XC_EFSNAME" ]; then
-        XC_FSID=
-        sed -i -e '/FSID/d' $TAGS
+if [ -n "$EC2TAG_FSID" ]; then
+    EFSNAME="$(aws efs describe-file-systems --file-system-id "$EC2TAG_FSID" --query 'FileSystems[].Name' --output text)"
+    if [ $? -ne 0 ] || [ -z "$EFSNAME" ]; then
+        EC2TAG_FSID=
+        sed -i -e '/EC2TAG_FSID/d' $TAGS
     fi
 fi
 
-if [ -n "$XC_FSID" ]; then
-    XC_NFSHOST="${XC_AZ}.${XC_FSID}.efs.${XC_REGION}.amazonaws.com"
+if [ -n "$EC2TAG_FSID" ]; then
+    XC_NFSHOST="${XC_AZ}.${EC2TAG_FSID}.efs.${XC_REGION}.amazonaws.com"
 else
-    XC_NFSHOST="nfs.xcalar.org"
+    XC_NFSHOST="${EC2TAG_NFSHOST:-nfs.xcalar.org}"
 fi
 
 XC_NFSIP="$(nslookup $XC_NFSHOST | awk '/Address:/{print $2}' | tail -1)"
@@ -82,7 +79,6 @@ nfs:/srv/share/data	/mnt/data	     nfs vers=4.1,defaults 	0	0	#cloud_init
 nfs:/srv/share/nfs 	/mnt/nfs   	     nfs vers=4.1,defaults 	0	0	#cloud_init
 nfs:/srv/datasets 	/netstore/datasets   nfs vers=4.1,defaults 	0	0	#cloud_init
 EOF
-
 DIRS="/mnt/data /mnt/nfs /netstore/datasets"
 for mdir in $DIRS; do
     mkdir -p $mdir
@@ -93,28 +89,22 @@ for mdir in $DIRS; do
     fi
 done
 
-if [ -n "$XC_CLUSTER" ]; then
-    mkdir -p /mnt/xcalar /mnt/nfs/cluster/${XC_CLUSTER}
+if [ -n "$EC2TAG_CLUSTER" ]; then
+    mkdir -p /mnt/xcalar /mnt/nfs/cluster/${EC2TAG_CLUSTER}
     cat >> /etc/fstab <<-EOF
-	nfs:/srv/share/nfs/cluster/$XC_CLUSTER /mnt/xcalar nfs vers=4.1,defaults  0   0  #cloud_init
+	nfs:/srv/share/nfs/cluster/$EC2TAG_CLUSTER /mnt/xcalar nfs vers=4.1,defaults  0   0  #cloud_init
 	EOF
     if ! mountpoint -q /mnt/xcalar; then
         mount /mnt/xcalar
     else
         mount -oremount /mnt/xcalar
     fi
-    aws --region us-west-2 ec2 describe-instances --filters Name=instance-state-name,Values=running,Name=tag:Cluster,Values=$XC_CLUSTER --query 'Reservations[].Instances[].[PrivateIpAddress,Tags[?Key==`Name`].Value[]]' --output text | sed '$!N;s/\n/ /' | grep -v '^None' | xargs -n1 -I {} printf "%s  #cloud_init\n" "{}"
+    aws --region us-west-2 ec2 describe-instances --filters Name=instance-state-name,Values=running,Name=tag:Cluster,Values=$EC2TAG_CLUSTER --query 'Reservations[].Instances[].[PrivateIpAddress,Tags[?Key==`Name`].Value[]]' --output text | sed '$!N;s/\n/ /' | grep -v '^None' | xargs -n1 -I {} printf "%s  #cloud_init\n" "{}" | tee -a /etc/hosts
 fi
 
-
-cat > /var/tmp/xcenv <<EOF
-XC_AZ=$XC_AZ
-XC_REGION=$XC_REGION
-XC_INSTANCEID=$XC_INSTANCEID
-XC_FSID=$XC_FSID
-XC_NAME=$XC_NAME
-XC_CLUSTER=$XC_CLUSTER
-XC_NFSHOST=$XC_NFSHOST
-XC_NFSIP=$XC_NFSIP
-EOF
+if [ -n "$EC2TAG_URL" ]; then
+    curl -sSL "$EC2TAG_URL" > /tmp/xcalar-installer.sh
+    chmod +x /tmp/xcalar-installer.sh
+    mkdir -p /etc/xcalar
+    aws --region us-west-2 ec2 describe-instances --filter Name=tag:Cluster,Values=$EC2TAG_CLUSTER --query 'Reservations[].Instances[].[PrivateIpAddress,Tags[?Key==`Name`].Value[]]' --output text | sed '$!N;s/\n/ /' | grep -v '^None' | xargs -n1 -I {} printf "%s  #cloud_init\n" "{}" | tee -a /etc/hosts
 
