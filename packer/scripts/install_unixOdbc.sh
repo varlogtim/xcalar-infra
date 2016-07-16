@@ -32,16 +32,16 @@ sudo service mysql start || true
 
 antiRequesites="libodbc1 unixodbc"
 log "Cleaning up anti-requesites: $antiRequesites"
-exc sudo apt-get -y remove "$antiRequesites"
+exc sudo apt-get -yqq remove "$antiRequesites"
 
 log "Installing MySql"
-exc sudo apt-get -y install mysql-server mysql-client
+exc sudo apt-get -yqq install mysql-server mysql-client
 
 log "Installing MySql driver for testing"
-exc sudo apt-get -y install libmyodbc
+exc sudo apt-get -yqq install libmyodbc
 
 log "Installing unixodbc-bin"
-exc sudo apt-get -y install unixodbc-bin unixodbc-dev
+exc sudo apt-get -yqq install unixodbc-bin unixodbc-dev
 
 # get mySql .so files
 mySFile=$(find /usr/lib -name '*libodbcmyS.so')

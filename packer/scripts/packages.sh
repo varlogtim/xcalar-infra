@@ -51,5 +51,4 @@ unzip
 vim-nox
 awscli
 "
-http_proxy=$APT_PROXY apt-get update
-http_proxy=$APT_PROXY apt-get -y install $PACKAGES
+http_proxy=$APT_PROXY apt-get -yqq install $PACKAGES

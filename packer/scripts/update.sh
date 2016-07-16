@@ -6,6 +6,6 @@ if [ "$(curl -sL -w "%{http_code}\\n" "$APT_PROXY" -o /dev/null)" != "200" ]; th
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-http_proxy=$APT_PROXY apt-get -y update
-http_proxy=$APT_PROXY apt-get -y dist-upgrade
-http_proxy=$APT_PROXY apt-get -y autoremove
+http_proxy=$APT_PROXY apt-get -yqq update
+http_proxy=$APT_PROXY apt-get -yqq upgrade
+http_proxy=$APT_PROXY apt-get -yqq autoremove

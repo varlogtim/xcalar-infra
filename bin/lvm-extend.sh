@@ -44,5 +44,7 @@ if [ "$YesNo" = "Y" ]; then
 	vgextend $VGROUP /dev/$DEV
 	lvextend -l +100%FREE /dev/$LV
 	resize2fs /dev/$LV
+else
+    echo >&2 "No action taken (type 'Y' for yes)"
 fi
 

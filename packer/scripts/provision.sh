@@ -18,21 +18,34 @@ set -ex
 # ARG APT_PROXY
 echo export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64 | tee -a /etc/profile.d/buildenv.sh && source /etc/profile.d/buildenv.sh
 
-cd $DOCKERPWD && sed -i 's/https/http/g' /etc/apt/sources.list.d/* || true || exit $?
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get update -y && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get upgrade -y && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y gcc sg3-utils openssh-server git pmccabe fio libaio1 libaio1-dbg libaio-dev sysstat iotop nmap traceroute valgrind strace libtool m4 wget clang ant openjdk-7-jdk zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip dpkg-dev libcap-dev || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq gcc sg3-utils openssh-server git pmccabe fio libaio1 libaio1-dbg libaio-dev sysstat iotop nmap traceroute valgrind strace libtool m4 wget clang ant openjdk-7-jdk zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip dpkg-dev libcap-dev || exit $?
 ## libhdfs3 deps
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf-dev protobuf-compiler debhelper || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf-dev protobuf-compiler debhelper || exit $?
 ## fpm deps
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby unixodbc-bin libmyodbc unixodbc-dev curl vim-nox bash-completion bc || exit $?
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y --no-install-recommends maven2 libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev libjemalloc-dev sysvinit-utils sysv-rc || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby unixodbc-bin libmyodbc unixodbc-dev curl vim-nox bash-completion bc || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq --no-install-recommends maven2 libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev libjemalloc-dev sysvinit-utils sysv-rc || exit $?
 
 cd $DOCKERPWD && groupadd --non-unique --force --gid 999 docker || exit $?
-cd $DOCKERPWD && curl -sL https://deb.nodesource.com/setup_5.x | /bin/bash - && sed -i 's/https/http/g' /etc/apt/sources.list.d/* && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs || exit $?
+cd $DOCKERPWD && curl -sL https://deb.nodesource.com/setup_5.x | /bin/bash - && sed -i 's/https/http/g' /etc/apt/sources.list.d/* && DEBIAN_FRONTEND=noninteractive apt-get install -yqq nodejs || exit $?
 cd $DOCKERPWD && for pkg in less grunt-cli uglify-js; do npm install -g $pkg; done || exit $?
 
 cd $DOCKERPWD && curl -sL http://repo.xcalar.net/pubkey.gpg | sudo apt-key add - || exit $?
 cd $DOCKERPWD && curl -sL http://repo.xcalar.net/xcalar-release-trusty.deb > /tmp/xcalar-release-trusty.deb && dpkg -i /tmp/xcalar-release-trusty.deb && rm -f /tmp/xcalar-release-trusty.deb || exit $?
-cd $DOCKERPWD && apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y thrift-dev libhdfs3-dev pmd || exit $?
+cd $DOCKERPWD && apt-get update -yqq && DEBIAN_FRONTEND=noninteractive apt-get install -yqq thrift-dev pmd || exit $?
+
+
+cd $DOCKERPWD && printf 'source %s\n\ngem %s' "'https://rubygems.org'" "'fpm'" > /tmp/Gemfile && cd /tmp && bundle install && rm /tmp/Gemfile || exit $?
+DOCKERPWD="/usr/src"
+#RUN printf '#!/bin/sh\nldconfig\n' > /var/tmp/ldconfig.sh && chmod +x /var/tmp/ldconfig.sh
+#RUN cd /usr/src && git clone https://github.com/PivotalRD/libhdfs3.git && cd libhdfs3 && git checkout -f v2.2.31
+echo export LIBHDFS3_ITERATION=6 | tee -a /etc/profile.d/buildenv.sh && source /etc/profile.d/buildenv.sh
+cd $SRCDIR && cp -a ./bin/setupLibhdfs3.sh /usr/src/ || curl -sSL http://repo.xcalar.net/scripts/setupLibhdfs3.sh > /usr/src/setupLibhdfs3.sh
+cd $DOCKERPWD && bash /usr/src/setupLibhdfs3.sh || exit $?
+#RUN cd /usr/src/libhdfs3 && curl -sSL http://repo.xcalar.net/deps/0001-Hack-to-always-use-hostname-to-connect-to-datanode.patch | patch -p1 && curl -sSL http://repo.xcalar.net/deps/0002-Nuclear-Option-To-Replace-All-getIpAddr-With-getHostName.patch | patch -p1
+### Add other patches here, and bump LIBHDFS3_ITERATION above to invalidate the docker cache and cause it to rebuild
+#RUN mkdir -p /usr/src/libhdfs3/build && cd /usr/src/libhdfs3/build && ../bootstrap --prefix=/usr && make -j`nproc` libhdfs3-static
+#RUN cd /usr/src/libhdfs3/build && make libhdfs3-static install DESTDIR=/tmp/libhdfs3 && cd ../.. && fpm -s dir -t deb -n libhdfs3-devel -v 2.2.31 -a x86_64 --iteration ${LIBHDFS3_ITERATION} --after-install /var/tmp/ldconfig.sh -C /tmp/libhdfs3 usr && rm -rf /tmp/libhdfs3 && dpkg -i libhdfs3*.deb
+
 
 ## Remove .so's of libs that we depend on but don't ship with the distro.
 ## Since we don't dynamically link against these anymore, we don't need to worry about shipping their packages.
@@ -40,13 +53,11 @@ cd $DOCKERPWD && echo 'add-auto-load-safe-path /' | tee -a /etc/gdb/gdbinit || e
 #
 cd $DOCKERPWD && echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-sudo && chmod 0440 /etc/sudoers.d/99-sudo || exit $?
 
-DOCKERPWD="/usr/src"
 
-cd $DOCKERPWD && printf 'source %s\n\ngem %s' "'https://rubygems.org'" "'fpm'" > /tmp/Gemfile && cd /tmp && bundle install || exit $?
 
 cd $DOCKERPWD && curl -o /usr/bin/gosu -fsSL "https://github.com/tianon/gosu/releases/download/1.7/gosu-$(dpkg --print-architecture)" && chmod +x /usr/bin/gosu || exit $?
 
-cd $DOCKERPWD && for pkg in xmltodict fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil netifaces pyquery texttable; do pip install -U ${pkg}; done || exit $?
+cd $DOCKERPWD && for pkg in fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil netifaces pyquery texttable virtualenv; do pip install -U ${pkg}; done || exit $?
 
 cd $SRCDIR && cp ./bin/install_unixOdbc.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/install_unixOdbc.sh > /usr/local/bin/install_unixOdbc.sh && cd - || true
 cd $SRCDIR && cp ./bin/setupOdbcMysql.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/setupOdbcMysql.sh > /usr/local/bin/setupOdbcMysql.sh && cd - || true
