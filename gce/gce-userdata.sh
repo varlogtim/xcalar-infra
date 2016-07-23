@@ -97,13 +97,11 @@ COUNT=$(get_metadata_value attributes/count)
 CLUSTERDIR=/mnt/nfs/cluster/$CLUSTER
 NFSMOUNT=/mnt/xcalar
 
-$sh_c 'mkdir -p /mnt/nfs /netstore/datasets /netstore/LRQ'
+$sh_c 'mkdir -p /mnt/nfs /netstore/datasets'
 $sh_c 'sed -i -e "/\/mnt\/nfs/d" /etc/fstab'
 $sh_c 'sed -i -e "/\/netstore\/datasets/d" /etc/fstab'
-$sh_c 'sed -i -e "/\/netstore\/LRQ/d" /etc/fstab'
 $sh_c 'echo "nfs:/srv/share/nfs /mnt/nfs   nfs defaults 0   0" >> /etc/fstab'
 $sh_c 'echo "nfs:/srv/datasets /netstore/datasets   nfs defaults 0   0" >> /etc/fstab'
-$sh_c 'echo "nfs:/srv/LRQ /netstore/LRQ   nfs defaults 0   0" >> /etc/fstab'
 $sh_c 'mount -a'
 
 mkdir -p $CLUSTERDIR/members
