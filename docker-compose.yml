@@ -45,6 +45,32 @@ grafana:
         - grafana_storage:/var/lib/grafana
         - grafana_config:/etc/grafana
 
+cloud9:
+    restart: always
+    image: kdelfour/cloud9-docker
+    environment:
+        - VIRTUAL_HOST=cloud9.int.xcalar.com,cloud9
+        - VIRTUAL_PORT=80
+
+
+#docker run -it -d -p 80:80 kdelfour/cloud9-docker
+#
+hdfs:
+    build: hadoop
+    restart: always
+    environment:
+        - VIRTUAL_HOST=hdfs-sanity.int.xcalar.com,hdfs-sanity
+        - VIRTUAL_PORT=50070
+    hostname: hdfs-sanity.local
+    ports:
+        - "2122:2122"
+        - "8020:9000"
+        - "50010:50010"
+        - "50020:50020"
+        - "50070:50070"
+        - "50075:50075"
+
+
 wetty:
     restart: always
     image: nathanleclaire/wetty
