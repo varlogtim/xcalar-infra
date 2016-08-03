@@ -60,16 +60,19 @@ hdfs:
     restart: always
     environment:
         - VIRTUAL_HOST=hdfs-sanity.int.xcalar.com,hdfs-sanity
-        - VIRTUAL_PORT=50070
+        - VIRTUAL_PORT=8088
     hostname: hdfs-sanity.local
     ports:
         - "2122:2122"
         - "8020:9000"
+        - "8088:8088"
         - "50010:50010"
         - "50020:50020"
         - "50070:50070"
         - "50075:50075"
 
+
+#- VIRTUAL_PORT=50070
 
 wetty:
     restart: always
