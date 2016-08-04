@@ -61,7 +61,7 @@ hdfs:
     environment:
         - VIRTUAL_HOST=hdfs-sanity.int.xcalar.com,hdfs-sanity
         - VIRTUAL_PORT=8088
-    hostname: hdfs-sanity.local
+    hostname: hdfs-sanity
     ports:
         - "2122:2122"
         - "8020:9000"
@@ -84,7 +84,7 @@ wetty:
     domainname: int.xcalar.com
 
 jenkins2:
-    image: jenkinsci/jenkins:2.0-beta-1
+    image: jenkins:2.7.1
     hostname: jenkins2
     domainname: int.xcalar.com
     ports:
