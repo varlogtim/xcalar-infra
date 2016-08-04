@@ -16,3 +16,4 @@ RUN curl -sSL http://repo.xcalar.net/data/qa.tar.gz | tar zxf - -C /tmp && \
     source $HADOOP_PREFIX/etc/hadoop/hadoop-env.sh && \
     ./sbin/stop-yarn.sh && \
     ./sbin/stop-dfs.sh
+RUN rm -fv /usr/local/hadoop/logs/*.{log,out,out.?}
