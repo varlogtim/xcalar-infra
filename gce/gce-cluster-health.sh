@@ -22,7 +22,7 @@ INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
 PIDS=()
 
 for host in ${INSTANCES[@]}; do
-    gcloud compute ssh $host --command "grep 'UsrNodeMain All nodes now network ready' /var/log/Xcalar.log" </dev/null &
+    gcloud compute ssh $host --command "grep 'All nodes now network ready' /var/log/Xcalar.log" </dev/null &
     PIDS+=($!)
 done
 ret=0
