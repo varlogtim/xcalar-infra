@@ -47,7 +47,7 @@ cd $DOCKERPWD && echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-sudo &&
 
 cd $DOCKERPWD && curl -o /usr/bin/gosu -fsSL "https://github.com/tianon/gosu/releases/download/1.7/gosu-$(dpkg --print-architecture)" && chmod +x /usr/bin/gosu || exit $?
 
-cd $DOCKERPWD && for pkg in fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil netifaces pyquery texttable virtualenv; do pip install -U ${pkg}; done || exit $?
+cd $DOCKERPWD && for pkg in fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil netifaces pyquery texttable virtualenv python-dateutil; do pip install -U ${pkg}; done || exit $?
 
 cd $SRCDIR && cp ./bin/install_unixOdbc.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/install_unixOdbc.sh > /usr/local/bin/install_unixOdbc.sh && cd - || true
 cd $SRCDIR && cp ./bin/setupOdbcMysql.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/setupOdbcMysql.sh > /usr/local/bin/setupOdbcMysql.sh && cd - || true
