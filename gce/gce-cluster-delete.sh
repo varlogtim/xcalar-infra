@@ -13,7 +13,7 @@ if [ -z "$CLUSTER" ]; then
     exit 1
 fi
 
-INSTANCES="$(gcloud compute instances list | grep $CLUSTER | awk '{print $1}')"
+INSTANCES="$(gcloud compute instances list | grep -w $CLUSTER | awk '{print $1}')"
 
 if [ -z "$INSTANCES" ]; then
     echo >&2 "No instances found for cluster $CLUSTER"

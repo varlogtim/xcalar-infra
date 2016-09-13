@@ -121,7 +121,7 @@ chmod +x ./xcalar-installer
 set +e
 set -x
 get_metadata_value attributes/config > xcalar-config
-sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath=nfs://'$NFSMOUNT'@g' xcalar-config > xcalar-config-nfs
+sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' xcalar-config > xcalar-config-nfs
 $sh_c 'mkdir -p /etc/xcalar'
 $sh_c 'cp xcalar-config-nfs /etc/xcalar/default.cfg'
 $sh_c 'bash ./xcalar-installer'
