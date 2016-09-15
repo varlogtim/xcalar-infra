@@ -13,15 +13,15 @@ if [ -z "$CLUSTER" ]; then
     exit 1
 fi
 
-INSTANCES="$(gcloud compute instances list | grep -w $CLUSTER | awk '{print $1}')"
+INSTANCES=($(gcloud compute instances list | awk '$1~/^'$CLUSTER'-[0-9]+/{print $1}'))
 
-if [ -z "$INSTANCES" ]; then
+if [ "${#INSTANCES[@]}" -eq 0 ]; then
     echo >&2 "No instances found for cluster $CLUSTER"
 else
     echo >&2 "WARNING: Deleting the following instances! Press Ctrl-C to abort. Sleeping for 10s."
-    echo >&2 "$INSTANCES"
+    echo >&2 "${INSTANCES[@]}"
     sleep 10
-    gcloud compute instances delete -q $INSTANCES
+    gcloud compute instances delete -q "${INSTANCES[@]}"
 fi
 echo "Deleting nfs:/srv/share/nfs/cluster/$CLUSTER"
 gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
