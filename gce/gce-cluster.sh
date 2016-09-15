@@ -63,7 +63,13 @@ if ! command -v gcloud; then
     fi
 fi
 if test -f "$INSTALLER"; then
-    INSTALLER_URL="repo.xcalar.net/builds/$INSTALLER_FNAME"
+    if [[ "$INSTALLER" =~ '/debug/' ]]; then
+        INSTALLER_URL="repo.xcalar.net/builds/debug/$INSTALLER_FNAME"
+    elif [[ "$INSTALLER" =~ '/prod/' ]]; then
+        INSTALLER_URL="repo.xcalar.net/builds/prod/$INSTALLER_FNAME"
+    else
+        INSTALLER_URL="repo.xcalar.net/builds/$INSTALLER_FNAME"
+    fi
     if ! gsutil ls gs://$INSTALLER_URL &>/dev/null; then
         say "Uploading $INSTALLER to gs://$INSTALLER_URL"
         until gsutil -m -o GSUtil:parallel_composite_upload_threshold=100M \
@@ -96,7 +102,7 @@ rm -f $CONFIG
 $DIR/../bin/genConfig.sh $DIR/../bin/template.cfg $CONFIG ${INSTANCES[@]}
 
 ARGS=()
-ARGS+=(--image ${IMAGE:-ubuntu-1404-1472059371})
+ARGS+=(--image ${IMAGE:-ubuntu-1404-1473838775})
 
 if [ $COUNT -gt 3 ]; then
     NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
@@ -108,6 +114,7 @@ fi
 
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
+gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --machine-type ${INSTANCE_TYPE} \
     --network=${NETWORK} \
