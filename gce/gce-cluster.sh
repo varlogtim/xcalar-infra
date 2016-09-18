@@ -29,6 +29,7 @@ UPLOADLOG=/tmp/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
 EMAIL="$(git config user.email)"
 DISK_TYPE="${DISK_TYPE:-pd-standard}"
+NETWORK="${NETWORK:-private}"
 INSTANCE_TYPE=${INSTANCE_TYPE:-n1-highmem-8}
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
 if [ -z "$DISK_SIZE" ]; then
@@ -109,7 +110,7 @@ say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --machine-type ${INSTANCE_TYPE} \
-    --network=private \
+    --network=${NETWORK} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size $DISK_SIZE \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
