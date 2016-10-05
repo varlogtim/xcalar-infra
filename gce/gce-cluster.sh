@@ -102,7 +102,7 @@ rm -f $CONFIG
 $DIR/../bin/genConfig.sh $DIR/../bin/template.cfg $CONFIG ${INSTANCES[@]}
 
 ARGS=()
-ARGS+=(--image ${IMAGE:-ubuntu-1404-1473838775})
+ARGS+=(--image ${IMAGE:-ubuntu-1404-1475647371})
 
 if [ $COUNT -gt 3 ]; then
     NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
