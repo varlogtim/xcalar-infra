@@ -124,5 +124,7 @@ get_metadata_value attributes/config > xcalar-config
 sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' xcalar-config > xcalar-config-nfs
 $sh_c 'mkdir -p /etc/xcalar'
 $sh_c 'cp xcalar-config-nfs /etc/xcalar/default.cfg'
+$sh_c 'curl -sSL http://repo.xcalar.net/bysha1/f9/f986aa196ad7455880a25b60d2b69e4a9ad75dd5/XcalarLic.key > /etc/xcalar/XcalarLic.key'
+$sh_c 'curl -sSL http://repo.xcalar.net/bysha1/4e/4eaac881c6194dbf4d768cd6df9f4e41bead6758/EcdsaPub.key > /etc/xcalar/EcdsaPub.key'
 $sh_c 'bash ./xcalar-installer'
 $sh_c 'service xcalar start'
