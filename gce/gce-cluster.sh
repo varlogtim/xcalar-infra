@@ -99,7 +99,9 @@ else
 fi
 
 rm -f $CONFIG
-$DIR/../bin/genConfig.sh $DIR/../bin/template.cfg $CONFIG ${INSTANCES[@]}
+# if CONFIG_TEMPLATE isn't set, use the default template.cfg
+CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
+$DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG ${INSTANCES[@]}
 
 ARGS=()
 ARGS+=(--image ${IMAGE:-ubuntu-1404-1475647371})
