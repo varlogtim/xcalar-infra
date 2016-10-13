@@ -10,6 +10,7 @@ gerrit:
         - VIRTUAL_PORT=8080
         - AUTH_TYPE=oauth
         - GERRIT_SITE=/home/gerrit2/gerrit
+        - CERT_NAME=gerrit
     volumes:
         - "gerrit:/home/gerrit2/gerrit"
 
