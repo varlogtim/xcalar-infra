@@ -21,12 +21,12 @@ echo export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64 | tee -a /etc/profile.d/
 cd $DOCKERPWD && curl -sL http://repo.xcalar.net/pubkey.gpg | sudo apt-key add - || exit $?
 cd $DOCKERPWD && curl -sL http://repo.xcalar.net/xcalar-release-trusty.deb > /tmp/xcalar-release-trusty.deb && dpkg -i /tmp/xcalar-release-trusty.deb && rm -f /tmp/xcalar-release-trusty.deb || exit $?
 
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get update -y && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get upgrade -y && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq gcc sg3-utils openssh-server git pmccabe fio libaio1 libaio1-dbg libaio-dev sysstat iotop nmap traceroute valgrind strace libtool m4 wget clang ant openjdk-7-jdk zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip dpkg-dev libcap-dev gawk libcrypto++9 libcrypto++-dev || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get update -yqq && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get upgrade -y && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq gcc sg3-utils openssh-server git pmccabe fio libaio1 libaio1-dbg libaio-dev sysstat iotop nmap traceroute valgrind strace libtool m4 wget clang ant openjdk-7-jdk zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip dpkg-dev libcap-dev gawk libcrypto++9 libcrypto++-dev || exit $?
 ## libhdfs3 deps
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf10 libprotobuf-dev protobuf-compiler debhelper || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf10 libprotobuf-dev protobuf-compiler debhelper || exit $?
 ## fpm deps
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby curl vim-nox bash-completion bc || exit $?
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -y --no-install-recommends maven2 libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby curl vim-nox bash-completion bc || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq --no-install-recommends maven2 libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev || exit $?
 
 cd $DOCKERPWD && groupadd --non-unique --force --gid 999 docker || exit $?
 cd $DOCKERPWD && curl -sL https://deb.nodesource.com/setup_4.x | /bin/bash - && DEBIAN_FRONTEND=noninteractive apt-get install -yqq nodejs || exit $?
@@ -44,27 +44,17 @@ cd $DOCKERPWD && echo 'add-auto-load-safe-path /' | tee -a /etc/gdb/gdbinit || e
 #
 cd $DOCKERPWD && echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-sudo && chmod 0440 /etc/sudoers.d/99-sudo || exit $?
 
-
-
 cd $DOCKERPWD && curl -o /usr/bin/gosu -fsSL "https://github.com/tianon/gosu/releases/download/1.7/gosu-$(dpkg --print-architecture)" && chmod +x /usr/bin/gosu || exit $?
 
-cd $DOCKERPWD && for pkg in fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil netifaces pyquery texttable virtualenv python-dateutil crcmod; do pip install -U ${pkg}; done || exit $?
+cd $DOCKERPWD && for pkg in fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil netifaces pyquery texttable virtualenv pywebhdfs urlparse snakebite; do pip install -U ${pkg}; done || exit $?
+cd $DOCKERPWD && pip install -U xlrd datetime pytz xmltodict python-dateutil
 
-cd $SRCDIR && cp ./bin/install_unixOdbc.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/install_unixOdbc.sh > /usr/local/bin/install_unixOdbc.sh && cd - || true
-cd $SRCDIR && cp ./bin/setupOdbcMysql.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/setupOdbcMysql.sh > /usr/local/bin/setupOdbcMysql.sh && cd - || true
 cd $SRCDIR && cp ./bin/osid /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/osid > /usr/local/bin/osid && chmod +x /usr/local/bin/osid && cd - || true
 cd $SRCDIR && cp ./bin/install-clang.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/install-clang.sh > /usr/local/bin/install-clang.sh && cd - || true
 cd $DOCKERPWD && bash /usr/local/bin/install-clang.sh || exit $?
 
-cd $DOCKERPWD && service mysql restart && bash /usr/local/bin/install_unixOdbc.sh && bash /usr/local/bin/setupOdbcMysql.sh && service mysql stop || exit $?
-
 cd $SRCDIR && cp -a ./conf/xcalar-sysctl.conf /etc/sysctl.d/99-xcalar.conf || curl -sSL http://repo.xcalar.net/patches/conf/xcalar-sysctl.conf > /etc/sysctl.d/90-sysctl.conf && cd - || true
 cd $SRCDIR && cp -a ./conf/xcalar-limits.conf /etc/security/limits.d/99-xcalar.conf || curl -sSL http://repo.xcalar.net/patches/conf/xcalar-limits.conf > /etc/security/limits.d/90-limits.conf && cd - || true
-cd $SRCDIR && cp -a ./conf/xcalar-logrotate.conf /etc/logrotate.d/xcalar || curl -sSL http://repo.xcalar.net/patches/conf/xcalar-logrotate.conf > /etc/logrotate.d/xcalar && cd - || true
-cd $SRCDIR && cp -a ./conf/xcalar-rsyslog.conf   /etc/rsyslog.d/42-xcalar.conf || curl -sSL http://repo.xcalar.net/patches/conf/xcalar-rsyslog.conf > /etc/rsyslog.d/42-xcalar.conf && cd - || true
-
-cd $DOCKERPWD && if ! grep -q '^xlrlowpriv:' /etc/passwd; then useradd --system --shell /usr/sbin/nologin xlrlowpriv; fi || exit $?
-cd $DOCKERPWD && if ! grep -q '^xlrlowprivnet:' /etc/passwd; then useradd --system --shell /usr/sbin/nologin xlrlowprivnet; fi || exit $?
 
 cd /var/tmp && for data in flight gdelt-small indexJoin yelp; do curl --retry 5 -sSL http://repo.xcalar.net/data/${data}.tar.gz | tar zxf - || true; done || true
 

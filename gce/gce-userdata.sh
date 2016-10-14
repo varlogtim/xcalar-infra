@@ -5,7 +5,11 @@ command_exists() {
 }
 
 get_metadata_value () {
-    curl -sSL -H 'Metadata-Flavor: Google' "http://metadata.google.internal/computeMetadata/v1/instance/$1"
+    if test -e /usr/share/google/get_metadata_value; then
+        /usr/share/google/get_metadata_value "$1"
+    else
+        curl -sSL -H 'Metadata-Flavor: Google' "http://metadata.google.internal/computeMetadata/v1/instance/$1"
+    fi
 }
 
 os_version () {
@@ -86,8 +90,12 @@ do_install () {
 do_install
 
 cd /tmp
-IP="$(ifconfig eth0 | grep inet | awk '{print $2}' | awk -F':' '{print $2}')"
-CLUSTER=$(get_metadata_value attributes/cluster)
+NOW="$(date +'%Y%m%d-%H%M')"
+IP="$(get_metadata_value network-interfaces/0/ip)"
+HOSTNAME_F="$(get_metadata_value hostname)"
+HOSTNAME_S="${HOSTNAME_F%%.*}"
+HOSTSENTRY="$IP       $HOSTNAME_F $HOSTNAME_S  #xcalar_added"
+CLUSTER="$(get_metadata_value attributes/cluster)"
 if [ -z "$cluster" ]; then
     CLUSTER="${HOSTNAME%%-[0-9]*}"
 fi
@@ -96,6 +104,14 @@ COUNT=$(get_metadata_value attributes/count)
 
 CLUSTERDIR=/mnt/nfs/cluster/$CLUSTER
 NFSMOUNT=/mnt/xcalar
+
+$sh_c "cp /etc/hostname /etc/hostname.${NOW}"
+$sh_c "echo $HOSTNAME_S > /etc/hostname"
+$sh_c "cp /etc/hosts /etc/hosts.${NOW}"
+$sh_c 'sed -i -e "/#xcalar_added$/d" /etc/hosts'
+$sh_c 'sed -i -e "/'$IP'/d" /etc/hosts'
+$sh_c "echo "$HOSTSENTRY" >> /etc/hosts"
+$sh_c "hostname $HOSTNAME_S"
 
 $sh_c 'mkdir -p /mnt/nfs /netstore/datasets'
 $sh_c 'sed -i -e "/\/mnt\/nfs/d" /etc/fstab'
@@ -111,20 +127,23 @@ $sh_c "sed -i '/$CLUSTER/d' /etc/fstab"
 $sh_c "echo 'nfs:/srv/share/nfs/cluster/$CLUSTER   $NFSMOUNT nfs defaults 0   0' >> /etc/fstab"
 $sh_c 'mount -a'
 
-test -f /etc/hosts.orig || $sh_c 'cp /etc/hosts /etc/hosts.orig'
-(cat /etc/hosts.orig ; echo "$IP    $(hostname -f) $(hostname -s)") > /tmp/hosts && $sh_c 'mv /tmp/hosts /etc/hosts'
-$sh_c "echo '$IP   $(hostname -f) $(hostname -s)' | tee $CLUSTERDIR/members/$(hostname -f)"
+#test -f /etc/hosts.orig || $sh_c 'cp /etc/hosts /etc/hosts.orig'
+#(cat /etc/hosts.orig ; echo "$IP    $(hostname -f) $(hostname -s)") > /tmp/hosts && $sh_c 'mv /tmp/hosts /etc/hosts'
+$sh_c "echo $HOSTSENTRY | tee $CLUSTERDIR/members/$HOSTNAME_F"
+#$sh_c "echo '$IP   $(hostname -f) $(hostname -s)' | tee $CLUSTERDIR/members/$(hostname -f)"
 
 # Download and run the installer
-curl -sSL "$(get_metadata_value attributes/installer)" > xcalar-installer
-chmod +x ./xcalar-installer
+curl -sSL "$(get_metadata_value attributes/installer)" > /tmp/xcalar-installer
+chmod +x /tmp/xcalar-installer
 set +e
 set -x
-get_metadata_value attributes/config > xcalar-config
-sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' xcalar-config > xcalar-config-nfs
+get_metadata_value attributes/config > /tmp/xcalar-config
+sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' /tmp/xcalar-config > /tmp/xcalar-config-nfs
 $sh_c 'mkdir -p /etc/xcalar'
-$sh_c 'cp xcalar-config-nfs /etc/xcalar/default.cfg'
+$sh_c 'cp /tmp/xcalar-config-nfs /etc/xcalar/default.cfg'
 $sh_c 'curl -sSL http://repo.xcalar.net/bysha1/f9/f986aa196ad7455880a25b60d2b69e4a9ad75dd5/XcalarLic.key > /etc/xcalar/XcalarLic.key'
 $sh_c 'curl -sSL http://repo.xcalar.net/bysha1/4e/4eaac881c6194dbf4d768cd6df9f4e41bead6758/EcdsaPub.key > /etc/xcalar/EcdsaPub.key'
-$sh_c 'bash ./xcalar-installer'
+$sh_c 'bash -x /tmp/xcalar-installer --noStart'
+$sh_c 'service rsyslog restart'
+$sh_c 'service apache2 restart'
 $sh_c 'service xcalar start'

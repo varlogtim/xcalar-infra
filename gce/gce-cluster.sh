@@ -13,6 +13,8 @@ if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
+TMPDIR="${TMPDIR:-/tmp/$(id -un)}/gce/$$"
+mkdir -p "$TMPDIR"
 if test -f "$1"; then
     INSTALLER="$(readlink -f ${1})"
 elif [[ $1 =~ ^http[s]?:// ]]; then
@@ -104,7 +106,7 @@ CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
 $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG ${INSTANCES[@]}
 
 ARGS=()
-ARGS+=(--image ${IMAGE:-ubuntu-1404-1475647371})
+ARGS+=(--image ${IMAGE:-ubuntu-1404-1476441781})
 
 if [ $COUNT -gt 3 ]; then
     NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
@@ -123,4 +125,11 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size $DISK_SIZE \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
-    --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG
+    --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG | tee $TMPDIR/gce-output.txt
+set +x
+res=${PIPESTATUS[0]}
+if [ "$res" -ne 0 ]; then
+    exit $res
+fi
+grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$4,$1;}' | tee $TMPDIR/hosts-int.txt
+grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$5,$1;}' | tee $TMPDIR/hosts-ext.txt
