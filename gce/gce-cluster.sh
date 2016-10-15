@@ -34,6 +34,7 @@ DISK_TYPE="${DISK_TYPE:-pd-standard}"
 NETWORK="${NETWORK:-private}"
 INSTANCE_TYPE=${INSTANCE_TYPE:-n1-highmem-8}
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
+DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-swap-{1..$COUNT}))
 if [ -z "$DISK_SIZE" ]; then
     case "$INSTANCE_TYPE" in
         n1-highmem-16) DISK_SIZE=100GB ;;
@@ -119,6 +120,7 @@ fi
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
 gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
+gcloud compute disks create --size=10GB --type=pd-ssd "${DISKS[@]}"
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --machine-type ${INSTANCE_TYPE} \
     --network=${NETWORK} \
@@ -126,10 +128,19 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --boot-disk-size $DISK_SIZE \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
     --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG | tee $TMPDIR/gce-output.txt
-set +x
 res=${PIPESTATUS[0]}
+set +x
 if [ "$res" -ne 0 ]; then
     exit $res
 fi
+for ii in `seq 1 $COUNT`; do
+    gcloud compute instances attach-disk ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii}
+done
+for ii in `seq 1 $COUNT`; do
+    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo mkswap -f /dev/sdb" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo swapon /dev/sdb"
+done
+
 grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$4,$1;}' | tee $TMPDIR/hosts-int.txt
 grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$5,$1;}' | tee $TMPDIR/hosts-ext.txt
