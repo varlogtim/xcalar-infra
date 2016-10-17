@@ -137,13 +137,12 @@
             "type": "shell",
             "execute_command": "{{.Vars}} sudo -E -S bash '{{.Path}}'",
             "scripts": [
+                "scripts/start.sh",
                 "scripts/update.sh",
                 "scripts/packages.sh",
                 "scripts/docker.sh",
                 "scripts/provision.sh",
                 "scripts/dkms-ixgbevf-install.sh",
-                "scripts/install_unixOdbc.sh",
-                "scripts/setupOdbcMysql.sh",
                 "scripts/finish.sh"
             ]
         }

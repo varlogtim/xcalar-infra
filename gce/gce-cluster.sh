@@ -107,7 +107,7 @@ CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
 $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG ${INSTANCES[@]}
 
 ARGS=()
-ARGS+=(--image ${IMAGE:-ubuntu-1404-1476441781})
+ARGS+=(--image ${IMAGE:-ubuntu-1404-1476513959})
 
 if [ $COUNT -gt 3 ]; then
     NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
@@ -137,10 +137,10 @@ for ii in `seq 1 $COUNT`; do
     gcloud compute instances attach-disk ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii}
 done
 for ii in `seq 1 $COUNT`; do
-    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo mkswap -f /dev/sdb" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo swapon /dev/sdb"
+    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo mkswap -f /dev/sdb >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo swapon /dev/sdb >/dev/null"
 done
 
-grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$4,$1;}' | tee $TMPDIR/hosts-int.txt
-grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$5,$1;}' | tee $TMPDIR/hosts-ext.txt
+grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$5,$1;}' | tee $TMPDIR/hosts-int.txt
+grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$6,$1;}' | tee $TMPDIR/hosts-ext.txt
