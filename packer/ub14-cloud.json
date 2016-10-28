@@ -1,5 +1,8 @@
 {
     "variables": {
+        "user": "jenkins",
+        "uid": "1000",
+        "password": "jenkins",
         "image_name": "ubuntu-1404-{{timestamp}}",
         "disk_size": "10",
         "project_id": "angular-expanse-99923",
@@ -8,7 +11,7 @@
         "source_ami": "ami-9abea4fb",
         "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
         "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
-        "user": "{{env `USER`}}"
+        "osver": "ub14"
     },
 
     "builders":
@@ -135,13 +138,17 @@
     "provisioners": [
         {
             "type": "shell",
+            "environment_vars": [
+                "CONTAINER_USER={{user `user`}}",
+                "CONTAINER_UID={{user `uid`}}"
+            ],
             "execute_command": "{{.Vars}} sudo -E -S bash '{{.Path}}'",
             "scripts": [
                 "scripts/start.sh",
-                "scripts/update.sh",
-                "scripts/packages.sh",
+                "scripts/update-{{user `osver`}}.sh",
+                "scripts/packages-{{user `osver`}}.sh",
                 "scripts/docker.sh",
-                "scripts/provision.sh",
+                "scripts/provision-{{user `osver`}}.sh",
                 "scripts/dkms-ixgbevf-install.sh",
                 "scripts/finish.sh"
             ]

@@ -1,0 +1,105 @@
+{
+    "variables": {
+        "user": "jenkins",
+        "uid": "1000",
+        "password": "jenkins",
+        "disk_size": "100000",
+        "output_directory": "output",
+        "iso_url": "http://netstore.int.xcalar.com/isos/CentOS-6.8-x86_64-bin-DVD1.iso",
+        "iso_md5": "f73c2c4dd333c202ca85ea66120cacdf",
+        "name" : "jenkins-slave-el6",
+        "osver": "el6",
+        "kickstart": "ks6.cfg"
+    },
+    "builders":
+    [
+        {
+            "type": "qemu",
+            "name": "{{user `name`}}-{{user `name`}}-qemu-kvm",
+            "format": "qcow2",
+            "accelerator": "kvm",
+            "disk_size": "{{ user `disk_size`}}",
+
+            "iso_url": "{{ user `iso_url`}}",
+            "iso_checksum": "{{ user `iso_md5`}}",
+            "iso_checksum_type": "md5",
+
+            "http_directory": "http",
+
+            "ssh_username": "{{user `user`}}",
+            "ssh_password": "{{user `password`}}",
+            "ssh_wait_timeout": "20m",
+            "shutdown_command": "echo '{{user `password`}}'|sudo -S shutdown -P now",
+
+            "output_directory": "{{ user `output_directory`}}-qemu-kvm",
+            "boot_wait": "2s",
+            "boot_command": [
+                "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort}}/{{ user `kickstart` }}<enter>"
+            ]
+        },
+        {
+            "type": "vmware-iso",
+            "vm_name": "{{user `name`}}-vmware",
+            "headless": true,
+            "boot_wait": "5s",
+            "disk_size": "{{ user `disk_size`}}",
+            "boot_command": [
+                "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort}}/{{ user `kickstart` }}<enter>"
+            ],
+            "shutdown_command": "echo '{{user `password`}}' | sudo -S shutdown -P now",
+            "output_directory": "{{ user `output_directory`}}-{{user `name`}}-vmware",
+            "http_directory": "http",
+            "iso_url": "{{ user `iso_url`}}",
+            "iso_checksum": "{{ user `iso_md5`}}",
+            "iso_checksum_type": "md5",
+            "ssh_username": "{{ user `user`}}",
+            "ssh_password": "{{ user `password`}}",
+            "ssh_port": 22,
+            "ssh_wait_timeout": "10000s",
+            "guest_os_type": "centos-64",
+            "keep_registered": true,
+            "tools_upload_flavor": "linux",
+            "vmx_data": { "memsize": "2048"}
+        }
+    ],
+
+    "provisioners": [
+        {
+            "type": "shell",
+            "environment_vars": [
+                "CONTAINER_USER={{user `user`}}",
+                "CONTAINER_UID={{user `uid`}}"
+            ],
+            "execute_command": "echo '{{user `password`}}' | {{.Vars}} sudo -E -S bash '{{.Path}}'",
+            "scripts": [
+                "scripts/start.sh",
+                "scripts/update-{{user `osver`}}.sh",
+                "scripts/packages-{{user `osver`}}.sh",
+                "scripts/docker.sh",
+                "scripts/{{user `user`}}.sh",
+                "scripts/provision-{{user `osver`}}.sh",
+                "scripts/finish.sh"
+            ]
+        }
+    ],
+
+    "post-processors": [
+        {
+            "type": "vagrant",
+            "keep_input_artifact": true,
+            "output": "{{user `output_directory`}}-box/{{user `name`}}.box"
+        },
+        {
+            "type": "vsphere-ova",
+            "host":"10.10.1.4",
+            "datacenter":"Datacenter/Xcalar/node6.int.xcalar.com",
+            "username":"root",
+            "password":"Welcome1",
+            "datastore": "node6-4TB-2",
+            "vm_folder":"Datacenter",
+            "vm_network":"VM Network",
+            "remove_floppy": "true",
+            "remove_optical_drive": "true"
+        }
+    ]
+}

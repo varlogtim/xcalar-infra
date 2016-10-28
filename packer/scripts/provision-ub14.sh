@@ -8,7 +8,7 @@ DOCKERUSER="`id -un`"
 SRCDIR=$PWD
 if [ `id -u` -ne 0 ]; then sudo "$0" "$@"; exit $?; fi
 if [ -z "$APT_PROXY" ]; then echo >&2 "WARNING: \$APT_PROXY not specified in the environment!"; fi
-if [ -z "$CONTAINER_USER" ]; then echo >&2 "WARNING: \$CONTAINER_USER not specified in the environment!"; export CONTAINER_USER=ubuntu; fi
+if [ -z "$CONTAINER_USER" ]; then echo >&2 "WARNING: \$CONTAINER_USER not specified in the environment!"; export CONTAINER_USER=jenkins; fi
 if [ -z "$CONTAINER_UID" ]; then echo >&2 "WARNING: \$CONTAINER_UID not specified in the environment!"; export CONTAINER_UID=1000; fi
 rm -f /etc/profile.d/buildenv.sh
 set -ex
