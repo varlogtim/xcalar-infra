@@ -1,0 +1,43 @@
+#!/bin/bash
+
+DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
+TMPL="$1"
+if [ -z "$TMPL" ]; then
+    echo >&2 "Need to specify a template (el6-minimal, el7-minimal, ub14-minimal)"
+    exit 1
+fi
+XML="$DIR/tmpl/${TMPL}.xml"
+if ! test -e "$XML"; then
+    echo >&2 "No template $XML found"
+    exit 1
+fi
+
+
+BASE=/var/lib/libvirt/images/${TMPL}.qcow2
+sudo chmod 0755 /var/lib/libvirt/images
+if ! test -e "$BASE"; then
+    echo >&2 "Copying ${TMPL}.qcow2 from /netstore/isos/..."
+    sudo cp /netstore/isos/${TMPL}.qcow2 /var/lib/libvirt/images
+    if [ $? -ne 0 ]; then
+        echo >&2 "Failed to copy image.."
+        exit 1
+    fi
+    sudo chmod 0444 "$BASE"
+fi
+
+MAC_ADDRESS=(
+0
+`cat $DIR/tmpl/${TMPL}.mac`
+)
+
+for ii in `seq 4`; do
+    NAME=${TMPL}-${ii}
+    IMAGE=$(dirname $BASE)/${NAME}.qcow2
+    cat tmpl/${TMPL}.xml | ./modify-domain.py --name=$NAME --new-uuid --device-path=$IMAGE --mac-address=${MAC_ADDRESS[$ii]} > vm/${NAME}.xml
+    virsh destroy $NAME 2>/dev/null || :
+    virsh dumpxml $NAME &>/dev/null && virsh undefine $NAME
+    sudo qemu-img create -f qcow2 -b $BASE $IMAGE
+    virsh define vm/${NAME}.xml
+    virsh start ${NAME}
+done
+
