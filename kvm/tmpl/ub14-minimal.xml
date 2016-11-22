@@ -2,8 +2,8 @@
   <name>ub14-minimal</name>
   <uuid>893122fb-f015-77bc-7942-b6d94aad34b9</uuid>
   <memory unit='KiB'>2097152</memory>
-  <currentMemory unit='KiB'>2097152</currentMemory>
-  <vcpu placement='static'>2</vcpu>
+  <currentMemory unit='GiB'>4</currentMemory>
+  <vcpu placement='static'>8</vcpu>
   <os>
     <type arch='x86_64' machine='pc-i440fx-trusty'>hvm</type>
     <boot dev='hd'/>

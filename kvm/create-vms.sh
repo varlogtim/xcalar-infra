@@ -6,6 +6,10 @@ if [ -z "$TMPL" ]; then
     echo >&2 "Need to specify a template (el6-minimal, el7-minimal, ub14-minimal)"
     exit 1
 fi
+COUNT="$2"
+if [ -z "$COUNT" ]; then
+    COUNT=4
+fi
 XML="$DIR/tmpl/${TMPL}.xml"
 if ! test -e "$XML"; then
     echo >&2 "No template $XML found"
@@ -30,7 +34,7 @@ MAC_ADDRESS=(
 `cat $DIR/tmpl/${TMPL}.mac`
 )
 
-for ii in `seq 4`; do
+for ii in `seq $COUNT`; do
     NAME=${TMPL}-${ii}
     IMAGE=$(dirname $BASE)/${NAME}.qcow2
     cat tmpl/${TMPL}.xml | ./modify-domain.py --name=$NAME --new-uuid --device-path=$IMAGE --mac-address=${MAC_ADDRESS[$ii]} > vm/${NAME}.xml
