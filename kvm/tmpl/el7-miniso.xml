@@ -3,7 +3,10 @@
   <uuid>66492fba-54cb-421d-8487-fbb6a2fbf3d0</uuid>
   <memory unit='KiB'>4194304</memory>
   <currentMemory unit='KiB'>4194304</currentMemory>
-  <vcpu placement='static'>2</vcpu>
+  <cpu mode='host-model'>
+   <model fallback='forbid'/>
+   <topology sockets='1' cores='2' threads='2'/>
+  </cpu>
   <resource>
     <partition>/machine</partition>
   </resource>
@@ -15,9 +18,6 @@
     <acpi/>
     <apic/>
   </features>
-  <cpu mode='custom' match='exact'>
-    <model fallback='allow'>Haswell</model>
-  </cpu>
   <clock offset='utc'>
     <timer name='rtc' tickpolicy='catchup'/>
     <timer name='pit' tickpolicy='delay'/>
