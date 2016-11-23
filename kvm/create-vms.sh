@@ -37,11 +37,11 @@ MAC_ADDRESS=(
 for ii in `seq $COUNT`; do
     NAME=${TMPL}-${ii}
     IMAGE=$(dirname $BASE)/${NAME}.qcow2
-    cat tmpl/${TMPL}.xml | ./modify-domain.py --name=$NAME --new-uuid --device-path=$IMAGE --mac-address=${MAC_ADDRESS[$ii]} > vm/${NAME}.xml
+    cat $DIR/tmpl/${TMPL}.xml | $DIR/modify-domain.py --name=$NAME --new-uuid --device-path=$IMAGE --mac-address=${MAC_ADDRESS[$ii]} > $DIR/vm/${NAME}.xml
     virsh destroy $NAME 2>/dev/null || :
     virsh dumpxml $NAME &>/dev/null && virsh undefine $NAME
     sudo qemu-img create -f qcow2 -b $BASE $IMAGE
-    virsh define vm/${NAME}.xml
+    virsh define $DIR/vm/${NAME}.xml
     virsh start ${NAME}
 done
 
