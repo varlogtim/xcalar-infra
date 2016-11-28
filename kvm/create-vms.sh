@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Spin up a KVM virtual machine
+# See http://www.greenhills.co.uk/2013/03/24/cloning-vms-with-kvm.html
 
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 TMPL="$1"
