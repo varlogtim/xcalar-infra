@@ -14,9 +14,16 @@ fi
 
 BASE=/var/lib/libvirt/images/${TMPL}.qcow2
 
-for ii in `seq 4`; do
-    NAME=${TMPL}-${ii}
-    IMAGE=$(dirname $BASE)/${NAME}.qcow2
-    virsh destroy $NAME 2>/dev/null || :
+VMS="$(virsh list --all | tail -n+3 | awk '{print $2}' | grep "${TMPL}")"
+
+if test -z "$VMS"; then
+    echo "No VMs found for $TMPL"
+    exit 0
+fi
+
+for vm in $VMS; do
+    IMAGE=$(dirname $BASE)/${vm}.qcow2
+    virsh destroy $vm
+    virsh undefine $vm
 done
 

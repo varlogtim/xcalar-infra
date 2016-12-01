@@ -1,8 +1,8 @@
 <domain type='kvm' id='11'>
   <name>el7-miniso</name>
   <uuid>66492fba-54cb-421d-8487-fbb6a2fbf3d0</uuid>
-  <memory unit='KiB'>4194304</memory>
-  <currentMemory unit='KiB'>4194304</currentMemory>
+  <memory unit='GiB'>4</memory>
+  <currentMemory unit='GiB'>4</currentMemory>
   <cpu mode='host-model'>
    <model fallback='forbid'/>
    <topology sockets='1' cores='2' threads='2'/>

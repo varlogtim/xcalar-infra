@@ -1,7 +1,7 @@
 <domain type='kvm'>
   <name>ub14-minimal</name>
   <uuid>893122fb-f015-77bc-7942-b6d94aad34b9</uuid>
-  <memory unit='KiB'>2097152</memory>
+  <memory unit='GiB'>4</memory>
   <currentMemory unit='GiB'>4</currentMemory>
   <cpu mode='host-model'>
    <model fallback='forbid'/>
