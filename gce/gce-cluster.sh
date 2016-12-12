@@ -8,14 +8,24 @@ say () {
 }
 
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    say "usage: $0 <installer-url> <count (default: 3)> <cluster (default: `whoami`-xcalar)>"
+    say "usage: $0 <installer-url>|--no-installer <count (default: 3)> <cluster (default: `whoami`-xcalar)>"
     exit 1
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 TMPDIR="${TMPDIR:-/tmp/$(id -un)}/gce/$$"
 mkdir -p "$TMPDIR"
-if test -f "$1"; then
+if [ "$1" == "--no-installer" ]; then
+    INSTALLER="$TMPDIR/noop-installer"
+    cat <<EOF > $INSTALLER
+#!/bin/bash
+
+echo "Done."
+
+exit 0
+EOF
+    chmod 755 $INSTALLER
+elif test -f "$1"; then
     INSTALLER="$(readlink -f ${1})"
 elif [[ $1 =~ ^http[s]?:// ]]; then
     INSTALLER="$1"
@@ -65,6 +75,7 @@ if ! command -v gcloud; then
         set +o pipefail
     fi
 fi
+
 if test -f "$INSTALLER"; then
     if [[ "$INSTALLER" =~ '/debug/' ]]; then
         INSTALLER_URL="repo.xcalar.net/builds/debug/$INSTALLER_FNAME"
@@ -76,8 +87,8 @@ if test -f "$INSTALLER"; then
     if ! gsutil ls gs://$INSTALLER_URL &>/dev/null; then
         say "Uploading $INSTALLER to gs://$INSTALLER_URL"
         until gsutil -m -o GSUtil:parallel_composite_upload_threshold=100M \
-                     cp -c -L "$UPLOADLOG" \
-                     "$INSTALLER" gs://$INSTALLER_URL; do
+            cp -c -L "$UPLOADLOG" \
+            "$INSTALLER" gs://$INSTALLER_URL; do
             sleep 1
         done
         mv $UPLOADLOG $(basename $UPLOADLOG .log)-finished.log
@@ -137,10 +148,15 @@ for ii in `seq 1 $COUNT`; do
     gcloud compute instances attach-disk ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii}
 done
 for ii in `seq 1 $COUNT`; do
-    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo mkswap -f /dev/sdb >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --command "sudo swapon /dev/sdb >/dev/null"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdb >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null"
 done
 
-grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$5,$1;}' | tee $TMPDIR/hosts-int.txt
-grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$6,$1;}' | tee $TMPDIR/hosts-ext.txt
+if [ "$NOTPREEMPTIBLE" != "1" ]; then
+    grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$5,$1;}' | tee $TMPDIR/hosts-int.txt
+    grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$6,$1;}' | tee $TMPDIR/hosts-ext.txt
+else 
+    grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$4,$1;}' | tee $TMPDIR/hosts-int.txt
+    grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$5,$1;}' | tee $TMPDIR/hosts-ext.txt
+fi
