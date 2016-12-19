@@ -128,6 +128,12 @@ if [ "$NOTPREEMPTIBLE" != "1" ]; then
     ARGS+=(--preemptible)
 fi
 
+STARTUP_ARGS=()
+if [ "$1" != "--no-installer" ]; then
+    STARTUP_ARGS+=(--metadata-from-file)
+    STARTUP_ARGS+=(startup-script=$DIR/gce-userdata.sh,config=$CONFIG)
+fi
+
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
 gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
@@ -138,7 +144,7 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size $DISK_SIZE \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
-    --metadata-from-file startup-script=$DIR/gce-userdata.sh,config=$CONFIG | tee $TMPDIR/gce-output.txt
+    ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
 set +x
 if [ "$res" -ne 0 ]; then
