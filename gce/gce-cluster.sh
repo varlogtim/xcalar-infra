@@ -3,6 +3,31 @@ export CLOUDSDK_COMPUTE_REGION=${CLOUDSDK_COMPUTE_REGION-us-central1}
 export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
 GCLOUD_SDK_URL="https://sdk.cloud.google.com"
 
+if [ "$(uname -s)" = Darwin ]; then
+    readlink_f () {
+        (
+        target="$1"
+
+        cd "$(dirname $target)"
+        target="$(basename $target)"
+
+        # Iterate down a (possible) chain of symlinks
+        while [ -L "$target" ]
+        do
+            target="$(readlink $target)"
+            cd "$(dirname $target)"
+            target="$(basename $target)"
+        done
+
+        echo "$(pwd -P)/$target"
+        )
+    }
+else
+    readlink_f () {
+        readlink "$@"
+    }
+fi
+
 say () {
     echo >&2 "$*"
 }
@@ -26,7 +51,7 @@ exit 0
 EOF
     chmod 755 $INSTALLER
 elif test -f "$1"; then
-    INSTALLER="$(readlink -f ${1})"
+    INSTALLER="$(readlink_f ${1})"
 elif [[ $1 =~ ^http[s]?:// ]]; then
     INSTALLER="$1"
 else
