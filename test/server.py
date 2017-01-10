@@ -1,16 +1,15 @@
-from selenium import webdriver
 import BaseHTTPServer
 import threading
 import urllib2
-from pyvirtualdisplay import Display
 import socket
 from argparse import ArgumentParser
+
+from pyvirtualdisplay import Display
+from selenium import webdriver
 
 """
 Please read README.md for env setup
 """
-
-CHROME_DRIVER_PATH = "/usr/bin/chromedriver"
 TEST_RESULT = None
 QUIT_SIGNAL = threading.Event()
 DEFAULT_SERVER_PORT = 5909
@@ -21,16 +20,8 @@ It supports opening/closing the web browser and notifying Jenkins.
 """
 class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
 
-    driver = None
-    ROUTE_START = '/start'
-    ROUTE_STATUS = '/status'
-    ROUTE_CLOSE = '/close'
-    ROUTE_ACTION = "name"
-
     """
-    TODO: restructure the http request
-    Http request/response should be consistent with
-    Xcalar Design
+    Handles GET request
     """
     def do_GET(self):
         global TEST_RESULT
@@ -38,12 +29,13 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
         params = self.parse(self.path)
         print params
         action = None
-        if self.ROUTE_ACTION in params:
-            action = params[self.ROUTE_ACTION]
-        
+        if "name" not in params:
+            return
+
+        action = params["name"]
         if action=="start":
             """
-            Sample url: http://localhost:5909/action?name=start&mode=ten&host=10.10.4.134&server=euler&port=5909&users=1
+            Sample url: http://localhost:5909/action?name=start&mode=ten&host=10.10.4.110&server=euler&port=5909&users=1
             """
             self.processStart(params)
         elif action=="close":
@@ -56,22 +48,14 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
             Sample url: http://localhost:5909/action?name=getstatus
             """
             self.processGetStatus(params)
-        # TODO: once test suite update the callback url, this
-        # route needs to change as well
-        elif self.path.startswith(self.ROUTE_STATUS):
+        elif action=="setstatus":
             """
-            Sample url: http://localhost:5909/status/user0%3Fstatus%3Aclose%26
+            Sample url: http://localhost:5909/action?name=setstatus
+            &res=user0%3Fstatus%3AfailFail%3A%201%2C%20Pass%3A%200%2C%20Skip%3A%200%2C%20Time%3A%200s%20%2C%20Error%3A%20time%20limit%20of%205000ms%20exceeded%20in%20function%3A%20loadDS%26
+            &callback=jQuery2130753973988575382_1484077385760&_=1484077385761
             """
-            self.path = self.path.strip("/")
-            if len(self.path.split("/")) < 2:
-                if TEST_RESULT:
-                    self.mark_SUCCESS("Finished: "+TEST_RESULT)
-                else:
-                    self.mark_SUCCESS("Still running")
-                return
-            status = self.path.split("/")[1]
-            self.mark_SUCCESS()
-            TEST_RESULT = urllib2.unquote(status)
+            self.processSetStatus(params)
+
 
     def processStart(self, params):
         users = params.get("users", "1")
@@ -80,30 +64,38 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
         port = params.get("port", str(DEFAULT_SERVER_PORT))
         host = params.get("host", socket.gethostname())
         testSuiteUrl = "http://"+host+"/test.html?auto=y&mode="+mode+"&host="+host+"&server="+socket.gethostname()+"%3A"+port+"&users="+users
+        print testSuiteUrl
+        CHROME_DRIVER_PATH = "/usr/bin/chromedriver"
         self.driver = webdriver.Chrome(CHROME_DRIVER_PATH)
         self.driver.get(testSuiteUrl)
-        self.mark_SUCCESS("Started")
+        self.markSuccess("Started")
 
 
     def processClose(self, params):
         if not TEST_RESULT:
-            self.mark_SUCCESS("Still running")
+            self.markSuccess("Still running")
         else:
-            self.mark_SUCCESS("Finished: "+TEST_RESULT)
+            self.markSuccess("Finished: "+TEST_RESULT)
             QUIT_SIGNAL.set()
 
     def processGetStatus(self, params):
         if TEST_RESULT:
-            self.mark_SUCCESS("Finished: "+TEST_RESULT)
+            self.markSuccess("==> Finished: %s <=="%(TEST_RESULT))
         else:
-            self.mark_SUCCESS("Still running")
+            self.markSuccess("Still running")
         return
+
+    def processSetStatus(self, params):
+        global TEST_RESULT
+        status = params["res"]
+        self.markSuccess()
+        TEST_RESULT = urllib2.unquote(status)
 
 
     """
     This will send back a 200 http response
     """
-    def mark_SUCCESS(self, msg=""):
+    def markSuccess(self, msg=""):
         self.send_response(200)
         self.send_header( 'Content-type', 'text/html' )
         self.end_headers()
