@@ -3,6 +3,8 @@ import threading
 import urllib2
 import socket
 from argparse import ArgumentParser
+from datetime import datetime
+import sys
 
 from pyvirtualdisplay import Display
 from selenium import webdriver
@@ -43,6 +45,12 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
             Sample url: http://localhost:5909/action?name=close
             """
             self.processClose(params)
+        elif action=="print":
+            """
+            Sample url: http://localhost:5909/action?name=print&res=user0%3A%20Fail%3A%200%2C%20Pass%3A%2013%2C%20Skip%3A%204%2C%20Time%3A%2046.326s
+            &callback=jQuery21309018166374230128_1484591586241&_=1484591586243
+            """
+            self.processPrint(params)
         elif action=="getstatus":
             """
             Sample url: http://localhost:5909/action?name=getstatus
@@ -65,10 +73,13 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
         host = params.get("host", socket.gethostname())
         testSuiteUrl = "http://"+host+"/test.html?auto=y&mode="+mode+"&host="+host+"&server="+socket.gethostname()+"%3A"+port+"&users="+users
         print testSuiteUrl
+        sys.stdout.flush()
         CHROME_DRIVER_PATH = "/usr/bin/chromedriver"
         self.driver = webdriver.Chrome(CHROME_DRIVER_PATH)
         self.driver.get(testSuiteUrl)
         self.markSuccess("Started")
+        print "Test started: %s" % (str(datetime.now()))
+        sys.stdout.flush()
 
 
     def processClose(self, params):
@@ -77,6 +88,12 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
         else:
             self.markSuccess("Finished: "+TEST_RESULT)
             QUIT_SIGNAL.set()
+
+    def processPrint(self, params):
+        status = params["res"]
+        self.markSuccess()
+        print "User finishes: " + urllib2.unquote(status)
+        sys.stdout.flush()
 
     def processGetStatus(self, params):
         if TEST_RESULT:
@@ -90,6 +107,8 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
         status = params["res"]
         self.markSuccess()
         TEST_RESULT = urllib2.unquote(status)
+        print "Test ended: %s" % (str(datetime.now()))
+        sys.stdout.flush()
 
 
     """
@@ -146,6 +165,7 @@ def main():
     target = args.target
     if not target:
         print "Please give the target server that runs test suites: -t"
+        sys.stdout.flush()
         return
     visible = args.visible
 

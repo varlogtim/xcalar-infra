@@ -67,7 +67,7 @@ while true; do
 done
 
 echo "Starting test driver"
-python test/server.py -t $NODE >/dev/null 2>&1 </dev/null &
+python test/server.py -t $NODE 2>&1 </dev/null &
 sleep 5
 
 TEST_DRIVER_HOST=$(hostname)
