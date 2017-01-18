@@ -24,7 +24,7 @@ if [ "$(uname -s)" = Darwin ]; then
     }
 else
     readlink_f () {
-        readlink "$@"
+        readlink -f "$@"
     }
 fi
 
@@ -169,6 +169,7 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size $DISK_SIZE \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
+    --tags=http-server,https-server \
     ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
 set +x
@@ -187,7 +188,7 @@ done
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
     grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$5,$1;}' | tee $TMPDIR/hosts-int.txt
     grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$6,$1;}' | tee $TMPDIR/hosts-ext.txt
-else 
+else
     grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$4,$1;}' | tee $TMPDIR/hosts-int.txt
     grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #external\n",$5,$1;}' | tee $TMPDIR/hosts-ext.txt
 fi
