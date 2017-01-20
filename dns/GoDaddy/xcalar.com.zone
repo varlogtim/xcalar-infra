@@ -1,0 +1,70 @@
+; Domain: xcalar.com
+; Exported (y-m-d hh:mm:ss): 2017-01-20 12:06:13
+;
+; This file is intended for use for informational and archival
+; purposes ONLY and MUST be edited before use on a production
+; DNS server.
+;
+; In particular, you must update the SOA record with the correct
+; authoritative name server and contact e-mail address information,
+; and add the correct NS records for the name servers which will
+; be authoritative for this domain.
+;
+; For further information, please consult the BIND documentation
+; located on the following website:
+;
+; http://www.isc.org/
+;
+; And RFC 1035:
+;
+; http://www.ietf.org/rfc/rfc1035.txt
+;
+; Please note that we do NOT offer technical support for any use
+; of this zone data, the BIND name server, or any other third-
+; party DNS software.
+;
+; Use at your own risk.
+
+; SOA Record
+xcalar.com.	3600	IN	SOA	ns51.domaincontrol.com.	dns.jomax.net (
+				2016050400
+				28800
+				7200
+				604800
+				600
+				)
+
+; A Records
+admin	600	IN	A	107.180.41.39
+@	600	IN	A	107.180.41.39
+mail	600	IN	A	107.180.41.39
+clorox	600	IN	A	52.8.161.75
+citi	600	IN	A	52.8.251.149
+vpn	600	IN	A	207.135.66.186
+
+; CNAME Records
+cpanel	3600	IN	CNAME	@
+webdisk.admin	3600	IN	CNAME	@
+webdisk	3600	IN	CNAME	@
+ftp	3600	IN	CNAME	@
+_domainconnect	3600	IN	CNAME	_domainconnect.gd.domaincontrol.com
+whm	3600	IN	CNAME	@
+dogfood	3600	IN	CNAME	xcalar-186.tisch.gvad.net
+www.admin	3600	IN	CNAME	@
+www	3600	IN	CNAME	@
+
+; MX Records
+@	3600	IN	MX	5	ALT1.ASPMX.L.GOOGLE.COM
+@	3600	IN	MX	5	ALT2.ASPMX.L.GOOGLE.COM
+@	3600	IN	MX	1	ASPMX.L.GOOGLE.COM
+@	3600	IN	MX	10	ASPMX3.GOOGLEMAIL.COM
+@	3600	IN	MX	10	ASPMX2.GOOGLEMAIL.COM
+
+; TXT Records
+@	3600	IN	TXT	"v=spf1 include:_spf.google.com ~all"
+google._domainkey	3600	IN	TXT	"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCb5nFSkx9BPBuNomYoE+lUF1neq1jvBgqjgftqIL5/7QKlV9LXESrrRpz6jYDiGr9PjvTPsQ9s9U4eJUQ9og/dfVw5N117K0PT7U9th52R5ly9LF0OlGkw+fJGtQgRKVMJ5EtSLvSr43jIIQz2Nic47HkutV+JNuuFxGqAY4sanQIDAQAB"
+@	3600	IN	TXT	"google-site-verification=Sd1qZjZZROcnhg1-1Uz4OCGewhMP0NdBIgP2TTxPIq0"
+
+; NS Records
+@	3600	IN	NS	ns52.domaincontrol.com
+@	3600	IN	NS	ns51.domaincontrol.com

@@ -1,0 +1,28 @@
+xcalar.com. 600 IN A 107.180.41.39
+xcalar.com. 300 IN MX 5 alt1.aspmx.l.google.com.
+xcalar.com. 300 IN MX 5 alt2.aspmx.l.google.com.
+xcalar.com. 300 IN MX 1 aspmx.l.google.com.
+xcalar.com. 300 IN MX 10 aspmx3.googlemail.com.
+xcalar.com. 300 IN MX 10 aspmx2.googlemail.com.
+xcalar.com. 300 IN NS ns-cloud-c1.googledomains.com.
+xcalar.com. 300 IN NS ns-cloud-c2.googledomains.com.
+xcalar.com. 300 IN NS ns-cloud-c3.googledomains.com.
+xcalar.com. 300 IN NS ns-cloud-c4.googledomains.com.
+xcalar.com. 300 IN SOA ns-cloud-c1.googledomains.com. cloud-dns-hostmaster.google.com. 2 21600 3600 259200 300
+xcalar.com. 3600 IN TXT "v=spf1 include:_spf.google.com ~all"
+xcalar.com. 3600 IN TXT "google-site-verification=Sd1qZjZZROcnhg1-1Uz4OCGewhMP0NdBIgP2TTxPIq0"
+_domainconnect.xcalar.com. 3600 IN CNAME _domainconnect.gd.domaincontrol.com.xcalar.com.
+google._domainkey.xcalar.com. 3600 IN TXT "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCb5nFSkx9BPBuNomYoE+lUF1neq1jvBgqjgftqIL5/7QKlV9LXESrrRpz6jYDiGr9PjvTPsQ9s9U4eJUQ9og/dfVw5N117K0PT7U9th52R5ly9LF0OlGkw+fJGtQgRKVMJ5EtSLvSr43jIIQz2Nic47HkutV+JNuuFxGqAY4sanQIDAQAB"
+admin.xcalar.com. 600 IN A 107.180.41.39
+webdisk.admin.xcalar.com. 3600 IN CNAME xcalar.com.
+www.admin.xcalar.com. 3600 IN CNAME xcalar.com.
+citi.xcalar.com. 600 IN A 52.8.251.149
+clorox.xcalar.com. 600 IN A 52.8.161.75
+cpanel.xcalar.com. 3600 IN CNAME xcalar.com.
+dogfood.xcalar.com. 3600 IN CNAME xcalar-186.tisch.gvad.net.xcalar.com.
+ftp.xcalar.com. 3600 IN CNAME xcalar.com.
+mail.xcalar.com. 600 IN A 107.180.41.39
+vpn.xcalar.com. 600 IN A 207.135.66.186
+webdisk.xcalar.com. 3600 IN CNAME xcalar.com.
+whm.xcalar.com. 3600 IN CNAME xcalar.com.
+www.xcalar.com. 3600 IN CNAME xcalar.com.
