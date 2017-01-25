@@ -32,6 +32,17 @@ graphite:
     volumes:
         - graphite_stat_storage:/opt/graphite/storage
 
+backuppc:
+    restart: always
+    image: alvaroaleman/backuppc
+    hostname: backuppc
+    domainname: int.xcalar.com
+    volumes:
+        - backuppc_data:/var/lib/backuppc
+        - backuppc_config:/etc/backuppc
+    environment:
+        - VIRTUAL_HOST=backuppc.int.xcalar.com,backuppc
+
 grafana:
     restart: always
     image: grafana/grafana
