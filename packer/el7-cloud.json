@@ -1,0 +1,54 @@
+{
+    "variables": {
+        "user": "jenkins",
+        "uid": "1000",
+        "password": "jenkins",
+        "image_name": "el7-{{timestamp}}",
+        "disk_size": "10",
+        "project_id": "angular-expanse-99923",
+        "account_file": "{{env `HOME`}}/.config/gcloud/xcalar.json",
+        "source_image_family": "centos-7",
+        "source_ami": "ami-9abea4fb",
+        "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
+        "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
+        "osver": "el7"
+    },
+
+    "builders":
+    [
+        {
+            "type": "googlecompute",
+            "ssh_username": "abakshi",
+            "account_file": "{{ user `account_file`}}",
+            "project_id": "{{ user `project_id`}}",
+            "source_image_family": "{{ user `source_image_family`}}",
+            "zone": "us-central1-f",
+            "image_name": "{{user `image_name`}}",
+            "instance_name": "packer-{{user `image_name`}}",
+            "machine_type": "n1-standard-8",
+            "disk_type": "pd-ssd",
+            "disk_size": "{{ user `disk_size`}}",
+            "preemptible": false,
+            "tags": [ "xcbuilder","el7" ]
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "environment_vars": [
+                "CONTAINER_USER={{user `user`}}",
+                "CONTAINER_UID={{user `uid`}}"
+            ],
+            "execute_command": "{{.Vars}} sudo -E -S bash '{{.Path}}'",
+            "scripts": [
+                "scripts/start.sh",
+                "scripts/update-{{user `osver`}}.sh",
+                "scripts/packages-{{user `osver`}}.sh",
+                "scripts/docker.sh",
+                "scripts/provision-{{user `osver`}}.sh",
+                "scripts/finish.sh"
+            ]
+        }
+    ]
+
+}
