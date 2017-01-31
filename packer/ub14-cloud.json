@@ -1,13 +1,12 @@
 {
     "variables": {
-        "user": "jenkins",
+        "ssh_username": "ubuntu",
         "uid": "1000",
-        "password": "jenkins",
-        "image_name": "ubuntu-1404-{{timestamp}}",
+        "image_name": "ubuntu-1404-lts-{{timestamp}}",
         "disk_size": "10",
         "project_id": "angular-expanse-99923",
-        "account_file": "{{env `HOME`}}/.config/gcloud/xcalar.json",
-        "source_image": "ubuntu-1404-trusty-v20160919",
+        "account_file": "{{env `HOME`}}/.config/gcloud/credentials",
+        "source_image_family": "ubuntu-1404-lts",
         "source_ami": "ami-9abea4fb",
         "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
         "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
@@ -28,24 +27,25 @@
                 "sg-b8cb3ddc",
                 "sg-84db4ee2"
             ],
-            "ssh_username": "ubuntu",
+            "ssh_username": "{{user `ssh_username`}}",
             "ami_name": "{{user `image_name`}}",
-            "ami_description": "Xcalar Build Image (Ubuntu 14.04)",
-            "tags": { "role": "xcbuilder", "osrelease": "trusty" }
+            "ami_description": "Xcalar Build Image ({{user `source_image_family`}})",
+            "tags": { "role": "xcbuilder", "osrelease": "{{user `source_image_family`}}" }
         },
         {
             "type": "googlecompute",
+            "ssh_username": "{{user `ssh_username`}}",
             "account_file": "{{ user `account_file`}}",
             "project_id": "{{ user `project_id`}}",
-            "source_image": "{{ user `source_image`}}",
+            "source_image_family": "{{ user `source_image_family`}}",
             "zone": "us-central1-f",
             "image_name": "{{user `image_name`}}",
-            "instance_name": "packer-xcbuilder-ubuntu-1404-{{timestamp}}",
-            "machine_type": "n1-standard-8",
+            "instance_name": "packer-{{user `source_image_family`}}-{{timestamp}}",
+            "machine_type": "n1-standard-4",
             "disk_type": "pd-ssd",
             "disk_size": "{{ user `disk_size`}}",
             "preemptible": false,
-            "tags": [ "xcbuilder","trusty" ]
+            "tags": [ "xcbuilder","{{user `source_image_family`}}" ]
         },
         {
             "name": "{{user `image_name`}}",
@@ -61,8 +61,8 @@
 
             "http_directory": "http",
 
-            "ssh_username": "{{user `user`}}",
-            "ssh_password": "{{user `password`}}",
+            "ssh_username": "{{user `ssh_username`}}",
+            "ssh_password": "{{user `ssh_password`}}",
             "ssh_wait_timeout": "20m",
             "shutdown_command": "echo '{{user `password`}}'|sudo -S shutdown -P now",
 
@@ -78,10 +78,10 @@
                 "keyboard-configuration/layout=USA ",
                 "keyboard-configuration/variant=USA ",
 
-                "passwd/user-fullname={{user `user`}} ",
-                "passwd/user-password-again={{user `password`}} ",
-                "passwd/user-password={{user `password`}} ",
-                "passwd/username={{user `user`}} ",
+                "passwd/user-fullname={{user `ssh_username`}} ",
+                "passwd/user-password-again={{user `ssh_password`}} ",
+                "passwd/user-password={{user `ssh_password`}} ",
+                "passwd/username={{user `ssh_username`}} ",
 
                 "initrd=/install/initrd.gz -- <enter>"
             ]
@@ -101,13 +101,13 @@
                 "fb=false debconf/frontend=noninteractive ",
                 "keyboard-configuration/modelcode=SKIP keyboard-configuration/layout=USA ",
                 "keyboard-configuration/variant=USA console-setup/ask_detect=false ",
-                "passwd/user-fullname={{user `user`}} ",
-                "passwd/user-password-again={{user `password`}} ",
-                "passwd/user-password={{user `password`}} ",
-                "passwd/username={{user `user`}} ",
+                "passwd/user-fullname={{user `ssh_username`}} ",
+                "passwd/user-password-again={{user `ssh_password`}} ",
+                "passwd/user-password={{user `ssh_password`}} ",
+                "passwd/username={{user `ssh_username`}} ",
                 "initrd=/install/initrd.gz -- <enter>"
             ],
-            "shutdown_command": "echo 'vagrant' | sudo -S -E shutdown -P now",
+            "shutdown_command": "echo '{{user `ssh_password`}}' | sudo -S -E shutdown -P now",
             "output_directory": "{{ user `output_directory`}}-virtualbox-iso",
             "hard_drive_interface": "sata",
             "guest_os_type": "Ubuntu_64",
@@ -139,7 +139,7 @@
         {
             "type": "shell",
             "environment_vars": [
-                "CONTAINER_USER={{user `user`}}",
+                "CONTAINER_USER={{user `ssh_username`}}",
                 "CONTAINER_UID={{user `uid`}}"
             ],
             "execute_command": "{{.Vars}} sudo -E -S bash '{{.Path}}'",
@@ -149,7 +149,7 @@
                 "scripts/packages-{{user `osver`}}.sh",
                 "scripts/docker.sh",
                 "scripts/provision-{{user `osver`}}.sh",
-                "scripts/dkms-ixgbevf-install.sh",
+                "scripts/puppet-install.sh",
                 "scripts/finish.sh"
             ]
         }

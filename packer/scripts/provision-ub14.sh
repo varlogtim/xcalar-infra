@@ -18,21 +18,23 @@ set -ex
 # ARG APT_PROXY
 echo export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64 | tee -a /etc/profile.d/buildenv.sh && source /etc/profile.d/buildenv.sh
 
-cd $DOCKERPWD && curl -sL http://repo.xcalar.net/pubkey.gpg | sudo apt-key add - || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get update -yqq && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get upgrade -yqq && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install --no-install-recommends -yqq gcc sg3-utils openssh-server git pmccabe fio sysstat iotop nmap traceroute valgrind strace libtool m4 wget zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip dpkg-dev gawk libcrypto++9 libcrypto++-dev cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev debhelper librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby curl vim-nox bash-completion bc libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev rsync fakeroot patchutils software-properties-common openjdk-7-jdk || exit $?
+cd $DOCKERPWD && add-apt-repository -y ppa:george-edison55/cmake-3.x || exit $?
+cd $DOCKERPWD && curl -sSL https://deb.nodesource.com/setup_6.x | bash || exit $?
+cd $DOCKERPWD && curl -sL http://repo.xcalar.net/pubkey.gpg | apt-key add - || exit $?
 cd $DOCKERPWD && curl -sL http://repo.xcalar.net/xcalar-release-trusty.deb > /tmp/xcalar-release-trusty.deb && dpkg -i /tmp/xcalar-release-trusty.deb && rm -f /tmp/xcalar-release-trusty.deb || exit $?
+cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive apt-get update -yqq && DEBIAN_FRONTEND=noninteractive apt-get install -yqq --no-install-recommends nodejs thrift-dev=0.9.2-3 libjemalloc-dev libprotobuf-dev=3.0.2-2 protobuf-compiler=3.0.2-2 libprotobuf10=3.0.2-2 ccache cmake || exit $?
+cd $DOCKERPWD && curl -sSL http://repo.xcalar.net/deps/ninja-1.7.2-1.tar.gz | tar zxf - --no-same-owner -C /usr/local/bin && ln -sfn ninja-1.7.2 /usr/local/bin/ninja || exit $?
 
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get update -yqq && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get upgrade -y && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq gcc sg3-utils openssh-server git pmccabe fio libaio1 libaio1-dbg libaio-dev sysstat iotop nmap traceroute valgrind strace libtool m4 wget clang ant openjdk-7-jdk zip unzip doxygen libc6-dbg iperf g++ htop exuberant-ctags zlib1g-dev libeditline-dev libbsd-dev autoconf automake libncurses5-dev devscripts ispell ccache libboost1.55-all-dev libssl-dev libglib2.0-dev libpython2.7-dev libjansson4 libjansson-dev make linux-tools-common linux-tools-generic phantomjs apache2 jq nfs-common mysql-client mysql-server libmysqlclient-dev libevent-dev libboost-test1.55-dev dictionaries-common uuid-dev pxz xz-utils realpath wamerican lcov python-pip dpkg-dev libcap-dev gawk libcrypto++9 libcrypto++-dev || exit $?
-## libhdfs3 deps
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq cmake libxml2 libxml2-dev libkrb5-dev krb5-user libgsasl7-dev uuid-dev libprotobuf10 libprotobuf-dev protobuf-compiler debhelper || exit $?
-## fpm deps
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq librpm3 librpmbuild3 rpm flex bison gdb python2.7-dbg ruby ruby-dev ruby-bundler libruby curl vim-nox bash-completion bc || exit $?
-cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive http_proxy=$APT_PROXY apt-get install -yqq --no-install-recommends maven2 libarchive-dev python-lxml libxslt1-dev libxslt1.1 libsnappy1 libsnappy-dev || exit $?
+curl -sSL http://repo.xcalar.net/deps/xcalar-build-context-1485895035.tar.gz | (tar zxf - --no-same-owner -C $SRCDIR)
+for data in flight gdelt-small indexJoin yelp; do curl --retry 5 -sSL http://repo.xcalar.net/data/${data}.tar.gz | tar zxf - --no-same-owner -C /var/tmp || true; done || true
+
+cd $SRCDIR && cp ./bin/npm-install.py /usr/bin && cd - || exit $?
+cd $SRCDIR && cp ./docker/ub14/ub14-build/package.json /usr/src && cd - || exit $?
+cd $DOCKERPWD && npm-install.py -p /usr/src/package.json || exit $?
 
 cd $DOCKERPWD && groupadd --non-unique --force --gid 999 docker || exit $?
-cd $DOCKERPWD && curl -sL https://deb.nodesource.com/setup_4.x | /bin/bash - && DEBIAN_FRONTEND=noninteractive apt-get install -yqq nodejs || exit $?
 cd $DOCKERPWD && for pkg in less grunt-cli uglify-js; do npm install -g $pkg; done || exit $?
-
-cd $DOCKERPWD && apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -yqq thrift-dev pmd libhdfs3-dev libjemalloc-dev reprepro ccache || exit $?
 
 
 cd $DOCKERPWD && printf 'source %s\n\ngem %s' "'https://rubygems.org'" "'fpm'" > /tmp/Gemfile && cd /tmp && bundle install && rm /tmp/Gemfile || exit $?
@@ -44,30 +46,25 @@ cd $DOCKERPWD && echo 'add-auto-load-safe-path /' | tee -a /etc/gdb/gdbinit || e
 #
 cd $DOCKERPWD && echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-sudo && chmod 0440 /etc/sudoers.d/99-sudo || exit $?
 
-cd $DOCKERPWD && curl -o /usr/bin/gosu -fsSL "https://github.com/tianon/gosu/releases/download/1.7/gosu-$(dpkg --print-architecture)" && chmod +x /usr/bin/gosu || exit $?
+cd $SRCDIR && cp ./requirements.txt /usr/src/ && cd - || exit $?
+cd $DOCKERPWD && pip install -U pip && pip install -r ./requirements.txt || exit $?
 
-cd $DOCKERPWD && for pkg in fake-factory ipdb pytest pytest-ordering enum34 apache_log_parser datetime pytz xlrd psutil netifaces pyquery texttable virtualenv pywebhdfs urlparse snakebite; do pip install -U ${pkg}; done || exit $?
-cd $DOCKERPWD && pip install -U xlrd datetime pytz xmltodict python-dateutil
+cd $SRCDIR && cp ./bin/osid /usr/local/bin/ && cd - || exit $?
+cd $SRCDIR && cp ./bin/install-clang.sh /usr/local/bin/ && cd - || exit $?
+cd $DOCKERPWD && /usr/local/bin/install-clang.sh || exit $?
 
-cd $SRCDIR && cp ./bin/osid /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/osid > /usr/local/bin/osid && chmod +x /usr/local/bin/osid && cd - || true
-cd $SRCDIR && cp ./bin/install-clang.sh /usr/local/bin/ || curl -sSL http://repo.xcalar.net/scripts/install-clang.sh > /usr/local/bin/install-clang.sh && cd - || true
-cd $DOCKERPWD && bash /usr/local/bin/install-clang.sh || exit $?
-
-cd $SRCDIR && cp -a ./conf/xcalar-sysctl.conf /etc/sysctl.d/99-xcalar.conf || curl -sSL http://repo.xcalar.net/patches/conf/xcalar-sysctl.conf > /etc/sysctl.d/90-sysctl.conf && cd - || true
-cd $SRCDIR && cp -a ./conf/xcalar-limits.conf /etc/security/limits.d/99-xcalar.conf || curl -sSL http://repo.xcalar.net/patches/conf/xcalar-limits.conf > /etc/security/limits.d/90-limits.conf && cd - || true
-
-cd /var/tmp && for data in flight gdelt-small indexJoin yelp; do curl --retry 5 -sSL http://repo.xcalar.net/data/${data}.tar.gz | tar zxf - || true; done || true
+cd $SRCDIR && cp -a ./conf/xcalar-sysctl.conf /etc/sysctl.d/90-xcsysctl.conf && cd - || exit $?
+cd $SRCDIR && cp -a ./conf/xcalar-limits.conf /etc/security/limits.d/90-xclimits.conf && cd - || exit $?
+cd $SRCDIR && cp -a ./conf/xcalar-logrotate.conf /etc/logrotate.d/xclogrotate && cd - || exit $?
+cd $SRCDIR && cp -a ./conf/xcalar-rsyslog.conf   /etc/rsyslog.d/90-xcrsyslog.conf && cd - || exit $?
 
 # ARG CONTAINER_USER
 # ARG CONTAINER_UID
 
-cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG sudo $CONTAINER_USER; fi || exit $?
-cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG docker $CONTAINER_USER; fi || exit $?
-cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG disk $CONTAINER_USER; fi || exit $?
-cd $DOCKERPWD && mkdir -p /var/log/xcalar /var/opt/xcalar /opt/xcalar/jail_py/usr /var/opt/xcalarTest /var/tmp/xcalar /var/tmp/xcalarTest || exit $?
-cd $DOCKERPWD && if [ -n "$CONTAINER_UID" ]; then chown $CONTAINER_UID /var/opt/xcalar* /opt/xcalar/jail_py /opt/xcalar/jail_py/usr /var/tmp/xcalar* /var/log/xcalar; fi || exit $?
+cd $DOCKERPWD && if [ -n "$CONTAINER_USER" ]; then usermod -aG sudo,docker,disk $CONTAINER_USER; fi || exit $?
+cd $DOCKERPWD && mkdir -p /var/log/xcalar /var/opt/xcalar /var/opt/xcalarTest /var/tmp/xcalar /var/tmp/xcalarTest && chown $CONTAINER_UID /var/opt/xcalar* /var/tmp/xcalar* /var/log/xcalar || exit $?
 
-# EXPOSE 80 5000 18552
+# EXPOSE 80 443 5000 18552 8000
 
 # CMD ["/bin/bash","-l"]
 #Entrypoint CMD
