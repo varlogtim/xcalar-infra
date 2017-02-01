@@ -56,6 +56,11 @@ abort () {
 
 set -e
 gdnsr export xcalar-cloud.zone --zone-file-format
+if [ -e transaction.yaml ]; then
+    NOW=$(date +%s)
+    echo >&2 "WARNING: transaction.yaml exists. Saving to transaction-${NOW}.yaml"
+    mv transaction.yaml transaction-${NOW}.yaml
+fi
 gdnst start
 
 set +e
@@ -64,4 +69,6 @@ while [ $# -ge 2 ]; do
     gdnst "${OP}" --name "${1}.${DOMAIN}" --ttl "${TTL}" --type A "${2}"
     shift 2
 done
-gdnst execute 
+gdnst execute
+rc=$?
+exit $rc

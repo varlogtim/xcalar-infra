@@ -38,7 +38,8 @@ if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
-TMPDIR="${TMPDIR:-/tmp/$(id -un)}/gce/$$"
+TMPDIR="${TMPDIR:-/tmp/$(id -u)}/$(basename ${BASH_SOURCE[0]} .sh)"
+rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 if [ "$1" == "--no-installer" ]; then
     INSTALLER="$TMPDIR/noop-installer"
@@ -65,18 +66,22 @@ CONFIG=/tmp/$CLUSTER-config.cfg
 UPLOADLOG=/tmp/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
 EMAIL="$(git config user.email)"
+XC_DEMO_DATASET_DIR="${XC_DEMO_DATASET_DIR:-/srv/datasets}"
 DISK_TYPE="${DISK_TYPE:-pd-standard}"
 NETWORK="${NETWORK:-private}"
 INSTANCE_TYPE=${INSTANCE_TYPE:-n1-highmem-8}
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
-DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-swap-{1..$COUNT}))
+SWAP_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-swap-{1..$COUNT}))
+DATA_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-data-{1..$COUNT}))
+DATA_SIZE="${DATA_SIZE:-10}"
+
 if [ -z "$DISK_SIZE" ]; then
     case "$INSTANCE_TYPE" in
-        n1-highmem-16) DISK_SIZE=100GB ;;
-        n1-highmem-8) DISK_SIZE=50GB ;;
-        n1-standard*) DISK_SIZE=32GB ;;
-        g1-*) DISK_SIZE=20GB ;;
-        *) DISK_SIZE=20GB ;;
+        n1-highmem-16) DISK_SIZE=100; RAM_SIZE=104;;
+        n1-highmem-8) DISK_SIZE=50; RAM_SIZE=52;;
+        n1-standard*) DISK_SIZE=32; RAM_SIZE=16;;
+        g1-*) DISK_SIZE=20; RAM_SIZE=16;;
+        *) DISK_SIZE=20; RAM_SIZE=16;;
     esac
 fi
 
@@ -140,7 +145,7 @@ fi
 rm -f $CONFIG
 # if CONFIG_TEMPLATE isn't set, use the default template.cfg
 CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
-$DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG ${INSTANCES[@]}
+$DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG "${INSTANCES[@]}"
 
 ARGS=()
 ARGS+=(--image ${IMAGE:-ubuntu-1404-lts-1485895114})
@@ -161,28 +166,34 @@ fi
 
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
-gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
-gcloud compute disks create --size=10GB --type=pd-ssd "${DISKS[@]}"
+gcloud compute disks create --size=${RAM_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}"
+gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --machine-type ${INSTANCE_TYPE} \
     --network=${NETWORK} \
     --boot-disk-type $DISK_TYPE \
-    --boot-disk-size $DISK_SIZE \
+    --boot-disk-size ${DISK_SIZE}GB \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
     --tags=http-server,https-server \
     ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
-set +x
 if [ "$res" -ne 0 ]; then
     exit $res
 fi
+gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 for ii in `seq 1 $COUNT`; do
     gcloud compute instances attach-disk ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii}
+    gcloud compute instances attach-disk ${CLUSTER}-${ii} --disk=${CLUSTER}-data-${ii}
 done
 for ii in `seq 1 $COUNT`; do
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdb >/dev/null" && \
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkfs.ext4 -F /dev/sdc >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && sudo mount $XC_DEMO_DATASET_DIR"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
 done
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then

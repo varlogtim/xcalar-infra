@@ -25,17 +25,19 @@ else
     sleep 10
     say "Deleting ${INSTANCES[@]} ..."
     gcloud compute instances delete -q "${INSTANCES[@]}"
-    say "** Detaching swap. Please ignore any errors **"
+    say "** Detaching disks. Please ignore any errors **"
     for inst in "${INSTANCES[@]}"; do
         ii="${inst##${CLUSTER}-}"
         gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii} || true
+        gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-data-${ii} || true
     done
 fi
 echo "Deleting nfs:/srv/share/nfs/cluster/$CLUSTER"
 gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 
 DISKS=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-swap-[0-9]+/{print $1}'))
+DISKS+=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-data-[0-9]+/{print $1}'))
 if [ "${#DISKS[@]}" -gt 0 ]; then
-    say "** Deleting swap. Please ignore any errors **"
+    say "** Deleting disks. Please ignore any errors **"
     gcloud compute disks delete -q "${DISKS[@]}"
 fi
