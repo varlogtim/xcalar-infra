@@ -96,6 +96,9 @@ while getopts "hi:n:c:u:s" opt "$@"; do
     esac
 done
 
+if ! echo "$CLUSTER" | egrep -q '^preview-[a-z0-9\.-]+[a-z0-9]$'; then
+    die 3 "Your cluster name must match with 'preview-[a-z0-9.-]+[a-z0-9]$'"
+fi
 
 export TMPDIR="${TMPDIR:-/tmp/$(id -u)}/$(basename ${BASH_SOURCE[0]} .sh)"
 rm -rf "$TMPDIR"
