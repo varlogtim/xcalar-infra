@@ -9,7 +9,6 @@ XLRINFRA="$(cd "$DIR/.." && pwd)"
 
 INSTALLER="${INSTALLER:-/netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod}"
 COUNT="${COUNT:-1}"
-CLUSTER="${CLUSTER:-preview-`whoami`-xcalar}"
 URL=""
 export TTL="${TTL:-120}"
 export ZONE="${ZONE:-xcalar-cloud}"
@@ -40,7 +39,7 @@ say () {
 usage () {
     cat >&2 <<XEOF
 
-    usage: $0 [-i <installer-url (default: $INSTALLER)> [-n <count (default: $COUNT)>] [-c <cluster (default: $CLUSTER)>] [-u <dns-short-name (default: $CLUSTER)>] [-s use the staging CA]
+    usage: $0 -c preview-clustername [-i <installer-url (default: $INSTALLER)> [-n <count (default: $COUNT)>]  [-u <dns-short-name (default: your-clustername)>] [-s use the staging CA]
 
     IMAGE=$IMAGE
     NOTPREEMPTIBLE=$NOTPREEMPTIBLE
@@ -82,6 +81,7 @@ gce_dns_replace () {
     "$DIR/gce-dns.sh" add "$@"
 }
 
+test $# -eq 0 && set -- -h
 
 while getopts "hi:n:c:u:s" opt "$@"; do
     case "$opt" in
@@ -96,6 +96,9 @@ while getopts "hi:n:c:u:s" opt "$@"; do
     esac
 done
 
+if [ -z "$CLUSTER" ]; then
+    die 3 "You must specify a cluster name with -c"
+fi
 if ! echo "$CLUSTER" | egrep -q '^preview-[a-z0-9\.-]+[a-z0-9]$'; then
     die 3 "Your cluster name must match with 'preview-[a-z0-9.-]+[a-z0-9]$'"
 fi
