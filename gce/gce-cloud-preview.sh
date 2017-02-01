@@ -18,7 +18,7 @@ export NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
 export DRYRUN="${DRYRUN:-0}"
 export IMAGE="${IMAGE:-ubuntu-1404-lts-1485895114}"
 export XC_DEMO_DATASET_DIR="${XC_DEMO_DATASET_DIR:-/srv/datasets}"
-export ACME_CA="${ACME_CA:-https://acme-staging.api.letsencrypt.org/directory}"
+export ACME_CA="${ACME_CA:-https://acme-v01.api.letsencrypt.org/directory}"
 
 
 syslog () {
@@ -40,7 +40,7 @@ say () {
 usage () {
     cat >&2 <<XEOF
 
-    usage: $0 [-i <installer-url (default: $INSTALLER)> [-n <count (default: $COUNT)>] [-c <cluster (default: $CLUSTER)>] [-u <dns-short-name (default: $CLUSTER)>] [-p use the production CA]
+    usage: $0 [-i <installer-url (default: $INSTALLER)> [-n <count (default: $COUNT)>] [-c <cluster (default: $CLUSTER)>] [-u <dns-short-name (default: $CLUSTER)>] [-s use the staging CA]
 
     IMAGE=$IMAGE
     NOTPREEMPTIBLE=$NOTPREEMPTIBLE
@@ -83,13 +83,13 @@ gce_dns_replace () {
 }
 
 
-while getopts "hi:n:c:u:p" opt "$@"; do
+while getopts "hi:n:c:u:s" opt "$@"; do
     case "$opt" in
         i) INSTALLER="$OPTARG";;
         n) COUNT="$OPTARG";;
         c) CLUSTER="$OPTARG";;
         u) URL="$OPTARG";;
-        p) export ACME_CA="https://acme-v01.api.letsencrypt.org/directory";;
+        s) export ACME_CA="https://acme-staging.api.letsencrypt.org/directory";;
         h) usage;;
         \?) say "Invalid option -$OPTARG"; exit 1;;
         :) say "Option -$OPTARG requires an argument."; exit 1;;
