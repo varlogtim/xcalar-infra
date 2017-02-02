@@ -192,7 +192,7 @@ else
 
 	script
 	    export HOME=$CADDY_HOME
-	    cd $HOME
+	    cd $CADDY_HOME
 	    exec /usr/bin/caddy -ca $ACME_CA -agree -root /var/tmp -conf /etc/caddy/Caddyfile
 	end script
 	EOF
