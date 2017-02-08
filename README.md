@@ -1,11 +1,11 @@
 # Xcalar-Infra
 
-    mkdir -p $HOME/p
-    git clone git@git:/gitrepos/xcalar-infra.git $HOME/p/xcalar-infra
-    echo 'XLIDIR=$HOME/p/xcalar-infra' | tee -a $HOME/.bashrc
+    git clone -o gerrit ssh://gerrit.int.xcalar.com:29418/xcalar/xcalar-infra.git $HOME
+    echo 'export XLRINFRA=$HOME/xcalar-infra' | tee -a $HOME/.bashrc
     source $HOME/.bashrc
-    cd $XLIDIR
+    cd $XLRINFRA
     git review -s
+
 
 ## repo
 
