@@ -52,6 +52,9 @@ for ii in $(seq 0 $(( $NumNodes - 1 ))); do
 	/opt/xcalar/bin/usrnode --nodeId $ii --numNodes $NumNodes --configFile $XCE_CONFIG >> $XCE_LOGDIR/node.${ii}.log 2>&1 </dev/null &
 	pid=$!
 	echo $pid > /var/run/xcalar/node.${ii}.pid
+    /opt/xcalar/bin/xcmonitor -n $ii -c $XCE_CONFIG >> $XCE_LOGDIR/xcmonitor.${ii}.log 2>&1 </dev/null &
+    pid=$!
+    echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
 done
 
 for ii in $(seq 60); do
