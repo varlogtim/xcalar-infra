@@ -77,7 +77,7 @@ do_install () {
     case "$(os_version)" in
         rhel*|el*)
             $sh_c 'yum update -y'
-            $sh_c 'yum install -y nfs-utils curl'
+            $sh_c 'yum install -y nfs-utils curl epel-release'
             ;;
         ub*)
             export DEBIAN_FRONTEND=noninteractive
@@ -113,16 +113,15 @@ $sh_c 'sed -i -e "/'$IP'/d" /etc/hosts'
 $sh_c "echo "$HOSTSENTRY" >> /etc/hosts"
 $sh_c "hostname $HOSTNAME_S"
 
-$sh_c 'mkdir -p /mnt/nfs /netstore/datasets'
+$sh_c 'mkdir -p /mnt/nfs'
 $sh_c 'sed -i -e "/\/mnt\/nfs/d" /etc/fstab'
-$sh_c 'sed -i -e "/\/netstore\/datasets/d" /etc/fstab'
 $sh_c 'echo "nfs:/srv/share/nfs /mnt/nfs   nfs defaults 0   0" >> /etc/fstab'
-$sh_c 'echo "nfs:/srv/datasets /netstore/datasets   nfs defaults 0   0" >> /etc/fstab'
 $sh_c 'mount -a'
-
 mkdir -p $CLUSTERDIR/members
+
 $sh_c 'mkdir -m 0777 -p /var/opt/xcalar /var/opt/xcalar/stats'
-$sh_c "mkdir -m 0777 $NFSMOUNT"
+
+$sh_c "mkdir -m 0777 -p $NFSMOUNT"
 $sh_c "sed -i '/$CLUSTER/d' /etc/fstab"
 $sh_c "echo 'nfs:/srv/share/nfs/cluster/$CLUSTER   $NFSMOUNT nfs defaults 0   0' >> /etc/fstab"
 $sh_c 'mount -a'
@@ -132,16 +131,31 @@ $sh_c 'mount -a'
 $sh_c "echo $HOSTSENTRY | tee $CLUSTERDIR/members/$HOSTNAME_F"
 #$sh_c "echo '$IP   $(hostname -f) $(hostname -s)' | tee $CLUSTERDIR/members/$(hostname -f)"
 
+# Add netstore only for non preview
+if ! echo "$CLUSTER" | grep -q '^preview-'; then
+    $sh_c 'mkdir -p /netstore/datasets'
+    $sh_c 'sed -i -e "/\/netstore\/datasets/d" /etc/fstab'
+    $sh_c 'echo "nfs:/srv/datasets /netstore/datasets   nfs defaults 0   0" >> /etc/fstab'
+    $sh_c 'mount -a'
+fi
+
+
 # Download and run the installer
-curl -sSL "$(get_metadata_value attributes/installer)" > /tmp/xcalar-installer
-chmod +x /tmp/xcalar-installer
+WORKDIR=/var/tmp/gce-userdata
+mkdir -p "$WORKDIR"
+curl -sSL "$(get_metadata_value attributes/installer)" > $WORKDIR/xcalar-installer
+get_metadata_value attributes/config > $WORKDIR/config
+$sh_c 'mkdir -p /etc/xcalar'
+if [ $COUNT -gt 1 ]; then
+    sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' $WORKDIR/config > $WORKDIR/config-nfs
+    $sh_c "cp $WORKDIR/config-nfs /etc/xcalar/default.cfg"
+else
+    $sh_c "cp $WORKDIR/config /etc/xcalar/default.cfg"
+fi
+
 set +e
 set -x
-get_metadata_value attributes/config > /tmp/xcalar-config
-sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' /tmp/xcalar-config > /tmp/xcalar-config-nfs
-$sh_c 'mkdir -p /etc/xcalar'
-$sh_c 'cp /tmp/xcalar-config-nfs /etc/xcalar/default.cfg'
-$sh_c 'bash -x /tmp/xcalar-installer --noStart'
+$sh_c "bash -x $WORKDIR/xcalar-installer --noStart"
 $sh_c 'service rsyslog restart'
 $sh_c 'service apache2 restart'
 $sh_c 'service xcalar start'

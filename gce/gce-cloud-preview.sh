@@ -16,9 +16,9 @@ export DOMAIN="${DOMAIN:-xcalar.cloud}"
 export NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
 export DRYRUN="${DRYRUN:-0}"
 export IMAGE="${IMAGE:-ubuntu-1404-lts-1485895114}"
+export NETWORK="${NETWORK:-private}"
 export XC_DEMO_DATASET_DIR="${XC_DEMO_DATASET_DIR:-/srv/datasets}"
 export ACME_CA="${ACME_CA:-https://acme-v01.api.letsencrypt.org/directory}"
-
 
 syslog () {
     logger -t "$NAME" -i -s "$@"
@@ -49,6 +49,7 @@ usage () {
     DOMAIN=$DOMAIN
     DRYRUN=$DRYRUN
     ACME_CA=$ACME_CA
+    NETWORK=$NETWORK
 
 XEOF
     exit 1
@@ -114,6 +115,9 @@ rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 
 set +e
+
+DATA_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-data-{1..$COUNT}))
+DATA_SIZE="${DATA_SIZE:-10}"
 
 syslog "Launching cluster $CLUSTER with $COUNT instances using installer $INSTALLER"
 (set -o pipefail; $DIR/gce-cluster.sh "$INSTALLER" $COUNT "$CLUSTER" 2>&1 | tee "$TMPDIR/gce-cluster.log")

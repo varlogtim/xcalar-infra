@@ -20,20 +20,26 @@ INSTANCES=($(gcloud compute instances list | awk '$1~/^'$CLUSTER'-[0-9]+/{print 
 if [ "${#INSTANCES[@]}" -eq 0 ]; then
     say "No instances found for cluster $CLUSTER"
 else
+    say
     say "WARNING: Deleting the following instances! Press Ctrl-C to abort. Sleeping for 10s."
+    say
     say "${INSTANCES[@]}"
-    sleep 10
+    say
+    for delay in `seq 10 -1 1`; do
+        printf "%d ...\r" $delay >&2
+        sleep 1
+    done
     say "Deleting ${INSTANCES[@]} ..."
     gcloud compute instances delete -q "${INSTANCES[@]}"
-    say "** Detaching disks. Please ignore any errors **"
-    for inst in "${INSTANCES[@]}"; do
-        ii="${inst##${CLUSTER}-}"
-        gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii} || true
-        gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-data-${ii} || true
-    done
+    #say "** Detaching disks. Please ignore any errors **"
+    #for inst in "${INSTANCES[@]}"; do
+    #    ii="${inst##${CLUSTER}-}"
+    #    gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii} || true
+    #    gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-data-${ii} || true
+    #done
+    echo "Deleting nfs:/srv/share/nfs/cluster/$CLUSTER"
+    gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 fi
-echo "Deleting nfs:/srv/share/nfs/cluster/$CLUSTER"
-gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 
 DISKS=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-swap-[0-9]+/{print $1}'))
 DISKS+=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-data-[0-9]+/{print $1}'))

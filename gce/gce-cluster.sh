@@ -70,6 +70,7 @@ XC_DEMO_DATASET_DIR="${XC_DEMO_DATASET_DIR:-/srv/datasets}"
 DISK_TYPE="${DISK_TYPE:-pd-standard}"
 NETWORK="${NETWORK:-private}"
 INSTANCE_TYPE=${INSTANCE_TYPE:-n1-highmem-8}
+IMAGE="${IMAGE:-ubuntu-1404-lts-1485895114}"
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
 SWAP_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-swap-{1..$COUNT}))
 DATA_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-data-{1..$COUNT}))
@@ -148,7 +149,11 @@ CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
 $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG "${INSTANCES[@]}"
 
 ARGS=()
-ARGS+=(--image ${IMAGE:-ubuntu-1404-lts-1485895114})
+if [ -n "$IMAGE_FAMILY" ]; then
+    ARGS+=(--image-family $IMAGE_FAMILY)
+else
+    ARGS+=(--image $IMAGE)
+fi
 
 if [ $COUNT -gt 3 ]; then
     NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
@@ -156,6 +161,10 @@ fi
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
     ARGS+=(--preemptible)
+fi
+
+if [ -n "$SUBNET" ]; then
+    ARGS+=(--subnet=${SUBNET})
 fi
 
 STARTUP_ARGS=()
@@ -174,16 +183,18 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size ${DISK_SIZE}GB \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
-    --tags=http-server,https-server \
-    ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
+    --tags=http-server,https-server ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
 if [ "$res" -ne 0 ]; then
     exit $res
 fi
 gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 for ii in `seq 1 $COUNT`; do
-    gcloud compute instances attach-disk ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii}
-    gcloud compute instances attach-disk ${CLUSTER}-${ii} --disk=${CLUSTER}-data-${ii}
+    instance=${CLUSTER}-${ii}
+    swap=${CLUSTER}-swap-${ii}
+    gcloud compute instances attach-disk $instance --disk=$swap
+    gcloud compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
+    gcloud compute instances set-disk-auto-delete  $instance --disk=$swap
 done
 for ii in `seq 1 $COUNT`; do
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdb >/dev/null" && \
