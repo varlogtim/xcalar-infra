@@ -11,6 +11,10 @@ gcs_dontcache () {
 
 DEFAULT=('gs://repo.xcalar.net/rpm-deps/el6/x86_64/repodata/*'
 'gs://repo.xcalar.net/rpm-deps/el7/x86_64/repodata/*'
+'gs://repo.xcalar.net/mirror/epel/6Server/x86_64/repodata/*'
+'gs://repo.xcalar.net/mirror/epel/7Server/x86_64/repodata/*'
+'gs://repo.xcalar.net/mirror/rhel/6Server/x86_64/repodata/*'
+'gs://repo.xcalar.net/mirror/rhel/7Server/x86_64/repodata/*'
 'gs://repo.xcalar.net/apt/ubuntu/conf/*'
 'gs://repo.xcalar.net/apt/ubuntu/db/*'
 'gs://repo.xcalar.net/apt/ubuntu/dists/trusty/main/binary-amd64/*')
