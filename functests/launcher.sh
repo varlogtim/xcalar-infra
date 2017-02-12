@@ -3,8 +3,8 @@
 set +e
 
 if [ `id -u` != 0 ]; then
-	echo Please run as root
-	exit 1
+    echo Please run as root
+    exit 1
 fi
 
 
@@ -32,35 +32,75 @@ mkdir -p /var/run/xcalar
 
 oldpids="$(cat /var/run/xcalar/*.pid 2>/dev/null)"
 if test -n "$oldpids"; then
-	kill -- $oldpids 2>/dev/null || true
-	sleep 5
-	kill -9 $oldpids 2>/dev/null || true
-	rm -f /var/run/xcalar/*.pid
+    kill -- $oldpids 2>/dev/null || true
+    sleep 5
+    kill -9 $oldpids 2>/dev/null || true
+    rm -f /var/run/xcalar/*.pid
 fi
 
 killall xcmgmtd usrnode childnode &>/dev/null || true
 sleep 4
 find /var/opt/xcalar -type f -delete
 find /dev/shm -name "xcalar-*" -delete
+find $XCE_LOGDIR -name "xcmonitorTmp.*" -type f -delete
+
 /opt/xcalar/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
 pid=$!
 echo $pid > /var/run/xcalar/xcmgmtd.pid
 
 NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
+declare -A monitorTmpLogs
 for ii in $(seq 0 $(( $NumNodes - 1 ))); do
-	/opt/xcalar/bin/usrnode --nodeId $ii --numNodes $NumNodes --configFile $XCE_CONFIG >> $XCE_LOGDIR/node.${ii}.log 2>&1 </dev/null &
-	pid=$!
-	echo $pid > /var/run/xcalar/node.${ii}.pid
-    /opt/xcalar/bin/xcmonitor -n $ii -c $XCE_CONFIG >> $XCE_LOGDIR/xcmonitor.${ii}.log 2>&1 </dev/null &
+    monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.log
+    monitorTmpLog=`mktemp $XCE_LOGDIR/xcmonitorTmp.${ii}.XXXXXX`
+    monitorTmpLogs[$ii]="$monitorTmpLog"
+
+    /opt/xcalar/bin/usrnode --nodeId $ii --numNodes $NumNodes --configFile $XCE_CONFIG >> $XCE_LOGDIR/node.${ii}.log 2>&1 </dev/null &
     pid=$!
-    echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
+    echo $pid > /var/run/xcalar/node.${ii}.pid
+    ( /opt/xcalar/bin/xcmonitor -n $ii -c $XCE_CONFIG 2>&1 </dev/null & echo $! > /var/run/xcalar/xcmonitor.${ii}.pid ) | tee -a $monitorLog > $monitorTmpLog &
 done
 
+backendUp="false"
+monitorUp="false"
+sleepTime=3
 for ii in $(seq 60); do
-	if xccli -c version 2>&1 | grep -q 'Backend Version:'; then
-		exit 0
-	fi
-	sleep 3
+    if xccli -c version 2>&1 | grep -q 'Backend Version:'; then
+        backendUp="true"
+        break
+    fi
+    sleep $sleepTime
 done
-exit 1
+
+if [ "$backendUp" = "false" ]; then
+    echo "Backend not up after " $(($sleepTime * $ii)) " seconds"
+    exit 1
+fi
+
+foundMaster="false"
+for jj in $(seq 60); do
+    for ii in $(seq 0 $(( $NumNodes - 1 ))); do
+        grep "STATE CHANGE:" "${monitorTmpLogs[$ii]}" | grep -q "=> Master"
+        ret=$?
+        if [ "$ret" = "0" ]; then
+            foundMaster="true"
+            break
+        fi
+    done
+
+    if [ "$foundMaster" = "true" ]; then
+        monitorUp="true"
+        break
+    fi
+
+    sleep $sleepTime
+done
+
+if [ "$monitorUp" = "false" ]; then
+    echo "Monitor not up after " $(($sleepTime * $jj)) " seconds"
+    pkill -9 usrnode
+    exit 1
+fi
+
+exit 0
