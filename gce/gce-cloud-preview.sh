@@ -122,13 +122,13 @@ if [ $rc -ne 0 ]; then
     die $rc "Failed to launch cluster"
 fi
 
-gcloud compute instances list > "$TMPDIR/gce-instances.tsv"
+gcloud compute instances list | grep 'RUNNING' > "$TMPDIR/gce-instances.tsv"
 
 IPS=()
 for ii in $(seq 1 $COUNT); do
     instance="${CLUSTER}-${ii}"
     dnsname="${instance}.${DOMAIN}"
-    ip="$(awk "/^$instance/{print \$(NF-1)}" "$TMPDIR/gce-instances.tsv")"
+    ip="$(awk "/^$instance /{print \$(NF-1)}" "$TMPDIR/gce-instances.tsv")"
     if [ $? -eq 0 ] && [ -n "$ip" ]; then
         IPS+=($ip)
         gce_dns_update "$instance" "$ip"
@@ -151,7 +151,7 @@ done
 for ii in $(seq 1 $COUNT); do
     instance="${CLUSTER}-${ii}"
     dnsname="${instance}.${DOMAIN}"
-    ip="$(awk "/^$instance/{print \$(NF-1)}" "$TMPDIR/gce-instances.tsv")"
+    ip="$(awk "/^$instance /{print \$(NF-1)}" "$TMPDIR/gce-instances.tsv")"
     until gcloud compute ssh "$instance" -- "sudo grep 'All nodes now network ready' /var/log/Xcalar.log"; do
         sleep 5
     done
