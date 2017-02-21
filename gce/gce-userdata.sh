@@ -96,8 +96,8 @@ HOSTNAME_F="$(get_metadata_value hostname)"
 HOSTNAME_S="${HOSTNAME_F%%.*}"
 HOSTSENTRY="$IP       $HOSTNAME_F $HOSTNAME_S  #xcalar_added"
 CLUSTER="$(get_metadata_value attributes/cluster)"
-if [ -z "$cluster" ]; then
-    CLUSTER="${HOSTNAME%%-[0-9]*}"
+if [ -z "$CLUSTER" ]; then
+    CLUSTER="${HOSTNAME_S%%-[0-9]*}"
 fi
 COUNT=$(get_metadata_value attributes/count)
 
