@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TTL="${TTL:-900}"
+TTL="${TTL:-120}"
 ZONE="${ZONE:-xcalar-cloud}"
 DOMAIN="${DOMAIN:-xcalar.cloud}"
 DRYRUN="${DRYRUN-1}"
@@ -18,20 +18,6 @@ usage () {
     exit 1
 }
 
-if [ $# -eq 0 ]; then
-    usage
-fi
-
-OP="${1}"
-shift
-
-case "$OP" in
-    -h|--help) usage ;;
-    add) ;;
-    remove) ;;
-    *) echo >&2 "Operation must be add or remove"; exit 1;;
-esac
-
 gdnsr () {
     if [ "$DRYRUN" = 1 ]; then
         echo "dry-run: gcloud dns record-sets $* --zone ${ZONE}"
@@ -47,6 +33,15 @@ gdnst () {
     gdnsr transaction "$@"
 }
 
+update () {
+    local record
+    record=($(gcloud dns record-sets list --zone $ZONE | grep "^${1}.${DOMAIN}" | awk '{printf "%s\n%s\n",$3,$4}'))
+    if [ ${#record[@]} -eq 2 ]; then
+        gdnst remove "${record[1]}" --name "${1}.${DOMAIN}" --ttl "${record[0]}"  --type A
+    fi
+    gdnst add "${2}" --name "${1}.${DOMAIN}" --ttl "${TTL}" --type A
+}
+
 abort () {
     gdnst abort
     echo >&2 "ERROR: Aborted gcloud dns transaction: $*"
@@ -54,8 +49,22 @@ abort () {
 }
 
 
+if [ $# -eq 0 ]; then
+    usage
+fi
+
+OP="${1}"
+shift
+
+case "$OP" in
+    -h|--help) usage ;;
+    add) ;;
+    remove) ;;
+    update) ;;
+    *) echo >&2 "Operation must be add, remove or update"; exit 1;;
+esac
+
 set -e
-gdnsr export xcalar-cloud.zone --zone-file-format
 if [ -e transaction.yaml ]; then
     NOW=$(date +%s)
     echo >&2 "WARNING: transaction.yaml exists. Saving to transaction-${NOW}.yaml"
@@ -66,7 +75,10 @@ gdnst start
 set +e
 
 while [ $# -ge 2 ]; do
-    gdnst "${OP}" --name "${1}.${DOMAIN}" --ttl "${TTL}" --type A "${2}"
+    case "$OP" in
+        add|remove) gdnst "$OP" "$2" --name "${1}.${DOMAIN}" --ttl "$TTL" --type A;;
+        update) update "$1" "$2";;
+    esac
     shift 2
 done
 gdnst execute

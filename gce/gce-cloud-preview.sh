@@ -81,6 +81,12 @@ gce_dns_replace () {
     "$DIR/gce-dns.sh" add "$@"
 }
 
+gce_dns_update () {
+    syslog "Updating DNS entry $*"
+    "$DIR/gce-dns.sh" update "$@"
+}
+
+
 test $# -eq 0 && set -- -h
 
 while getopts "hi:n:c:u:s" opt "$@"; do
@@ -125,10 +131,10 @@ for ii in $(seq 1 $COUNT); do
     ip="$(awk "/^$instance/{print \$(NF-1)}" "$TMPDIR/gce-instances.tsv")"
     if [ $? -eq 0 ] && [ -n "$ip" ]; then
         IPS+=($ip)
-        gce_dns_replace "$instance" "$ip"
+        gce_dns_update "$instance" "$ip"
         if [ $ii -eq 1 ]; then
             if [ -n "$URL" ] && [ "$instance" != "${URL}" ]; then
-                gce_dns_replace "$URL" "$ip"
+                gce_dns_update "$URL" "$ip"
             fi
         fi
     else
