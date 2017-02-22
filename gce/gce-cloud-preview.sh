@@ -15,7 +15,7 @@ export ZONE="${ZONE:-xcalar-cloud}"
 export DOMAIN="${DOMAIN:-xcalar.cloud}"
 export NOTPREEMPTIBLE="${NOTPREEMPTIBLE:-1}"
 export DRYRUN="${DRYRUN:-0}"
-export IMAGE="${IMAGE:-el7-1485562626}"
+export IMAGE="${IMAGE:-el7-1487749767}"
 export NETWORK="${NETWORK:-private}"
 export XC_DEMO_DATASET_DIR="${XC_DEMO_DATASET_DIR:-/srv/datasets}"
 export ACME_CA="${ACME_CA:-https://acme-v01.api.letsencrypt.org/directory}"
@@ -156,16 +156,25 @@ for ii in $(seq 1 $COUNT); do
     instance="${CLUSTER}-${ii}"
     dnsname="${instance}.${DOMAIN}"
     ip="$(awk "/^$instance /{print \$(NF-1)}" "$TMPDIR/gce-instances.tsv")"
-    until gcloud compute ssh "$instance" -- "sudo grep 'All nodes now network ready' /var/log/Xcalar.log"; do
-        sleep 5
-    done
+
+    # On EL7 we have to query journalctl for syslog messges
+    if [[ "${IMAGE}" =~ ^(el7|centos-7|rhel-7) ]] || [[ "$IMAGE_FAMILY" =~ ^(centos-7|rhel-7) ]]; then
+        until gcloud compute ssh "$instance" -- "sudo journalctl -b | grep 'All nodes now network ready'"; do
+            sleep 5
+        done
+    else
+        until gcloud compute ssh "$instance" -- "sudo grep 'All nodes now network ready' /var/log/Xcalar.log"; do
+            sleep 5
+        done
+    fi
+
     if [ $ii -eq 1 ] && [ -n "$URL" ] && [ "$instance" != "$URL" ]; then
         gcloud compute ssh "$instance" -- "sudo ACME_CA=$ACME_CA /var/tmp/$NAME/bin/install-caddy.sh ${URL}.${DOMAIN}"
     else
         gcloud compute ssh "$instance" -- "sudo ACME_CA=$ACME_CA /var/tmp/$NAME/bin/install-caddy.sh $dnsname"
     fi
+    gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/certs/fakelerootx1.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null"
     gcloud compute ssh $instance --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar" && \
-    gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo sed -i -e 's@^Constants.XcalarRootCompletePath=.*\$@Constants.XcalarRootCompletePath=/var/opt/xcalar@g' /etc/xcalar/default.cfg" && \
     gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo service xcalar stop-supervisor || true" && \
     gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo service xcalar start"
     rc=$?

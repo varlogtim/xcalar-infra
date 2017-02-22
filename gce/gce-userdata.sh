@@ -4,12 +4,22 @@ command_exists() {
     command -v "$@" > /dev/null 2>&1
 }
 
+# Taken from GCloud's ubuntu package /usr/share/google/get_metadata_value
 get_metadata_value () {
     if test -e /usr/share/google/get_metadata_value; then
         /usr/share/google/get_metadata_value "$1"
-    else
-        curl -sSL -H 'Metadata-Flavor: Google' "http://metadata.google.internal/computeMetadata/v1/instance/$1"
+        return $?
     fi
+    local readonly tmpfile=$(mktemp)
+    http_code=$(curl -f "http://metadata.google.internal/computeMetadata/v1/instance/${1}" -H "Metadata-Flavor: Google" -w "%{http_code}" \
+        -s -o ${tmpfile} 2>/dev/null)
+    local readonly return_code=$?
+    # If the command completed successfully, print the metadata value to stdout.
+    if [[ ${return_code} == 0 && ${http_code} == 200 ]]; then
+        cat ${tmpfile}
+    fi
+    rm -f ${tmpfile}
+    return ${return_code}
 }
 
 os_version () {
@@ -137,6 +147,9 @@ if ! echo "$CLUSTER" | grep -q '^preview-'; then
     $sh_c 'sed -i -e "/\/netstore\/datasets/d" /etc/fstab'
     $sh_c 'echo "nfs:/srv/datasets /netstore/datasets   nfs defaults 0   0" >> /etc/fstab'
     $sh_c 'mount -a'
+else
+    umount /mnt/nfs
+    $sh_c 'sed -i -e "/\/mnt\/nfs/d" /etc/fstab'
 fi
 
 
@@ -155,7 +168,7 @@ fi
 
 set +e
 set -x
-$sh_c "bash -x $WORKDIR/xcalar-installer --noStart"
+$sh_c "bash -x $WORKDIR/xcalar-installer --noStart --startOnBoot"
 $sh_c 'service rsyslog restart'
 $sh_c 'service apache2 restart'
 $sh_c 'service xcalar start'

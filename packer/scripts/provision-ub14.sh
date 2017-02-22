@@ -26,7 +26,7 @@ cd $DOCKERPWD && curl -sL http://repo.xcalar.net/xcalar-release-trusty.deb > /tm
 cd $DOCKERPWD && DEBIAN_FRONTEND=noninteractive apt-get update -yqq && DEBIAN_FRONTEND=noninteractive apt-get install -yqq --no-install-recommends nodejs thrift-dev=0.9.2-3 libjemalloc-dev libprotobuf-dev=3.0.2-2 protobuf-compiler=3.0.2-2 libprotobuf10=3.0.2-2 ccache cmake || exit $?
 cd $DOCKERPWD && curl -sSL http://repo.xcalar.net/deps/ninja-1.7.2-1.tar.gz | tar zxf - --no-same-owner -C /usr/local/bin && ln -sfn ninja-1.7.2 /usr/local/bin/ninja || exit $?
 
-curl -sSL http://repo.xcalar.net/deps/xcalar-build-context-1485895035.tar.gz | (tar zxf - --no-same-owner -C $SRCDIR)
+curl -sSL http://repo.xcalar.net/deps/xcalar-build-context-1487745549.tar.gz | (tar zxf - --no-same-owner -C $SRCDIR)
 for data in flight gdelt-small indexJoin yelp; do curl --retry 5 -sSL http://repo.xcalar.net/data/${data}.tar.gz | tar zxf - --no-same-owner -C /var/tmp || true; done || true
 
 cd $SRCDIR && cp ./bin/npm-install.py /usr/bin && cd - || exit $?

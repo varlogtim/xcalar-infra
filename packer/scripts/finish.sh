@@ -3,6 +3,7 @@
 set -x
 date > /etc/packer_build_time
 
+rm -f /var/log/startupscript.log
 rm -f /etc/hostname
 #mkdir -p /netstore /freenas
 #echo 'netstore.int.xcalar.com:/public/netstore /netstore   nfs    defaults    0   0' | tee -a /etc/fstab
