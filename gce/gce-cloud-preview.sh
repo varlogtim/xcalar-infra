@@ -176,6 +176,8 @@ for ii in $(seq 1 $COUNT); do
     gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/certs/fakelerootx1.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null"
     gcloud compute ssh $instance --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar" && \
     gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo service xcalar stop-supervisor || true" && \
+    gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo cp -r /var/tmp/$NAME/bin/config /var/opt/xcalar/config" && \
+    gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo mv /var/opt/xcalar/config/XcalarLic.key /etc/xcalar/XcalarLic.key" && \
     gcloud compute ssh $instance --ssh-flag="-tt" --command "sudo service xcalar start"
     rc=$?
     if [ $rc -ne 0 ]; then
