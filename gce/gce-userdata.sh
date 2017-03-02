@@ -86,13 +86,28 @@ do_install () {
 
     case "$(os_version)" in
         rhel*|el*)
+            gcsfuseRepo="/etc/yum.repos.d/gcsfuse.repo"
+            $sh_c "touch $gcsfuseRepo"
+            $sh_c "echo '[gcsfuse]' >> $gcsfuseRepo"
+            $sh_c "echo 'name=gcsfuse (packages.cloud.google.com)' >> $gcsfuseRepo"
+            $sh_c "echo 'baseurl=https://packages.cloud.google.com/yum/repos/gcsfuse-el7-x86_64' >> $gcsfuseRepo"
+            $sh_c "echo 'enabled=1' >> $gcsfuseRepo"
+            $sh_c "echo 'gpgcheck=1' >> $gcsfuseRepo"
+            $sh_c "echo 'repo_gpgcheck=1' >> $gcsfuseRepo"
+            $sh_c "echo 'gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpp' >> $gcsfuseRepo"
+            $sh_c "echo '    https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg' >> $gcsfuseRepo"
             $sh_c 'yum update -y'
-            $sh_c 'yum install -y nfs-utils curl epel-release'
+            $sh_c 'yum install -y nfs-utils curl epel-release gcsfuse'
             ;;
         ub*)
             export DEBIAN_FRONTEND=noninteractive
+            $sh_c 'echo "deb http://packages.cloud.google.com/apt gcsfuse-`lsb_release -c -s` main" > /etc/apt/sources.list.d/gcsfuse.list'
             $sh_c 'apt-get update -y'
             $sh_c 'apt-get install -y nfs-common curl'
+            $sh_c 'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -'
+            $sh_c 'apt-get update -y'
+            $sh_c 'apt-get install -y gcsfuse'
+            $sh_c 'usermod -a -G fuse $USER'
             ;;
     esac
 }
@@ -141,11 +156,14 @@ $sh_c 'mount -a'
 $sh_c "echo $HOSTSENTRY | tee $CLUSTERDIR/members/$HOSTNAME_F"
 #$sh_c "echo '$IP   $(hostname -f) $(hostname -s)' | tee $CLUSTERDIR/members/$(hostname -f)"
 
-# Add netstore only for non preview
+# Add xcalar-qa and netstore only for non preview
 if ! echo "$CLUSTER" | grep -q '^preview-'; then
     $sh_c 'mkdir -p /netstore/datasets'
+    $sh_c 'mkdir -p /xcalar-qa'
     $sh_c 'sed -i -e "/\/netstore\/datasets/d" /etc/fstab'
     $sh_c 'echo "nfs:/srv/datasets /netstore/datasets   nfs defaults 0   0" >> /etc/fstab'
+    $sh_c 'sed -i -e "/xcalar-qa/d" /etc/fstab'
+    $sh_c 'echo "xcqa /xcalar-qa   gcsfuse defaults,implicit_dirs" >> /etc/fstab'
     $sh_c 'mount -a'
 else
     umount /mnt/nfs
