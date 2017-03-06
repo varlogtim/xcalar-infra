@@ -97,13 +97,13 @@ do_install () {
             $sh_c "echo 'gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpp' >> $gcsfuseRepo"
             $sh_c "echo '    https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg' >> $gcsfuseRepo"
             $sh_c 'yum update -y'
-            $sh_c 'yum install -y nfs-utils curl epel-release gcsfuse'
+            $sh_c 'yum install -y nfs-utils curl epel-release gcsfuse collectd'
             ;;
         ub*)
             export DEBIAN_FRONTEND=noninteractive
             $sh_c 'echo "deb http://packages.cloud.google.com/apt gcsfuse-`lsb_release -c -s` main" > /etc/apt/sources.list.d/gcsfuse.list'
             $sh_c 'apt-get update -y'
-            $sh_c 'apt-get install -y nfs-common curl'
+            $sh_c 'apt-get install -y nfs-common curl collectd'
             $sh_c 'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -'
             $sh_c 'apt-get update -y'
             $sh_c 'apt-get install -y gcsfuse'
@@ -170,6 +170,32 @@ else
     $sh_c 'sed -i -e "/\/mnt\/nfs/d" /etc/fstab'
 fi
 
+# XXX Should use puppet manifest
+# Set up collectd
+$sh_c 'service collectd stop'
+graphiteConfFile="/etc/collectd/collectd.conf"
+writeGraphite='
+LoadPlugin write_graphite
+<Plugin write_graphite>
+    <Node \"graphite\">
+        Host "10.128.0.27" # graphite.c.angular-expanse-99923.internal
+        Port \"2003\"
+        Protocol \"tcp\"
+        LogSendErrors false
+        Prefix \"collectd.'$CLUSTER'.\"
+        Postfix \"\"
+        StoreRates true
+        AlwaysAppendDS false
+        EscapeCharacter \"_\"
+    </Node>
+</Plugin>
+'
+
+$sh_c "sed -i -e \"s/localhost/`hostname -f`/\" $graphiteConfFile"
+$sh_c "sed -i -e \"s/FQDNLookup true/FQDNLookup false/\" $graphiteConfFile"
+$sh_c "echo \"$writeGraphite\" >> $graphiteConfFile"
+
+$sh_c 'service collectd start'
 
 # Download and run the installer
 WORKDIR=/var/tmp/gce-userdata
