@@ -151,7 +151,13 @@ $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG "${INSTANCES[@]}"
 ARGS=()
 if [ -n "$IMAGE_FAMILY" ]; then
     ARGS+=(--image-family $IMAGE_FAMILY)
-else
+fi
+
+if [ -n "$IMAGE_PROJECT" ]; then
+    ARGS+=(--image-project $IMAGE_PROJECT)
+fi
+
+if [ -n "$IMAGE" ]; then
     ARGS+=(--image $IMAGE)
 fi
 
