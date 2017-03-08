@@ -1,3 +1,6 @@
+*.tar
+*.tar.gz
+*.tmp
 .venv/
 packer_cache/
 box/
