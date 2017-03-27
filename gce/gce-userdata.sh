@@ -178,7 +178,7 @@ writeGraphite='
 LoadPlugin write_graphite
 <Plugin write_graphite>
     <Node \"graphite\">
-        Host "10.128.0.27" # graphite.c.angular-expanse-99923.internal
+        Host "graphite" # graphite.c.angular-expanse-99923.internal
         Port \"2003\"
         Protocol \"tcp\"
         LogSendErrors false
