@@ -78,11 +78,11 @@ DATA_SIZE="${DATA_SIZE:-10}"
 
 if [ -z "$DISK_SIZE" ]; then
     case "$INSTANCE_TYPE" in
-        n1-highmem-16) DISK_SIZE=100; RAM_SIZE=104;;
-        n1-highmem-8) DISK_SIZE=50; RAM_SIZE=52;;
-        n1-standard*) DISK_SIZE=32; RAM_SIZE=16;;
-        g1-*) DISK_SIZE=20; RAM_SIZE=16;;
-        *) DISK_SIZE=20; RAM_SIZE=16;;
+        n1-highmem-16) DISK_SIZE=400; RAM_SIZE=104;;
+        n1-highmem-8) DISK_SIZE=200; RAM_SIZE=52;;
+        n1-standard*) DISK_SIZE=80; RAM_SIZE=16;;
+        g1-*) DISK_SIZE=80; RAM_SIZE=16;;
+        *) DISK_SIZE=80; RAM_SIZE=16;;
     esac
 fi
 
