@@ -109,12 +109,11 @@ do_install () {
         ub*)
             export DEBIAN_FRONTEND=noninteractive
             $sh_c 'echo "deb http://packages.cloud.google.com/apt gcsfuse-`lsb_release -c -s` main" > /etc/apt/sources.list.d/gcsfuse.list'
-            $sh_c 'apt-get update -y'
-            $sh_c 'apt-get install -y nfs-common curl collectd'
             $sh_c 'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -'
             $sh_c 'apt-get update -y'
-            $sh_c 'apt-get install -y gcsfuse'
-            $sh_c 'usermod -a -G fuse $USER'
+            $sh_c 'DEBIAN_FRONTEND=noninteractive apt-get install -y nfs-common curl collectd'
+            $sh_c 'DEBIAN_FRONTEND=noninteractive apt-get install -y gcsfuse'
+            test -n "$SUDO_USER" && $sh_c "usermod -a -G fuse $SUDO_USER" || true
             ;;
     esac
 }
@@ -219,7 +218,18 @@ fi
 
 set +e
 set -x
+XCE_UID="$(id -u xcalar 2>/dev/null)"
+if [ $? -eq 0 ] && [ "$XCE_UID" != "" ]; then
+    $sh_c "echo 'XCE_UID=$XCE_UID' | tee -a /etc/default/xcalar"
+fi
+grep -v '#' /etc/default/xcalar > /etc/default/xcalar.default
+rm -f /etc/default/xcalar
 $sh_c "bash -x $WORKDIR/xcalar-installer --noStart --startOnBoot"
+cat /etc/default/xcalar.default | tee -a /etc/default/xcalar
 $sh_c 'service rsyslog restart'
 $sh_c 'service apache2 restart'
-$sh_c 'service xcalar start'
+cd ~xcalar || cd /var/tmp
+$sh_c 'su -c "/opt/xcalar/bin/xcalarctl start" - xcalar'
+if [ $? -ne 0 ]; then
+    $sh_c 'service xcalar start'
+fi
