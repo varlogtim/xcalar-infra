@@ -84,20 +84,27 @@ do_install () {
         curl='busybox wget -qO-'
     fi
 
+    os_version > /var/tmp/os_version
     case "$(os_version)" in
         rhel*|el*)
             gcsfuseRepo="/etc/yum.repos.d/gcsfuse.repo"
-            $sh_c "touch $gcsfuseRepo"
-            $sh_c "echo '[gcsfuse]' >> $gcsfuseRepo"
-            $sh_c "echo 'name=gcsfuse (packages.cloud.google.com)' >> $gcsfuseRepo"
-            $sh_c "echo 'baseurl=https://packages.cloud.google.com/yum/repos/gcsfuse-el7-x86_64' >> $gcsfuseRepo"
-            $sh_c "echo 'enabled=1' >> $gcsfuseRepo"
-            $sh_c "echo 'gpgcheck=1' >> $gcsfuseRepo"
-            $sh_c "echo 'repo_gpgcheck=1' >> $gcsfuseRepo"
-            $sh_c "echo 'gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpp' >> $gcsfuseRepo"
-            $sh_c "echo '    https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg' >> $gcsfuseRepo"
+            if true; then
+                $sh_c "rm -f $gcsfuseRepo"
+            else
+                $sh_c "touch $gcsfuseRepo"
+                $sh_c "echo '[gcsfuse]' > $gcsfuseRepo"
+                $sh_c "echo 'name=gcsfuse (packages.cloud.google.com)' >> $gcsfuseRepo"
+                $sh_c "echo 'baseurl=https://packages.cloud.google.com/yum/repos/gcsfuse-el${ELVERSION}-x86_64' >> $gcsfuseRepo"
+                $sh_c "echo 'enabled=1' >> $gcsfuseRepo"
+                $sh_c "echo 'gpgcheck=1' >> $gcsfuseRepo"
+                $sh_c "echo 'repo_gpgcheck=1' >> $gcsfuseRepo"
+                $sh_c "echo 'gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpp' >> $gcsfuseRepo"
+                $sh_c "echo '    https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg' >> $gcsfuseRepo"
+            fi
             $sh_c 'yum update -y'
-            $sh_c 'yum install -y nfs-utils curl epel-release gcsfuse collectd'
+            $sh_c 'yum install -y nfs-utils curl epel-release collectd'
+            curl http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm > /tmp/gcsfuse.rpm
+            $sh_c "yum localinstall -y /tmp/gcsfuse.rpm"
             ;;
         ub*)
             export DEBIAN_FRONTEND=noninteractive
