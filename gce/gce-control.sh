@@ -20,8 +20,26 @@ EOF
 }
 
 gce_instances () {
-    gcloud compute instances "$@"
-    local rc=$?
+    local cmd="$1"
+    local rc=1
+    shift
+    if [ $# -gt 1 ]; then
+        gcloud compute instances "$cmd" "$@"
+        rc=$?
+    else
+        if gcloud compute instances describe "$1" &>/dev/null; then
+            gcloud compute instances "$cmd" "$@"
+            rc=$?
+        else
+            local -a INSTANCES=($(gcloud compute instances list | awk '/^'${1}'-[1-9][0-9]*/{print $1}'))
+            if [ ${#INSTANCES[@]} -eq 0 ]; then
+                echo >&2 "No instances or cluster named $1 found"
+                exit 1
+            fi
+            gcloud compute instances "$cmd" "${INSTANCES[@]}"
+            rc=$?
+        fi
+    fi
     if [ $rc -ne 0 ]; then
         logger -t "$NAME" -i -s "[ERROR:$rc] gcloud compute instances $*"
     else
@@ -42,6 +60,7 @@ case "$cmd" in
     list) ;;
     *) usage ;;
 esac
+shift
 
-gce_instances "$@"
+gce_instances "$cmd" "$@"
 exit $?
