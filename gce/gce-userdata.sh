@@ -218,10 +218,6 @@ fi
 
 set +e
 set -x
-XCE_UID="$(id -u xcalar 2>/dev/null)"
-if [ $? -eq 0 ] && [ "$XCE_UID" != "" ]; then
-    $sh_c "echo 'XCE_UID=$XCE_UID' | tee -a /etc/default/xcalar"
-fi
 grep -v '#' /etc/default/xcalar > /etc/default/xcalar.default
 rm -f /etc/default/xcalar
 $sh_c "bash -x $WORKDIR/xcalar-installer --noStart --startOnBoot"
