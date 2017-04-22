@@ -211,6 +211,7 @@ for ii in `seq 1 $COUNT`; do
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && sudo mount $XC_DEMO_DATASET_DIR"
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null"
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XCE_ENABLE_SENDING_SUPPORT_BUNDLES=true | sudo tee -a /etc/default/xcalar"
 done
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
