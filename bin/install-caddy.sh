@@ -56,6 +56,48 @@ fi
 
 mkdir -p /etc/caddy
 
+if ! test -e /etc/caddy/supervisor.conf; then
+    cat > /etc/caddy/supervisor.conf <<EOF
+[supervisord]
+nodaemon=false
+minfds=65535
+minprocs=32000
+user=www-data
+group=www-data
+loglevel=info
+pidfile=/tmp/caddy-supervisor.pid
+directory=/tmp
+nocleanup=false
+childlogdir=/var/log/caddy
+logfile=/var/log/caddy/supervisor.log
+stdout_logfile=/var/log/caddy/supervisor-out.log
+stderr_logfile=/var/log/caddy/supervisor-err.log
+stdout_logfile_maxbytes=100MB
+stderr_logfile_maxbytes=100MB
+
+[supervisorctl]
+serverurl=unix:///tmp/caddy-supervisor.sock
+
+[unix_http_server]
+file=/tmp/caddy-supervisor.sock
+chmod=0700
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory=supervisor.rpcinterface:make_main_rpcinterface
+
+[program:caddy]
+environment=HOME="$CADDY_HOME",CADDY_HOME="$CADDY_HOME"
+startsecs=10
+startretries=5
+command=/usr/bin/caddy -ca $ACME_CA -log stdout -agree -root /var/tmp -conf /etc/caddy/Caddyfile
+autostart=true
+autorestart=unexpected
+redirect_stderr=true
+stdout_logfile=/var/log/caddy/caddy.log
+stdout_logfile_maxbytes=100MB
+EOF
+fi
+
 if ! test -e /etc/caddy/Caddyfile; then
 	cat > /etc/caddy/Caddyfile <<-EOF
 	${HOSTLINE} {
@@ -107,7 +149,7 @@ mkdir -m 0750 -p /var/log/caddy
 chown www-data $CADDY_HOME
 chown www-data:adm /var/log/caddy
 
-CADDY_VERSION="${CADDY_VERSION:-0.9.4}"
+CADDY_VERSION="${CADDY_VERSION:-0.9.5}"
 if ! test -e /usr/bin/caddy-${CADDY_VERSION}; then
     curl -sSL http://repo.xcalar.net/deps/caddy-linux-amd64_${CADDY_VERSION} > /usr/bin/caddy.$$
     chmod +x /usr/bin/caddy.$$
@@ -175,6 +217,10 @@ if command -v systemctl &>/dev/null; then
     systemctl enable caddy.service || true
     systemctl stop caddy.service || true
     systemctl start caddy.service
+elif [ -f /etc/redhat-release ]; then
+    service httpd stop || true
+    chkconfig httpd off || true
+    supervisord -c /etc/caddy/supervisor.conf
 else
     cat > /etc/init/caddy.conf <<-EOF
 	description "Caddy Server startup script"
