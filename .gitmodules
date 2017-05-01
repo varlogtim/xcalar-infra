@@ -1,4 +1,0 @@
-[submodule "gerrit/All-Projects"]
-	path = gerrit/All-Projects
-	url = ssh://gerrit.int.xcalar.com:29418/All-Projects.git
-	branch = meta/config
