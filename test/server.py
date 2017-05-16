@@ -80,6 +80,10 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
         self.markSuccess("Started")
         print "Test started: %s" % (str(datetime.now()))
         sys.stdout.flush()
+        fout = open("/tmp/chromeDriver.log", "w")
+        for entry in self.driver.get_log('browser'):
+            fout.write(entry+"\n")
+            fout.flush()
 
 
     def processClose(self, params):
