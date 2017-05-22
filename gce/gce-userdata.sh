@@ -226,6 +226,3 @@ $sh_c 'service rsyslog restart'
 $sh_c 'service apache2 restart'
 cd ~xcalar || cd /var/tmp
 $sh_c 'su -c "/opt/xcalar/bin/xcalarctl start" - xcalar'
-if [ $? -ne 0 ]; then
-    $sh_c 'service xcalar start'
-fi
