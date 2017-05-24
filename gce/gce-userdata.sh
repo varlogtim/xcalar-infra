@@ -179,8 +179,7 @@ fi
 # XXX Should use puppet manifest
 # Set up collectd
 $sh_c 'service collectd stop'
-graphiteConfFile="/etc/collectd/collectd.conf"
-writeGraphite='
+writeGraphiteCommon='
 LoadPlugin write_graphite
 <Plugin write_graphite>
     <Node \"graphite\">
@@ -197,10 +196,20 @@ LoadPlugin write_graphite
 </Plugin>
 '
 
-$sh_c "sed -i -e \"s/localhost/`hostname -f`/\" $graphiteConfFile"
-$sh_c "sed -i -e \"s/FQDNLookup true/FQDNLookup false/\" $graphiteConfFile"
-$sh_c "echo \"$writeGraphite\" >> $graphiteConfFile"
+if test -e /etc/redhat-release; then
+    graphiteConfFile="/etc/collectd.d/collectd.conf"
+    writeGraphite='
+Hostname'`hostname -f`'
+FQDNLookup false
+'"$writeGraphiteCommon"
+else
+    graphiteConfFile="/etc/collectd/colectd.conf"
+    writeGraphite="$writeGraphiteCommon"
+    $sh_c "sed -i -e \"s/localhost/`hostname -f`/\" $graphiteConfFile"
+    $sh_c "sed -i -e \"s/FQDNLookup true/FQDNLookup false/\" $graphiteConfFile"
+fi
 
+$sh_c "echo \"$writeGraphite\" >> $graphiteConfFile"
 $sh_c 'service collectd start'
 
 # Download and run the installer
