@@ -20,10 +20,12 @@ EMAIL="$(git config user.email)"
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
 
 PIDS=()
+NODENUM=0
 
 for host in ${INSTANCES[@]}; do
-    gcloud compute ssh $host --command "grep 'All nodes now network ready' /var/log/Xcalar.log" </dev/null &
+    gcloud compute ssh $host --command "grep 'All nodes now network ready' /var/log/xcalar/node.$NODENUM.err" </dev/null &
     PIDS+=($!)
+    ((NODENUM++))
 done
 ret=0
 for pid in ${PIDS[@]}; do
