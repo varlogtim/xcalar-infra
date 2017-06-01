@@ -82,7 +82,7 @@ class Handler( BaseHTTPServer.BaseHTTPRequestHandler ):
         sys.stdout.flush()
         fout = open("/tmp/chromeDriver.log", "w")
         for entry in self.driver.get_log('browser'):
-            fout.write(entry+"\n")
+            fout.write("{}\n".format(entry))
             fout.flush()
 
 
