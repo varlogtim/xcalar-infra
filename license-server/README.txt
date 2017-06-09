@@ -21,4 +21,19 @@ directory with the command:
   * a license key reader called readKey from $XLRDIR/src/bin/licenseTools
   * the Xcalar license public key called EcdsaPub.key from $XLDIR/src/data
 
+7. Management of license_keys.sqlite is handled with the python utility 
+manage.py.  It has three modes:
+  * insert key against user name:
+./manage.py -c insert -n "John Smith" -k "key value"
+  * list the license keys for one user (with -n) or all users (without -n)
+./manage.py -c list [-n "John Smith"]
+  * delete one key (with -k) or all keys (without -k) against user name:
+./manage.py -c delete -n "John Smith" [-k "key value"]
+  
+8. A crontab is included that dumps the contents of license_keys.sqlite to
+a text file on network storage mounted at /backup/licenses.
+
+9. The backup directory on zd1 is mounted using gcsfuse into a gs bucket 
+named zendesk-license with the command:
+gcsfuse zendesk-licenses /backup/licenses
 
