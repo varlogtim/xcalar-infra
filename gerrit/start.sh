@@ -11,7 +11,7 @@ then
 #    GPID=$(cat $PIDFILE)
     echo "gerrit $GERRIT_VERSION is started successfully with auth.type=$AUTH_TYPE, please login to check."
     echo ""
-    tail -f $GERRIT_HOME/gerrit/logs/*_log
+    exec tail -f $GERRIT_HOME/gerrit/logs/*_log
 else
     cat $GERRIT_HOME/gerrit/logs/error_log
     exit 1
