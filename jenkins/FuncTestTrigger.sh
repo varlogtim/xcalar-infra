@@ -69,9 +69,6 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     echo "none  /dev/shm    tmpfs   defaults,size=${tmpFsSizeGb%.*}G    0   0" | sudo tee -a /etc/fstab
     sudo mount -o remount /dev/shm
 
-    # Enable sending support bundles
-    echo "export XCE_ENABLE_SENDING_SUPPORT_BUNDLES=true" | sudo tee -a /etc/default/xcalar 
-
     restartXcalar || true
 
     if xccli -c version 2>&1 | grep -q 'Error'; then
