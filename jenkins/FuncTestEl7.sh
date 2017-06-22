@@ -17,7 +17,6 @@ ssh -t -T -o StrictHostKeyChecking=no jenkins@functest-el7-1 'python /netstore/u
 --testCase liblog::logStress \
 --testCase libqueryparser::queryParserStress \
 --testCase libqueryeval::queryEvalStress \
---testCase libns2::ns2Test \
 --testCase libqm::qmStringQueryTest \
 --testCase libqm::qmRetinaQueryTest \
 --testCase libdag::randomTest \
@@ -34,14 +33,12 @@ ssh -t -T -o StrictHostKeyChecking=no jenkins@functest-el7-1 'python /netstore/u
 --testCase libds::dataSetStress \
 --testCase libxdb::xdbStress \
 --testCase liboperators::basicFunc \
+--testCase childfun::fun \
+--testCase libapp::sanity \
+--testCase libapp::stress \
 --testCase libruntime::stress --silent &> /dev/null &'
 
-#--testCase libapp::sanity \
-#--testCase libapp::stress \
-#--testCase childfun::fun \
-
-# --testCase libds::dataSetStress \
-
+# --testCase libns2::ns2Test \
 
 # --testCase libdemystify::demystifyTest \
 
