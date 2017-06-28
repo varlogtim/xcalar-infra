@@ -86,6 +86,8 @@ if [ -z "$DISK_SIZE" ]; then
     esac
 fi
 
+SWAP_SIZE=${SWAP_SIZE:-$RAM_SIZE}
+
 if ! command -v gcloud; then
     if test -e "$XLRDIR/bin/gcloud-sdk.sh"; then
         say "gcloud command not found, attemping to install via $XLRDIR/bin/gcloud-sdk.sh ..."
@@ -181,7 +183,7 @@ fi
 
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
-gcloud compute disks create --size=${RAM_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}"
+gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}"
 gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --machine-type ${INSTANCE_TYPE} \
