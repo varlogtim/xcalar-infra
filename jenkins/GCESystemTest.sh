@@ -38,12 +38,32 @@ echo "$ips"
 
 stopXcalar() {
     xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo /opt/xcalar/bin/xcalarctl stop-supervisor"
+    # Wait for the usrnode to shutdown
+    host="${cluster}-1"
+    gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes not started"
+    ret=$?
+    numRetries=60
+    try=0
+    while [ $ret -ne 0 -a "$try" -lt "$numRetries" ]; do
+        sleep 1s
+        gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes not started"
+        ret=$?
+        try=$(( $try + 1 ))
+    done
+    if [ $ret -eq 0 ]; then
+        echo "All nodes stopped"
+    else
+        echo "Error while waiting for nodes to stop"
+        return 1
+    fi
 }
 
 restartXcalar() {
     set +e
     stopXcalar
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo service xcalar start"
+    # xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo service xcalar start"
+    # Start xcmonitor which will start the usrnodes once all the xcmonitors form a cluster
+    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo /opt/xcalar/bin/xcalarctl start"
     for ii in $(seq 1 $NUM_INSTANCES ) ; do
         host="${cluster}-${ii}"
             gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started"
