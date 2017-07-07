@@ -26,7 +26,7 @@ cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
 xcalar-infra/gce/gce-cluster-delete.sh $cluster || true
 
 # Create new GCE instance(s)
-ret=`xcalar-infra/gce/gce-cluster.sh $installer $NUM_INSTANCES $cluster`
+ret=`xcalar-infra/gce/gce-cluster-xcmonitor.sh $installer $NUM_INSTANCES $cluster`
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
     ips=($(awk '/RUNNING/ {print $6":18552"}' <<< "$ret"))
