@@ -125,6 +125,8 @@ restartXcalar
 # remove when bug 2670 fixed
 hosts=$( IFS=$','; echo "${ips[*]}" )
 
+xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo pip install google-cloud-storage"
+
 set +e
 python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n 1 -i ${ips[0]} -t gce52Config -w --serial
 ret="$?"
