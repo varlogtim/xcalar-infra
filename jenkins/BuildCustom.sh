@@ -1,6 +1,7 @@
 #!/bin/bash
 
-export XLRDIR=$PWD
-export PATH=$XLRDIR/bin:$PATH
+set -e
+
+source doc/env/xc_aliases
 
 bash -ex bin/build-installers.sh

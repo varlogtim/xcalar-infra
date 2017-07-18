@@ -1,7 +1,8 @@
 #!/bin/bash
 
-export XLRDIR=$PWD
-export PATH=$XLRDIR/bin:$PATH
+set -e
+
+source doc/env/xc_aliases
 
 gitsha=`git rev-parse --short=8 HEAD`
 
