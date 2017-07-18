@@ -18,7 +18,7 @@ sudo service xcalar stop-supervisor
 
 ret=$?
 
-if [ "$ret" != "0" ]; then    
+if [ "$ret" != "0" ]; then
     echo "Failed to stop Xcalar. Forcefully murdering usrnodes now"
     sudo killall -s KILL usrnode
     sudo killall -s KILL childnode
@@ -47,8 +47,8 @@ sudo rm -rf /var/opt/xcalar
 sudo rm -rf /var/opt/xcalarTest
 sudo rm -rf $shm/xcalar-shm-*
 sudo rm -rf /tmp/xcalar/xcalar-shm-*
-sudo mkdir -p /opt/xcalar    
-test -e /etc/xcalar || sudo mkdir -p /etc/xcalar    
+sudo mkdir -p /opt/xcalar
+test -e /etc/xcalar || sudo mkdir -p /etc/xcalar
 mkdir /var/tmp/xcalar
 mkdir /var/tmp/xcalarTest-$LOGNAME
 mkdir /var/tmp/xcalarTest
@@ -57,11 +57,6 @@ sudo mkdir -p /var/opt/xcalar /var/opt/xcalarTest
 sudo chown $(id -u):$(id -g) /var/opt/xcalar /var/opt/xcalarTest
 
 set -e
-
-if [ "$DeployType" != "None" ]; then
-    sudo rm -rf /opt/xcalar/scripts
-    sudo rm -rf /opt/xcalar/bin
-fi
 
 if [ "$DeployType" = "Source" ]; then
     export XLRDIR=`pwd`
@@ -72,12 +67,8 @@ if [ "$DeployType" = "Source" ]; then
         build prod
     else
         build config
-        build        
+        build
     fi
-    
-    sudo ln -s $XLRDIR/scripts /opt/xcalar/scripts
-    sudo ln -s $XLRDIR/bin /opt/xcalar/bin
-    
 elif [ "$DeployType" = "Installer" ]; then
     set +e
     sudo rm $XCE_CONFIG # To stop it from umounting the shared directory
@@ -140,7 +131,7 @@ sudo unzip -o $XLROPTDIR/lib/python2.7/pyClient.zip
 
 if [ ! -f /etc/xcalar/template.cfg ]; then
     sudo cp -rf $XLRDIR/src/data/template.cfg /etc/xcalar/template.cfg
-fi    
+fi
 
 sudo $GenConfig /etc/xcalar/template.cfg $XCE_CONFIG $xcalarNodes
 
@@ -150,20 +141,20 @@ echo "$Configuration" | sudo tee -a $XCE_CONFIG
 
 if [ ! -f /etc/xcalar/supervisor.conf ]; then
     sudo cp -rf $XLRDIR/conf/supervisor.conf /etc/xcalar/supervisor.conf
-fi    
+fi
 
 if [ ! -f /var/tmp/xcalar-root ]; then
     mkdir -p /var/tmp/xcalar-root
 fi
 
-sudo cp -rf $XLRDIR/bin/xcalarctl /etc/init.d/xcalarctl 
+sudo cp -rf $XLRDIR/bin/xcalarctl /etc/init.d/xcalarctl
 
 sudo $XLRDIR/bin/installer/user-installer.sh start
 
 if [ -f /usr/bin/journalctl ]; then
-    sudo journalctl -f -p0..4   
+    sudo journalctl -f -p0..4
 else
     tail -f /var/log/Xcalar.log
-fi    
+fi
 
 echo "Done with StartCluster"
