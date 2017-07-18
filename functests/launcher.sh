@@ -31,6 +31,7 @@ PATH="$XLRDIR/bin:$PATH"
 XCE_LICENSEDIR="${XCE_LICENSEDIR:-/etc/xcalar}"
 XCE_LOGDIR="$(awk -F'=' '/^Constants.XcalarLogCompletePath/{print $2}' $XCE_CONFIG)"
 XCE_LOGDIR="${XCE_LOGDIR:-/var/log/xcalar}"
+export MALLOC_CHECK_=2
 
 export XCE_CONFIG XCE_USER XCE_LOGDIR XLRDIR LIBHDFS3_CONF PATH XCE_LICENSEDIR
 

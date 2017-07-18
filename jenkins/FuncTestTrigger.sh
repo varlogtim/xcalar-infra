@@ -1,6 +1,5 @@
 #!/bin/bash -x
 
-export MALLOC_CHECK_=2
 export XLRDIR=/opt/xcalar
 export PATH=$XLRDIR/bin:$PATH
 export XCE_CONFIG=/etc/xcalar/default.cfg
