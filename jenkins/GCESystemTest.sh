@@ -25,6 +25,8 @@ cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
 # Delete the old GCE instance(s), just in case it's (they're) still hanging around
 xcalar-infra/gce/gce-cluster-delete.sh $cluster || true
 
+sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
+
 # Create new GCE instance(s)
 ret=`xcalar-infra/gce/gce-cluster-xcmonitor.sh $installer $NUM_INSTANCES $cluster`
 
@@ -126,6 +128,7 @@ restartXcalar
 hosts=$( IFS=$','; echo "${ips[*]}" )
 
 xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo pip install google-cloud-storage"
+xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
 
 set +e
 python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n 1 -i ${ips[0]} -t gce52Config -w --serial
