@@ -32,6 +32,17 @@ say () {
     echo >&2 "$*"
 }
 
+cleanup () {
+    gcloud compute instances delete -q "${INSTANCES[@]}" || true
+    gcloud compute disks delete -q "${SWAP_DISKS[@]}" "${DATA_DISKS[@]}" || true
+}
+
+die () {
+    cleanup
+    say "ERROR($1): $2"
+    exit $1
+}
+
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     say "usage: $0 <installer-url>|--no-installer <count (default: 3)> <cluster (default: `whoami`-xcalar)>"
     exit 1
@@ -74,7 +85,7 @@ IMAGE="${IMAGE:-ubuntu-1404-lts-1485895114}"
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
 SWAP_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-swap-{1..$COUNT}))
 DATA_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-data-{1..$COUNT}))
-DATA_SIZE="${DATA_SIZE:-10}"
+DATA_SIZE="${DATA_SIZE:-0}"
 
 if [ -z "$DISK_SIZE" ]; then
     case "$INSTANCE_TYPE" in
@@ -148,7 +159,7 @@ fi
 rm -f $CONFIG
 # if CONFIG_TEMPLATE isn't set, use the default template.cfg
 CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
-$DIR/../bin/genConfig.sh $CONFIG_TEMPLATE $CONFIG "${INSTANCES[@]}"
+(echo "Constants.BufferCacheMemLocking=false"; $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}") > $CONFIG
 
 ARGS=()
 if [ -n "$IMAGE_FAMILY" ]; then
@@ -183,8 +194,15 @@ fi
 
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
-gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}"
-gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
+gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}" && \
+if [ $DATA_SIZE -gt 0 ]; then
+    gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
+fi
+res=$?
+if [ $res -ne 0 ]; then
+    die $res "Failed to create disks"
+fi
+
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --machine-type ${INSTANCE_TYPE} \
     --network=${NETWORK} \
@@ -194,25 +212,37 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --tags=http-server,https-server ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
 if [ "$res" -ne 0 ]; then
-    exit $res
+    die $res "Failed to create some instances"
 fi
 gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 for ii in `seq 1 $COUNT`; do
     instance=${CLUSTER}-${ii}
     swap=${CLUSTER}-swap-${ii}
-    gcloud compute instances attach-disk $instance --disk=$swap
-    gcloud compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
-    gcloud compute instances set-disk-auto-delete  $instance --disk=$swap
+    gcloud compute instances attach-disk $instance --disk=$swap && \
+    gcloud compute instances set-disk-auto-delete  $instance --disk=$swap && \
+    if [ $DATA_SIZE -gt 0 ]; then
+        gcloud compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
+    fi
+    res=$?
+    if [ $res -ne 0 ]; then
+        die $res "Failed to attach some disks"
+    fi
 done
 for ii in `seq 1 $COUNT`; do
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdb >/dev/null" && \
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null"
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkfs.ext4 -F /dev/sdc >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && sudo mount $XC_DEMO_DATASET_DIR"
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null"
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null" && \
+    if [ $DATA_SIZE -gt 0 ]; then
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkfs.ext4 -F /dev/sdc >/dev/null" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && sudo mount $XC_DEMO_DATASET_DIR" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
+    fi
+    res=$?
+    if [ $res -ne 0 ]; then
+        die $res "Failed to setup ${CLUSTER}-${ii}"
+    fi
 done
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then

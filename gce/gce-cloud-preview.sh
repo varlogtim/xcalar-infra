@@ -117,7 +117,7 @@ mkdir -p "$TMPDIR"
 set +e
 
 DATA_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-data-{1..$COUNT}))
-DATA_SIZE="${DATA_SIZE:-10}"
+export DATA_SIZE="${DATA_SIZE:-10}"
 
 syslog "Launching cluster $CLUSTER with $COUNT instances using installer $INSTALLER"
 (set -o pipefail; $DIR/gce-cluster.sh "$INSTALLER" $COUNT "$CLUSTER" 2>&1 | tee "$TMPDIR/gce-cluster.log")
