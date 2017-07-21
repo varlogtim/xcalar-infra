@@ -14,7 +14,7 @@ _ssh () {
 
 XCALAR_ROOT=$(_ssh $SSHUSER@$NODE "grep -o 'Constants.XcalarRootCompletePath=[^,]*' /etc/xcalar/default.cfg | cut -d '=' -f 2")
 XCCLI=$(_ssh $SSHUSER@$NODE "echo \${XLRDIR:-/opt/xcalar}/bin/xccli")
-LATEST_INSTALLER=`ls /netstore/builds/byJob/BuildTrunk/$INSTALLERNUMBER/debug/*-installer`
+LATEST_INSTALLER=`ls /netstore/builds/byJob/BuildTrunk/$INSTALLERNUMBER/debug/*$INSTALLERNUMBER*-installer`
 if [ -e "$LATEST_INSTALLER" ]; then
     echo "Using BuildTrunk Debug build number $INSTALLERNUMBER"
 else
@@ -59,7 +59,7 @@ sudo pip install pyvirtualdisplay selenium
 sudo apt-get install -y Xvfb
 
 echo "Stop usrnode remotely"
-_ssh $SSHUSER@$NODE "service xcalar stop" < /dev/null || true
+_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop-supervisor" < /dev/null || true
 echo "Cleaning buffer cache file"
 _ssh $SSHUSER@$NODE "rm -rf /dev/shm/*" < /dev/null || true
 echo "Cleaning XLRROOT"
@@ -70,9 +70,6 @@ echo "Installing latest build"
 _ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --start"
 
 echo "Installing UI in this build"
-#_ssh $SSHUSER@$NODE "rm -rf /var/www/xcalar-gui"
-#cp xcalar-gui.tar.gz /netstore/users/jerene/XDTestSuite
-#_ssh $SSHUSER@$NODE "cd /var/www/; sudo cp /netstore/users/jerene/XDTestSuite/xcalar-gui.tar.gz .; tar -zxvf xcalar-gui.tar.gz; mv prod xcalar-gui"
 scp xcalar-gui.tar.gz jenkins@$NODE:/var/www
 _ssh $SSHUSER@$NODE "cd /var/www; tar -zxvf xcalar-gui.tar.gz; rm -rf xcalar-gui; mv prod xcalar-gui"
 date
