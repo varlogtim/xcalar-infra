@@ -34,7 +34,7 @@ say () {
 
 cleanup () {
     gcloud compute instances delete -q "${INSTANCES[@]}" || true
-    gcloud compute disks delete -q "${SWAP_DISKS[@]}" "${DATA_DISKS[@]}" || true
+    gcloud compute disks delete -q "${SWAP_DISKS[@]}" || true
 }
 
 die () {
@@ -198,13 +198,13 @@ fi
 
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
-gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}" && \
-if [ $DATA_SIZE -gt 0 ]; then
-    gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
-fi
+gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}"
 res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
+fi
+if [ $DATA_SIZE -gt 0 ]; then
+    gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
 fi
 
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
@@ -223,7 +223,6 @@ for ii in `seq 1 $COUNT`; do
     instance=${CLUSTER}-${ii}
     swap=${CLUSTER}-swap-${ii}
     gcloud compute instances attach-disk $instance --disk=$swap && \
-    gcloud compute instances set-disk-auto-delete  $instance --disk=$swap && \
     if [ $DATA_SIZE -gt 0 ]; then
         gcloud compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
     fi
@@ -238,9 +237,9 @@ for ii in `seq 1 $COUNT`; do
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null" && \
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null" && \
     if [ $DATA_SIZE -gt 0 ]; then
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkfs.ext4 -F /dev/sdc >/dev/null" && \
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && sudo mount $XC_DEMO_DATASET_DIR" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XC_DEMO_DATASET_DIR || sudo mkfs.ext4 -F /dev/sdc >/dev/null" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XC_DEMO_DATASET_DIR" && \
         gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
     fi
     res=$?
@@ -248,6 +247,15 @@ for ii in `seq 1 $COUNT`; do
         die $res "Failed to setup ${CLUSTER}-${ii}"
     fi
 done
+
+PIDS=()
+for ii in `seq 1 $COUNT`; do
+    instance=${CLUSTER}-${ii}
+    swap=${CLUSTER}-swap-${ii}
+    gcloud compute instances set-disk-auto-delete  $instance --disk=$swap &
+    PIDS+=($!)
+done
+wait "${PIDS[@]}"
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
     grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$5,$1;}' | tee $TMPDIR/hosts-int.txt

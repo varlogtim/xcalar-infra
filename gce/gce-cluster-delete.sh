@@ -3,15 +3,45 @@
 export CLOUDSDK_COMPUTE_REGION=${CLOUDSDK_COMPUTE_REGION-us-central1}
 export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
 
+CLUSTER="${CLUSTER:-$(id -un)-xcalar}"
+SLEEP="${SLEEP:-10}"
+FORCE=false
+
 say () {
     echo >&2 "$*"
 }
 
-if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    say "$0 <cluster-name (default: `id -un`-xcalar>"
+usage () {
+    say "$0 [-f|--force] cluster-name (default: $CLUSTER)"
     exit 1
-fi
-CLUSTER="${1:-`id -un`-xcalar}"
+}
+
+warn_user () {
+    local sleep_delay="${1}"
+    local delay
+    shift
+    say
+    say "WARNING: Deleting the following instances! Press Ctrl-C to abort. Sleeping for ${sleep_delay}s."
+    say
+    say "$*"
+    say
+    for delay in `seq ${sleep_delay} -1 1`; do
+        printf "%d ...\r" $delay >&2
+        sleep 1
+    done
+}
+
+while getopts "hf" opt "$@"; do
+    case "$opt" in
+        f) FORCE=true;;
+        h) usage;;
+        --) break;;
+        \?) say "Invalid option -$OPTARG"; exit 1;;
+        :) say "Option -$OPTARG requires an argument."; exit 1;;
+    esac
+done
+shift $((OPTIND - 1))
+test -n "$1" && CLUSTER="$1"
 
 set +e
 
@@ -20,25 +50,11 @@ INSTANCES=($(gcloud compute instances list | awk '$1~/^'$CLUSTER'-[0-9]+/{print 
 if [ "${#INSTANCES[@]}" -eq 0 ]; then
     say "No instances found for cluster $CLUSTER"
 else
-    say
-    say "WARNING: Deleting the following instances! Press Ctrl-C to abort. Sleeping for 10s."
-    say
-    say "${INSTANCES[@]}"
-    say
-    for delay in `seq 10 -1 1`; do
-        printf "%d ...\r" $delay >&2
-        sleep 1
-    done
+    if ! $FORCE; then
+        warn_user "${SLEEP}" "${INSTANCES[@]}"
+    fi
     say "Deleting ${INSTANCES[@]} ..."
     gcloud compute instances delete -q "${INSTANCES[@]}"
-    #say "** Detaching disks. Please ignore any errors **"
-    #for inst in "${INSTANCES[@]}"; do
-    #    ii="${inst##${CLUSTER}-}"
-    #    gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-swap-${ii} || true
-    #    gcloud compute instances detach-disk -q ${CLUSTER}-${ii} --disk=${CLUSTER}-data-${ii} || true
-    #done
-    echo "Deleting nfs:/srv/share/nfs/cluster/$CLUSTER"
-    gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 fi
 
 DISKS=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-swap-[0-9]+/{print $1}'))

@@ -101,10 +101,9 @@ do_install () {
                 $sh_c "echo 'gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpp' >> $gcsfuseRepo"
                 $sh_c "echo '    https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg' >> $gcsfuseRepo"
             fi
-            $sh_c 'yum update -y'
+            $sh_c 'yum clean all'
             $sh_c 'yum install -y nfs-utils curl epel-release collectd'
-            curl http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm > /tmp/gcsfuse.rpm
-            $sh_c "yum localinstall -y /tmp/gcsfuse.rpm"
+            $sh_c "yum localinstall -y http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm"
             ;;
         ub*)
             export DEBIAN_FRONTEND=noninteractive
