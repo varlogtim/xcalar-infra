@@ -33,7 +33,8 @@ echo "Tarring up XD"
 tar -zcvf xcalar-gui.tar.gz prod
 
 
-NUM_USERS=$(shuf -i 2-3 -n 1)
+#NUM_USERS=$(shuf -i 2-3 -n 1)
+NUM_USERS=2
 
 echo "Installing required packages"
 if ! grep -q Ubuntu /etc/os-release; then
