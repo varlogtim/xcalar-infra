@@ -159,7 +159,11 @@ fi
 rm -f $CONFIG
 # if CONFIG_TEMPLATE isn't set, use the default template.cfg
 CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
-(echo "Constants.BufferCacheMemLocking=false"; $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}") > $CONFIG
+# monitor timeouts must be sufficiently large (VMs may go AWOL for long times)
+(echo "Constants.BufferCacheMemLocking=false";
+ echo "Constants.XcMonSlaveMasterTimeout=21600";
+ echo "Constants.XcMonMasterSlaveTimeout=21600";
+ $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}") > $CONFIG
 
 ARGS=()
 if [ -n "$IMAGE_FAMILY" ]; then
