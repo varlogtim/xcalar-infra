@@ -47,7 +47,7 @@ fi
 
 killall xcmgmtd usrnode childnode &>/dev/null || true
 sleep 4
-find /var/opt/xcalar -type f -delete
+find /var/opt/xcalar -type f -not -path '/var/opt/xcalar/support/*' -delete
 find /dev/shm -name "xcalar-*" -delete
 find $XCE_LOGDIR -name "xcmonitorTmp.*" -type f -delete
 
