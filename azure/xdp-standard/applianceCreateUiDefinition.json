@@ -1,0 +1,20 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json",
+    "handler": "Microsoft.Compute.MultiVm",
+    "version": "0.1.2-preview",
+    "parameters": {
+        "basics": [
+            { "name": "installerUrl",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Path to installer",
+              "defaultValue": "",
+              "toolTip": "Provide path to installer",
+              "constraints": {},
+              "options": {},
+              "visible": true
+            } 
+        ],
+        "steps": [],
+        "outputs": { "installerUrl": "installerUrl" }
+    }
+}
