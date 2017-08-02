@@ -1,5 +1,5 @@
-xdp-standard-package.zip: applianceCreateUiDefinition.json applianceMainTemplate.json mainTemplate.json
-	zip xdp-standard-package.zip applianceCreateUiDefinition.json applianceMainTemplate.json mainTemplate.json
+xdp-standard-package.zip: applianceCreateUiDefinition.json createUiDefinition.json applianceMainTemplate.json mainTemplate.json
+	zip xdp-standard-package.zip applianceCreateUiDefinition.json createUiDefinition.json applianceMainTemplate.json mainTemplate.json
 
 .PHONY: all clean
 

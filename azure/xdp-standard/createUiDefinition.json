@@ -1,0 +1,35 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json",
+    "handler": "Microsoft.Compute.MultiVm",
+    "version": "0.1.2-preview",
+    "parameters": {
+        "basics": [
+            { "name": "licenseKey",
+              "type": "Microsoft.Common.TextBox",
+              "label": "License Key (leave blank for trial)",
+              "defaultValue": "",
+              "toolTip": "Enter license key if provided. Leave blank for trial. Standard Azure charges still applies",
+              "constraints": {},
+              "options": {},
+              "visible": true
+            },
+            { "name": "scaleNumber",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Number of nodes",
+              "defaultValue": "1",
+              "toolTip": "Xcalar Data Platform Standard Edition supports up to 16 nodes",
+              "constraints": {
+                  "required": true,
+                  "regex": "^[0-9]{1,2}$",
+                  "validationMessage": "Please enter a number between 1 - 16" 
+              },
+              "options": {},
+              "visible": true
+            },
+
+        ],
+        "steps": [],
+        "outputs": { "licenseKey": "licenseKey",
+                     "scaleNumber": "scaleNumber" }
+    }
+}
