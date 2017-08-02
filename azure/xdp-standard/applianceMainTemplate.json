@@ -2,24 +2,11 @@
   "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "clusterName": {
-      "type": "string",
-      "metadata": {
-        "description": "Cluster name"
-      }
-    },
     "licenseKey": {
       "type": "securestring",
       "defaultValue": "",
       "metadata": {
         "description": "Enter license if provided. Leave blank for 7-day trial"
-      }
-    },
-    "vmSize": {
-      "type": "string",
-      "defaultValue": "Standard_DS14_v2_Promo",
-      "metadata": {
-        "description": "Size of the VM"
       }
     },
     "scaleNumber": {
@@ -32,40 +19,30 @@
     "adminUsername": {
       "type": "string",
       "metadata": {
-        "description": "Admin username"
+        "description": "Administrator's username for the Xcalar cluster"
       }
     },
     "adminPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Admin password"
-      }
-    },
-    "installerUrl": {
-      "type": "string",
-      "metadata": {
-        "description": "Installer Url"
-      }
-    },
-    "storageAccountType": {
-      "type": "string",
-      "defaultValue": "Standard_LRS",
-      "metadata": {
-        "description": "Storage Account type"
+        "description": "Administrator's password for the Xcalar cluster"
       }
     }
   },
   "variables": {
     "sq": "'",
+    "clusterName": "xdp-standard-",
+    "vmSize": "Standard_DS14_v2_Promo",
+    "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'xc')]",
-    "availabilitySetName": "[concat(parameters('clusterName'),'AvSet')]",
-    "virtualNetworkName": "[concat(parameters('clusterName'),'VNET')]",
+    "availabilitySetName": "[concat(variables('clusterName'), 'AvSet')]",
+    "virtualNetworkName": "[concat(variables('clusterName'), 'VNET')]",
     "vnetAddressPrefix": "10.0.0.0/16",
     "publicIPAddressType": "Dynamic",
     "vnetID": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
-    "subnet1Name": "[concat(parameters('clusterName'),'Subnet-1')]",
+    "subnet1Name": "[concat(variables('clusterName'),'Subnet-1')]",
     "subnet1Prefix": "10.0.0.0/24",
-    "nicName": "[concat(parameters('clusterName'),'NIC')]",
+    "nicName": "[concat(variables('clusterName'),'NIC')]",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "https://raw.githubusercontent.com/xcalar-inc/azure-arm-cluster/master",
     "customScriptFilePath": "[concat(variables('scriptsUri'),'/bootstrap.sh')]",
@@ -73,16 +50,32 @@
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.3",
-    "vmExtensionName": "xcalarExtension"
+    "vmExtensionName": "xcalarExtension",
+    "imageName": "xcalar-1.2.1-1044",
+    "onDiskVhdUri": "https://xcpacker.blob.core.windows.net/system/Microsoft.Compute/Images/xcalar/xcalar-el7-v20170731-osDisk.4c1453b2-52b3-4143-a2e6-455c706ceeb4.vhd"
   },
   "resources": [
+    {
+      "type": "Microsoft.Compute/images",
+      "apiVersion": "2015-05-01-preview",
+      "name": "variables('imageName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "storageProfile": {
+          "onDisk": "Linux",
+          "onState": "Generalized",
+          "blobUri": "[variables('onDiskVhdUri')]",
+          "storageAccountType": "[variables('storageAccountType')]"
+        }
+      }
+    },
     {
       "type": "Microsoft.Storage/storageAccounts",
       "name": "[variables('storageAccountName')]",
       "apiVersion": "2015-05-01-preview",
       "location": "[resourceGroup().location]",
       "properties": {
-        "accountType": "[parameters('storageAccountType')]"
+        "accountType": "[variables('storageAccountType')]"
       }
     },
     {
@@ -95,7 +88,7 @@
     {
       "apiVersion": "2015-05-01-preview",
       "type": "Microsoft.Network/publicIPAddresses",
-      "name": "[concat(parameters('clusterName'),'publicIP', copyIndex())]",
+      "name": "[concat(variables('clusterName'), 'publicIP', copyIndex())]",
       "location": "[resourceGroup().location]",
       "copy": {
         "name": "foo",
@@ -136,7 +129,7 @@
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
-        "[concat('Microsoft.Network/publicIPAddresses/', parameters('clusterName'), 'publicIP', copyIndex())]",
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('clusterName'), 'publicIP', copyIndex())]",
         "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
       ],
       "properties": {
@@ -147,7 +140,7 @@
               "privateIPAllocationMethod": "Static",
               "privateIPAddress": "[concat('10.0.0.', copyIndex(4))]",
               "publicIPAddress": {
-                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('clusterName'),'publicIP', copyIndex()))]"
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(variables('clusterName'), 'publicIP', copyIndex()))]"
               },
               "subnet": {
                 "id": "[variables('subnet1Ref')]"
@@ -158,12 +151,12 @@
       }
     },
     {
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2016-04-30-preview",
       "type": "Microsoft.Compute/virtualMachines",
-      "name": "[concat(parameters('clusterName'), copyIndex())]",
+      "name": "[concat(variables('clusterName'), copyIndex())]",
       "location": "[resourceGroup().location]",
       "copy": {
-        "name": "foo",
+        "name": "vmiterator",
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
@@ -176,19 +169,16 @@
           "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('availabilitySetName'))]"
         },
         "hardwareProfile": {
-          "vmSize": "[parameters('vmSize')]"
+          "vmSize": "[variables('vmSize')]"
         },
         "osProfile": {
-          "computername": "[concat(parameters('clusterName'), copyIndex())]",
+          "computername": "[concat(variables('clusterName'), copyIndex())]",
           "adminUsername": "[parameters('adminUsername')]",
           "adminPassword": "[parameters('adminPassword')]"
         },
         "storageProfile": {
           "imageReference": {
-            "publisher": "[variables('imagePublisher')]",
-            "offer": "[variables('imageOffer')]",
-            "sku": "[variables('imageSKU')]",
-            "version": "latest"
+            "id": "[resourceId('Microsoft.Compute/images', variables('imageName'))]"
           },
           "osDisk": {
             "name": "osdisk",
@@ -210,7 +200,7 @@
     },
     {
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(parameters('clusterName'), copyIndex(),'/', variables('vmExtensionName'))]",
+      "name": "[variables('vmExtensionName')]",
       "apiVersion": "2015-05-01-preview",
       "location": "[resourceGroup().location]",
       "copy": {
@@ -218,7 +208,7 @@
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
-        "[concat('Microsoft.Compute/virtualMachines/', parameters('clusterName'), copyIndex())]"
+        "[concat('Microsoft.Compute/virtualMachines/', variables('clusterName'), copyIndex())]"
       ],
       "properties": {
         "publisher": "Microsoft.Azure.Extensions",
@@ -231,7 +221,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), parameters('installerUrl'), variables('sq'), ' ', variables('sq'), parameters('clusterName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' >> /var/log/startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('clusterName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' >> /var/log/startup.log 2>&1')]"
         }
       }
     }
@@ -243,7 +233,7 @@
       },
       "publicIp": {
           "type": "string",
-          "value": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('clusterName'),'publicIP', '0'))]"
+          "value": "[resourceId('Microsoft.Network/publicIPAddresses', concat(variables('clusterName'), 'publicIP', '0'))]"
       }
   }
 }

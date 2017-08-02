@@ -8,28 +8,110 @@
               "type": "Microsoft.Common.TextBox",
               "label": "License Key (leave blank for trial)",
               "defaultValue": "",
-              "toolTip": "Enter license key if provided. Leave blank for trial. Standard Azure charges still applies",
+              "toolTip": "Enter license key if provided. Leave blank for 7-day trial. Standard Azure charges still applies",
               "constraints": {},
               "options": {},
               "visible": true
             },
             { "name": "scaleNumber",
-              "type": "Microsoft.Common.TextBox",
+              "type": "Microsoft.Common.DropDown",
               "label": "Number of nodes",
               "defaultValue": "1",
               "toolTip": "Xcalar Data Platform Standard Edition supports up to 16 nodes",
               "constraints": {
-                  "required": true,
-                  "regex": "^[0-9]{1,2}$",
-                  "validationMessage": "Please enter a number between 1 - 16" 
+                "allowedValues": [
+                  {
+                    "label": "1",
+                    "value": "1"
+                  },
+                  {
+                    "label": "2",
+                    "value": "2"
+                  },
+                  {
+                    "label": "3",
+                    "value": "3"
+                  },
+                  {
+                    "label": "4",
+                    "value": "4"
+                  },
+                  {
+                    "label": "5",
+                    "value": "5"
+                  },
+                  {
+                    "label": "6",
+                    "value": "6"
+                  },
+                  {
+                    "label": "7",
+                    "value": "7"
+                  },
+                  {
+                    "label": "8",
+                    "value": "8"
+                  },
+                  {
+                    "label": "9",
+                    "value": "9"
+                  },
+                  {
+                    "label": "10",
+                    "value": "10"
+                  },
+                  {
+                    "label": "11",
+                    "value": "11"
+                  },
+                  {
+                    "label": "12",
+                    "value": "12"
+                  },
+                  {
+                    "label": "13",
+                    "value": "13"
+                  },
+                  {
+                    "label": "14",
+                    "value": "14"
+                  },
+                  {
+                    "label": "15",
+                    "value": "15"
+                  },
+                  {
+                    "label": "16",
+                    "value": "16"
+                  }
+                ]
               },
               "options": {},
               "visible": true
             },
-
+            {
+              "name": "adminUsername",
+              "type": "Microsoft.Common.Textbox",
+              "label": "Administrator's username for the Xcalar cluster",
+              "constraints": { "required": true }
+            },
+            {
+              "name": "adminPassword",
+              "type": "Microsoft.Common.PasswordBox",
+              "label": {
+                "password": "Password",
+                "confirmPassword": "Confirm password"
+              },
+              "toolTip": "",
+              "constraints": { "required": true },
+              "options": { "hideConfirmation": false },
+              "visible": true
+            }
         ],
         "steps": [],
         "outputs": { "licenseKey": "licenseKey",
-                     "scaleNumber": "scaleNumber" }
+                     "scaleNumber": "scaleNumber",
+                     "adminUsername": "adminUsername",
+                     "adminPassword": "adminPassword" }
     }
 }
