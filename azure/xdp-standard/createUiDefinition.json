@@ -109,9 +109,9 @@
             }
         ],
         "steps": [],
-        "outputs": { "licenseKey": "licenseKey",
-                     "scaleNumber": "scaleNumber",
-                     "adminUsername": "adminUsername",
-                     "adminPassword": "adminPassword" }
+        "outputs": { "licenseKey": "[basics('licenseKey')]",
+                     "scaleNumber": "[basics('scaleNumber')]",
+                     "adminUsername": "[basics('adminUsername')]",
+                     "adminPassword": "[basics('adminPassword')]" }
     }
 }
