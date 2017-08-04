@@ -5,9 +5,6 @@
     "licenseKey": {
       "type": "securestring",
       "defaultValue": "",
-      "metadata": {
-        "description": "Enter license if provided. Leave blank for 7-day trial"
-      }
     },
     "scaleNumber": {
       "type": "int",
@@ -30,7 +27,9 @@
     }
   },
   "variables": {
-    "managedResourceGroup": "[concat(resourceGroup().id, uniquestring(resourceGroup().id))]"
+    "managedResourceGroup": "[resourceGroup().id]",
+    "applianceDefinitionId": "/subscriptions/861014e9-bb2e-40ff-b6f6-85a511035bfd/resourceGroups/blim-xcalar/providers/Microsoft.Solutions/applianceDefinitions/xcalarAppDef" 
+
   },
   "resources": [
     {
@@ -38,10 +37,11 @@
       "name": "[concat('xdp-standard-', parameters('scaleNumber'), '-nodes')]",
       "apiVersion": "2016-09-01-preview",
       "location": "[resourceGroup().Location]",
-      "kind": "marketplace",
+      "kind": "ServiceCatalog",
       "properties": {
         "ManagedResourceGroupId": "[variables('managedResourceGroup')]",
         "PublisherPackageId": "xcalar-inc.xcalar-data-platform.xdp-standard.1.2.1",
+        "applianceDefinitionId": "[variables('applianceDefinitionId')]",
         "parameters": {
           "licenseKey": {
             "value": "[parameters('licenseKey')]"

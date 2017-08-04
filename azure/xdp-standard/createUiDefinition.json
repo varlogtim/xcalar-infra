@@ -6,10 +6,10 @@
         "basics": [
             { "name": "licenseKey",
               "type": "Microsoft.Common.TextBox",
-              "label": "License Key (leave blank for trial)",
+              "label": "License Key",
               "defaultValue": "",
-              "toolTip": "Enter license key if provided. Leave blank for 7-day trial. Standard Azure charges still applies",
-              "constraints": {},
+              "toolTip": "0.05 Contact Xcalar to request for a trial license if you don't have one.",
+              "constraints": { "required": true },
               "options": {},
               "visible": true
             },
@@ -91,9 +91,13 @@
             },
             {
               "name": "adminUsername",
-              "type": "Microsoft.Common.Textbox",
-              "label": "Administrator's username for the Xcalar cluster",
-              "constraints": { "required": true }
+              "type": "Microsoft.Common.TextBox",
+              "label": "Username",
+              "defaultValue": "admin",
+              "toolTip": "Enter username to be used for administrating the cluster",
+              "constraints": { "required": true },
+              "options": {},
+              "visible": true
             },
             {
               "name": "adminPassword",
@@ -110,7 +114,7 @@
         ],
         "steps": [],
         "outputs": { "licenseKey": "[basics('licenseKey')]",
-                     "scaleNumber": "[basics('scaleNumber')]",
+                     "scaleNumber": "[int(basics('scaleNumber'))]",
                      "adminUsername": "[basics('adminUsername')]",
                      "adminPassword": "[basics('adminPassword')]" }
     }

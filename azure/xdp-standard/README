@@ -1,0 +1,9 @@
+To publish something as a internal package for deployment,
+1) Change kind to ServiceCatalog in mainTemplate.json and run
+
+make && url=`../../bin/installer-url.sh -d s3 ./xdp-standard-package.zip | grep https` && az managedapp definition create -n xcalarAppDef -l "westcentralus" --resource-group "blim-xcalar" --lock-level ReadOnly --display-name "Xcalar Data Platform" --description "For internal deployment only" --authorizations "a015a485-ab1c-4e03-b275-3505e2b12249:8e3af657-a8ff-443c-a75c-2fe8c4bcb635" --package-file-uri "$url" --debug
+
+
+To publish this into Azure marketplace,
+1) Delete applianceDefinitionId from mainTemplate.json
+2) Change kind to "marketplace"
