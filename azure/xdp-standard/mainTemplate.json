@@ -4,7 +4,7 @@
   "parameters": {
     "licenseKey": {
       "type": "securestring",
-      "defaultValue": "",
+      "defaultValue": ""
     },
     "scaleNumber": {
       "type": "int",
@@ -27,7 +27,8 @@
     }
   },
   "variables": {
-    "managedResourceGroup": "[resourceGroup().id]",
+    "clusterName": "[concat('xdp-standard-', parameters('scaleNumber'), '-nodes')]",
+    "managedResourceGroup": "[concat(resourceGroup().id, '-', variables('clusterName'), '-resources')]",
     "applianceDefinitionId": "/subscriptions/861014e9-bb2e-40ff-b6f6-85a511035bfd/resourceGroups/blim-xcalar/providers/Microsoft.Solutions/applianceDefinitions/xcalarAppDef" 
 
   },

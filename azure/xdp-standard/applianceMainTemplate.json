@@ -4,7 +4,7 @@
   "parameters": {
     "licenseKey": {
       "type": "securestring",
-      "defaultValue": "",
+      "defaultValue": ""
     },
     "scaleNumber": {
       "type": "int",
@@ -29,10 +29,10 @@
   "variables": {
     "sq": "'",
     "clusterName": "xdp-standard-",
+    "vmName": "[concat(variables('clusterName'), 'xce-')]",
     "vmSize": "Standard_DS14_v2_Promo",
     "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'xc')]",
-    "availabilitySetName": "[concat(variables('clusterName'), 'AvSet')]",
     "virtualNetworkName": "[concat(variables('clusterName'), 'VNET')]",
     "vnetAddressPrefix": "10.0.0.0/16",
     "publicIPAddressType": "Dynamic",
@@ -53,20 +53,6 @@
   },
   "resources": [
     {
-      "type": "Microsoft.Compute/images",
-      "apiVersion": "2015-05-01-preview",
-      "name": "variables('imageName')]",
-      "location": "[resourceGroup().location]",
-      "properties": {
-        "storageProfile": {
-          "onDisk": "Linux",
-          "onState": "Generalized",
-          "blobUri": "[variables('onDiskVhdUri')]",
-          "storageAccountType": "[variables('storageAccountType')]"
-        }
-      }
-    },
-    {
       "type": "Microsoft.Storage/storageAccounts",
       "name": "[variables('storageAccountName')]",
       "apiVersion": "2015-05-01-preview",
@@ -76,11 +62,15 @@
       }
     },
     {
-      "type": "Microsoft.Compute/availabilitySets",
-      "name": "[variables('availabilitySetName')]",
-      "apiVersion": "2015-05-01-preview",
+      "type": "Microsoft.Compute/images",
+      "apiVersion": "2017-03-30",
+      "name": "[variables('imageName')]",
       "location": "[resourceGroup().location]",
-      "properties": { }
+      "properties": {
+        "sourceVirtualMachine": {
+          "id": "[concat('/subscriptions/861014e9-bb2e-40ff-b6f6-85a511035bfd/resourceGroups/xcalar-images/providers/Microsoft.Compute/images/', variables('imageName'))]"
+        }
+      }
     },
     {
       "apiVersion": "2015-05-01-preview",
@@ -150,26 +140,23 @@
     {
       "apiVersion": "2016-04-30-preview",
       "type": "Microsoft.Compute/virtualMachines",
-      "name": "[concat(variables('clusterName'), copyIndex())]",
+      "name": "[concat(variables('vmName'), copyIndex())]",
       "location": "[resourceGroup().location]",
       "copy": {
         "name": "vmiterator",
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
+        "[concat('Microsoft.Compute/images/', variables('imageName'))]",
         "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
-        "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]",
-        "[concat('Microsoft.Compute/availabilitySets/', variables('availabilitySetName'))]"
+        "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]"
       ],
       "properties": {
-        "availabilitySet": {
-          "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('availabilitySetName'))]"
-        },
         "hardwareProfile": {
           "vmSize": "[variables('vmSize')]"
         },
         "osProfile": {
-          "computername": "[concat(variables('clusterName'), copyIndex())]",
+          "computername": "[concat(variables('vmName'), copyIndex())]",
           "adminUsername": "[parameters('adminUsername')]",
           "adminPassword": "[parameters('adminPassword')]"
         },
@@ -178,12 +165,12 @@
             "id": "[resourceId('Microsoft.Compute/images', variables('imageName'))]"
           },
           "osDisk": {
-            "name": "osdisk",
-            "vhd": {
-              "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).primaryEndpoints.blob, 'vhds/', 'osdisk', copyIndex(), '.vhd')]"
-            },
             "caching": "ReadWrite",
-            "createOption": "FromImage"
+            "createOption": "FromImage",
+            "name": "[concat(variables('vmName'), copyIndex(), '-osDisk')]",
+            "vhd": {
+              "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).primaryEndpoints.blob, 'vhds/', variables('vmName'), copyIndex(), '-osDisk.vhd')]"
+            }
           }
         },
         "networkProfile": {
@@ -197,7 +184,7 @@
     },
     {
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('clusterName'), '/', variables('vmExtensionName'))]",
+      "name": "[concat(variables('clusterName'), 'extensions/', variables('vmExtensionName'))]",
       "apiVersion": "2015-05-01-preview",
       "location": "[resourceGroup().location]",
       "copy": {
@@ -205,7 +192,7 @@
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
-        "[concat('Microsoft.Compute/virtualMachines/', variables('clusterName'), copyIndex())]"
+        "[concat('Microsoft.Compute/virtualMachines/', variables('vmName'), copyIndex())]"
       ],
       "properties": {
         "publisher": "Microsoft.Azure.Extensions",
@@ -218,7 +205,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('clusterName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' >> /var/log/startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('vmName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' >> /var/log/startup.log 2>&1')]"
         }
       }
     }
