@@ -4,7 +4,7 @@ set -x
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y nfs-kernel-server nfs-common iperf3 vim-nox htop iftop sysstat iozone3
 
-for BLKDEV in /dev/nvme0n1 /dev/sdb; do
+for BLKDEV in /dev/disk/by-id/nvme-nvme_card_nvme_card /dev/nvme0n1 /dev/sdb; do
     if test -b $BLKDEV; then
         break
     fi
@@ -13,6 +13,7 @@ if ! test -b $BLKDEV; then
     exit 1
 fi
 case "$BLKDEV" in
+    /dev/disk/by-id/*) PART="${BLKDEV}-part1";;
     /dev/nvme*) PART="${BLKDEV}p1";;
     /dev/sd*) PART="${BLKDEV}1";;
     /dev/xvd*) PART="${BLKDEV}1";;
@@ -27,10 +28,11 @@ if ! test -b "$PART"; then
     done
 fi
 
-UUID="$(blkid $PART | awk '{print $2}')"
+# In 512-byte blocks
+blockdev --setra 1024 "$PART"
 sed -i '/\/srv\/share/d' /etc/fstab /etc/exports
 mkdir -p /srv/share
-echo "$UUID /srv/share  ext4    relatime,discard,nofail 0   2" | tee -a /etc/fstab
+echo "UUID=$(blkid -s UUID -o value $PART) /srv/share  ext4    relatime,discard,defaults,nofail,nobarrier  0   2" | tee -a /etc/fstab
 mount /srv/share
 mkdir -p -m 0777 /srv/share/nfs/cluster
 chmod 0777 /srv/share/nfs/cluster
