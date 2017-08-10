@@ -30,6 +30,7 @@
     "sq": "'",
     "clusterName": "xdp-standard-",
     "vmName": "[concat(variables('clusterName'), 'xce-')]",
+    "nicName": "[concat(variables('clusterName'),'nic-')]",
     "vmSize": "Standard_DS14_v2_Promo",
     "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'xc')]",
@@ -39,17 +40,15 @@
     "vnetID": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
     "subnet1Name": "[concat(variables('clusterName'),'Subnet-1')]",
     "subnet1Prefix": "10.0.0.0/24",
-    "nicName": "[concat(variables('clusterName'),'NIC')]",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
-    "scriptsUri": "https://raw.githubusercontent.com/xcalar-inc/azure-arm-cluster/master",
-    "customScriptFilePath": "[concat(variables('scriptsUri'),'/bootstrap.sh')]",
-    "customScriptCommandToExecute": "/bin/bash bootstrap.sh ",
+    "scriptsUri": "http://pub.xcalar.net/azure/dev",
+    "customScriptName": "ampBootstrap-3.sh",
+    "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
+    "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.3",
-    "vmExtensionName": "xcalarExtension",
-    "imageName": "xcalar-1.2.1-1044",
-    "onDiskVhdUri": "https://xcpacker.blob.core.windows.net/system/Microsoft.Compute/Images/xcalar/xcalar-el7-v20170731-osDisk.4c1453b2-52b3-4143-a2e6-455c706ceeb4.vhd"
+    "vmExtensionName": "xcalarBootstrapExtension"
   },
   "resources": [
     {
@@ -59,17 +58,6 @@
       "location": "[resourceGroup().location]",
       "properties": {
         "accountType": "[variables('storageAccountType')]"
-      }
-    },
-    {
-      "type": "Microsoft.Compute/images",
-      "apiVersion": "2017-03-30",
-      "name": "[variables('imageName')]",
-      "location": "[resourceGroup().location]",
-      "properties": {
-        "sourceVirtualMachine": {
-          "id": "[concat('/subscriptions/861014e9-bb2e-40ff-b6f6-85a511035bfd/resourceGroups/xcalar-images/providers/Microsoft.Compute/images/', variables('imageName'))]"
-        }
       }
     },
     {
@@ -147,7 +135,6 @@
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
-        "[concat('Microsoft.Compute/images/', variables('imageName'))]",
         "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
         "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]"
       ],
@@ -162,7 +149,10 @@
         },
         "storageProfile": {
           "imageReference": {
-            "id": "[resourceId('Microsoft.Compute/images', variables('imageName'))]"
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('imageSKU')]",
+            "version": "latest"
           },
           "osDisk": {
             "caching": "ReadWrite",
@@ -184,7 +174,7 @@
     },
     {
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('clusterName'), 'extensions/', variables('vmExtensionName'))]",
+      "name": "[concat(variables('vmName'), copyIndex(), '/', variables('vmExtensionName'))]",
       "apiVersion": "2015-05-01-preview",
       "location": "[resourceGroup().location]",
       "copy": {
@@ -209,15 +199,5 @@
         }
       }
     }
-  ],
-  "outputs": {
-      "adminUsername": {
-          "type": "string",
-          "value": "[parameters('adminUsername')]"
-      },
-      "publicIp": {
-          "type": "string",
-          "value": "[resourceId('Microsoft.Network/publicIPAddresses', concat(variables('clusterName'), 'publicIP', '0'))]"
-      }
-  }
+  ]
 }
