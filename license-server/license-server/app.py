@@ -6,8 +6,9 @@ import re
 import sqlite3
 import os
 import sys
+import json
 
-from flask import Flask, jsonify, abort, render_template, g
+from flask import Flask, jsonify, abort, render_template, g, request
 
 app = Flask(__name__)
 
@@ -48,6 +49,19 @@ def initDbCommand():
     print 'Database initialized.'
 
 # Helper functions
+def getKeyInfo(key):
+    p = subprocess.Popen([readKeyCmd, "-k", pubKey, "-l", key], stdout=subprocess.PIPE)
+    cmdOutput = p.communicate()[0]
+    if p.returncode != 0:
+        raise Exception("%s returned %d" % (readKeyCmd, p.returncode))
+
+    keyProps = {}
+    for line in cmdOutput.splitlines():
+        elements = json.loads("{%s}" % line)
+        keyProps.update(elements)
+
+    return keyProps
+
 def getKeysForOrg(organization):
     conn = getDb()
 
@@ -68,16 +82,8 @@ def getKeysForOrg(organization):
 
     unpackedKeys = []
     for key in [k[0] for k in orgKeys]:
-         cmdOutput = subprocess.Popen([readKeyCmd, "-k", pubKey, "-l", key], stdout=subprocess.PIPE).communicate()[0]
-
-         keyProps = {}
-         for line in cmdOutput.splitlines():
-             elements = line.split(':')
-             propName = elements[0].replace('"', '')
-             propValue = elements[1].replace('"', '')
-             keyProps[propName] = propValue
-
-         unpackedKeys.append(keyProps)
+        keyProps = getKeyInfo(key)
+        unpackedKeys.append(keyProps)
 
     return unpackedKeys
 
@@ -99,8 +105,13 @@ def getKeys(organization):
 
     return jsonify({'key': keys})
 
-@app.route('/license/api/v1.0/checkvalid/<string:key>', methods=['POST'])
-def checkvalid(key):
+@app.route('/license/api/v1.0/checkvalid', methods=['POST'])
+def checkvalid():
+    jsonInput = request.get_json()
+    if "key" not in jsonInput:
+        abort(404)
+    key = jsonInput["key"]
+
     conn = getDb()
     retObj = {"success": False}
 
@@ -115,19 +126,23 @@ def checkvalid(key):
             {"key": key})
         if not cursor.rowcount:
             retObj["error"] = "License key not found"
-
-        activeRowId = cursor.lastrowid
-
-        cursor.execute("""
-            SELECT active
-            FROM activation
-            WHERE rowid = :rowid""",
-            {"rowid": activeRowId})
-        dbActive = cursor.fetchone()
-        if dbActive[0]:
-            retObj["success"] = True
         else:
-            retObj["error"] = "License key inactive"
+            activeRowId = cursor.lastrowid
+
+            cursor.execute("""
+                SELECT active
+                FROM activation
+                WHERE rowid = :rowid""",
+                {"rowid": activeRowId})
+            dbActive = cursor.fetchone()
+            if dbActive[0]:
+                try:
+                    retObj["keyInfo"] = getKeyInfo(key)
+                    retObj["success"] = True
+                except Exception as e:
+                    retObj["error"] = "Error parsing license key: %s" % e
+            else:
+                retObj["error"] = "License key inactive"
 
     return jsonify(retObj)
 
@@ -155,4 +170,4 @@ def getHtmlkey(organization):
     return render_template('_table_render.html', keys=output)
 
 if __name__ == '__main__':
-    app.run(debug=True,host='0.0.0.0')
+    app.run(debug=False,host='0.0.0.0')
