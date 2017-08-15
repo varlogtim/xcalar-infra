@@ -90,22 +90,6 @@ def pageNotFound(error):
 def index():
     return "Hello, World!"
 
-@app.route('/license/api/v1.0/keys', methods=['GET'])
-def getAllKeys():
-    conn = getDb()
-
-    allKeys = defaultdict(list)
-    with conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT organization.name, license.key
-            FROM license
-            LEFT JOIN organization ON license.org_id = organization.org_id""")
-        dbKeys = cursor.fetchall()
-        for key in dbKeys:
-            allKeys[key[0]].append(key[1])
-
-    return jsonify({'keys': allKeys})
 
 @app.route('/license/api/v1.0/keys/<string:organization>', methods=['GET'])
 def getKeys(organization):
