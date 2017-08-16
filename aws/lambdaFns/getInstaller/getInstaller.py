@@ -66,13 +66,14 @@ def lambda_handler(event, context):
         ret["error"] = "Version \"%s\" not found" % installerVersion
         return ret
 
+    # numNodesLicensed == 0 is god-mode. Only Xcalar employees should have that
+    if numNodesLicensed != 0 and numNodes > numNodesLicensed:
+        ret["error"] = "Tried to deploy %d nodes when only %d are licensed" % (numNodes, numNodesLicensed)
+        return ret
+
     params = { 'Bucket': bucket, 'Key': installerPath }
     signedUrl = s3.generate_presigned_url(ClientMethod="get_object", Params=params, ExpiresIn=1800)
     ret["signedUrl"] = signedUrl
-
-    if numNodes > numNodesLicensed:
-        ret["error"] = "Tried to deploy %d nodes when only %d are licensed" % (numNodes, numNodesLicensed)
-        return ret
 
     ret["success"] = True
     return ret
