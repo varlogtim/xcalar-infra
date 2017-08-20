@@ -3,6 +3,7 @@
 echo "Starting bootstrap at `date`"
 
 INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/installer"
+HTML="http://pub.xcalar.net/azure/dev/html-4.tar.gz"
 
 CLUSTER="${HOSTNAME%%[0-9]*}"
 INDEX="${2:-0}"
@@ -15,12 +16,33 @@ sed -i -e 's/^SELINUX=enforcing.*$/SELINUX=permissive/g' /etc/selinux/config
 
 yum update -y
 yum install -y nfs-utils epel-release parted curl
-yum install -y jq
+yum install -y jq python-pip
+
+pip install jinja2
+
+test -n "$HTML" && curl -sSL "$HTML" > html.tar.gz
+
+tar -zxvf html.tar.gz
+
+serveError() {
+    errorMsg="$1"
+    rectifyMsg="$2"
+    cd html
+    python ./render.py "$errorMsg" "$rectifyMsg"
+    nohup python -m SimpleHTTPServer 80 >> /var/log/xcalarHttp.log 2>&1 &
+}
 
 retVal=`curl -H "Content-Type: application/json" -X POST -d "{ \"licenseKey\": \"$LICENSE\", \"numNodes\": $COUNT, \"installerVersion\": \"latest\" }" $INSTALLER_SERVER`
 success=`echo "$retVal" | jq .success`
 if [ "$success" = "false" ]; then
-    echo "$retVal"
+    errorMsg=`echo "$retVal" | jq -r .error`
+    echo 2>&1 "ERROR: $errorMsg"
+    if [ "$errorMsg" = "License key not found" ]; then
+        rectifyMsg="Please contact Xcalar at <a href=\"mailto:sales@xcalar.com\">sales@xcalar.com</a> for a trial license"
+    else
+        rectifyMsg="Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
+    fi
+    serveError "$errorMsg" "$rectifyMsg"
     exit 1
 fi
 
@@ -52,7 +74,8 @@ test -n "$INSTALLER_URL" && curl -sSL "$INSTALLER_URL" > installer.sh
 curl --retry 3 -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=2017-04-02&format=json" | jq . > metadata.json
 retCode=$?
 if [ "$retCode" != "0" ]; then
-    echo "Could not contact metadata service"
+    echo >&2 "ERROR: Could not contact metadata service"
+    serveError "Could not contact metadata service" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
     exit $retCode
 fi
 
@@ -102,6 +125,7 @@ fi
 if [ -n "$INSTALLER_URL" ] && [ -f "installer.sh" ]; then
     if ! bash -x installer.sh --nostart; then
         echo >&2 "ERROR: Failed to run installer"
+        serveError "Failed to run installer" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
         exit 1
     fi
 fi

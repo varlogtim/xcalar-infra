@@ -42,7 +42,7 @@
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap-3.sh",
+    "customScriptName": "ampBootstrap-6.sh",
     "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
     "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
     "imagePublisher": "OpenLogic",
