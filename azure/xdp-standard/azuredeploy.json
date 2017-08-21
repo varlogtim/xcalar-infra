@@ -24,6 +24,19 @@
       "metadata": {
         "description": "Administrator's password for the Xcalar cluster"
       }
+    },
+    "bootstrapUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Bootstrap Url"
+      }
+    },
+    "installerUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Installer Url"
+      }
     }
   },
   "variables": {
@@ -42,14 +55,14 @@
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap-6.sh",
-    "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
-    "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
+    "customScriptFilePath": "[parameters('bootstrapUrl')]",
+    "customScriptCommandToExecute": "/bin/bash -x ampBootstrap.sh ",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.3",
     "vmExtensionName": "xcalarBootstrapExtension",
-    "dataDiskSize": 1023
+    "dataDiskSize": 1023,
+    "nfsMount": "[concat(variables('clusterName'),'0:/srv/share')]"
   },
   "resources": [
     {
@@ -205,7 +218,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('vmName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' >> /var/log/startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('vmName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' ', variables('sq'), variables('nfsMount'), variables('sq'), ' ', variables('sq'), parameters('installerUrl'), variables('sq'), ' >> /var/log/startup.log 2>&1')]"
         }
       }
     }
