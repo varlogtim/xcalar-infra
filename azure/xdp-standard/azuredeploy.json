@@ -15,6 +15,7 @@
     },
     "adminUsername": {
       "type": "string",
+      "defaultValue": "azureuser",
       "metadata": {
         "description": "Administrator's username for the Xcalar cluster"
       }
@@ -24,6 +25,20 @@
       "metadata": {
         "description": "Administrator's password for the Xcalar cluster"
       }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D14_v2_Promo",
+      "metadata": {
+        "description": "Size of the VM"
+      },
+      "allowedValues": [
+          "Standard_D13_v2_Promo",
+          "Standard_DS13_v2_Promo",
+          "Standard_DS14_v2_Promo",
+          "Standard_D14_v2_Promo",
+          "Standard_D15_v2_Promo",
+          "Standard_DS15_v2_Promo"]
     },
     "bootstrapUrl": {
       "type": "string",
@@ -44,8 +59,8 @@
     "clusterName": "xdp-standard-",
     "vmName": "[concat(variables('clusterName'), 'xce-')]",
     "nicName": "[concat(variables('clusterName'),'nic-')]",
-    "vmSize": "Standard_DS14_v2_Promo",
-    "storageAccountType": "Premium_LRS",
+    "vmSize": "[parameters('vmSize')]",
+    "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'xc')]",
     "virtualNetworkName": "[concat(variables('clusterName'), 'VNET')]",
     "vnetAddressPrefix": "10.0.0.0/16",
@@ -140,7 +155,7 @@
       }
     },
     {
-      "apiVersion": "2016-04-30-preview",
+      "apiVersion": "2017-03-30",
       "type": "Microsoft.Compute/virtualMachines",
       "name": "[concat(variables('vmName'), copyIndex())]",
       "location": "[resourceGroup().location]",
@@ -169,22 +184,8 @@
             "version": "latest"
           },
           "osDisk": {
-            "caching": "ReadWrite",
-            "createOption": "FromImage",
-            "name": "[concat(variables('vmName'), copyIndex(), '-osDisk')]",
-            "vhd": {
-              "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).primaryEndpoints.blob, 'vhds/', variables('vmName'), copyIndex(), '-osDisk.vhd')]"
-            }
-          },
-          "dataDisks": [{
-            "createOption": "Empty",
-            "lun": 0,
-            "name": "[concat(variables('vmName'), copyIndex(), '-dataDisk')]",
-            "vhd": {
-              "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).primaryEndpoints.blob, 'vhds/', variables('vmName'), copyIndex(), '-dataDisk.vhd')]"
-            },
-            "diskSizeGB": "[variables('dataDiskSize')]"
-          }]
+            "createOption": "FromImage"
+          }
         },
         "networkProfile": {
           "networkInterfaces": [

@@ -10,6 +10,9 @@
         },
         "scaleNumber": {
             "value": 3
+        },
+        "vmSize": {
+            "value": "Standard_D14_v2_Promo"
         }
     }
 }

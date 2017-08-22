@@ -42,12 +42,16 @@ mount_device () {
     fi
     # If there's already a partition table, you need to sgdisk it twice
     # because it 'fails' the first time. sgdisk aligns the partition for you
-    sgdisk -Zg -n1:0:0 $DEV || sgdisk -Zg -n1:0:0 $DEV
+    # -n1 creates an aligned partition using the entire disk, -t1 sets the
+    # partition type to 'Linux filesystem' and -c1 sets the label to 'SSD'
+    sgdisk -Zg -n1:0:0 -t1:8300 -c1:SSD $DEV || sgdisk -Zg -n1:0:0 -t1:8300 -c1:SSD $DEV
     test $? -eq 0 || return 1
     sync
     for retry in $(seq 5); do
         sleep 5
-        mkfs.xfs $2 && break
+        # Must use -f[orce] because the partition may have already existed with a valid
+        # file system. sgdisk doesn't earase the partitioning information, unlike parted/fdisk.
+        mkfs.xfs -f $2 && break
     done
     test $? -eq 0 || return 1
     clean_fstab $2 && \

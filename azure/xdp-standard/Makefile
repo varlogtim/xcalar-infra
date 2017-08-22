@@ -3,9 +3,9 @@
 SHELL = /bin/bash
 GROUP = $(shell id -un)-rg
 LOCATION  = westus2
-BOOTSTRAP = ampBootstrap.sh
+BOOTSTRAP = ../bootstrap/ampBootstrap.sh
 S3_INSTALLER_URL = s3://xcrepo/builds/bc8beef7-0649eba1/prod/xcalar-1.2.1-1088-installer
-S3_BOOTSTRAP_URL = s3://xcrepo/bysha1/$(shell sha1sum $(BOOTSTRAP) | awk '{print $$1}')/$(BOOTSTRAP)
+S3_BOOTSTRAP_URL = s3://xcrepo/bysha1/$(shell sha1sum $(BOOTSTRAP) | awk '{print $$1}')/$(shell basename $(BOOTSTRAP))
 
 all: xdp-standard-package.zip
 
@@ -26,8 +26,8 @@ delete:
 	az group delete --name $(GROUP) --no-wait
 
 %.json: %.json.example
-	@cp -v $< $@
-	@echo "Please modify the password in parameters.json before!" && false
+	@test -e $@ || { cp -v $< $@; @echo "Please modify the password in parameters.json before!"; exit 1; }
+	@touch $@
 
 deploy: group parameters.json
 	INSTALLER_URL=`aws s3 presign --expires-in 3600 $(S3_INSTALLER_URL)` && \

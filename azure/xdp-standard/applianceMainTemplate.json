@@ -31,7 +31,7 @@
     "clusterName": "xdp-standard-",
     "vmName": "[concat(variables('clusterName'), 'xce-')]",
     "nicName": "[concat(variables('clusterName'),'nic-')]",
-    "vmSize": "Standard_DS14_v2_Promo",
+    "vmSize": "Standard_D14_v2_Promo",
     "storageAccountType": "Premium_LRS",
     "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'xc')]",
     "virtualNetworkName": "[concat(variables('clusterName'), 'VNET')]",
