@@ -8,11 +8,8 @@
         "adminPassword": {
             "value": "YOUR-PASSWORD"
         },
-        "scaleNumber": {
-            "value": 3
-        },
-        "vmSize": {
-            "value": "Standard_D14_v2_Promo"
+        "licenseKey": {
+            "value": "YOUR-LICENSE-KEY"
         }
     }
 }

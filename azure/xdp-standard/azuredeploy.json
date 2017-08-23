@@ -8,7 +8,7 @@
     },
     "scaleNumber": {
       "type": "int",
-      "defaultValue": 1,
+      "defaultValue": 3,
       "metadata": {
         "description": "Number of XCE nodes to provision. (Max: 16)"
       }

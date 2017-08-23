@@ -32,7 +32,7 @@
     "vmName": "[concat(variables('clusterName'), 'xce-')]",
     "nicName": "[concat(variables('clusterName'),'nic-')]",
     "vmSize": "Standard_D14_v2_Promo",
-    "storageAccountType": "Premium_LRS",
+    "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'xc')]",
     "virtualNetworkName": "[concat(variables('clusterName'), 'VNET')]",
     "vnetAddressPrefix": "10.0.0.0/16",
@@ -42,7 +42,7 @@
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap-6.sh",
+    "customScriptName": "ampBootstrap-7.sh",
     "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
     "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
     "imagePublisher": "OpenLogic",
@@ -127,7 +127,7 @@
       }
     },
     {
-      "apiVersion": "2016-04-30-preview",
+      "apiVersion": "2017-03-30",
       "type": "Microsoft.Compute/virtualMachines",
       "name": "[concat(variables('vmName'), copyIndex())]",
       "location": "[resourceGroup().location]",
@@ -156,22 +156,8 @@
             "version": "latest"
           },
           "osDisk": {
-            "caching": "ReadWrite",
-            "createOption": "FromImage",
-            "name": "[concat(variables('vmName'), copyIndex(), '-osDisk')]",
-            "vhd": {
-              "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).primaryEndpoints.blob, 'vhds/', variables('vmName'), copyIndex(), '-osDisk.vhd')]"
-            }
-          },
-          "dataDisks": [{
-            "createOption": "Empty",
-            "lun": 0,
-            "name": "[concat(variables('vmName'), copyIndex(), '-dataDisk')]",
-            "vhd": {
-              "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).primaryEndpoints.blob, 'vhds/', variables('vmName'), copyIndex(), '-dataDisk.vhd')]"
-            },
-            "diskSizeGB": "[variables('dataDiskSize')]"
-          }]
+            "createOption": "FromImage"
+          }
         },
         "networkProfile": {
           "networkInterfaces": [
