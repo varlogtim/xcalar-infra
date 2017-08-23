@@ -4,17 +4,22 @@ SHELL = /bin/bash
 GROUP = $(shell id -un)-rg
 LOCATION  = westus2
 BOOTSTRAP = ../bootstrap/ampBootstrap.sh
-S3_INSTALLER_URL = s3://xcrepo/builds/bc8beef7-0649eba1/prod/xcalar-1.2.1-1088-installer
-S3_BOOTSTRAP_URL = s3://xcrepo/bysha1/$(shell sha1sum $(BOOTSTRAP) | awk '{print $$1}')/$(shell basename $(BOOTSTRAP))
+BUCKET = xcrepo
+S3_INSTALLER = s3://$(BUCKET)/builds/ce1c3bbd-254932a4/prod/xcalar-1.2.2-1179-installer
+S3_BOOTSTRAP_KEY = bysha1/$(shell sha1sum $(BOOTSTRAP) | awk '{print $$1}')/$(shell basename $(BOOTSTRAP))
+S3_BOOTSTRAP = s3://$(BUCKET)/$(S3_BOOTSTRAP_KEY)
 
-SCRIPTS_URI=$(shell jq -r .variables.scriptsUri applianceMainTemplate.json | sed -e 's@^http://@@g')
-SCRIPTS_NAME=$(shell jq -r .variables.customScriptName applianceMainTemplate.json)
-SCRIPTS_PATH=$(SCRIPTS_URI)/$(SCRIPTS_NAME)
+SCRIPTS_PATH=$(shell jq -r '[.variables.scriptsUri,.variables.customScriptName]|join("/")' applianceMainTemplate.json | sed -e 's@^http://@@g')
 SCRIPTS_SHA1=$(shell sha1sum $(BOOTSTRAP) | cut -d' ' -f1)
+
+-include local.mk
 
 all: xdp-standard-package.zip
 
 xdp-standard-package.zip: createUiDefinition.json applianceMainTemplate.json mainTemplate.json
+	aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP)
+	aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY)
+	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' applianceMainTemplate.json
 	cp createUiDefinition.json applianceCreateUiDefinition.json
 	zip xdp-standard-package.zip applianceCreateUiDefinition.json createUiDefinition.json applianceMainTemplate.json mainTemplate.json
 
@@ -27,8 +32,9 @@ group:
         az group create --name $(GROUP) --location $(LOCATION); \
     fi
 
-delete:
+destroy:
 	az group delete --name $(GROUP) --no-wait
+	-rm -f local.mk
 
 check_bootstrap:
 	@http_proxy=; \
@@ -53,18 +59,20 @@ update_bootstrap:
 	@touch $@
 
 deploy: group parameters.json
-	INSTALLER_URL=`aws s3 presign --expires-in 3600 $(S3_INSTALLER_URL)` && \
-    aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP_URL) && \
-    BOOTSTRAP_URL=`aws s3 presign --expires-in 3600 $(S3_BOOTSTRAP_URL)` && \
+	aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP)
+	INSTALLER_URL=`aws s3 presign --expires-in 3600 $(S3_INSTALLER)` && \
+	BOOTSTRAP_URL=`aws s3 presign --expires-in 3600 $(S3_BOOTSTRAP)` && \
     echo $${INSTALLER_URL} && \
     echo $${BOOTSTRAP_URL} && \
+    echo GROUP=$(GROUP) | tee local.mk && \
     time az group deployment create --resource-group $(GROUP) --name $(GROUP)-deploy \
      --template-file azuredeploy.json \
      --parameters @parameters.json \
+     --parameters "{\"dnsLabelPrefix\": { \"value\": \"$(GROUP)\"}}" \
      --parameters "{\"installerUrl\": { \"value\": \"$${INSTALLER_URL}\"}}" \
      --parameters "{\"bootstrapUrl\": { \"value\": \"$${BOOTSTRAP_URL}\"}}"
 
-deployMain: check_bootstrap group parameters.json
+deployMain: group parameters.json
 	time az group deployment create --resource-group $(GROUP) --name $(GROUP)-deploy \
      --template-file applianceMainTemplate.json \
      --parameters @parameters.json

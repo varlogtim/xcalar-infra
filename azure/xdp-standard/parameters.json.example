@@ -6,7 +6,13 @@
             "value": "azureuser"
         },
         "adminPassword": {
-            "value": "YOUR-PASSWORD"
+            "value": "Passw0rd!012"
+        },
+        "adminEmail": {
+            "value": ""
+        },
+        "scaleNumber": {
+            "value": 3
         },
         "licenseKey": {
             "value": "YOUR-LICENSE-KEY"
