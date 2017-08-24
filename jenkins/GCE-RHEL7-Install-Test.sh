@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 
 set -o pipefail
 
@@ -179,7 +179,7 @@ echo "## test-ui - run a UI test on the upgraded instance with old files"
 
 if [ $STAGE_3_COMPLETE -eq 0 ]; then
     $GUITSTDIR/startup.sh -f cluster_build.json -i cluster.data  && sleep 20 && \
-        $GUITSTDIR/test-running.sh -f cluster_build.json -i cluster.data # && sleep 10 && \ 
+        $GUITSTDIR/test-running.sh -f cluster_build.json -i cluster.data # && sleep 10 && \
     # UI Verification Test here &&
     # UI Workspace Modify here && \
     #$GUITSTDIR/test-ui.sh -i cluster.data
@@ -213,7 +213,7 @@ echo "## STAGE_4_COMPLETE: $STAGE_4_COMPLETE"
 echo "##"
 
 
-rm -f ${NEW_INSTALLER_FILE} ${OLD_INSTALLER_FILE} && 
+rm -f ${NEW_INSTALLER_FILE} ${OLD_INSTALLER_FILE} &&
 echo "${NEW_INSTALLER_FILE} and ${OLD_INSTALLER_FILE} deleted" && echo
 
 $GUITSTDIR/delete-gui-installer-test.sh -f $XLRDIR/cluster_build.json -i $XLRDIR/cluster.data
@@ -221,20 +221,20 @@ $GUITSTDIR/nfs-manage.sh -r -f cluster_build.json -i cluster.data
 
 GRAPHITE_OUTPUT="prod.instupgradetests.${BUILD_TEST_NAME}.${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}:${STAGE_4_COMPLETE}|g"
 
-echo  "$GRAPHITE_OUTPUT" | nc -w 1 -u $GRAPHITE 8125
+echo  "$GRAPHITE_OUTPUT" | nc -4 -w 5 -u $GRAPHITE 8125
 
 echo "Value sent to graphite: $GRAPHITE_OUTPUT"
 
 source cluster.data
 
 if [ "$STAGE_4_COMPLETE" = "0" ]; then
-    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.status:0|g" | nc -w 1 -u $GRAPHITE 8125
-    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numPass:1|c" | nc -w 1 -u $GRAPHITE 8125
+    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.status:0|g" | nc -4 -w 5 -u $GRAPHITE 8125
+    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numPass:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
 else
-    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.status:1|g" | nc -w 1 -u $GRAPHITE 8125
-    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numFail:1|c" | nc -w 1 -u $GRAPHITE 8125
+    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.status:1|g" | nc -4 -w 5 -u $GRAPHITE 8125
+    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numFail:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
 fi
 
 echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO"

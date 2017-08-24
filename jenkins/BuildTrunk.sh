@@ -28,4 +28,4 @@ fi
 # Add new tag to graphite
 tagName="build${BUILD_NUMBER}"
 
-echo "prod.tags.$tagName.${gitsha}:1|g" | nc -w 1 -u $GRAPHITE 8125
+echo "prod.tags.$tagName.${gitsha}:1|g" | nc -4 -w 5 -u $GRAPHITE 8125

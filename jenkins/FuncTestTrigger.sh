@@ -27,15 +27,15 @@ funcstatsd () {
     local status="$2"
     local gitsha="$3"
     if [ "$status" = "PASS" ]; then
-        echo "prod.functests.$TEST_TYPE.${hostname//./_}.${name}:0|g" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numPass:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.status:0|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.functests.$TEST_TYPE.${hostname//./_}.${name}:0|g" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numPass:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.status:0|g" | nc -4 -w 5 -u $GRAPHITE 8125
     elif [ "$status" = "FAIL" ]; then
-        echo "prod.functests.$TEST_TYPE.${hostname//./_}.${name}:1|g" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numFail:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.status:1|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.functests.$TEST_TYPE.${hostname//./_}.${name}:1|g" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numFail:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.status:1|g" | nc -4 -w 5 -u $GRAPHITE 8125
     fi
 }
 
@@ -94,8 +94,8 @@ NumTests="${#TestsToRun[@]}"
 ii=1
 hostname=`hostname -f`
 
-echo "prod.functests.$TEST_TYPE.${hostname//./_}.currentIter:$CURRENT_ITERATION|g" | nc -w 1 -u $GRAPHITE 8125
-echo "prod.functests.$TEST_TYPE.${hostname//./_}.numberOfIters:$NUMBER_ITERATIONS|g" | nc -w 1 -u $GRAPHITE 8125
+echo "prod.functests.$TEST_TYPE.${hostname//./_}.currentIter:$CURRENT_ITERATION|g" | nc -4 -w 5 -u $GRAPHITE 8125
+echo "prod.functests.$TEST_TYPE.${hostname//./_}.numberOfIters:$NUMBER_ITERATIONS|g" | nc -4 -w 5 -u $GRAPHITE 8125
 
 echo "1..$NumTests" | tee "$TAP"
 set +e

@@ -29,10 +29,10 @@ fi
 
 ret=`xcalar-infra/gce/gce-cluster.sh $INSTALLER_PATH $NUM_INSTANCES $cluster`
 
-if [ "$NOTPREEMPTIBLE" != "1" ]; then                                           
-    ips=($(awk '/RUNNING/ {print $6}' <<< "$ret"))                      
-else                                                                            
-    ips=($(awk '/RUNNING/ {print $5}' <<< "$ret"))                      
+if [ "$NOTPREEMPTIBLE" != "1" ]; then
+    ips=($(awk '/RUNNING/ {print $6}' <<< "$ret"))
+else
+    ips=($(awk '/RUNNING/ {print $5}' <<< "$ret"))
 fi
 
 TMPDIR="${TMPDIR:-/tmp/`id -un`}/$JOB_NAME/functests"
@@ -59,8 +59,8 @@ restartXcalar() {
     stopXcalar
     xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo service xcalar start"
     for ii in $(seq 1 $NUM_INSTANCES ) ; do
-        host="${cluster}-${ii}"                                                                                                                                                                                                                                                                                                                                                                                               
-        gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started" 
+        host="${cluster}-${ii}"
+        gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started"
         ret=$?
         numRetries=60
         try=0
@@ -76,7 +76,7 @@ restartXcalar() {
             echo "Error while waiting for node $ii to come up"
             return 1
         fi
-    done 
+    done
     set -e
 }
 
@@ -89,13 +89,13 @@ funcstatsd() {
     local status="$2"
     local gitsha="$3"
     if [ "$status" = "PASS" ]; then
-        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numPass:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:0|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numPass:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:0|g" | nc -4 -w 5 -u $GRAPHITE 8125
     elif [ "$status" = "FAIL" ]; then
-        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numFail:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:1|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numFail:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:1|g" | nc -4 -w 5 -u $GRAPHITE 8125
     fi
 }
 
@@ -120,7 +120,7 @@ while ! startupDone ; do
         exit 1
     fi
 done
-    
+
 stopXcalar
 xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "mkdir -p $XdbLocalSerDesPath"
 xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "chmod +w $XdbLocalSerDesPath"
@@ -150,7 +150,7 @@ anyfailed=0
 for ii in `seq 1 $NUM_ITERATIONS`; do
     echo "Iteration $ii"
     jj=1
-    
+
     for Test in "${TestsToRun[@]}"; do
         logfile="$TMPDIR/${hostname//./_}_${Test//::/_}_$ii.log"
 
@@ -193,7 +193,7 @@ else
     if cloudXccli -c version 2>&1 | grep -q 'Error'; then
          genSupport
     fi
-    
+
     if [ "$LEAVE_ON_FAILURE" = "true" ]; then
         echo "As requested, cluster will not be cleaned up."
         echo "Run 'xcalar-infra/gce/gce-cluster-delete.sh ${cluster}' once finished."
@@ -201,5 +201,4 @@ else
         xcalar-infra/gce/gce-cluster-delete.sh $cluster || true
     fi
 fi
-
 
