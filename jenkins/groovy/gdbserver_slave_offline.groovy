@@ -21,21 +21,18 @@ if (result.size() != 1) {
 
     slave.cliOffline("gdbserver is running")
 
-    globalNodeProperties = instance.getGlobalNodeProperties()
-    envVarsNodePropertyList = globalNodeProperties.getAll(EnvironmentVariablesNodeProperty.class)
+    node = instance.getNode(slave.name)
+    props = node.nodeProperties.getAll(hudson.slaves.EnvironmentVariablesNodeProperty.class)
 
-    newEnvVarsNodeProperty = null
-    envVars = null
-
-    if (envVarsNodePropertyList == null || envVarsNodePropertyList.size() == 0) {
-        newEnvVarsNodeProperty = new EnvironmentVariablesNodeProperty();
-        globalNodeProperties.add(newEnvVarsNodeProperty)
-        envVars = newEnvVarsNodeProperty.getEnvVars()
+    if(props.empty) {
+        def entry = new EnvironmentVariablesNodeProperty.Entry("GDBSERVER", "gdbserver is running." + slave.name + " is offline.")
+        def evnp = new EnvironmentVariablesNodeProperty(entry)
+        node.nodeProperties.add(evnp)
     } else {
-        envVars = envVarsNodePropertyList.get(0).getEnvVars()
+        for (prop in props) {
+            prop.envVars.put("GDBSERVER", "gdbserver is running.")
+        }
     }
 
-    envVars.put("GDBSERVER", "gdbserver is running.")
-
-    instance.save()
+    slave.save()
 }
