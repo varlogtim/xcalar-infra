@@ -130,6 +130,10 @@ hosts=$( IFS=$','; echo "${ips[*]}" )
 xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo pip install google-cloud-storage"
 xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
 
+source $XLRDIR/doc/env/xc_aliases
+
+xcEnvEnter
+
 set +e
 python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n 1 -i ${ips[0]} -t gce52Config -w --serial
 ret="$?"
