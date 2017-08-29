@@ -122,6 +122,8 @@ while ! startupDone ; do
      fi
 done
 
+xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "echo Constants.SendSupportBundle=true | sudo tee -a /etc/xcalar/default.cfg"
+
 restartXcalar
 
 # remove when bug 2670 fixed
