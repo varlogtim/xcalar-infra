@@ -11,7 +11,13 @@ jenkins_cli () {
 
 usage () {
     cat << EOF
-$0 [-l list current plugins] [-n list newest plugins after restart] [-h help] -- [jenkins-cli args]
+usage: $0 [-l list-plugins (list current plugins)] [-n list-plugins (list newest plugins after restart)] -- [jenkins-cli args]
+
+    -l list-plugins   : output currently loaded plugins in plugin:version format
+    -n list-plugins   : output updated plugins in plugin:version format
+
+    --
+
 EOF
     exit 1
 }
@@ -20,12 +26,12 @@ test $# -gt 0 || set -- help
 
 filter () { cat; }
 
-while getopts "ln" opt "$@"; do
+while getopts "hln" opt "$@"; do
     case $opt in
         h) usage;;
         l) filter() { tr -d '()' | awk '{printf "%s:%s\n",$1,$(NF)}'; };;
         n) filter() { sed -re 's/\([0-9].*//g' | awk '{printf "%s:%s\n",$1,$(NF)}'; };;
-        -*) usage;;
+        -*) break;;
         --) break;;
     esac
 done
