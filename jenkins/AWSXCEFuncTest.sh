@@ -8,7 +8,6 @@ sudo chown jenkins:jenkins /home/jenkins/.config
 set -e
 
 TestsToRun=($TestCases)
-cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
 TAP="AllTests.tap"
 
 if [ "$DEPLOY_TYPE" = "Source" ]; then
@@ -27,7 +26,6 @@ if [ "$DEPLOY_TYPE" = "Source" ]; then
 fi
 
 set +e
-sudo yum -y install sshpass-1.06-1.el7.x86_64
 sudo yum -y install awscli-1.11.90-1.el7.noarch
 sudo yum install -y nc
 set -e
@@ -41,7 +39,12 @@ echo "Host *.us-west-2.compute.amazonaws.com
 
 chmod 0600 ~/.ssh/config
 
-ret=`xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster`
+if [ -z $CLUSTER_AVAILABLE ] && [ $CLUSTER_AVAILABLE -eq 1 ]; then
+    cluster=$CLUSTER
+else
+    cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
+    ret=`xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster`
+fi
 
 sleep 120
 

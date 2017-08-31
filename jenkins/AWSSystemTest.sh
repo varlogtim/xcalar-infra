@@ -2,6 +2,7 @@ bash /netstore/users/jenkins/slave/setup.sh
 
 export XLRDIR=`pwd`
 export PATH=$PATH:"$XLRDIR/bin"
+export TAP="AllTests.tap"
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
@@ -23,13 +24,9 @@ else
     installer=`find build -type f -name 'xcalar-*-installer'`
 fi
 
-cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
-
 if ! uname -a | grep -i ubuntu; then
-    sudo yum -y install sshpass-1.06-1.el7.x86_64
     sudo yum -y install awscli-1.11.90-1.el7.noarch
 else
-    sudo aptitude -y install sshpass
     sudo aptitude -y install awscli
 fi
 
@@ -42,17 +39,23 @@ echo "Host *.us-west-2.compute.amazonaws.com
 
 chmod 0600 ~/.ssh/config
 
-xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster
-ret=$?
-if [ $ret -ne 0 ]; then
-    if [ "$LEAVE_ON_FAILURE" = "true" ]; then
-        echo "As requested, cluster will not be cleaned up."
-        echo "Run 'xcalar-infra/aws/aws-cloudformation-delete.sh ${cluster}' once finished."
-    else
-        xcalar-infra/aws/aws-cloudformation-delete.sh $cluster || true
+if [ -z $CLUSTER_AVAILABLE ] && [ $CLUSTER_AVAILABLE -eq 1 ]; then
+    cluster=$CLUSTER
+else
+    cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
+    xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        if [ "$LEAVE_ON_FAILURE" = "true" ]; then
+            echo "As requested, cluster will not be cleaned up."
+            echo "Run 'xcalar-infra/aws/aws-cloudformation-delete.sh ${cluster}' once finished."
+        else
+            xcalar-infra/aws/aws-cloudformation-delete.sh $cluster || true
+        fi
+        exit 1
     fi
-    exit 1
 fi
+
 sleep 120
 
 cloudXccli() {
@@ -165,24 +168,44 @@ restartXcalar
 
 waitForUsrnodes
 
-host=$(xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "host")
-
 source $XLRDIR/doc/env/xc_aliases
 
 xcEnvEnter
 
+gitsha=`cloudXccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
+host=$(xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "host")
+
+echo "1..$NUM_ITERATIONS" | tee "$TAP"
 set +e
-python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n 1 -i "$host":18552 -t gce52Config -w --serial
-ret="$?"
+for ii in `seq 1 $NUM_ITERATIONS`; do
+    Test="$SYSTEM_TEST_CONFIG-$NUM_USERS"
+    python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n $NUM_USERS -i $host -t $SYSTEM_TEST_CONFIG -w
+    ret="$?"
+    if [ "$ret" = "0" ]; then
+        echo "Passed '$Test' at `date`"
+        funcstatsd "$Test" "PASS" "$gitsha"
+        echo "ok ${ii} - $Test-$ii"  | tee -a $TAP
+    else
+        genSupport
+        funcstatsd "$Test" "FAIL" "$gitsha"
+        echo "not ok ${ii} - $Test-$ii" | tee -a $TAP
+        if [ "$LEAVE_ON_FAILURE" = "true" ]; then
+            echo "As requested, cluster will not be cleaned up."
+            echo "Run 'xcalar-infra/aws/aws-cloudformation-delete.sh ${cluster}' once finished."
+        else
+            xcalar-infra/aws/aws-cloudformation-delete.sh $cluster || true
+        fi
+        exit $ret
+    fi
+done
 
 xcalar-infra/aws/aws-cloudformation-ssh.sh "$cluster" runClusterCmd "/opt/xcalar/bin/xccli -c 'stats 0'"
 xcalar-infra/aws/aws-cloudformation-ssh.sh "$cluster" runClusterCmd "/opt/xcalar/bin/xccli -c 'stats 1'"
+set -e
 
 if [ $ret -eq 0 ]; then
     xcalar-infra/aws/aws-cluster-delete.sh $cluster || true
 else
-    genSupport
-    echo "One or more tests failed"
     if [ "$LEAVE_ON_FAILURE" = "true" ]; then
         echo "As requested, cluster will not be cleaned up."
         echo "Run 'xcalar-infra/aws/aws-cloudformation-delete.sh ${cluster}' once finished."
@@ -192,5 +215,7 @@ else
 fi
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=7200 net.ipv4.tcp_keepalive_intvl=75 net.ipv4.tcp_keepalive_probes=9
+
+rm -rf ~/.ssh/config
 
 exit $ret
