@@ -167,6 +167,10 @@ waitForUsrnodes
 
 host=$(xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "host")
 
+source $XLRDIR/doc/env/xc_aliases
+
+xcEnvEnter
+
 set +e
 python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n 1 -i "$host":18552 -t gce52Config -w --serial
 ret="$?"
