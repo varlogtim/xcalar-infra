@@ -33,6 +33,15 @@ else
     sudo aptitude -y install awscli
 fi
 
+echo "Host *.us-west-2.compute.amazonaws.com
+    User ec2-user
+    IdentityFile "$AWS_PEM"
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR" > ~/.ssh/config
+
+chmod 0600 ~/.ssh/config
+
 xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster
 ret=$?
 if [ $ret -ne 0 ]; then
