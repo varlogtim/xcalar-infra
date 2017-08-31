@@ -1,5 +1,6 @@
-export XLRDIR=`pwd`
+bash /netstore/users/jenkins/slave/setup.sh
 
+export XLRDIR=`pwd`
 export PATH=$PATH:"$XLRDIR/bin"
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
