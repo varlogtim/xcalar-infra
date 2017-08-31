@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# This script shoould not start xcmonitor and usrnodes since the new monitor
-# starts usrnodes itself. For now, to quickly get this script functional with
-# the new monitor, continue launching usrnodes directly, without a monitor, by
-# commenting out the monitor specific lines -> which will eventually be modified
-# to correctly invoke the monitor (and remove the usrnode launching).
+# This script starts up xcmonitor which starts up the usrnode
 
 set +e
 
@@ -45,11 +41,10 @@ if test -n "$oldpids"; then
     rm -f /var/run/xcalar/*.pid
 fi
 
-killall xcmgmtd usrnode childnode &>/dev/null || true
+killall xcmgmtd xcmonitor usrnode childnode &>/dev/null || true
 sleep 4
 find /var/opt/xcalar -type f -not -path '/var/opt/xcalar/support/*' -delete
 find /dev/shm -name "xcalar-*" -delete
-find $XCE_LOGDIR -name "xcmonitorTmp.*" -type f -delete
 
 /opt/xcalar/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
 pid=$!
@@ -57,20 +52,14 @@ echo $pid > /var/run/xcalar/xcmgmtd.pid
 
 NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
-#declare -A monitorTmpLogs
 for ii in $(seq 0 $(( $NumNodes - 1 ))); do
-    # monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
-    # monitorTmpLog=`mktemp $XCE_LOGDIR/xcmonitorTmp.${ii}.XXXXXX`
-    # monitorTmpLogs[$ii]="$monitorTmpLog"
-
-    /opt/xcalar/bin/usrnode --nodeId $ii --numNodes $NumNodes --configFile $XCE_CONFIG 1>> $XCE_LOGDIR/node.${ii}.out 2>> $XCE_LOGDIR/node.${ii}.err </dev/null &
+    monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
+    /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
     pid=$!
-    echo $pid > /var/run/xcalar/node.${ii}.pid
-# ( /opt/xcalar/bin/xcmonitor -n $ii -c $XCE_CONFIG 2>&1 </dev/null & echo $! > /var/run/xcalar/xcmonitor.${ii}.pid ) | tee -a $monitorLog > $monitorTmpLog &
+    echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
 done
 
 backendUp="false"
-#monitorUp="false"
 sleepTime=3
 for ii in $(seq 60); do
     if xccli -c version 2>&1 | grep -q 'Backend Version:'; then
@@ -84,30 +73,5 @@ if [ "$backendUp" = "false" ]; then
     echo "Backend not up after " $(($sleepTime * $ii)) " seconds"
     exit 1
 fi
-
-#foundMaster="false"
-#for jj in $(seq 60); do
-    #for ii in $(seq 0 $(( $NumNodes - 1 ))); do
-        #grep "STATE CHANGE:" "${monitorTmpLogs[$ii]}" | grep -q "=> Master"
-        #ret=$?
-        #if [ "$ret" = "0" ]; then
-            #foundMaster="true"
-            #break
-        #fi
-    #done
-
-    #if [ "$foundMaster" = "true" ]; then
-        #monitorUp="true"
-        #break
-    #fi
-
-    #sleep $sleepTime
-#done
-
-#if [ "$monitorUp" = "false" ]; then
-    #echo "Monitor not up after " $(($sleepTime * $jj)) " seconds"
-    #pkill -9 usrnode
-    #exit 1
-#fi
 
 exit 0
