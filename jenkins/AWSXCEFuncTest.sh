@@ -39,11 +39,12 @@ echo "Host *.us-west-2.compute.amazonaws.com
 
 chmod 0600 ~/.ssh/config
 
-if [ -z $CLUSTER_AVAILABLE ] && [ $CLUSTER_AVAILABLE -eq 1 ]; then
-    cluster=$CLUSTER
-else
+if [ "$CLUSTER" = "" ]; then
     cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
     ret=`xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster`
+
+else
+    cluster=$CLUSTER
 fi
 
 sleep 120
@@ -155,8 +156,10 @@ waitForUsrnodes
 
 stopXcalar
 
-xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "echo \"$FuncTestParam\" | sudo tee -a /etc/xcalar/default.cfg"
-xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "echo Constants.SendSupportBundle=true | sudo tee -a /etc/xcalar/default.cfg"
+if [ "$CLUSTER" = "" ]; then
+    xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "echo \"$FuncTestParam\" | sudo tee -a /etc/xcalar/default.cfg"
+    xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "echo Constants.SendSupportBundle=true | sudo tee -a /etc/xcalar/default.cfg"
+fi
 
 restartXcalar
 
@@ -176,7 +179,7 @@ if [ "$ret" != "0" ]; then
     exit $ret
 fi
 
-gitsha=`cloudXccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
+gitsha=`cloudXccli -c "version" | head -n2 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
 AllTests="$(cloudXccli -c 'functests list' | tail -n+2)"

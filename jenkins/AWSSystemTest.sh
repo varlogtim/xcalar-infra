@@ -172,14 +172,15 @@ source $XLRDIR/doc/env/xc_aliases
 
 xcEnvEnter
 
-gitsha=`cloudXccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
+gitsha=`cloudXccli -c "version" | head -n2 | cut -d\  -f3 | cut -d- -f5`
 host=$(xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "host")
+port=18552
 
 echo "1..$NUM_ITERATIONS" | tee "$TAP"
 set +e
 for ii in `seq 1 $NUM_ITERATIONS`; do
     Test="$SYSTEM_TEST_CONFIG-$NUM_USERS"
-    python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n $NUM_USERS -i $host -t $SYSTEM_TEST_CONFIG -w
+    python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n $NUM_USERS -i $host:$port -t $SYSTEM_TEST_CONFIG -w --serial
     ret="$?"
     if [ "$ret" = "0" ]; then
         echo "Passed '$Test' at `date`"
