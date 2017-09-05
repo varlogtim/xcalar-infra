@@ -24,12 +24,6 @@ else
     installer=`find build -type f -name 'xcalar-*-installer'`
 fi
 
-if ! uname -a | grep -i ubuntu; then
-    sudo yum -y install awscli-1.11.90-1.el7.noarch
-else
-    sudo aptitude -y install awscli
-fi
-
 echo "Host *.us-west-2.compute.amazonaws.com
     User ec2-user
     IdentityFile "$AWS_PEM"
@@ -39,9 +33,7 @@ echo "Host *.us-west-2.compute.amazonaws.com
 
 chmod 0600 ~/.ssh/config
 
-if [ -z $CLUSTER_AVAILABLE ] && [ $CLUSTER_AVAILABLE -eq 1 ]; then
-    cluster=$CLUSTER
-else
+if [ $CLUSTER = "" ]; then
     cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
     xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster
     ret=$?
@@ -54,6 +46,8 @@ else
         fi
         exit 1
     fi
+else
+    cluster=$CLUSTER
 fi
 
 sleep 120

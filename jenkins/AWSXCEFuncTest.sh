@@ -25,11 +25,6 @@ if [ "$DEPLOY_TYPE" = "Source" ]; then
     INSTALLER_PATH=`find build -type f -name 'xcalar-*-installer'`
 fi
 
-set +e
-sudo yum -y install awscli-1.11.90-1.el7.noarch
-sudo yum install -y nc
-set -e
-
 echo "Host *.us-west-2.compute.amazonaws.com
     User ec2-user
     IdentityFile "$AWS_PEM"
