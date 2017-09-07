@@ -4,6 +4,7 @@ echo "Starting bootstrap at `date`"
 
 INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/installer"
 HTML="http://pub.xcalar.net/azure/dev/html-4.tar.gz"
+XCALAR_ADVENTURE_DATASET="http://pub.xcalar.net/datasets/xcalarAdventure.tar.gz"
 
 CLUSTER="${HOSTNAME%%[0-9]*}"
 INDEX="${2:-0}"
@@ -70,7 +71,7 @@ yum install -y jq xfsprogs python-pip
 
 pip install jinja2
 
-test -n "$HTML" && curl -sSL "$HTML" > html.tar.gz
+test -n "$HTML" && safe_curl -sSL "$HTML" > html.tar.gz
 
 tar -zxvf html.tar.gz
 
@@ -255,5 +256,14 @@ while :; do
     sleep 5
 done
 
+# Let's retrieve the xcalar adventure datasets now
+if test -n "$XCALAR_ADVENTURE_DATASET"; then
+    safe_curl -sSL "$XCALAR_ADVENTURE_DATASET" > xcalarAdventure.tar.gz
+    tar -zxvf xcalarAdventure.tar.gz
+    mkdir -p /netstore/datasets/adventure
+    mv XcalarTraining /netstore/datasets/
+    mv dataPrep /netstore/datasets/adventure/
+    chmod -R 755 /netstore
+fi
 
 service xcalar start
