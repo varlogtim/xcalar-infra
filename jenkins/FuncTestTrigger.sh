@@ -114,6 +114,11 @@ anyfailed=0
         fi
 
         xccli -c "loglevelset Debug"
+        # Print the stats from all the nodes at the beginning of each test run
+        NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
+        for nodeid in $(seq 0 $(( $NumNodes - 1 ))); do
+            xccli -c "stats $nodeid"
+        done
         time xccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
         rc=${PIPESTATUS[0]}
         if [ $rc -ne 0 ]; then
