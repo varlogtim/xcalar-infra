@@ -39,6 +39,19 @@ funcstatsd () {
     fi
 }
 
+zipLogs() {
+    ret=$?
+
+    set +e
+    tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 /var/log/xcalar
+    sudo rm -rf /var/log/xcalar/*
+    set -e
+
+    exit $ret
+}
+
+trap "zipLogs" EXIT
+
 if [ "$CURRENT_ITERATION" = "0" ]; then
     set +e
     sudo /opt/xcalar/bin/xcalarctl stop-supervisor
@@ -100,47 +113,50 @@ echo "prod.functests.$TEST_TYPE.${hostname//./_}.numberOfIters:$NUMBER_ITERATION
 echo "1..$NumTests" | tee "$TAP"
 set +e
 anyfailed=0
-    for Test in "${TestsToRun[@]}"; do
+for Test in "${TestsToRun[@]}"; do
     logfile="$TMPDIR/${hostname//./_}_${Test//::/_}.log"
 
-        echo Running $Test on $hostname ...
-        if xccli -c version 2>&1 | grep -q 'Error'; then
-           genSupport
-           restartXcalar || true
-           if xccli -c version 2>&1 | grep -q 'Error'; then
-               echo "Could not restart usrnodes after previous crash"
-               exit 1
-           fi
-        fi
+    echo Running $Test on $hostname ...
+    if xccli -c version 2>&1 | grep -q 'Error'; then
+       genSupport
+       restartXcalar || true
+       if xccli -c version 2>&1 | grep -q 'Error'; then
+            echo "Could not restart usrnodes after previous crash"
+            exit 1
+       fi
+    fi
 
-        xccli -c "loglevelset Debug"
-        # Print the stats from all the nodes at the beginning of each test run
-        NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
-        for nodeid in $(seq 0 $(( $NumNodes - 1 ))); do
-            xccli -c "stats $nodeid"
-        done
-        time xccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
-        rc=${PIPESTATUS[0]}
-        if [ $rc -ne 0 ]; then
-            now=$(date +"%T")
-            filepath="`pwd`$now"
+    xccli -c "loglevelset Debug"
 
-            sudo cp /opt/xcalar/bin/usrnode "$filepath"
+    # Print the stats from all the nodes at the beginning of each test run
+    NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
+    for nodeid in $(seq 0 $(( $NumNodes - 1 ))); do
+        xccli -c "stats $nodeid"
+    done
+
+    time xccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
+
+    rc=${PIPESTATUS[0]}
+    if [ $rc -ne 0 ]; then
+        now=$(date +"%T")
+        filepath="`pwd`$now"
+
+        sudo cp /opt/xcalar/bin/usrnode "$filepath"
+        funcstatsd "$Test" "FAIL" "$gitsha"
+        echo "not ok ${ii} - $Test" | tee -a $TAP
+        anyfailed=1
+    else
+        if grep -q Error "$logfile"; then
             funcstatsd "$Test" "FAIL" "$gitsha"
-            echo "not ok ${ii} - $Test" | tee -a $TAP
+            echo "Failed test output in $logfile at `date`"
+            cat >&2 "$logfile"
+            echo "not ok ${ii} - $Test"  | tee -a $TAP
             anyfailed=1
         else
-            if grep -q Error "$logfile"; then
-                funcstatsd "$Test" "FAIL" "$gitsha"
-                echo "Failed test output in $logfile at `date`"
-                cat >&2 "$logfile"
-                echo "not ok ${ii} - $Test"  | tee -a $TAP
-                anyfailed=1
-            else
-                echo "Passed test at `date`"
-                funcstatsd "$Test" "PASS" "$gitsha"
-                echo "ok ${ii} - $Test"  | tee -a $TAP
-            fi
+            echo "Passed test at `date`"
+            funcstatsd "$Test" "PASS" "$gitsha"
+            echo "ok ${ii} - $Test"  | tee -a $TAP
         fi
-        ii=$(( $ii + 1 ))
-    done
+    fi
+    ii=$(( $ii + 1 ))
+done
