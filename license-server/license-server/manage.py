@@ -1,106 +1,76 @@
 #!/usr/bin/python
 
-from collections import defaultdict
-import json
 import os
+from collections import defaultdict
 import argparse
 import sqlite3
+from licenseServerApi import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 license_key_db_name = dir_path + '/license_keys.sqlite'
 
-def open_db():
+def openDb():
     conn = sqlite3.connect(license_key_db_name)
     return [conn, conn.cursor()]
 
-def close_db(conn):
+def closeDb(conn):
     conn.close()
-
-def fetch_everything(c):
-    c.execute('select * from licenses')
-    return c.fetchall()
-
-def fetch_names(c):
-    c.execute('select distinct Owner from licenses')
-    names = c.fetchall()
-    names = [item for sublist in names for item in sublist]
-    return names
-
-def fetch_licenses_for_name(c, name):
-    c.execute('select Key from licenses where Owner="{owner}"'.\
-              format(owner=name))
-    keys = c.fetchall()
-    keys = [item for sublist in keys for item in sublist]
-    return keys
-
-def list_names(name):
-    my_keys = defaultdict(list)
-    if (name is None):
-        [conn, c] = open_db()
-        table = fetch_everything(c)
-        close_db(conn)
-        for row in table:
-            my_keys[row[0]].append(row[1])
-    else:
-        [conn, c] = open_db()
-        names = fetch_names(c)
-        if not name in names:
-            close_db(conn)
-            print "Name not found!"
-            exit(1)
-        table = fetch_licenses_for_name(c, name)
-        close_db(conn)
-        for row in table:
-            my_keys[name].append(row)
-    print json.dumps(my_keys, indent=4, sort_keys=True)
-
-def insert(name, key):
-    [conn, c] = open_db()
-    c.execute('insert into licenses (Owner, Key) values ("{owner}", "{key}")'.\
-              format(owner=name, key=key))
-    conn.commit()
-    close_db(conn)
-
-def delete(name, key):
-    [conn, c] = open_db()
-    if (key is None): 
-        c.execute('delete from licenses where Owner="{owner}"'.\
-              format(owner=name))
-    elif ("%" in key):
-        c.execute('delete from licenses where Owner="{owner}" and Key like "{key}"'.\
-                  format(owner=name, key=key))
-    else:
-        c.execute('delete from licenses where Owner="{owner}" and Key="{key}"'.\
-                  format(owner=name, key=key))
-    conn.commit()
-    close_db(conn)
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--name", "-n", help="owner of the key")
+parser.add_argument("--organization", "-o", help="organization owner belongs to")
 parser.add_argument("--key", "-k", help="the key to be inserted")
-parser.add_argument("--command", "-c", required=True, 
-                    choices=['insert', 'delete', 'list'], 
+parser.add_argument("--table", "-t", help="Name of table to display")
+parser.add_argument("--command", "-c", required=True,
+                    choices=['insert', 'delete', 'list', 'listTable'],
                     help="action to be performed: insert or delete")
 args = parser.parse_args()
 
-if (args.command == 'delete' and
-    args.name is None):
+if (args.command == 'insert' and
+    (args.key is None or args.organization is None)):
     parser.print_help()
-    print "Name is required in order to delete\n"
+    print "Organization and key are required in order to insert\n"
     exit(1)
 
-if (args.command == 'insert' and
-    (args.name is None or args.key is None)):
+if (args.command == 'listTable' and
+    (args.table is None)):
     parser.print_help()
-    print "Name and key are required in order to insert\n"
+    print "table is required in order to listTable\n"
     exit(1)
 
 if (args.command == 'list'):
-    list_names(args.name)
+    [conn, c] = openDb()
+    table = listKeys(c, args.name, args.organization)
+    closeDb(conn)
+
+    my_keys = defaultdict(list)
+    for row in table:
+        my_keys["%s (%s)" % (row[0], row[1])].append(row[2])
+
+    print json.dumps(my_keys, indent=4, sort_keys=True)
 
 if (args.command == 'insert'):
-    insert(args.name, args.key)
+    [conn, c] = openDb()
+    insert(c, args.name, args.organization, args.key)
+    conn.commit()
+    closeDb(conn)
 
 if (args.command == 'delete'):
-    delete(args.name, args.key)
+    [conn, c] = openDb()
+    if (args.name is not None):
+        deleteName(c, args.name)
+
+    if (args.organization is not None):
+        deleteOrganization(c, args.organization)
+
+    if (args.key is not None):
+        deleteKey(c, args.key)
+
+    conn.commit()
+    closeDb(conn)
+
+if (args.command == 'listTable'):
+    [conn, c] = openDb()
+    print json.dumps(listTable(c, args.table))
+    closeDb(conn)
+

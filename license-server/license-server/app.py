@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 import subprocess
 import ast
@@ -8,7 +8,59 @@ import os
 import sys
 import json
 
-from flask import Flask, jsonify, abort, render_template, g, request
+from flask import Flask, jsonify, abort, render_template, g, request, make_response, current_app
+from functools import update_wrapper
+import licenseServerApi
+
+# Copied from http://flask.pocoo.org/snippets/56
+# This creates a decoration @crossdomain that allows
+# that endpoint to be called from another domain via AJAX
+def crossdomain(origin=None, methods=None, headers=None,
+                max_age=21600, attach_to_all=True,
+                automatic_options=True):
+    if methods is not None:
+        methods = ', '.join(sorted(x.upper() for x in methods))
+
+    if headers is not None and not isinstance(headers, basestring):
+        headers = ', '.join(x.upper() for x in headers)
+
+    if not isinstance(origin, basestring):
+        origin = ', '.join(origin)
+
+    if isinstance(max_age, timedelta):
+        max_age = max_age.total_seconds()
+
+    def get_methods():
+        if methods is not None:
+            return methods
+        options_resp = current_app.make_default_options_response()
+        return options_resp.headers['allow']
+
+    def decorator(f):
+        def wrapped_function(*args, **kwargs):
+            if automatic_options and request.method == 'OPTIONS':
+                resp = current_app.make_default_options_response()
+            else:
+                resp = make_response(f(*args, **kwargs))
+
+            if not attach_to_all and request.method != 'OPTIONS':
+                return resp
+
+            h = resp.headers
+            h['Access-Control-Allow-Origin'] = origin
+            h['Access-Control-Allow-Methods'] = get_methods()
+            h['Access-Control-Max-Age'] = str(max_age)
+
+            if headers is not None:
+                h['Access-Control-Allow-Headers'] = headers
+
+            return resp
+
+        f.provide_automatic_options = False
+        f.required_methods = ['OPTIONS']
+        return update_wrapper(wrapped_function, f)
+
+    return decorator
 
 app = Flask(__name__)
 
@@ -62,30 +114,16 @@ def getKeyInfo(key):
 
     return keyProps
 
-def getKeysForOrg(organization):
-    conn = getDb()
-
-    orgKeys = []
-    with conn:
+def getKeys(name = None, organization = None):
+    with getDb() as conn:
+        keys = []
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT (license.key)
-            FROM license
-            LEFT JOIN organization ON license.org_id = organization.org_id
-            WHERE organization.name = :orgname
-            """,
-            {"orgname": organization})
-        orgKeys = cursor.fetchall()
+        keys = licenseServerApi.listKeys(cursor, name, organization)
 
-    if not orgKeys:
+    if not keys:
         return []
 
-    unpackedKeys = []
-    for key in [k[0] for k in orgKeys]:
-        keyProps = getKeyInfo(key)
-        unpackedKeys.append(keyProps)
-
-    return unpackedKeys
+    return [getKeyInfo(k[2]) for k in keys]
 
 # Request handlers
 @app.errorhandler(404)
@@ -96,10 +134,83 @@ def pageNotFound(error):
 def index():
     return "Hello, World!"
 
+# XXX Use JWT or some other way to secure these HTTP endpoints (beginning with secure/)
+@app.route('/license/api/v1.0/secure/listactivation', methods=['POST'])
+def listActivation():
+    try:
+        return listTable("activation", request.get_json())
+    except:
+        abort(404)
 
-@app.route('/license/api/v1.0/keys/<string:organization>', methods=['GET'])
-def getKeys(organization):
-    keys = getKeysForOrg(organization)
+@app.route('/license/api/v1.0/secure/listowner', methods=['POST'])
+def listOwner():
+    try:
+        return listTable("owner", request.get_json())
+    except:
+        abort(404)
+
+@app.route('/license/api/v1.0/secure/listlicense', methods=['POST'])
+def listLicense():
+    try:
+        return listTable("license", request.get_json())
+    except:
+        abort(404)
+
+@app.route('/license/api/v1.0/secure/listorganization', methods=['POST'])
+def listOrganization():
+    try:
+        return listTable("organization", request.get_json())
+    except:
+        abort(404)
+
+@app.route('/license/api/v1.0/secure/addlicense', methods=['POST'])
+@crossdomain(origin="*", headers="Content-Type, Origin")
+def insertLicense():
+    jsonInput = request.get_json();
+    if "secret" not in jsonInput or jsonInput["secret"] != "xcalarS3cret":
+        abort(404)
+
+    name = jsonInput.get("name", None)
+
+    try:
+        organization = jsonInput["organization"]
+        key = jsonInput["key"]
+    except:
+        abort(404)
+
+    try:
+        with getDb() as conn:
+            cursor = conn.cursor()
+            licenseServerApi.insert(cursor, name, organization, key)
+    except:
+        abort(404)
+
+    return jsonify({"success": True})
+
+def listTable(tableName, jsonInput):
+    if "secret" not in jsonInput or jsonInput["secret"] != "xcalarS3cret":
+        raise Exception("Invalid secret provided")
+
+    if not tableName.isalnum():
+        raise Exception("tableName must contain only alpha-numeric characters")
+
+    with getDb() as conn:
+        cursor = conn.cursor()
+        return jsonify(licenseServerApi.listTable(cursor, tableName))
+
+
+@app.route('/license/api/v1.0/keys/<string:ownerName>', methods=['GET'])
+@crossdomain(origin="*")
+def getKeysByOwner(ownerName):
+    keys = getKeys(name=ownerName)
+    if not keys:
+        return jsonify({})
+
+    return jsonify({'key': keys})
+
+@app.route('/license/api/v1.0/keysbyorg/<string:organizationName>', methods=['GET'])
+def getKeysByOrg(organizationName):
+    keys = getKeys(organization=organizationName)
     if not keys:
         abort(404)
 
@@ -112,10 +223,9 @@ def checkvalid():
         abort(404)
     key = jsonInput["key"]
 
-    conn = getDb()
-    retObj = {"success": False}
+    with getDb() as conn:
+        retObj = {"success": False}
 
-    with conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO activation (key, active)
@@ -149,20 +259,28 @@ def checkvalid():
 
 @app.route('/license/api/v1.0/activations/<string:key>', methods=['GET'])
 def activations(key):
-    conn = getDb()
-    actives = []
-    with conn:
+    with getDb() as conn:
+        actives = []
         cursor = conn.cursor()
         cursor.execute("""
             SELECT (timestamp, key)
             FROM activation
             """)
         actives = cursor.fetchall()
-    return jsonify({"activations": actives})
+        return jsonify({"activations": actives})
 
-@app.route('/license/api/v1.0/keyshtml/<string:organization>', methods=['GET'])
-def getHtmlkey(organization):
-    keys = getKeysForOrg(organization)
+@app.route('/license/api/v1.0/keyshtml/<string:ownerName>', methods=['GET'])
+def getHtmlKeysByOwner(ownerName):
+    keys = getKeys(name=ownerName)
+    if not keys:
+        abort(404)
+
+    output = sorted(keys, key=lambda k: datetime.strptime(k['expiration'], '%m/%d/%Y'), reverse=True)
+    return render_template('_table_render.html', keys=output)
+
+@app.route('/license/api/v1.0/keysbyorghtml/<string:organizationName>', methods=['GET'])
+def getHtmlKeysByOrg(organizationName):
+    keys = getKeys(organization=organizationName)
     if not keys:
         abort(404)
 
