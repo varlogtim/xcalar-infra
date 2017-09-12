@@ -58,7 +58,7 @@ TMPDIR="${TMPDIR:-/tmp}/$LOGNAME/gce-cluster/$$"
 mkdir -p "$TMPDIR" || die "Failed to create $TMPDIR"
 trap "rm -rf $TMPDIR" EXIT
 
-INSTANCES=($(gcloud compute instances list --filter='status:RUNNING' -r "$REGEXP" | tail -n+2 | awk '{print $1}'))
+INSTANCES=($(gcloud compute instances list --filter="status:RUNNING name ~ $REGEXP" | tail -n+2 | awk '{print $1}'))
 
 if [ "${#INSTANCES[@]}" -eq 0 ]; then
     say "No instances found matching $REGEXP"

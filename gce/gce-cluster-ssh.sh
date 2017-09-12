@@ -21,7 +21,7 @@ TMPDIR="${TMPDIR:-/tmp}/$LOGNAME/gce-cluster/$$"
 mkdir -p "$TMPDIR" || die "Failed to create $TMPDIR"
 trap "rm -rf $TMPDIR" EXIT
 
-gcloud compute instances list --regexp="${CLUSTER}-\\d+" | grep RUNNING  | awk '{printf "%s	    %s\n",$(NF-1),$1}' > "$TMPDIR/hosts.txt"
+gcloud compute instances list --filter="name ~ ${CLUSTER}-\\d+" | grep RUNNING  | awk '{printf "%s	    %s\n",$(NF-1),$1}' > "$TMPDIR/hosts.txt"
 while read ip hostn; do
     echo "Host $hostn"
     echo "  Hostname $ip"
@@ -30,7 +30,6 @@ while read ip hostn; do
     echo "  LogLevel ERROR"
 done < "$TMPDIR/hosts.txt" > "$TMPDIR/ssh_config"
 
-#declare -a HOSTS=($(gcloud compute instances list --regexp="${CLUSTER}-\\d+" | grep RUNNING  | awk '{printf "%s\t%s\n",$(NF-1),$1}'))
 declare -a HOSTS=($(awk '/^Host/{print $2}' "$TMPDIR/ssh_config"))
 
 test "${#HOSTS[@]}" -gt 0 || die "No RUNNING hosts found matching ${CLUSTER}-\\d+"
