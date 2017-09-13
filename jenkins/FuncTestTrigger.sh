@@ -110,6 +110,8 @@ hostname=`hostname -f`
 echo "prod.functests.$TEST_TYPE.${hostname//./_}.currentIter:$CURRENT_ITERATION|g" | nc -4 -w 5 -u $GRAPHITE 8125
 echo "prod.functests.$TEST_TYPE.${hostname//./_}.numberOfIters:$NUMBER_ITERATIONS|g" | nc -4 -w 5 -u $GRAPHITE 8125
 
+NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
+
 echo "1..$NumTests" | tee "$TAP"
 set +e
 anyfailed=0
@@ -127,30 +129,15 @@ for Test in "${TestsToRun[@]}"; do
     fi
 
     xccli -c "loglevelset Debug"
-
-    # Print the stats from all the nodes at the beginning of each test run
-    NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
-    for nodeid in $(seq 0 $(( $NumNodes - 1 ))); do
-        xccli -c "stats $nodeid"
-    done
-
     time xccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
 
     rc=${PIPESTATUS[0]}
     if [ $rc -ne 0 ]; then
-        now=$(date +"%T")
-        filepath="`pwd`$now"
-
-        sudo cp /opt/xcalar/bin/usrnode "$filepath"
-        funcstatsd "$Test" "FAIL" "$gitsha"
-        echo "not ok ${ii} - $Test" | tee -a $TAP
         anyfailed=1
     else
         if grep -q Error "$logfile"; then
-            funcstatsd "$Test" "FAIL" "$gitsha"
             echo "Failed test output in $logfile at `date`"
             cat >&2 "$logfile"
-            echo "not ok ${ii} - $Test"  | tee -a $TAP
             anyfailed=1
         else
             echo "Passed test at `date`"
@@ -158,5 +145,31 @@ for Test in "${TestsToRun[@]}"; do
             echo "ok ${ii} - $Test"  | tee -a $TAP
         fi
     fi
+
+    # Print and check the stats from all the nodes for any xdb page leaks
+    for nodeid in $(seq 0 $(( $NumNodes - 1 ))); do
+        count=`xccli -c "stats $nodeid" | tee /dev/stderr | grep -e "xdb.pagekvbuf.bc    fastAllocs" -e "xdb.pagekvbuf.bc    fastFrees" | awk '{print $3}' | uniq  | wc -l`
+        # count = 2 when fastAllocs and fastFrees differ
+        # count = 1 when fastAllocs and fastFrees are same
+        # count = 0 when xccli command fails(happens when usrnode crashed/sick)
+        if [ $count -gt 1 ]; then
+            # fastAllocs and fastFrees are different which means that there is a leak
+            echo "Failed pagekvbuf leak test"
+            # abort the usrnode to get a core file
+            pgrep -f "usrnode --nodeId $nodeid" | xargs -r sudo kill -6
+            anyfailed=1
+        fi
+    done
+
+    if [ $anyfailed -eq 1 ]; then
+        # copy out the usrnode binary
+        now=$(date +"%T")
+        filepath="`pwd`$now"
+        sudo cp /opt/xcalar/bin/usrnode "$filepath"
+        # mark the test as failed
+        funcstatsd "$Test" "FAIL" "$gitsha"
+        echo "not ok ${ii} - $Test" | tee -a $TAP
+    fi
+
     ii=$(( $ii + 1 ))
 done
