@@ -12,6 +12,8 @@ COUNT="${3:-1}"
 LICENSE="$4"
 NFSMOUNT="${5:-${CLUSTER}0:/srv/share}"
 INSTALLER_URL="${6}"
+STORAGE_ACCOUNT_NAME="${7}"
+STORAGE_ACCESS_KEY="${8}"
 
 # Safer curl. Use IPv4, follow redirects (-L), and add some retries. We've seen curl
 # try to use IPv6 on AWS, and many intermittent errors when not retrying. --location
@@ -113,6 +115,10 @@ NFSHOST="${NFSMOUNT%%:*}"
 SHARE="${NFSMOUNT##*:}"
 
 if [ -r /etc/default/xcalar ]; then
+    echo "" >> /etc/default/xcalar
+    echo "## Azure Blob Storage config" >> /etc/default/xcalar
+    echo "AZURE_STORAGE_ACCOUNT=$STORAGE_ACCOUNT_NAME" >> /etc/default/xcalar
+    echo "AZURE_STORAGE_ACCESS_KEY=$STORAGE_ACCESS_KEY" >> /etc/default/xcalar
     . /etc/default/xcalar
 fi
 

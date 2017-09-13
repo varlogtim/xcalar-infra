@@ -8,7 +8,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "License Key",
               "defaultValue": "",
-              "toolTip": "0.21 Contact Xcalar to request for a trial license if you don't have one.",
+              "toolTip": "0.28 Contact Xcalar to request for a trial license if you don't have one.",
               "constraints": { "required": true },
               "options": {},
               "visible": true

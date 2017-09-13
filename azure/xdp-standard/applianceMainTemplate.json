@@ -29,36 +29,41 @@
   "variables": {
     "sq": "'",
     "clusterName": "xdp-standard-",
-    "vmName": "[concat(variables('clusterName'), 'xce-')]",
-    "nicName": "[concat(variables('clusterName'),'nic-')]",
+    "vmName": "[concat(variables('clusterName'), 'xce-vm')]",
     "vmSize": "Standard_D14_v2_Promo",
     "storageAccountType": "Standard_LRS",
-    "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'xc')]",
-    "virtualNetworkName": "[concat(variables('clusterName'), 'VNET')]",
+    "storageAccountName": "[concat('xdpstorage', uniquestring(subscription().subscriptionId, resourceGroup().id, variables('clusterName')))]",
+    "virtualNetworkName": "[concat(variables('clusterName'), 'vnet')]",
     "vnetAddressPrefix": "10.0.0.0/16",
     "publicIPAddressType": "Dynamic",
     "vnetID": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
-    "subnet1Name": "[concat(variables('clusterName'),'Subnet-1')]",
+    "subnet1Name": "[concat(variables('clusterName'),'subnet-1')]",
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap-7.sh",
+    "customScriptName": "ampBootstrap-9.sh",
     "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
     "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.3",
-    "vmExtensionName": "xcalarBootstrapExtension",
-    "dataDiskSize": 1023
+    "vmExtensionName": "xcalarBootstrapExtension"
   },
   "resources": [
     {
       "type": "Microsoft.Storage/storageAccounts",
+      "kind": "BlobStorage",
       "name": "[variables('storageAccountName')]",
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2017-06-01",
       "location": "[resourceGroup().location]",
+      "identity": {
+          "type": "SystemAssigned"
+      },
+      "sku": {
+          "name": "[variables('storageAccountType')]"
+      },
       "properties": {
-        "accountType": "[variables('storageAccountType')]"
+          "accessTier": "hot"
       }
     },
     {
@@ -98,7 +103,7 @@
     {
       "apiVersion": "2015-05-01-preview",
       "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('nicName'), copyIndex())]",
+      "name": "[concat(variables('vmName'), copyIndex(), '-nic0')]",
       "location": "[resourceGroup().location]",
       "copy": {
         "name": "foo",
@@ -137,7 +142,7 @@
       },
       "dependsOn": [
         "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
-        "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]"
+        "[concat('Microsoft.Network/networkInterfaces/', variables('vmName'), copyIndex(), '-nic0')]"
       ],
       "properties": {
         "hardwareProfile": {
@@ -162,7 +167,7 @@
         "networkProfile": {
           "networkInterfaces": [
             {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('nicName'), copyIndex()))]"
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('vmName'), copyIndex(), '-nic0'))]"
             }
           ]
         }
@@ -171,14 +176,15 @@
     {
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "name": "[concat(variables('vmName'), copyIndex(), '/', variables('vmExtensionName'))]",
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2017-03-30",
       "location": "[resourceGroup().location]",
       "copy": {
         "name": "foo",
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
-        "[concat('Microsoft.Compute/virtualMachines/', variables('vmName'), copyIndex())]"
+        "[concat('Microsoft.Compute/virtualMachines/', variables('vmName'), copyIndex())]",
+        "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]"
       ],
       "properties": {
         "publisher": "Microsoft.Azure.Extensions",
@@ -191,7 +197,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('vmName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' >> /var/log/startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('vmName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' ', variables('sq'), variables('sq'), ' ', variables('sq'), variables('sq'), ' ', variables('sq'), variables('storageAccountName'), variables('sq'), ' ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> /var/log/startup.log 2>&1')]"
         }
       }
     }
