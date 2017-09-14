@@ -201,7 +201,7 @@ xcalar-infra/aws/aws-cloudformation-ssh.sh "$cluster" runClusterCmd "/opt/xcalar
 set -e
 
 if [ $ret -eq 0 ]; then
-    xcalar-infra/aws/aws-cluster-delete.sh $cluster || true
+    xcalar-infra/aws/aws-cloudformation-delete.sh $cluster || true
 else
     if [ "$LEAVE_ON_FAILURE" = "true" ]; then
         echo "As requested, cluster will not be cleaned up."
