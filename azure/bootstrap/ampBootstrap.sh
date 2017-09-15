@@ -38,10 +38,6 @@ shift $((OPTIND-1))
 CLUSTER="${CLUSTER:-${HOSTNAME%%[0-9]*}}"
 NFSMOUNT="${NFSMOUNT:-${CLUSTER}0:/srv/share}"
 
-echo "$ADMIN_USERNAME" >> /etc/adminUser
-echo "$ADMIN_PASSWORD" >> /etc/adminUser
-echo "$ADMIN_EMAIL" >> /etc/adminUser
-
 XLRDIR=/opt/xcalar
 
 # Safer curl. Use IPv4, follow redirects (-L), and add some retries. We've seen curl
@@ -175,20 +171,17 @@ fi
 NFSHOST="${NFSMOUNT%%:*}"
 SHARE="${NFSMOUNT##*:}"
 
-if [ -r /etc/default/xcalar ]; then
-    echo "" >> /etc/default/xcalar
-    echo "## Azure Blob Storage config" >> /etc/default/xcalar
-    echo "AZURE_STORAGE_ACCOUNT=$STORAGE_ACCOUNT_NAME" >> /etc/default/xcalar
-    echo "AZURE_STORAGE_ACCESS_KEY=$STORAGE_ACCESS_KEY" >> /etc/default/xcalar
-    . /etc/default/xcalar
-fi
-
 XCE_HOME="${XCE_HOME:-/mnt/xcalar}"
 XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
 XCE_LICENSEDIR="${XCE_LICENSEDIR:-/etc/xcalar}"
 
 # Download the installer as soon as we can
 safe_curl -sSL "$INSTALLER_URL" > installer.sh
+if [ `du installer.sh | cut -f 1` = "0" ]; then
+    echo >&2 "ERROR: Error downloading installer"
+    serveError "Error downloading installer"
+    exit 1
+fi
 
 # Determine our CIDR by querying the metadata service
 safe_curl -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=2017-04-02&format=json" | jq . > metadata.json
@@ -281,6 +274,14 @@ if [ -f "installer.sh" ]; then
     setcap cap_net_bind_service=+ep $XLRDIR/bin/caddy
 fi
 
+if [ -r /etc/default/xcalar ]; then
+    echo "" >> /etc/default/xcalar
+    echo "## Azure Blob Storage config" >> /etc/default/xcalar
+    echo "AZURE_STORAGE_ACCOUNT=$STORAGE_ACCOUNT_NAME" >> /etc/default/xcalar
+    echo "AZURE_STORAGE_ACCESS_KEY=$STORAGE_ACCESS_KEY" >> /etc/default/xcalar
+    echo "export AZURE_STORAGE_ACCOUNT AZURE_STORAGE_ACCESS_KEY" >> /etc/default/xcalar
+    . /etc/default/xcalar
+fi
 
 # Generate a list of all cluster members
 DOMAIN="$(dnsdomainname)"
@@ -393,8 +394,12 @@ service xcalar start
 
 # Add in the default admin user into Xcalar
 if [ ! -z "$ADMIN_USERNAME" ]; then
-    jsonData="{ \"defaultAdminEnabled: true\", \"username\": \"$ADMIN_USERNAME\", \"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\" }"
-    echo "$jsonData" >> /etc/adminUser
+    mkdir -p $XCE_HOME/config
+    chown -R xcalar:xcalar $XCE_HOME/config
+    jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"$ADMIN_USERNAME\", \"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\" }"
+    echo "Creating default admin user $ADMIN_USERNAME ($ADMIN_EMAIL)"
     # Don't fail the deploy if this curl doesn't work
-    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1/login/defaultAdmin/set" || true
+    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set" || true
+else
+    echo "ADMIN_USERNAME is not specified"
 fi

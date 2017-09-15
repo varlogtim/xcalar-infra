@@ -31,15 +31,9 @@
         "description": "Administrator's email address"
       }
     },
-    "dnsLabelPrefix": {
-      "type": "string",
-      "metadata": {
-        "description": "Administrator's password for the Xcalar cluster"
-      }
-    },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_E16s_v3",
+      "defaultValue": "Standard_DS14_v2_Promo",
       "metadata": {
         "description": "Size of the VM"
       },
@@ -61,8 +55,8 @@
     "clusterName": "xdp-standard-",
     "vmName": "[concat(variables('clusterName'), 'xce-vm')]",
     "vmSize": "[parameters('vmSize')]",
-    "dnsLabelPrefix": "[concat('xdp-standard-', parameters('dnsLabelPrefix'))]",
-    "storageAccountType": "Premium_LRS",
+    "dnsLabelPrefix": "[concat(variables('clusterName'), uniquestring(subscription().subscriptionId, resourceGroup().id, parameters('licenseKey')))]",
+    "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat('xdpstorage', uniquestring(subscription().subscriptionId, resourceGroup().id, variables('clusterName')))]",
     "virtualNetworkName": "[concat(variables('clusterName'), 'vnet')]",
     "vnetAddressPrefix": "10.0.0.0/16",
@@ -71,8 +65,8 @@
     "subnet1Name": "[concat(variables('clusterName'),'subnet-1')]",
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
-    "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap-13.sh",
+    "scriptsUri": "https://xcrepo.s3.amazonaws.com/bysha1/e83c88f913f29380a406195c002aa7f76d8f084a",
+    "customScriptName": "ampBootstrap.sh",
     "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
     "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
     "imagePublisher": "OpenLogic",
@@ -83,6 +77,21 @@
     "nicName": "[concat(variables('clusterName'),'nic-')]"
   },
   "resources": [
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "[concat(variables('vmName'),'0-datadisk')]",
+      "apiVersion": "2017-03-30",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Premium_LRS"
+      },
+      "properties": {
+          "creationData": {
+              "createOption": "Empty"
+          },
+          "diskSizeGB": "[variables('dataDiskSize')]"
+      }
+    },
     {
       "type": "Microsoft.Storage/storageAccounts",
       "name": "[variables('storageAccountName')]",
@@ -195,11 +204,16 @@
                 "osDisk": {
                     "createOption": "FromImage"
                 },
-                "dataDisks": [{
-                    "createOption": "Empty",
+                "dataDisks": [
+                  {
                     "lun": 0,
-                    "diskSizeGB": "[variables('dataDiskSize')]"
-                }]
+                    "name": "[concat(variables('vmName'), copyIndex(), '-datadisk')]",
+                    "createOption": "attach",
+                    "managedDisk": {
+                      "id": "[resourceId('Microsoft.Compute/disks/', concat(variables('vmName'), copyIndex(), '-datadisk'))]"
+                    }
+                  }
+                ]
             },
             "networkProfile": {
                 "networkInterfaces": [
@@ -303,7 +317,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -a azure.xcalar.cloud -b Z38PTJSFJD11PH -d ', variables('dnsLabelPrefix'),' -e AKIAIH53R2K2L7RO2M4A -f \"uo4t5mnADoXzGkwxGXAWPVWKvAes0+bjO4HDfA4L\" -i ', copyIndex(), ' -n ', parameters('scaleNumber'), ' -l ', variables('sq'), parameters('licenseKey'), variables('sq'), ' -v ', parameters('adminEmail'), ' -w ', parameters('adminUsername'), ' -x ', variables('sq'), parameters('adminPassword'), variables('sq'), ' -y ', variables('sq'), variables('storageAccountName'), variables('sq'), ' -z ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -a azure.xcalar.cloud -b Z38PTJSFJD11PH -d ', variables('dnsLabelPrefix'),' -e AKIAIH53R2K2L7RO2M4A -f \"uo4t5mnADoXzGkwxGXAWPVWKvAes0+bjO4HDfA4L\" -i ', copyIndex(), ' -n ', parameters('scaleNumber'), ' -l ', variables('sq'), parameters('licenseKey'), variables('sq'), ' -v ', variables('sq'), parameters('adminEmail'), variables('sq'), ' -w ', variables('sq'), parameters('adminUsername'), variables('sq'), ' -x ', variables('sq'), parameters('adminPassword'), variables('sq'), ' -y ', variables('sq'), variables('storageAccountName'), variables('sq'), ' -z ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> startup.log 2>&1')]"
         }
       }
     }

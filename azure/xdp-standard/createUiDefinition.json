@@ -8,7 +8,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "License Key",
               "defaultValue": "",
-              "toolTip": "0.28 Contact Xcalar to request for a trial license if you don't have one.",
+              "toolTip": "0.34 Contact Xcalar to request for a trial license if you don't have one.",
               "constraints": { "required": true },
               "options": {},
               "visible": true
@@ -16,14 +16,10 @@
             { "name": "scaleNumber",
               "type": "Microsoft.Common.DropDown",
               "label": "Number of nodes",
-              "defaultValue": "1",
+              "defaultValue": "2",
               "toolTip": "Xcalar Data Platform Standard Edition supports up to 16 nodes",
               "constraints": {
                 "allowedValues": [
-                  {
-                    "label": "1",
-                    "value": "1"
-                  },
                   {
                     "label": "2",
                     "value": "2"
