@@ -9,9 +9,10 @@ except:
 
 bucket = "xcrepo"
 installerPaths = {
+    "1.2.2": "builds/ce1c3bbd-254932a4/prod/xcalar-1.2.2-1179-installer",
     "1.2.1": "builds/67cf7211-962b4eb4/prod/xcalar-1.2.1-1044-installer"
 }
-installerPaths["latest"] = installerPaths["1.2.1"]
+installerPaths["latest"] = installerPaths["1.2.2"]
 
 def lambda_handler(event, context):
     licenseServer="https://zd.xcalar.net/license/api/v1.0/checkvalid"
