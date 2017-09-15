@@ -24,6 +24,12 @@
       "metadata": {
         "description": "Administrator's password for the Xcalar cluster"
       }
+    },
+    "adminEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Administrator's email address"
+      }
     }
   },
   "variables": {
@@ -41,7 +47,7 @@
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap-9.sh",
+    "customScriptName": "ampBootstrap-10.sh",
     "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
     "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
     "imagePublisher": "OpenLogic",
@@ -197,7 +203,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('vmName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' ', variables('sq'), variables('sq'), ' ', variables('sq'), variables('sq'), ' ', variables('sq'), variables('storageAccountName'), variables('sq'), ' ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> /var/log/startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), variables('sq'), variables('vmName'), variables('sq'), ' ', variables('sq'), copyIndex(), variables('sq'), ' ', variables('sq'), parameters('scaleNumber'), variables('sq'), ' ', variables('sq'), parameters('licenseKey'), variables('sq'), ' ', variables('sq'), variables('sq'), ' ', variables('sq'), variables('sq'), ' ', variables('sq'), parameters('adminUsername'), variables('sq'), ' ', variables('sq'), parameters('adminPassword'), variables('sq'), ' ', variables('sq'), parameters('adminEmail'), variables('sq'), ' ', variables('sq'), variables('storageAccountName'), variables('sq'), ' ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> /var/log/startup.log 2>&1')]"
         }
       }
     }

@@ -12,8 +12,15 @@ COUNT="${3:-1}"
 LICENSE="$4"
 NFSMOUNT="${5:-${CLUSTER}0:/srv/share}"
 INSTALLER_URL="${6}"
-STORAGE_ACCOUNT_NAME="${7}"
-STORAGE_ACCESS_KEY="${8}"
+ADMIN_USERNAME="${7}"
+ADMIN_PASSWORD="${8}"
+ADMIN_EMAIL="${9}"
+STORAGE_ACCOUNT_NAME="${10}"
+STORAGE_ACCESS_KEY="${11}"
+
+echo "$ADMIN_USERNAME" >> /etc/adminUser
+echo "$ADMIN_PASSWORD" >> /etc/adminUser
+echo "$ADMIN_EMAIL" >> /etc/adminUser
 
 # Safer curl. Use IPv4, follow redirects (-L), and add some retries. We've seen curl
 # try to use IPv6 on AWS, and many intermittent errors when not retrying. --location
@@ -273,3 +280,10 @@ if test -n "$XCALAR_ADVENTURE_DATASET"; then
 fi
 
 service xcalar start
+
+# Add in the default admin user into Xcalar
+if [ ! -z "$ADMIN_USERNAME" ]; then
+    jsonData="{ \"defaultAdminEnabled: true\", \"username\": \"$ADMIN_USERNAME\", \"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\" }"
+    echo "$jsonData" >> /etc/adminUser
+    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1/login/defaultAdmin/set"
+fi

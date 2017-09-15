@@ -24,6 +24,12 @@
       "metadata": {
         "description": "Administrator's password for the Xcalar cluster"
       }
+    },
+    "adminEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Administrator's email"
+      }
     }
   },
   "variables": {
@@ -55,6 +61,9 @@
           },
           "adminPassword": {
             "value": "[parameters('adminPassword')]"
+          },
+          "adminEmail": {
+            "value": "[parameters('adminEmail')]"
           }
         }
       }

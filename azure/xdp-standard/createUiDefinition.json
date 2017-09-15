@@ -110,12 +110,22 @@
               "constraints": { "required": true },
               "options": { "hideConfirmation": false },
               "visible": true
+            },
+            {
+              "name": "adminEmail",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Email address",
+              "toolTip": "Enter an email address with which notifications about the deployment will be sent",
+              "constraints": { "required": true },
+              "options": {},
+              "visible": true
             }
         ],
         "steps": [],
         "outputs": { "licenseKey": "[basics('licenseKey')]",
                      "scaleNumber": "[int(basics('scaleNumber'))]",
                      "adminUsername": "[basics('adminUsername')]",
-                     "adminPassword": "[basics('adminPassword')]" }
+                     "adminPassword": "[basics('adminPassword')]",
+                     "adminEmail": "[basics('adminEmail')]" }
     }
 }
