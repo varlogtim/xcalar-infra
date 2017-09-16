@@ -45,3 +45,19 @@ xcalar-release-1.0-2.x86_64.rpm: pubkey.gpg rpm/xcalar.repo rpm-deps/xcalar-deps
         -v 1.0 --after-install $(TMP)/after.sh --iteration 2 -C $(TMP) etc
 	rm -rf $(TMP)
 
+ALL = xcalar-release-trusty.deb xcalar-release-el.rpm xcalar-rhel-mirror.rpm
+release-all: $(ALL)
+
+xcalar-release-trusty.deb: xcalar-release-trusty/after-install.sh xcalar-release-trusty/usr/share/xcalar/gpg/pubkey.gpg xcalar-release-trusty/etc/apt/sources.list.d/xcalar.list
+	fpm -s dir -t deb -f --name xcalar-release --package $@ --version 1.0 --iteration 2 --deb-no-default-config-files --vendor 'Xcalar, Inc.' --description 'Xcalar APT Repo' --after-install xcalar-release-trusty/after-install.sh -C xcalar-release-trusty etc usr
+
+xcalar-release-el.rpm: xcalar-release-el/etc/yum.repos.d/xcalar.repo xcalar-release-el/etc/yum.repos.d/xcalar-deps.repo xcalar-release-el/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar
+	fpm -s dir -t rpm --f --name xcalar-release --package $@ --version 1.0 --iteration 2 --vendor 'Xcalar, Inc.' --description 'Xcalar YUM Repo' -C xcalar-release-el etc
+
+xcalar-rhel-mirror.rpm: xcalar-rhel-mirror/etc/yum.repos.d/xcalar-rhel-mirror.repo xcalar-rhel-mirror/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-RHEL-Mirror
+	fpm -s dir -t rpm -f --name xcalar-rhel-mirror --package $@ --version 1.0 --iteration 2 --vendor 'Xcalar, Inc.' --description 'Xcalar RHEL Mirror Repo' -C xcalar-rhel-mirror etc
+	gsutil cp $@ gs://repo.xcalar.net/
+
+upload-release: $(ALL)
+	for ii in $^; do gsutil cp $$ii gs://repo.xcalar.net/; done
+
