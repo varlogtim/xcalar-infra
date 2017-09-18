@@ -1,5 +1,5 @@
-; Domain: xcalar.com
-; Exported (y-m-d hh:mm:ss): 2017-01-20 12:06:13
+﻿; Domain: xcalar.com
+; Exported (y-m-d hh:mm:ss): 2017-09-18 14:05:56
 ;
 ; This file is intended for use for informational and archival
 ; purposes ONLY and MUST be edited before use on a production
@@ -27,7 +27,7 @@
 
 ; SOA Record
 xcalar.com.	3600	IN	SOA	ns51.domaincontrol.com.	dns.jomax.net (
-				2016050400
+				2017091801
 				28800
 				7200
 				604800
@@ -37,21 +37,34 @@ xcalar.com.	3600	IN	SOA	ns51.domaincontrol.com.	dns.jomax.net (
 ; A Records
 admin	600	IN	A	107.180.41.39
 @	600	IN	A	107.180.41.39
+customer-upload	600	IN	A	207.135.66.186
 mail	600	IN	A	107.180.41.39
-clorox	600	IN	A	52.8.161.75
+marketplace	600	IN	A	104.198.211.142
+wells-student-01-1	1800	IN	A	35.188.44.174
+dogfood	900	IN	A	52.175.224.63
+uploads	600	IN	A	207.135.66.186
+*	600	IN	A	130.211.225.110
 citi	600	IN	A	52.8.251.149
+wells-student-02-1	1800	IN	A	104.197.77.63
 vpn	600	IN	A	207.135.66.186
+university	1800	IN	A	104.154.244.26
 
 ; CNAME Records
 cpanel	3600	IN	CNAME	@
+kevpwac72gpntsbgmhchs6kzntvhjerd._domainkey	3600	IN	CNAME	kevpwac72gpntsbgmhchs6kzntvhjerd.dkim.amazonses.com
+esiyawtav2qorljqmudqyugb6zkyvjag._domainkey	3600	IN	CNAME	esiyawtav2qorljqmudqyugb6zkyvjag.dkim.amazonses.com
+livechat	900	IN	CNAME	livechat.aws.xcalar.com
 webdisk.admin	3600	IN	CNAME	@
 webdisk	3600	IN	CNAME	@
-ftp	3600	IN	CNAME	@
+email.me	3600	IN	CNAME	mailgun.org
 _domainconnect	3600	IN	CNAME	_domainconnect.gd.domaincontrol.com
 whm	3600	IN	CNAME	@
-dogfood	3600	IN	CNAME	xcalar-186.tisch.gvad.net
 www.admin	3600	IN	CNAME	@
+kj533n5vnlvyeguqrgimsamgwsf634lv._domainkey	3600	IN	CNAME	kj533n5vnlvyeguqrgimsamgwsf634lv.dkim.amazonses.com
+email.mg	3600	IN	CNAME	mailgun.org
 www	3600	IN	CNAME	@
+discourse	1800	IN	CNAME	xcalar-discourse.westus2.cloudapp.azure.com
+repo	3600	IN	CNAME	c.storage.googleapis.com
 
 ; MX Records
 @	3600	IN	MX	5	ALT1.ASPMX.L.GOOGLE.COM
@@ -61,10 +74,29 @@ www	3600	IN	CNAME	@
 @	3600	IN	MX	10	ASPMX2.GOOGLEMAIL.COM
 
 ; TXT Records
-@	3600	IN	TXT	"v=spf1 include:_spf.google.com ~all"
+_acme-challenge.vpn	3600	IN	TXT	"ie4NQaaGNCVxGY7jbVSjLUPQuSYfbwDlmoW6BnZIRkE"
+_amazonses	3600	IN	TXT	"Qj2CV+YtUddrQ0CBSNVhr7sUaEpbH7nhrgGu9xKrr2s="
+mailo._domainkey.mg	3600	IN	TXT	"k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC+4XpVAP/xuiiX2EeFI13e1QEfNR1Q8zqERLjrgvt4fnKiy5aBe4GIAfhS3FcHahdBuu0ClADTH/GXbz4idQOZnfAq0MV5bjlMOrL7NVsKRBD1suIyn5WlzfbC28elG9KL3ta5wn28WJwBLq4nTYSIu7sL6rihaTmZStamytjwTwIDAQAB"
+@	3600	IN	TXT	"keybase-site-verification=1PlrGKMgQXMyW_06rY1Tki4ZR6BfrIB4G61GC__HCWs"
+_acme-challenge.discourse	3600	IN	TXT	"DhaDOHc_gL6dqpTy5XAhEwFOjz5gKqqEFMA87qzWVaA"
+_acme-challenge	900	IN	TXT	"rZChvJnJoLHSG4YZwIw5D96gDIhKd_QvmH7ttMFZYhQ"
+_acme-challenge.www	900	IN	TXT	"tO5GfUzsmSb7iE0cH7_eqt-Os3fd5t72LK0jLqPBlig"
+@	3600	IN	TXT	"v=spf1 include:_spf.google.com include:_spf.salesforce.com ~all"
+xcalar._domainkey	1800	IN	TXT	"V=DKIM1; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCkEtWeLmpvXF+7EMHe9T4gSAaNZ3toeJiTfpFwMin7LlxIHbHhXwiLfBMjV8ZQDxUMqs41eKixTkoJ29y98B9/dbSfw/fO1BBSuj7POt7DgsxAfXk/271mQPGYh4zXwFb/TfqoOtUtn5NdtJeYrLZ3RywvctXkUYa3mrr1PyLTWwIDAQAB"
 google._domainkey	3600	IN	TXT	"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCb5nFSkx9BPBuNomYoE+lUF1neq1jvBgqjgftqIL5/7QKlV9LXESrrRpz6jYDiGr9PjvTPsQ9s9U4eJUQ9og/dfVw5N117K0PT7U9th52R5ly9LF0OlGkw+fJGtQgRKVMJ5EtSLvSr43jIIQz2Nic47HkutV+JNuuFxGqAY4sanQIDAQAB"
+@	3600	IN	TXT	"MS=ms88783797"
+@	3600	IN	TXT	"google-site-verification=Kkbg8LcviBFSrsBrf0pod65Exrn3eHqG8ykTBuCASx4"
+mg	3600	IN	TXT	"v=spf1 include:mailgun.org ~all"
 @	3600	IN	TXT	"google-site-verification=Sd1qZjZZROcnhg1-1Uz4OCGewhMP0NdBIgP2TTxPIq0"
+_acme-challenge.uploads	3600	IN	TXT	"j1F-FVoPfGCoSLCFq36_thxUsDTDj1YElyed_FiYW1I"
 
 ; NS Records
+gce	3600	IN	NS	ns-cloud-d3.googledomains.com
+azr	3600	IN	NS	ns1-06.azure-dns.com
+gce	3600	IN	NS	ns-cloud-d1.googledomains.com
+gce	3600	IN	NS	ns-cloud-d4.googledomains.com
+azr	3600	IN	NS	ns2-06.azure-dns.net
 @	3600	IN	NS	ns52.domaincontrol.com
+gce	3600	IN	NS	ns-cloud-d2.googledomains.com
+aws	3600	IN	NS	ns-1675.awsdns-17.co.uk
 @	3600	IN	NS	ns51.domaincontrol.com
