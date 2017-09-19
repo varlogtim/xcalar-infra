@@ -75,6 +75,12 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     sudo -E $XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
     echo "$FuncParams" | sudo tee -a $XCE_CONFIG
 
+    # Enable XEM
+    echo "Constants.XcalarEnterpriseManagerEnabled=true" | sudo tee -a $XCE_CONFIG
+    echo "Constants.XcalarClusterName=`hostname`" | sudo tee -a $XCE_CONFIG
+    echo "XcalarEnterpriseManager.Host=xem-202-1.int.xcalar.com" | sudo tee -a $XCE_CONFIG
+    echo "XcalarEnterpriseManager.Port=15000" | sudo tee -a $XCE_CONFIG
+
     sudo sed --in-place '/\dev\/shm/d' /etc/fstab
     tmpFsSizeGb=`cat /proc/meminfo | grep MemTotal | awk '{ printf "%.0f\n", $2/1024/1024 }'`
     let "tmpFsSizeGb = $tmpFsSizeGb * 95 / 100"
