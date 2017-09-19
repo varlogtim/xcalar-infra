@@ -43,7 +43,7 @@ zipLogs() {
     ret=$?
 
     set +e
-    tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 /var/log/xcalar
+    sudo tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 /var/log/xcalar
     sudo rm -rf /var/log/xcalar/*
     set -e
 
