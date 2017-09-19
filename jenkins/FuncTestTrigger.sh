@@ -114,8 +114,8 @@ NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
 echo "1..$NumTests" | tee "$TAP"
 set +e
-anyfailed=0
 for Test in "${TestsToRun[@]}"; do
+    anyfailed=0
     logfile="$TMPDIR/${hostname//./_}_${Test//::/_}.log"
 
     echo Running $Test on $hostname ...
@@ -139,10 +139,6 @@ for Test in "${TestsToRun[@]}"; do
             echo "Failed test output in $logfile at `date`"
             cat >&2 "$logfile"
             anyfailed=1
-        else
-            echo "Passed test at `date`"
-            funcstatsd "$Test" "PASS" "$gitsha"
-            echo "ok ${ii} - $Test"  | tee -a $TAP
         fi
     fi
 
@@ -164,11 +160,15 @@ for Test in "${TestsToRun[@]}"; do
     if [ $anyfailed -eq 1 ]; then
         # copy out the usrnode binary
         now=$(date +"%T")
-        filepath="`pwd`$now"
+        filepath="`pwd`/usrnode.$now"
         sudo cp /opt/xcalar/bin/usrnode "$filepath"
         # mark the test as failed
         funcstatsd "$Test" "FAIL" "$gitsha"
         echo "not ok ${ii} - $Test" | tee -a $TAP
+    else
+        echo "Passed test at `date`"
+        funcstatsd "$Test" "PASS" "$gitsha"
+        echo "ok ${ii} - $Test"  | tee -a $TAP
     fi
 
     ii=$(( $ii + 1 ))
