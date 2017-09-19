@@ -8,7 +8,7 @@
     },
     "scaleNumber": {
       "type": "int",
-      "defaultValue": 1,
+      "defaultValue": 3,
       "metadata": {
         "description": "Number of XCE nodes to provision. (Max: 16)"
       }
@@ -33,20 +33,36 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_DS14_v2_Promo",
+      "defaultValue": "Standard_E8s_v3",
       "metadata": {
         "description": "Size of the VM"
       },
       "allowedValues": [
-          "Standard_D13_v2_Promo",
           "Standard_DS13_v2_Promo",
           "Standard_DS14_v2_Promo",
-          "Standard_D14_v2_Promo",
-          "Standard_D15_v2_Promo",
           "Standard_DS15_v2_Promo",
-          "Standard_E16_v3",
+          "Standard_E8s_v3",
           "Standard_E16s_v3"
         ]
+    },
+    "dnsLabelPrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "Administrator's password for the Xcalar cluster"
+      }
+    },
+    "bootstrapUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Bootstrap Url"
+      }
+    },
+    "installerUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Installer Url"
+      }
     }
   },
   "variables": {
@@ -317,7 +333,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -a azure.xcalar.io -b Z1B5U8RYSOLN6J -d ', variables('dnsLabelPrefix'),' -e AKIAIH53R2K2L7RO2M4A -f \"uo4t5mnADoXzGkwxGXAWPVWKvAes0+bjO4HDfA4L\" -r https://acme-v01.api.letsencrypt.org/directory -i ', copyIndex(), ' -n ', parameters('scaleNumber'), ' -l ', variables('sq'), parameters('licenseKey'), variables('sq'), ' -v ', variables('sq'), parameters('adminEmail'), variables('sq'), ' -w ', variables('sq'), parameters('adminUsername'), variables('sq'), ' -x ', variables('sq'), parameters('adminPassword'), variables('sq'), ' -y ', variables('sq'), variables('storageAccountName'), variables('sq'), ' -z ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -a azure.xcalar.io -b Z1B5U8RYSOLN6J -d ', variables('dnsLabelPrefix'),' -e AKIAIH53R2K2L7RO2M4A -f \"uo4t5mnADoXzGkwxGXAWPVWKvAes0+bjO4HDfA4L\" -g \"m8QFonzFegKu\" -p s3://xccerts/certs/azure.xcalar.io/bysha1/abb179a4036f92f744aa0d0c973f87593d668efb/xdp-standard-001-099.tar.gz.gpg -i ', copyIndex(), ' -n ', parameters('scaleNumber'), ' -l ', variables('sq'), parameters('licenseKey'), variables('sq'), ' -v ', parameters('adminEmail'), ' -w ', parameters('adminUsername'), ' -x ', variables('sq'), parameters('adminPassword'), variables('sq'), ' -y ', variables('sq'), variables('storageAccountName'), variables('sq'), ' -z ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'),' -u ', variables('sq'), parameters('installerUrl'), variables('sq'), ' >> startup.log 2>&1')]"
         }
       }
     }
