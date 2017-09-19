@@ -90,7 +90,7 @@ mount_device () {
     test $? -eq 0 || return 1
     clean_fstab $2 && \
     mkdir -p $1 && \
-    echo "$2   $1      ext4        defaults,discard,relatime  0   0" | tee -a /etc/fstab
+    echo "$2   $1      ext4        defaults,discard,relatime,nobarrier  0   0" | tee -a /etc/fstab
     mount $1
 }
 
@@ -127,6 +127,11 @@ setenforce Permissive
 sed -i -e 's/^SELINUX=enforcing.*$/SELINUX=permissive/g' /etc/selinux/config
 
 yum makecache fast
+
+# See https://docs.microsoft.com/en-us/azure/storage/common/storage-premium-storage#premium-storage-for-linux-vms
+rpm -e hypervkvpd || true
+yum install -y microsoft-hyper-v
+
 yum install -y nfs-utils epel-release parted gdisk curl
 yum install -y jq python-pip awscli
 
