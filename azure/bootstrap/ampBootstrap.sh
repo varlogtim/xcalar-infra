@@ -5,6 +5,7 @@ echo "Starting bootstrap at `date`"
 echo "$@" | tee args.txt
 
 INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/installer"
+LICENSE_SERVER="https://zd.xcalar.net/license/api/v1.0/marketplacedeploy"
 HTML="http://pub.xcalar.net/azure/dev/html-4.tar.gz"
 XCALAR_ADVENTURE_DATASET="http://pub.xcalar.net/datasets/xcalarAdventure.tar.gz"
 ZONE="Z38PTJSFJD11PH"
@@ -303,7 +304,7 @@ done
 # Register domain
 CNAME="${DNSLABELPREFIX}-${INDEX}.${LOCATION}.cloudapp.azure.com"
 XCE_DNS="${DNSLABELPREFIX}.${SUBDOMAIN}"
-
+DEPLOYED_URL=""
 if [ "$INDEX" = 0 ]; then
     aws_route53_record "${CNAME}" "${XCE_DNS}"
     (
@@ -318,8 +319,10 @@ if [ "$INDEX" = 0 ]; then
     sed -i -e 's/caddy -quiet/caddy -quiet -agree/g' /etc/xcalar/supervisor.conf
     if lego_register_domain "${XCE_DNS}"; then
         sed -i -e "s|tls.*$|tls /etc/xcalar/${XCE_DNS}.crt /etc/xcalar/${XCE_DNS}.key|g" /etc/xcalar/Caddyfile
+        DEPLOYED_URL="https://$XCE_DNS"
     else
         sed -i -e 's/tls.*$/tls self_signed/g' /etc/xcalar/Caddyfile
+        DEPLOYED_URL="https://$CNAME"
     fi
 else
     (
@@ -413,3 +416,10 @@ if [ ! -z "$ADMIN_USERNAME" ]; then
 else
     echo "ADMIN_USERNAME is not specified"
 fi
+
+if [ ! -z "$DEPLOYED_URL" ]; then
+    # Inform license server about URL
+    jsonData="{ \"key\": \"$LICENSE\", \"url\": \"$DEPLOYED_URL\", \"marketplaceName\": \"azure\" }"
+    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "$LICENSE_SERVER"
+fi
+

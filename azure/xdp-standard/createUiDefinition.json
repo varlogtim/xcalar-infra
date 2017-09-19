@@ -8,7 +8,7 @@
               "type": "Microsoft.Common.TextBox",
               "label": "License Key",
               "defaultValue": "",
-              "toolTip": "0.34 Contact Xcalar to request for a trial license if you don't have one.",
+              "toolTip": "Contact Xcalar at info@xcalar.com to request for a trial license if you don't have one. You may access Xcalar's customer portal at https://myxcalar.zendesk.com, to access your license keys.",
               "constraints": { "required": true },
               "options": {},
               "visible": true

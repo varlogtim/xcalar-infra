@@ -65,7 +65,7 @@
     "subnet1Name": "[concat(variables('clusterName'),'subnet-1')]",
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
-    "scriptsUri": "https://xcrepo.s3.amazonaws.com/bysha1/e83c88f913f29380a406195c002aa7f76d8f084a",
+    "scriptsUri": "https://xcrepo.s3.amazonaws.com/bysha1/a771e2ec984c8296d04e721b55e29ee22b477f2c",
     "customScriptName": "ampBootstrap.sh",
     "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
     "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",

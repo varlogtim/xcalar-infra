@@ -72,3 +72,15 @@ FROM
 LEFT JOIN organization ON orgLicenses.name = organization.name;
 
 DROP TABLE licenses;
+
+---------------------------------- VERSION  2 ----------------------------------
+
+CREATE TABLE IF NOT EXISTS marketplace (
+    marketplace_id  INTEGER PRIMARY KEY,
+    key             TEXT                NOT NULL,
+    url             TEXT                NOT NULL,
+    marketplaceName TEXT                NOT NULL,
+    timestamp       DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(key) REFERENCES license(key)
+);
+

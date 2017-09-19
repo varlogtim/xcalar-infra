@@ -9,7 +9,7 @@ except:
 
 bucket = "xcrepo"
 installerPaths = {
-    "1.2.2": "builds/7c1bc3bd-045410f0/prod/xcalar-1.2.2-1186-installer",
+    "1.2.2": "builds/e5c22263-01d66bb7/prod/xcalar-1.2.2-1191-installer",
     "1.2.1": "builds/67cf7211-962b4eb4/prod/xcalar-1.2.1-1044-installer"
 }
 installerPaths["latest"] = installerPaths["1.2.2"]

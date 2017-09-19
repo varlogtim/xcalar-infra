@@ -163,6 +163,13 @@ def listOrganization():
     except:
         abort(404)
 
+@app.route('/license/api/v1.0/secure/listmarketplace', methods=['POST'])
+def listMarketplace():
+    try:
+        return listTable("marketplace", request.get_json())
+    except:
+        abort(404)
+
 @app.route('/license/api/v1.0/secure/addlicense', methods=['POST'])
 @crossdomain(origin="*", headers="Content-Type, Origin")
 def insertLicense():
@@ -209,10 +216,11 @@ def getKeysByOwner(ownerName):
     return jsonify({'key': keys})
 
 @app.route('/license/api/v1.0/keysbyorg/<string:organizationName>', methods=['GET'])
+@crossdomain(origin="*")
 def getKeysByOrg(organizationName):
     keys = getKeys(organization=organizationName)
     if not keys:
-        abort(404)
+        return jsonify({})
 
     return jsonify({'key': keys})
 
@@ -220,7 +228,7 @@ def getKeysByOrg(organizationName):
 def checkvalid():
     jsonInput = request.get_json()
     if "key" not in jsonInput:
-        abort(404)
+        abort(400)
     key = jsonInput["key"]
 
     with getDb() as conn:
@@ -255,6 +263,46 @@ def checkvalid():
                 retObj["error"] = "License key inactive"
 
     return jsonify(retObj)
+
+@app.route('/license/api/v1.0/marketplacedeploy', methods=['POST'])
+def marketplaceDeploy():
+    jsonInput = request.get_json()
+    try:
+        marketplaceName = jsonInput["marketplaceName"]
+        url = jsonInput["url"]
+        key = jsonInput["key"]
+    except:
+        abort(400)
+
+    with getDb() as conn:
+        retObj = {"success": False}
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT key FROM license WHERE key = :licenseKey", { "licenseKey": key })
+        if not cursor.rowcount:
+            retObj["error"] = "License key not found"
+            return jsonify(retObj)
+
+        cursor.execute("INSERT INTO marketplace (key, url, marketplaceName) VALUES(:licenseKey, :url, :marketplaceName)", {"licenseKey": key, "url": url, "marketplaceName": marketplaceName })
+        retObj["success"] = True
+
+    return jsonify(retObj)
+
+@app.route('/license/api/v1.0/getdeployment/<string:organizationName>', methods=['GET'])
+@crossdomain(origin="*")
+def getDeployments(organizationName):
+    with getDb() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT url, marketplaceName, timestamp, license.key FROM marketplace INNER JOIN license ON marketplace.key = license.key INNER JOIN organization ON license.org_id = organization.org_id WHERE organization.name = :orgName ORDER BY marketplace.timestamp DESC", { "orgName": organizationName })
+        headers = [ "url", "marketplaceName", "timestamp", "licenseKey" ]
+        retVals = []
+        for row in cursor.fetchall():
+            dictionary = { name: value for (name, value) in zip(headers, row) }
+            dictionary["keyInfo"] = getKeyInfo(dictionary["licenseKey"])
+            del dictionary["licenseKey"]
+            retVals.append(dictionary)
+        return jsonify(retVals)
+
 
 
 @app.route('/license/api/v1.0/activations/<string:key>', methods=['GET'])
