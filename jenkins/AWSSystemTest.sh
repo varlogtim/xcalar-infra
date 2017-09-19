@@ -131,6 +131,7 @@ mountSsd() {
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo mkfs.ext4 -E nodiscard /dev/xvdb"
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo chown -R ec2-user:ec2-user /ssd"
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "echo /dev/xvdb /ssd ext4 defaults,nofail,noatime,discard 0 2 | sudo tee -a /etc/fstab"
+    xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo mkdir /ssd"
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo mount /ssd"
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo mkdir -p /ssd/xdbser"
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo chmod -R 777 /ssd"
