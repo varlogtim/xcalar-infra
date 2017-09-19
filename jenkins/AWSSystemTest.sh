@@ -33,7 +33,7 @@ echo "Host *.us-west-2.compute.amazonaws.com
 
 chmod 0600 ~/.ssh/config
 
-if [ $CLUSTER = "" ]; then
+if [ "$CLUSTER" = "" ]; then
     cluster=`echo $JOB_NAME-$BUILD_NUMBER | tr A-Z a-z`
     xcalar-infra/aws/aws-cloudformation.sh $INSTALLER_PATH $NUM_INSTANCES $cluster
     ret=$?
@@ -135,6 +135,21 @@ mountSsd() {
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo mkdir -p /ssd/xdbser"
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "sudo chmod -R 777 /ssd"
     xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "runClusterCmd" "echo Constants.XdbLocalSerDesPath=/ssd/xdbser | sudo tee -a /etc/xcalar/default.cfg"
+}
+
+funcstatsd() {
+    local name="${1//::/_}"
+    local status="$2"
+    local gitsha="$3"
+    if [ "$status" = "PASS" ]; then
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numPass:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:0|g" | nc -4 -w 5 -u $GRAPHITE 8125
+    elif [ "$status" = "FAIL" ]; then
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numFail:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:1|g" | nc -4 -w 5 -u $GRAPHITE 8125
+    fi
 }
 
 try=0
