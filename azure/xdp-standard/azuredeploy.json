@@ -39,18 +39,15 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_E16s_v3",
+      "defaultValue": "Standard_E8s_v3",
       "metadata": {
         "description": "Size of the VM"
       },
       "allowedValues": [
-          "Standard_D13_v2_Promo",
           "Standard_DS13_v2_Promo",
           "Standard_DS14_v2_Promo",
-          "Standard_D14_v2_Promo",
-          "Standard_D15_v2_Promo",
           "Standard_DS15_v2_Promo",
-          "Standard_E16_v3",
+          "Standard_E8s_v3",
           "Standard_E16s_v3"
         ]
     },

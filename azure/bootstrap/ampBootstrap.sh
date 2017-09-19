@@ -11,7 +11,11 @@ ZONE="Z38PTJSFJD11PH"
 SUBDOMAIN="azure.xcalar.cloud"
 export AWS_DEFAULT_REGION=us-west-2
 
-while getopts "a:b:c:d:e:f:i:n:l:u:s:v:w:x:y:z:" optarg; do
+# By default use the LetsEncrypt staging server so we don't trigger
+# CA limits for this domain
+CASERVER="https://acme-staging.api.letsencrypt.org/directory"
+
+while getopts "a:b:c:d:e:f:i:n:l:u:r:s:v:w:x:y:z:" optarg; do
     case "$optarg" in
         a) SUBDOMAIN="$OPTARG";;
         b) ZONE="$OPTARG";;
@@ -23,6 +27,7 @@ while getopts "a:b:c:d:e:f:i:n:l:u:s:v:w:x:y:z:" optarg; do
         n) COUNT="$OPTARG";;
         l) LICENSE="$OPTARG";;
         u) INSTALLER_URL="$OPTARG";;
+        r) CASERVER="$OPTARG";;
         s) NFSMOUNT="$OPTARG";;
         v) ADMIN_EMAIL="$OPTARG";;
         w) ADMIN_USERNAME="$OPTARG";;
@@ -90,12 +95,12 @@ mount_device () {
 }
 
 lego_register_domain() {
-    curl -L https://github.com/xenolf/lego/releases/download/v0.4.0/lego_linux_amd64.tar.xz | \
+    safe_curl -L https://github.com/xenolf/lego/releases/download/v0.4.0/lego_linux_amd64.tar.xz | \
         tar Jxvf - --no-same-owner lego_linux_amd64
     mv lego_linux_amd64 /usr/local/bin/lego
     chmod +x /usr/local/bin/lego
     setcap cap_net_bind_service=+ep /usr/local/bin/lego
-    lego -d "$1" --dns route53 --accept-tos --email "${ADMIN_EMAIL}" run
+    lego -d "$1" --server "${CASERVER}" --dns route53 --accept-tos --email "${ADMIN_EMAIL}" run
     if [ $? -ne 0 ]; then
         echo >&2 "Failed to acquire certificate"
         return 1
