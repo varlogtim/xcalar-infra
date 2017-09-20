@@ -42,7 +42,8 @@ if test -n "$oldpids"; then
 fi
 
 killall xcmgmtd xcmonitor usrnode childnode &>/dev/null || true
-sleep 4
+# Give enough time for processes to go away and free up the tcp ports
+sleep 30
 find /var/opt/xcalar -type f -not -path '/var/opt/xcalar/support/*' -delete
 find /dev/shm -name "xcalar-*" -delete
 

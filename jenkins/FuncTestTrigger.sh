@@ -134,7 +134,15 @@ for Test in "${TestsToRun[@]}"; do
        fi
     fi
 
-    xccli -c "loglevelset Debug"
+    if xccli -c "loglevelset Debug" 2>&1 | grep -q 'Error'; then
+       genSupport
+       restartXcalar || true
+       if xccli -c version 2>&1 | grep -q 'Error'; then
+            echo "Could not restart usrnodes after previous crash"
+            exit 1
+       fi
+    fi
+
     time xccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
 
     rc=${PIPESTATUS[0]}
