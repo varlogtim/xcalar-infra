@@ -1,5 +1,5 @@
 // use with jenkins-cli.sh scripting
-// jenkins-cli.sh < list_nodes.groovy | grep ^NODE_ONLINE
+// $XLRINFRA/bin/jenkins-cli.sh groovysh < list_nodes.groovy | grep ^NODE_ONLINE
 
 import hudson.FilePath
 import hudson.model.Node
