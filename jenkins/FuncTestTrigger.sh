@@ -81,12 +81,21 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     echo "XcalarEnterpriseManager.Host=xem-202-1.int.xcalar.com" | sudo tee -a $XCE_CONFIG
     echo "XcalarEnterpriseManager.Port=15000" | sudo tee -a $XCE_CONFIG
 
+    # Enable NoChildLDPreload so that childnodes do not inherit LD_PRELOAD from usrnode
+    echo "Constants.NoChildLDPreload=true" | sudo tee -a $XCE_CONFIG
+
     sudo sed --in-place '/\dev\/shm/d' /etc/fstab
     tmpFsSizeGb=`cat /proc/meminfo | grep MemTotal | awk '{ printf "%.0f\n", $2/1024/1024 }'`
     let "tmpFsSizeGb = $tmpFsSizeGb * 95 / 100"
 
     echo "none  /dev/shm    tmpfs   defaults,size=${tmpFsSizeGb%.*}G    0   0" | sudo tee -a /etc/fstab
     sudo mount -o remount /dev/shm
+
+    # Increase the mmap map count for GuardRails to work
+    echo 10000000 | sudo tee /proc/sys/vm/max_map_count
+
+    # Build GuardRails
+    make -C xcalar-infra/GuardRails
 
     restartXcalar || true
 

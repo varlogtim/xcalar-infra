@@ -55,7 +55,7 @@ NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
 for ii in $(seq 0 $(( $NumNodes - 1 ))); do
     monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
-    /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+    LD_PRELOAD=xcalar-infra/GuardRails/libguardrails.so.0.0 /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
     pid=$!
     echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
 done
