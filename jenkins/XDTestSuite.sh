@@ -27,11 +27,17 @@ echo "Installer location: $LATEST_INSTALLER"
 echo "Building XD"
 export XLRDIR=`pwd` #Not used
 export XLRGUIDIR=`pwd` #Not used
-make installer
+make installer product=$(GUI_PRODUCT)
 
-echo "Tarring up XD"
-tar -zcvf xcalar-gui.tar.gz prod
+echo "Testing for product $(GUI_PRODUCT)"
 
+if [ "$GUI_PRODUCT" = "XI" ]; then
+    echo "Tarring up xcalar-insight"
+    tar -zcvf xcalar-gui.tar.gz xcalar-insight
+else
+    echo "Tarring up xcalar-design"
+    tar -zcvf xcalar-gui.tar.gz xcalar-design
+fi
 
 #NUM_USERS=$(shuf -i 2-3 -n 1)
 NUM_USERS=2
