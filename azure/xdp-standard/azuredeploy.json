@@ -60,7 +60,7 @@
     },
     "zone_id": {
       "type": "string",
-      "defaultValue": "Z1B5U8RYSOLN6J"
+      "defaultValue": "Z1B5U8RYSOLN6J",
       "metadata": {
         "description": "Route53 ZoneID of the DNS zone"
       }
