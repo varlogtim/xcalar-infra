@@ -9,7 +9,7 @@ TAP="AllTests.tap"
 rm -f "$TAP"
 
 restartXcalar() {
-    sudo xcalar-infra/functests/launcher.sh
+    sudo xcalar-infra/functests/launcher.sh $jemallocEnabled
 }
 
 genSupport() {
