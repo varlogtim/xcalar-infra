@@ -53,9 +53,20 @@ echo $pid > /var/run/xcalar/xcmgmtd.pid
 
 NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
+# Run half of the jobs with jemalloc allocator
+if [ $(( $BUILD_ID % 2 )) -eq 0 ]; then
+    jemallocEnabled=1
+else
+    jemallocEnabled=0
+fi
+
 for ii in $(seq 0 $(( $NumNodes - 1 ))); do
     monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
-    LD_PRELOAD=xcalar-infra/GuardRails/libguardrails.so.0.0 /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+    if [ $jemallocEnabled -eq 1 ]; then
+        MALLOC_CONF=tcache:false,junk:true /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+    else
+        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+    fi
     pid=$!
     echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
 done

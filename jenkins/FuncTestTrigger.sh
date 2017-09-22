@@ -52,6 +52,13 @@ zipLogs() {
 
 trap "zipLogs" EXIT
 
+# Run half of the jobs with jemalloc allocator
+if [ $(( $BUILD_ID % 2 )) -eq 0 ]; then
+    jemallocEnabled=1
+else
+    jemallocEnabled=0
+fi
+
 if [ "$CURRENT_ITERATION" = "0" ]; then
     set +e
     sudo /opt/xcalar/bin/xcalarctl stop-supervisor
@@ -69,7 +76,11 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
 
     sudo yum -y remove xcalar
 
-    sudo $INSTALLER_PATH --noStart
+    if [ $jemallocEnabled -eq 1 ]; then
+        sudo /netstore/builds/byJob/BuildCustom/10219/prod/xcalar-1.2.2-10219-installer --noStart
+    else
+        sudo $INSTALLER_PATH --noStart
+    fi
 
     sudo rm $XCE_CONFIG
     sudo -E $XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
