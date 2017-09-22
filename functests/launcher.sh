@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 # This script starts up xcmonitor which starts up the usrnode
 
