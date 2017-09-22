@@ -292,11 +292,13 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
     // Used only for stats
     const int usrSizeBin = log2fast(usrSize);
 
-    pthread_mutex_lock(&gMutex);
+    int ret = pthread_mutex_lock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
 
-    int ret = replenishBin(binNum);
+    ret = replenishBin(binNum);
     if (ret) {
-        pthread_mutex_unlock(&gMutex);
+        ret = pthread_mutex_unlock(&gMutex);
+        GR_ASSERT_ALWAYS(ret == 0);
         return(NULL);
     }
 
@@ -310,7 +312,8 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
     memHisto[usrSizeBin].allocs++;
     totalUserRequestedBytes += usrSize;
 
-    pthread_mutex_unlock(&gMutex);
+    ret = pthread_mutex_unlock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
 
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_FREE);
     // First invalid byte address after buffer
@@ -320,7 +323,8 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
 
 static void
 putBuf(void *buf) {
-    pthread_mutex_lock(&gMutex);
+    int ret = pthread_mutex_lock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
 
     ElmHdr *hdr = buf;
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_INUSE);
@@ -337,7 +341,8 @@ putBuf(void *buf) {
     memBins[binNum].numFree++;
     memBins[binNum].frees++;
 
-    pthread_mutex_unlock(&gMutex);
+    ret = pthread_mutex_unlock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
 }
 
 __attribute__((constructor)) static void
@@ -350,18 +355,14 @@ initialize(void) {
     GR_ASSERT_ALWAYS(pageSize == 4096);
     GR_ASSERT_ALWAYS((sizeof(ElmHdr) % sizeof(void *)) == 0);
 
-    pthread_mutex_lock(&gMutex);
+    int ret = pthread_mutex_lock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
     if (!isInit) {
 #ifdef USE_GP
         numGuardPages = 1;
 #endif
-        int ret;
         printf("Initializing GuardRails\n");
         ret = addNewMemPool(200 * MB);
-        if (ret) {
-            printf("Initializing GuardRails\n");
-        }
-
         GR_ASSERT_ALWAYS(ret == 0);
 
         ret = initBinsMeta();
@@ -372,7 +373,8 @@ initialize(void) {
 
         isInit = true;
     }
-    pthread_mutex_unlock(&gMutex);
+    ret = pthread_mutex_unlock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
 }
 
 static void *
