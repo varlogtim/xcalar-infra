@@ -24,17 +24,17 @@ fi
 
 echo "Installer location: $LATEST_INSTALLER"
 
-echo "Building XD"
+echo "Building $GUI_PRODUCT"
 export XLRDIR=`pwd` #Not used
 export XLRGUIDIR=`pwd` #Not used
-make installer product=$(GUI_PRODUCT)
-
-echo "Testing for product $(GUI_PRODUCT)"
+make installer product=$GUI_PRODUCT
 
 if [ "$GUI_PRODUCT" = "XI" ]; then
+    GUI_FOLDER=xcalar-insight
     echo "Tarring up xcalar-insight"
     tar -zcvf xcalar-gui.tar.gz xcalar-insight
 else
+    GUI_FOLDER=xcalar-design
     echo "Tarring up xcalar-design"
     tar -zcvf xcalar-gui.tar.gz xcalar-design
 fi
@@ -78,7 +78,7 @@ _ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --start"
 
 echo "Installing UI in this build"
 scp xcalar-gui.tar.gz jenkins@$NODE:/var/www
-_ssh $SSHUSER@$NODE "cd /var/www; tar -zxvf xcalar-gui.tar.gz; rm -rf xcalar-gui; mv prod xcalar-gui"
+_ssh $SSHUSER@$NODE "cd /var/www; tar -zxvf xcalar-gui.tar.gz; rm -rf xcalar-gui; mv $GUI_FOLDER xcalar-gui"
 date
 timeOut=50
 counter=0
