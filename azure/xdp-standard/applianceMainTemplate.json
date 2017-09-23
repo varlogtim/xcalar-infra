@@ -183,7 +183,8 @@
         },
         "dependsOn": [
             "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
-            "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]"
+            "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]",
+            "[concat('Microsoft.Compute/disks/', variables('vmName'), copyIndex(), '-datadisk')]"
         ],
         "properties": {
             "hardwareProfile": {
