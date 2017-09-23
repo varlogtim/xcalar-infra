@@ -8,7 +8,8 @@
     },
     "scaleNumber": {
       "type": "int",
-      "defaultValue": 1,
+      "defaultValue": 2,
+      "minValue": 2,
       "metadata": {
         "description": "Number of XCE nodes to provision. (Max: 16)"
       }
@@ -97,11 +98,15 @@
       "name": "[variables('storageAccountName')]",
       "apiVersion": "2017-06-01",
       "location": "[resourceGroup().location]",
+      "kind": "BlobStorage",
       "identity": {
           "type": "SystemAssigned"
       },
       "sku": {
           "name": "[variables('storageAccountType')]"
+      },
+      "properties": {
+          "accessTier": "Hot"
       }
     },
     {

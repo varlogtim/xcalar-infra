@@ -4,6 +4,7 @@
   "parameters": {
     "licenseKey": {
       "type": "securestring",
+      "minLength": 40,
       "defaultValue": ""
     },
     "scaleNumber": {
@@ -15,6 +16,7 @@
     },
     "adminUsername": {
       "type": "string",
+      "minLength": 5,
       "metadata": {
         "description": "Administrator's username for the Xcalar cluster"
       }
@@ -27,6 +29,7 @@
     },
     "adminEmail": {
       "type": "string",
+      "minLength": 12,
       "metadata": {
         "description": "Administrator's email address"
       }
@@ -50,6 +53,13 @@
           "Standard_E8s_v3",
           "Standard_E16s_v3"
         ]
+    },
+    "dataDiskSize": {
+      "type": "int",
+      "defaultValue": 1023,
+      "metadata": {
+        "description": "Number of XCE nodes to provision. (Max: 16)"
+      }
     },
     "zone": {
       "type": "string",
@@ -84,8 +94,8 @@
     "clusterName": "xdp-standard-",
     "vmName": "[concat(variables('clusterName'), 'xce-vm')]",
     "vmSize": "[parameters('vmSize')]",
-    "dnsLabelPrefix": "[concat('xdp-standard-', parameters('dnsLabelPrefix'))]",
-    "storageAccountType": "Premium_LRS",
+    "dnsLabelPrefix": "[concat(variables('clusterName'), uniquestring(subscription().subscriptionId, resourceGroup().id, parameters('licenseKey')))]",
+    "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat('xdpstorage', uniquestring(subscription().subscriptionId, resourceGroup().id, variables('clusterName')))]",
     "virtualNetworkName": "[concat(variables('clusterName'), 'vnet')]",
     "vnetAddressPrefix": "10.0.0.0/16",
@@ -95,27 +105,51 @@
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap-10.sh",
+    "customScriptName": "ampBootstrap.sh",
     "customScriptFilePath": "[parameters('bootstrapUrl')]",
     "customScriptCommandToExecute": "/bin/bash -x ampBootstrap.sh ",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.3",
     "vmExtensionName": "xcalarBootstrapExtension",
-    "dataDiskSize": 127,
-    "nicName": "[concat(variables('clusterName'),'nic-')]"
+    "dataDiskSize": "[parameters('dataDiskSize')]",
+    "nicName": "[concat(variables('clusterName'),'nic-')]",
+    "dataDiskName": "[concat(variables('clusterName'),'datadisk-')]"
   },
   "resources": [
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "[concat(variables('dataDiskName'),copyIndex())]",
+      "apiVersion": "2017-03-30",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Premium_LRS"
+      },
+      "copy": {
+          "name": "num",
+          "count": "[parameters('scaleNumber')]"
+      },
+      "properties": {
+          "creationData": {
+              "createOption": "Empty"
+          },
+          "diskSizeGB": "[variables('dataDiskSize')]"
+      }
+    },
     {
       "type": "Microsoft.Storage/storageAccounts",
       "name": "[variables('storageAccountName')]",
       "apiVersion": "2017-06-01",
       "location": "[resourceGroup().location]",
+      "kind": "BlobStorage",
       "identity": {
           "type": "SystemAssigned"
       },
       "sku": {
           "name": "[variables('storageAccountType')]"
+      },
+      "properties": {
+          "accessTier": "Hot"
       }
     },
     {
@@ -197,7 +231,8 @@
         },
         "dependsOn": [
             "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
-            "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]"
+            "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyIndex())]",
+            "[concat('Microsoft.Compute/disks/', concat(variables('dataDiskName'), copyIndex()))]"
         ],
         "properties": {
             "hardwareProfile": {
@@ -216,14 +251,18 @@
                     "version": "latest"
                 },
                 "osDisk": {
-                    "createOption": "FromImage",
-                    "diskSizeGB" : 255
+                    "createOption": "FromImage"
                 },
-                "dataDisks": [{
-                    "createOption": "Empty",
+                "dataDisks": [
+                  {
                     "lun": 0,
-                    "diskSizeGB": "[variables('dataDiskSize')]"
-                }]
+                    "name": "[concat(variables('dataDiskName'), copyIndex())]",
+                    "createOption": "attach",
+                    "managedDisk": {
+                      "id": "[resourceId('Microsoft.Compute/disks/', concat(variables('dataDiskName'), copyIndex()))]"
+                    }
+                  }
+                ]
             },
             "networkProfile": {
                 "networkInterfaces": [
