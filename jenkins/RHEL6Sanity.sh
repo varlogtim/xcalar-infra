@@ -1,39 +1,38 @@
 #!/bin/bash
 
-#set +e
-#docker stop $(docker ps -aq)
-#docker rm $(docker ps -aq)
-#docker rmi $(docker images -aq)
-#set -e
-
 export XLRDIR=`pwd`
 export ExpServerd="false"
 export PATH="/opt/clang/bin:$XLRDIR/bin:$PATH"
 export CCACHE_BASEDIR=$XLRDIR
+
 source $XLRDIR/doc/env/xc_aliases
+
+xcEnvEnter "$HOME/.local/lib/$JOB_NAME"
 
 rpm -q xcalar && sudo yum remove -y xcalar
 sudo rm -rf /opt/xcalar/scripts
 
-# Set this for pytest to be able to find the correct cfg file
-pgrep childnode | sudo xargs -r kill -9
-pgrep usrnode | sudo xargs -r kill -9
-pgrep xcmgmtd | sudo xargs -r kill -9
+pkill -9 gdbserver || true
+pkill -9 usrnode || true
+pkill -9 childnode || true
+pkill -9 xcmgmtd || true
+pkill -9 xcmonitor || true
 
-if true; then
-  rm -rf /var/tmp/xcalar-`id -un`/* /var/tmp/xcalar-`id -un`/*
-  mkdir -p /var/tmp/xcalar-`id -un`/sessions /var/tmp/xcalar-`id -un`/sessions
-  sudo ln -sfn $XLRDIR/src/data/qa /var/tmp/
-  sudo ln -sfn $XLRDIR/src/data/qa /var/tmp/`id -un`-qa  
-fi
+rm -rf /var/tmp/xcalar-`id -un`/* /var/tmp/xcalar-`id -un`/*
+mkdir -p /var/tmp/xcalar-`id -un`/sessions /var/tmp/xcalar-`id -un`/sessions
+sudo ln -sfn $XLRDIR/src/data/qa /var/tmp/
+sudo ln -sfn $XLRDIR/src/data/qa /var/tmp/`id -un`-qa
+
 git clean -fxd >/dev/null
-git submodule update --init --recursive
+
+find $XLRDIR -name "core.*" -exec rm --force {} +
 
 set +e
 xclean
 set -e
 
 ccache -s
+
 # debug build
 build clean  >/dev/null
 build config  >/dev/null
