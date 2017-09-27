@@ -91,6 +91,7 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     echo "Constants.XcalarClusterName=`hostname`" | sudo tee -a $XCE_CONFIG
     echo "XcalarEnterpriseManager.Host=xem-202-1.int.xcalar.com" | sudo tee -a $XCE_CONFIG
     echo "XcalarEnterpriseManager.Port=15000" | sudo tee -a $XCE_CONFIG
+    echo "XcalarEnterpriseManager.IsVirtualXceCluster=true" | sudo tee -a $XCE_CONFIG
 
     # Enable NoChildLDPreload so that childnodes do not inherit LD_PRELOAD from usrnode
     echo "Constants.NoChildLDPreload=true" | sudo tee -a $XCE_CONFIG
