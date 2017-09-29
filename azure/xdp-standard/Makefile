@@ -29,7 +29,7 @@ SCRIPTS_SHA1=$(shell sha1sum $(BOOTSTRAP) | cut -d' ' -f1)
 export GNUPGHOME=$(CURDIR)/.gnupg
 JQ=/usr/local/bin/jq
 
-s3url = $(shell aws s3 presign --expires-in 3600 $(1))
+s3url = $(shell ../../bin/installer-url.sh -d s3 $(1))
 
 -include local.mk
 
