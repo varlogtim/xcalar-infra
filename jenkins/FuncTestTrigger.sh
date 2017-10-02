@@ -1,5 +1,7 @@
 #!/bin/bash -x
 
+touch /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME
+
 export XLRDIR=/opt/xcalar
 export PATH=$XLRDIR/bin:$PATH
 export XCE_CONFIG=/etc/xcalar/default.cfg
@@ -39,18 +41,55 @@ funcstatsd () {
     fi
 }
 
-zipLogs() {
+genBuildArtifacts() {
+    mkdir -p ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+    mkdir -p $XLRDIR/tmpdir
+
+    # Find core files and dump backtrace
+    gdbcore.sh -c core.tar.bz2 $XLRDIR /var/log/xcalar /var/tmp/xcalar-root
+
+    find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2>/dev/null | xargs cp --parents -rt $XLRDIR/tmpdir/
+
+    PIDS=()
+    for dir in tmpdir /var/log/xcalar; do
+        if [ -d $dir ]; then
+            if [ "$dir" = "/var/log/xcalar" ]; then
+                tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 $dir &
+            else
+                tar -cf $dir.tar.bz2 --use-compress-prog=pbzip2 $dir &
+            fi
+            PIDS+=($!)
+        fi
+    done
+
+    wait "${PIDS[@]}"
     ret=$?
+    if [ $ret -ne 0 ]; then
+        echo >&2 "ERROR($ret): tar failed"
+    fi
 
-    set +e
-    sudo tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 /var/log/xcalar
-    sudo rm -rf /var/log/xcalar/*
-    set -e
+    for dir in core tmpdir /var/log/xcalar; do
+        if [ "$dir" = "/var/log/xcalar" ]; then
+            cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+            rm var_log_xcalar.tar.bz2
+            rm $dir/*
+        else
+            if [ -f $dir.tar.bz2 ]; then
+                cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+                rm $dir.tar.bz2
+                if [ -d $dir ]; then
+                    rm -r $dir/*
+                fi
+            fi
+        fi
+    done
 
-    exit $ret
+    echo >&2 "Build artifacts copied to ${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
+
+    rm /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME
 }
 
-trap "zipLogs" EXIT
+trap "genBuildArtifacts" EXIT
 
 # Run half of the jobs with jemalloc allocator
 if [ $(( $BUILD_ID % 2 )) -eq 0 ]; then
@@ -186,7 +225,7 @@ for Test in "${TestsToRun[@]}"; do
         if [ $count -gt 1 ]; then
             # fastAllocs and fastFrees are different which means that there is a leak
             echo "Failed pagekvbuf leak test"
-            # abort the usrnode to get a core file. 
+            # abort the usrnode to get a core file.
             # XXX: Commenting this out out for now to reduce noise.
             # pgrep -f "usrnode --nodeId $nodeid" | xargs -r sudo kill -6
             # anyfailed=1
