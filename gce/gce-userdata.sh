@@ -22,6 +22,15 @@ get_metadata_value () {
     return ${return_code}
 }
 
+# Safer curl. Use IPv4, add some retries, timeouts, and --location (aka, -L)
+# to follow redirects is pretty much mandatory. We've seen curl try to use IPv6 on
+# and many intermittent errors when retry isn't used. When a cluster comes up
+# all the nodes tend to hit the source http server for the file, causing it to
+# temporarily be unavailable.
+safe_curl () {
+    curl -4 --location --retry 20 --retry-delay 3 --retry-max-time 60 "$@"
+}
+
 os_version () {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -214,7 +223,7 @@ $sh_c 'service collectd start'
 # Download and run the installer
 WORKDIR=/var/tmp/gce-userdata
 mkdir -p "$WORKDIR"
-curl -sSL "$(get_metadata_value attributes/installer)" > $WORKDIR/xcalar-installer
+safe_curl "$(get_metadata_value attributes/installer)" > $WORKDIR/xcalar-installer
 get_metadata_value attributes/config > $WORKDIR/config
 $sh_c 'mkdir -p /etc/xcalar'
 if [ $COUNT -gt 1 ]; then
