@@ -34,9 +34,9 @@ if [ "$GUI_PRODUCT" = "XI" ]; then
     echo "Tarring up xcalar-insight"
     tar -zcvf xcalar-gui.tar.gz xcalar-insight
 else
-    GUI_FOLDER=xcalar-design
-    echo "Tarring up xcalar-design"
-    tar -zcvf xcalar-gui.tar.gz xcalar-design
+    GUI_FOLDER=xcalar-gui
+    echo "Tarring up xcalar-design(xcalar-gui)"
+    tar -zcvf xcalar-gui.tar.gz xcalar-gui
 fi
 
 #NUM_USERS=$(shuf -i 2-3 -n 1)
