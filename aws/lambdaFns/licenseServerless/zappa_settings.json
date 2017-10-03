@@ -1,0 +1,10 @@
+{
+    "production": {
+        "app_function": "app.app", 
+        "aws_region": "us-west-2", 
+        "profile_name": null, 
+        "project_name": "licenseserver", 
+        "runtime": "python2.7", 
+        "s3_bucket": "zappa-4o0g3f1os"
+    }
+}
