@@ -15,7 +15,8 @@ installerPaths = {
 installerPaths["latest"] = installerPaths["1.2.2"]
 
 def lambda_handler(event, context):
-    licenseServer="https://zd.xcalar.net/license/api/v1.0/checkvalid"
+    licenseServer="https://x3xjvoyc6f.execute-api.us-west-2.amazonaws.com/production/license/api/v1.0/checkvalid"
+    #licenseServer="https://zd.xcalar.net/license/api/v1.0/checkvalid"
     ret = {}
     ret["success"] = False
 
