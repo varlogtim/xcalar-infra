@@ -206,12 +206,12 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
                exit 1
            fi
         fi
+
         time cloudXccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
         rc=${PIPESTATUS[0]}
         if [ $rc -ne 0 ]; then
             funcstatsd "$Test" "FAIL" "$gitsha"
             echo "not ok1 ${jj} - $Test-$ii" | tee -a $TAP
-
             anyfailed=1
         else
             if grep -v 'No such file or directory' "$logfile" | grep -q Error; then
@@ -226,7 +226,26 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
                 echo "ok ${jj} - $Test-$ii"  | tee -a $TAP
             fi
         fi
+
+        # Kill all instances of xccli previously spawned because xccli may continue
+        # to run because there are cases where ssh connection was terminated on
+        # client and server connection is still active.
+        xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster singleNode "pgrep xccli"
+        ret=$?
+        if [ $ret -eq 0 ]; then
+            numRetries=10
+            try=0
+
+            while [ $ret -eq 0 -a "$try" -lt "$numRetries" ]; do
+                xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster singleNode "killall xccli"
+                ret=$?
+                try=$(( $try + 1 ))
+                sleep 1s
+            done
+        fi
+
         jj=$(( $jj + 1 ))
+
     done
 done
 
