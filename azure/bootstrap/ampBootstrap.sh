@@ -3,7 +3,7 @@
 echo "Starting bootstrap at `date`"
 
 INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/installer"
-LICENSE_SERVER="https://zd.xcalar.net/license/api/v1.0/marketplacedeploy"
+LICENSE_SERVER="https://x3xjvoyc6f.execute-api.us-west-2.amazonaws.com/production/license/api/v1.0/marketplacedeploy"
 HTML="http://pub.xcalar.net/azure/dev/html-4.tar.gz"
 XCALAR_ADVENTURE_DATASET="http://pub.xcalar.net/datasets/xcalarAdventure.tar.gz"
 SUBDOMAIN="azure.xcalar.io"
