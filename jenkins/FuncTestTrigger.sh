@@ -116,7 +116,7 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     sudo yum -y remove xcalar
 
     if [ $jemallocEnabled -eq 1 ]; then
-        sudo /netstore/builds/byJob/BuildCustom/10239/prod/xcalar-1.2.2-10239-installer --noStart
+        sudo /netstore/builds/byJob/BuildCustom/10244/prod/xcalar-1.2.2-10244-installer --noStart
     else
         sudo $INSTALLER_PATH --noStart
     fi
