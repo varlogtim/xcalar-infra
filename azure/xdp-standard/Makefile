@@ -29,13 +29,13 @@ SCRIPTS_SHA1=$(shell sha1sum $(BOOTSTRAP) | cut -d' ' -f1)
 export GNUPGHOME=$(CURDIR)/.gnupg
 JQ=/usr/local/bin/jq
 
-s3url = $(shell ../../bin/installer-url.sh -d s3 $(1))
+s3url = $(shell aws s3 presign $(1))
 
 -include local.mk
 
 # These are the full URLs, possibly with parameter eg: https://xcrepo.s3.amazonaws.com/builds/foo.sh?Arg-1&Arg2=2
-BOOTSTRAP_URL := $(call s3url, $(S3_BOOTSTRAP))
-INSTALLER_URL := $(call s3url, $(S3_INSTALLER))
+BOOTSTRAP_URL = $(call s3url, $(S3_BOOTSTRAP))
+INSTALLER_URL = $(call s3url, $(S3_INSTALLER))
 
 all: xdp-standard-package.zip
 
@@ -98,8 +98,8 @@ validate: $(VALIDATE_RG) parameters.json
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,\
                                            dnsLabelPrefix: {value:"$(GROUP)"},\
-                                           installerUrl: {value:"$(call s3url,$(S3_INSTALLER))"},\
-                                           bootstrapUrl: {value:"$(call s3url,$(S3_BOOTSTRAP))"}\
+                                           installerUrl: {value:"$(INSTALLER_URL)"},\
+                                           bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
                                            }|tojson' $(PARAMETERS_DEFAULTS) $(PARAMETERS))" --output json
 
 deploy: $(GROUP) validate
@@ -109,8 +109,8 @@ deploy: $(GROUP) validate
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,\
                                            dnsLabelPrefix: {value:"$(GROUP)"},\
-                                           installerUrl: {value:"$(call s3url,$(S3_INSTALLER))"},\
-                                           bootstrapUrl: {value:"$(call s3url,$(S3_BOOTSTRAP))"}\
+                                           installerUrl: {value:"$(INSTALLER_URL)"},\
+                                           bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
                                            }|tojson' $(PARAMETERS_DEFAULTS) $(PARAMETERS))"
 	@echo "Your cluster is available at https://$$(az group deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
@@ -124,8 +124,8 @@ deployDev: $(GROUP) validate
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,\
                                            dnsLabelPrefix: {value:"$(GROUP)"},\
-                                           installerUrl: {value:"$(call s3url,$(S3_INSTALLER))"},\
-                                           bootstrapUrl: {value:"$(call s3url,$(S3_BOOTSTRAP))"}\
+                                           installerUrl: {value:"$(INSTALLER_URL)"},\
+                                           bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
                                            }|tojson' $(PARAMETERS_DEFAULTS) $(PARAMETERS)"
 	@echo "Your cluster is available at https://$$(az group deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
