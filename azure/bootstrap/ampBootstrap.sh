@@ -447,9 +447,9 @@ if [ "$PUBLICIPV4" != "" ]; then
     fi
     aws_route53_record "${CNAME}" "${XCE_DNS}"
     (
-    echo "https://${XCE_DNS}:443 {"
+    echo ":443, https://${XCE_DNS}:443 {"
     tail -n+2 /etc/xcalar/Caddyfile
-    echo "http://${XCE_DNS} {"
+    echo ":80, http://${XCE_DNS} {"
     echo "  redir https://{host}{uri}"
     echo "}"
     ) | tee /etc/xcalar/Caddyfile.$$
