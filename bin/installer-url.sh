@@ -109,6 +109,9 @@ elif [[ "${INSTALLER}" =~ ^http[s]?:// ]]; then
     fi
     echo $INSTALLER
     exit 0
+elif [[ "${INSTALLER}" =~ ^s3:// ]]; then
+    aws s3 presign "${INSTALLER}"
+    exit $?
 fi
 
 say "Unable to locate $INSTALLER as either a valid file or URL"
