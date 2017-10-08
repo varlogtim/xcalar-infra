@@ -32,12 +32,11 @@ make installer product=$GUI_PRODUCT
 if [ "$GUI_PRODUCT" = "XI" ]; then
     GUI_FOLDER=xcalar-insight
     echo "Tarring up xcalar-insight"
-    tar -zcvf xcalar-gui.tar.gz xcalar-insight
 else
     GUI_FOLDER=xcalar-gui
     echo "Tarring up xcalar-design(xcalar-gui)"
-    tar -zcvf xcalar-gui.tar.gz xcalar-gui
 fi
+tar -zcvf xcalar-gui.tar.gz $GUI_FOLDER
 
 #NUM_USERS=$(shuf -i 2-3 -n 1)
 NUM_USERS=2
@@ -78,7 +77,7 @@ _ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --start"
 
 echo "Installing UI in this build"
 scp xcalar-gui.tar.gz jenkins@$NODE:/var/www
-_ssh $SSHUSER@$NODE "cd /var/www; tar -zxvf xcalar-gui.tar.gz; rm -rf xcalar-gui; mv $GUI_FOLDER xcalar-gui"
+_ssh $SSHUSER@$NODE "cd /var/www; rm -rf xcalar-gui; tar -zxvf xcalar-gui.tar.gz; mv $GUI_FOLDER xcalar-gui"
 date
 timeOut=50
 counter=0
