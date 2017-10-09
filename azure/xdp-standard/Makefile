@@ -23,7 +23,7 @@ TEMPLATE ?= azuredeploy.json
 PASSWORD=$(shell jq -r '.parameters.adminPassword.value' $(PARAMETERS))
 USERNAME=$(shell jq -r '.parameters.adminUsername.value' $(PARAMETERS))
 
-SCRIPTS_PATH=$(shell jq -r '[.variables.scriptsUri,.variables.customScriptName]|join("/")' applianceMainTemplate.json | sed -e 's@^http://@@g')
+SCRIPTS_PATH=$(shell jq -r '[.variables.scriptsUri,.variables.customScriptName]|join("/")' mainTemplate.json | sed -e 's@^http://@@g')
 SCRIPTS_SHA1=$(shell sha1sum $(BOOTSTRAP) | cut -d' ' -f1)
 
 export GNUPGHOME=$(CURDIR)/.gnupg
@@ -47,15 +47,14 @@ jq15:
 	@if ! jq --version | grep -q '1.5'; then sudo curl -o $(JQ).tmp -fsSL https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64 && sudo chmod +x $(JQ).tmp && sudo mv $(JQ).tmp $(JQ); fi
 	@hash -r; jq --version | grep -q '1.5' || { echo "jq 1.5 had to be installed. Please run 'hash -r', and make sure jq is $(JQ) in your PATH"; exit 2; }
 
-xdp-standard-package.zip: createUiDefinition.json applianceMainTemplate.json mainTemplate.json
+xdp-standard-package.zip: createUiDefinition.json mainTemplate.json
 	aws s3 cp $(S3_BOOTSTRAP) - >/dev/null 2>&1 || aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP)
 	aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY)
-	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' applianceMainTemplate.json
-	cp createUiDefinition.json applianceCreateUiDefinition.json
-	zip xdp-standard-package.zip applianceCreateUiDefinition.json createUiDefinition.json applianceMainTemplate.json mainTemplate.json
+	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' mainTemplate.json
+	zip xdp-standard-package.zip createUiDefinition.json mainTemplate.json
 
 clean:
-	rm -f xdp-standard-package.zip applianceCreateUiDefinition.json
+	rm -f xdp-standard-package.zip
 	rm -rf .tmp/
 
 $(VALIDATE_RG) $(GROUP):
@@ -70,7 +69,7 @@ destroy:
 check_bootstrap:
 	@http_proxy=; \
      if ! test "`curl -sSL http://$(SCRIPTS_PATH) | sha1sum | cut -d' ' -f1`" = "$(SCRIPTS_SHA1)"; then \
-        echo >&2 "ERROR: Checksum of $(BOOTSTRAP) doesn't match with what's referenced in your applianceMainTemplate (http://$(SCRIPTS_PATH))"; \
+        echo >&2 "ERROR: Checksum of $(BOOTSTRAP) doesn't match with what's referenced in your mainTemplate (http://$(SCRIPTS_PATH))"; \
         exit 1; \
      fi
 
@@ -81,7 +80,7 @@ update_bootstrap:
     elif test "`curl -sSL http://$(SCRIPTS_PATH) 2>/dev/null | sha1sum | cut -d' ' -f1`" = "$(SCRIPTS_SHA1)"; then \
         echo >&2 "http://$(SCRIPTS_PATH) already up-to-date"; \
     else \
-        echo >&2 "http://$(SCRIPTS_PATH) already exists with a different checksum! Not overwriting! Bump the version in applianceMainTemplate.json."; \
+        echo >&2 "http://$(SCRIPTS_PATH) already exists with a different checksum! Not overwriting! Bump the version in mainTemplate.json."; \
         exit 1; \
     fi
 
@@ -132,10 +131,10 @@ deployDev: $(GROUP) validate
 deployMain: $(GROUP) validate_main
 	bash -n $(BOOTSTRAP)
 	aws s3 cp $(S3_BOOTSTRAP) - >/dev/null 2>&1 || { aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP) && aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY); }
-	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' applianceMainTemplate.json
+	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' mainTemplate.json
 	@(touch local.mk; cat local.mk; echo GROUP=$(GROUP)) | uniq | tee local.mk.tmp >/dev/null && mv local.mk.tmp local.mk
 	time az group deployment create --resource-group $(GROUP) --name $(DEPLOY) \
-     --template-file applianceMainTemplate.json \
+     --template-file mainTemplate.json \
      --parameters "$$(jq -r '.parameters | {adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber}|tojson' $(PARAMETERS))"
 	@echo "Your cluster is available at https://$$(az group deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
