@@ -8,8 +8,8 @@
     },
     "scaleNumber": {
       "type": "int",
-      "defaultValue": 2,
-      "minValue": 2,
+      "defaultValue": 1,
+      "minValue": 1,
       "metadata": {
         "description": "Number of XCE nodes to provision. (Max: 16)"
       }
@@ -53,6 +53,10 @@
   "variables": {
     "sq": "'",
     "scaleMinusOne": "[sub(parameters('scaleNumber'), 1)]",
+    "scaleMinusOneHack": {
+        "true": "[variables('scaleMinusOne')]",
+        "false": "[int(1)]"
+    },
     "clusterName": "xdp-standard-",
     "vmName": "[concat(variables('clusterName'), 'xce-vm')]",
     "vmSize": "[parameters('vmSize')]",
@@ -235,9 +239,10 @@
         "type": "Microsoft.Compute/virtualMachines",
         "name": "[concat(variables('vmName'), copyIndex(1))]",
         "location": "[resourceGroup().location]",
+        "condition": "[greater(variables('scaleMinusOne'), 0)]",
         "copy": {
             "name": "nodeId",
-            "count": "[variables('scaleMinusOne')]"
+            "count": "[variables('scaleMinusOneHack')[string(greater(variables('scaleMinusOne'), 0))]]"
         },
         "dependsOn": [
             "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
@@ -273,13 +278,14 @@
         }
     },
     {
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2017-03-01",
       "type": "Microsoft.Network/networkInterfaces",
       "name": "[concat(variables('nicName'), copyIndex(1))]",
       "location": "[resourceGroup().location]",
+      "condition": "[greater(variables('scaleMinusOne'), 0)]",
       "copy": {
         "name": "foo",
-        "count": "[variables('scaleMinusOne')]"
+        "count": "[variables('scaleMinusOneHack')[string(greater(variables('scaleMinusOne'), 0))]]"
       },
       "dependsOn": [
         "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"

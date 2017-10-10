@@ -16,10 +16,14 @@
             { "name": "scaleNumber",
               "type": "Microsoft.Common.DropDown",
               "label": "Number of nodes",
-              "defaultValue": "2",
+              "defaultValue": "1",
               "toolTip": "Xcalar Data Platform Standard Edition supports up to 16 nodes",
               "constraints": {
                 "allowedValues": [
+                  {
+                    "label": "1",
+                    "value": "1"
+                  },
                   {
                     "label": "2",
                     "value": "2"
