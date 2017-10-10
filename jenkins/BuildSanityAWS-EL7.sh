@@ -26,7 +26,7 @@ pkill -9 xcmgmtd || true
 
 do_build () {
  xclean || true
- (echo "Constants.BufferCacheMemLocking=false"; sed 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg) > src/data/${HOSTNAME}.cfg
+ (echo "Constants.BufferCacheLazyMemLocking=true"; sed 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg) > src/data/${HOSTNAME}.cfg
 
  echo "build clean"
  build clean &>/dev/null || build clean

@@ -27,7 +27,7 @@ pkill -9 xcmgmtd || true
 
 do_build () {
  xclean || true
- (echo "Constants.BufferCacheMemLocking=false"; sed 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg) > src/data/${HOSTNAME}.cfg
+ (echo "Constants.BufferCacheLazyMemLocking=true"; sed 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg) > src/data/${HOSTNAME}.cfg
 
  build clean
  build $1 CC='ccache gcc' CXX='ccache g++'
@@ -44,7 +44,7 @@ exit $?
 
 #bash -ex bin/build-installers.sh
 git clean -fxd
-(echo "Constants.BufferCacheMemLocking=false"; sed 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg) > src/data/${HOSTNAME}.cfg
+(echo "Constants.BufferCacheLazyMemLocking=true"; sed 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg) > src/data/${HOSTNAME}.cfg
 . doc/env/xc_aliases
 xclean
 build clean

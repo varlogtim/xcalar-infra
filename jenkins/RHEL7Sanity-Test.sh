@@ -42,7 +42,7 @@ xclean
 set -e
 
 if [ ! -e "src/data/${HOSTNAME}.cfg" ]; then
-  (echo Constants.BufferCacheMemLocking=false; sed -e 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg ) > src/data/${HOSTNAME}.cfg
+  (echo Constants.BufferCacheLazyMemLocking=true; sed -e 's/TEMPLATE/'${HOSTNAME}'/g' src/data/template.cfg ) > src/data/${HOSTNAME}.cfg
 fi
 
 
