@@ -12,7 +12,8 @@ _ssh () {
     ssh -t -T -oUserKnownHostsFile=/dev/null -oLogLevel=ERROR -oStrictHostKeyChecking=no "$@"
 }
 
-XCALAR_ROOT=$(_ssh $SSHUSER@$NODE "grep -o 'Constants.XcalarRootCompletePath=[^,]*' /etc/xcalar/default.cfg | cut -d '=' -f 2")
+PREV_ROOT=$(_ssh $SSHUSER@$NODE "grep -o 'Constants.XcalarRootCompletePath=[^,]*' /etc/xcalar/default.cfg | cut -d '=' -f 2")
+XCALAR_ROOT=${PREV_ROOT:-/var/opt/xcalar}
 XCCLI=$(_ssh $SSHUSER@$NODE "echo \${XLRDIR:-/opt/xcalar}/bin/xccli")
 LATEST_INSTALLER=`ls /netstore/builds/byJob/BuildTrunk/$INSTALLERNUMBER/debug/*$INSTALLERNUMBER*-installer`
 if [ -e "$LATEST_INSTALLER" ]; then
