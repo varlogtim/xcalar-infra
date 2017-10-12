@@ -110,7 +110,7 @@
     "customScriptCommandToExecute": "/bin/bash -x ampBootstrap.sh ",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
-    "imageSKU": "7.3",
+    "imageSKU": "7.4",
     "vmExtensionName": "xcalarBootstrapExtension",
     "dataDiskSize": "[parameters('dataDiskSize')]",
     "nicName": "[concat(variables('clusterName'),'nic-')]",

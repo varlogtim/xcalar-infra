@@ -18,13 +18,17 @@ ZONE ?= azure.xcalar.io
 PARAMETERS ?= parameters.json
 PARAMETERS_DEFAULTS ?= parameters.json.defaults
 TEMPLATE ?= azuredeploy.json
-
+S3CP= aws s3 cp --quiet
+PUBLIC = --acl public-read --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform'
+S3PUBLIC = $(S3CP) $(PUBLIC)
 
 PASSWORD=$(shell jq -r '.parameters.adminPassword.value' $(PARAMETERS))
 USERNAME=$(shell jq -r '.parameters.adminUsername.value' $(PARAMETERS))
 
 SCRIPTS_PATH=$(shell jq -r '[.variables.scriptsUri,.variables.customScriptName]|join("/")' mainTemplate.json | sed -e 's@^http://@@g')
 SCRIPTS_SHA1=$(shell sha1sum $(BOOTSTRAP) | cut -d' ' -f1)
+
+PAYLOAD = $(wildcard payload/*)
 
 export GNUPGHOME=$(CURDIR)/.gnupg
 JQ=/usr/local/bin/jq
@@ -34,10 +38,14 @@ s3url = $(shell aws s3 presign $(1))
 -include local.mk
 
 # These are the full URLs, possibly with parameter eg: https://xcrepo.s3.amazonaws.com/builds/foo.sh?Arg-1&Arg2=2
-BOOTSTRAP_URL = $(call s3url, $(S3_BOOTSTRAP))
+BOOTSTRAP_URL = https://s3-us-west-2.amazonaws.com/$(BUCKET)/$(S3_BOOTSTRAP_KEY)
 INSTALLER_URL = $(call s3url, $(S3_INSTALLER))
 
 all: xdp-standard-package.zip
+
+clean:
+	rm -f xdp-standard-package.zip payload.tar.gz
+	rm -rf .tmp
 
 /usr/bin/sshpass:
 	@echo "You need sshpass installed. Please use 'sudo apt-get install -y sshpass' on Ubuntu and 'sudo yum install -y sshpass' on EL"
@@ -47,15 +55,18 @@ jq15:
 	@if ! jq --version | grep -q '1.5'; then sudo curl -o $(JQ).tmp -fsSL https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64 && sudo chmod +x $(JQ).tmp && sudo mv $(JQ).tmp $(JQ); fi
 	@hash -r; jq --version | grep -q '1.5' || { echo "jq 1.5 had to be installed. Please run 'hash -r', and make sure jq is $(JQ) in your PATH"; exit 2; }
 
-xdp-standard-package.zip: createUiDefinition.json mainTemplate.json
-	aws s3 cp $(S3_BOOTSTRAP) - >/dev/null 2>&1 || aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP)
-	aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY)
-	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' mainTemplate.json
-	zip xdp-standard-package.zip createUiDefinition.json mainTemplate.json
+payload.tar.gz: $(PAYLOAD)
+	rm -f $@
+	fakeroot tar czvf $@ $^
 
-clean:
-	rm -f xdp-standard-package.zip
-	rm -rf .tmp/
+.PHONY: xdp-standard-package.zip
+xdp-standard-package.zip: createUiDefinition.json mainTemplate.json bootstrap.sh payload.tar.gz
+	rm -rf .tmp
+	mkdir -p .tmp
+	cp $^ .tmp
+	#(cat bootstrap.sh; base64 payload.tar.gz) > .tmp/bootstrap.sh
+	rm -f $@
+	(cd .tmp/ && zip ../$@ * && cp ../$@ .)
 
 $(VALIDATE_RG) $(GROUP):
 	@if ! test "`az group exists --name $@ --output tsv`" = true; then \
@@ -88,6 +99,9 @@ update_bootstrap:
 	@test -e $@ || { echo "Copying template $< to $@ ..." && cp $< $@ && echo "Please modify the missing sections in $(PARAMETERS) before redeploying!"; exit 1; }
 	@touch $@
 
+validateMain: $(VALIDATE_RG) parameters.json
+	@bash -n $(BOOTSTRAP)
+	@az group deployment validate --resource-group $(VALIDATE_RG) --template-file "mainTemplate.json" --parameters @parameters.main.json
 
 validate: $(VALIDATE_RG) parameters.json
 	@bash -n $(BOOTSTRAP)
@@ -115,27 +129,23 @@ deploy: $(GROUP) validate
 
 deployDev: $(GROUP) validate
 	bash -n $(BOOTSTRAP)
-	aws s3 cp $(S3_BOOTSTRAP) - >/dev/null 2>&1 || { aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP) && aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY); }
-	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' applianceDevTemplate.json
+	aws s3 cp $(S3_BOOTSTRAP) - >/dev/null 2>&1 || aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP)
+	aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY)
+	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "'`dirname $(BOOTSTRAP_URL)`'",|g' applianceDevTemplate.json
 	@(touch local.mk; cat local.mk; echo GROUP=$(GROUP)) | uniq | tee local.mk.tmp >/dev/null && mv local.mk.tmp local.mk
 	time az group deployment create --resource-group $(GROUP) --name $(DEPLOY) \
      --template-file applianceDevTemplate.json \
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
-                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,\
+                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber,\
                                            dnsLabelPrefix: {value:"$(GROUP)"},\
                                            installerUrl: {value:"$(INSTALLER_URL)"},\
                                            bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
-                                           }|tojson' $(PARAMETERS_DEFAULTS) $(PARAMETERS)"
+                                           }|tojson' $(PARAMETERS_DEFAULTS) $(PARAMETERS))"
 	@echo "Your cluster is available at https://$$(az group deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
-deployMain: $(GROUP) validate_main
-	bash -n $(BOOTSTRAP)
-	aws s3 cp $(S3_BOOTSTRAP) - >/dev/null 2>&1 || { aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP) && aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY); }
-	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "https://'$(BUCKET)'.s3.amazonaws.com/'`dirname $(S3_BOOTSTRAP_KEY)`'",|g' mainTemplate.json
-	@(touch local.mk; cat local.mk; echo GROUP=$(GROUP)) | uniq | tee local.mk.tmp >/dev/null && mv local.mk.tmp local.mk
+deployMain: $(GROUP) validateMain
 	time az group deployment create --resource-group $(GROUP) --name $(DEPLOY) \
-     --template-file mainTemplate.json \
-     --parameters "$$(jq -r '.parameters | {adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber}|tojson' $(PARAMETERS))"
+     --template-file mainTemplate.json --parameters @parameters.main.json
 	@echo "Your cluster is available at https://$$(az group deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
 getips:
@@ -158,8 +168,8 @@ ssh/%:
 	fakeroot tar czvf $@ --transform='s,^$*,cert,' $^
 
 %.gpg.upload: %.gpg
-	aws s3 cp $< s3://xccerts/certs/$(ZONE)/bysha1/`sha1sum $< | cut -d' ' -f1`/$(<F)
+	$(S3PUBLIC) $< s3://xccerts/certs/$(ZONE)/bysha1/`sha1sum $< | cut -d' ' -f1`/$(<F)
 
 %.upload: %.pem %.key
-	aws s3 cp --acl public-read --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' $(<F).pem s3://xccerts/certs/xcalar.io/
-	aws s3 cp --acl public-read --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' $(<F).key s3://xccerts/certs/xcalar.io/
+	$(S3PUBLIC) $(<F).pem s3://xccerts/certs/$(ZONE)/
+	$(S3PUBLIC) $(<F).key s3://xccerts/certs/$(ZONE)/

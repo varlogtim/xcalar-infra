@@ -32,6 +32,13 @@
         "description": "Administrator's email address"
       }
     },
+    "location": {
+      "type": "string",
+      "defaultValue": "West US 2",
+      "metadata": {
+        "description": "Location of resources"
+      }
+    },
     "vmSize": {
       "type": "string",
       "defaultValue": "Standard_E8s_v3",
@@ -39,8 +46,11 @@
         "description": "Size of the VM"
       },
       "allowedValues": [
+          "Standard_D13_v2_Promo",
           "Standard_DS13_v2_Promo",
           "Standard_DS14_v2_Promo",
+          "Standard_D14_v2_Promo",
+          "Standard_D15_v2_Promo",
           "Standard_DS15_v2_Promo",
           "Standard_E8s_v3",
           "Standard_E16s_v3"
@@ -69,9 +79,12 @@
   "variables": {
     "sq": "'",
     "scaleMinusOne": "[sub(parameters('scaleNumber'), 1)]",
+    "scaleMinusOneHack": {
+        "true": "[variables('scaleMinusOne')]",
+        "false": "[int(1)]"
+    },
     "clusterName": "xdp-standard-",
     "vmName": "[concat(variables('clusterName'), 'xce-vm')]",
-    "vmSize": "[parameters('vmSize')]",
     "dnsLabelPrefix": "[concat(variables('clusterName'), uniquestring(subscription().subscriptionId, resourceGroup().id, parameters('licenseKey')))]",
     "storageAccountType": "Standard_LRS",
     "storageAccountName": "[concat('xdpstorage', uniquestring(subscription().subscriptionId, resourceGroup().id, variables('clusterName')))]",
@@ -82,13 +95,13 @@
     "subnet1Name": "[concat(variables('clusterName'),'subnet-1')]",
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
-    "scriptsUri": "https://xcrepo.s3.amazonaws.com/bysha1/d9a42d6c9abbf2d8c7ad916489ff1160633860fb",
+    "scriptsUri": "https://s3-us-west-2.amazonaws.com/xcrepo/bysha1/f0fac9e2bfdf961bbab0717b51b90eb674e50c64",
     "customScriptName": "ampBootstrap.sh",
     "customScriptFilePath": "[concat(variables('scriptsUri'), '/', variables('customScriptName'))]",
     "customScriptCommandToExecute": "[concat('/bin/bash ', variables('customScriptName'), ' ')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
-    "imageSKU": "7.3",
+    "imageSKU": "7.4",
     "vmExtensionName": "xcalarBootstrapExtension",
     "dataDiskSize": 1023,
     "nicName": "[concat(variables('clusterName'),'nic-')]"
@@ -98,7 +111,7 @@
       "type": "Microsoft.Compute/disks",
       "name": "[concat(variables('vmName'),'0-datadisk')]",
       "apiVersion": "2017-03-30",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "sku": {
         "name": "Premium_LRS"
       },
@@ -113,7 +126,7 @@
       "type": "Microsoft.Storage/storageAccounts",
       "name": "[variables('storageAccountName')]",
       "apiVersion": "2017-06-01",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "kind": "BlobStorage",
       "identity": {
           "type": "SystemAssigned"
@@ -126,26 +139,26 @@
       }
     },
     {
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2017-09-01",
       "type": "Microsoft.Network/publicIPAddresses",
       "name": "[concat(variables('clusterName'), 'publicIP', copyIndex())]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "copy": {
-        "name": "foo",
+        "name": "numIp",
         "count": 1
       },
       "properties": {
         "publicIPAllocationMethod": "[variables('publicIPAddressType')]",
         "dnsSettings": {
-          "domainNameLabel": "[concat(variables('dnsLabelPrefix'),'-',copyIndex())]"
+          "domainNameLabel": "[concat(variables('dnsLabelPrefix'))]"
         }
       }
     },
     {
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2017-09-01",
       "type": "Microsoft.Network/virtualNetworks",
       "name": "[variables('virtualNetworkName')]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
@@ -163,12 +176,12 @@
       }
     },
     {
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2017-09-01",
       "type": "Microsoft.Network/networkInterfaces",
       "name": "[concat(variables('nicName'), copyIndex())]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "copy": {
-        "name": "foo",
+        "name": "numNetworkInterfaces",
         "count": 1
       },
       "dependsOn": [
@@ -197,7 +210,7 @@
         "apiVersion": "2017-03-30",
         "type": "Microsoft.Compute/virtualMachines",
         "name": "[concat(variables('vmName'), copyIndex())]",
-        "location": "[resourceGroup().location]",
+        "location": "[parameters('location')]",
         "copy": {
             "name": "nodeId",
             "count": 1
@@ -209,7 +222,7 @@
         ],
         "properties": {
             "hardwareProfile": {
-                "vmSize": "[variables('vmSize')]"
+                "vmSize": "[parameters('vmSize')]"
             },
             "osProfile": {
                 "computername": "[concat(variables('vmName'), copyIndex())]",
@@ -250,10 +263,11 @@
         "apiVersion": "2017-03-30",
         "type": "Microsoft.Compute/virtualMachines",
         "name": "[concat(variables('vmName'), copyIndex(1))]",
-        "location": "[resourceGroup().location]",
+        "location": "[parameters('location')]",
+        "condition": "[greater(variables('scaleMinusOne'), 0)]",
         "copy": {
             "name": "nodeId",
-            "count": "[variables('scaleMinusOne')]"
+            "count": "[variables('scaleMinusOneHack')[string(greater(variables('scaleMinusOne'), 0))]]"
         },
         "dependsOn": [
             "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
@@ -261,7 +275,7 @@
         ],
         "properties": {
             "hardwareProfile": {
-                "vmSize": "[variables('vmSize')]"
+                "vmSize": "[parameters('vmSize')]"
             },
             "osProfile": {
                 "computername": "[concat(variables('vmName'), copyIndex(1))]",
@@ -289,13 +303,14 @@
         }
     },
     {
-      "apiVersion": "2015-05-01-preview",
+      "apiVersion": "2017-09-01",
       "type": "Microsoft.Network/networkInterfaces",
       "name": "[concat(variables('nicName'), copyIndex(1))]",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
+      "condition": "[greater(variables('scaleMinusOne'), 0)]",
       "copy": {
-        "name": "foo",
-        "count": "[variables('scaleMinusOne')]"
+        "name": "numNetworkInterfaces",
+        "count": "[variables('scaleMinusOneHack')[string(greater(variables('scaleMinusOne'), 0))]]"
       },
       "dependsOn": [
         "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
@@ -319,9 +334,9 @@
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "name": "[concat(variables('vmName'), copyIndex(), '/', variables('vmExtensionName'))]",
       "apiVersion": "2017-03-30",
-      "location": "[resourceGroup().location]",
+      "location": "[parameters('location')]",
       "copy": {
-        "name": "foo",
+        "name": "numExt",
         "count": "[parameters('scaleNumber')]"
       },
       "dependsOn": [
@@ -339,7 +354,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -a azure.xcalar.io -b Z1B5U8RYSOLN6J -d ', variables('dnsLabelPrefix'),' -e AKIAIH53R2K2L7RO2M4A -f \"uo4t5mnADoXzGkwxGXAWPVWKvAes0+bjO4HDfA4L\" -g \"m8QFonzFegKu\" -p s3://xccerts/certs/azure.xcalar.io/bysha1/abb179a4036f92f744aa0d0c973f87593d668efb/xdp-standard-001-099.tar.gz.gpg -i ', copyIndex(), ' -n ', parameters('scaleNumber'), ' -l ', variables('sq'), parameters('licenseKey'), variables('sq'), ' -v ', parameters('adminEmail'), ' -w ', parameters('adminUsername'), ' -x ', variables('sq'), parameters('adminPassword'), variables('sq'), ' -y ', variables('sq'), variables('storageAccountName'), variables('sq'), ' -z ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'),' -u ', variables('sq'), parameters('installerUrl'), variables('sq'), ' >> startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -d ', variables('dnsLabelPrefix'),' -i ', copyIndex(), ' -n ', parameters('scaleNumber'), ' -l ', variables('sq'), parameters('licenseKey'), variables('sq'), ' -v ', variables('sq'), parameters('adminEmail'), variables('sq'), ' -w ', variables('sq'), parameters('adminUsername'), variables('sq'), ' -x ', variables('sq'), parameters('adminPassword'), variables('sq'), ' -y ', variables('sq'), variables('storageAccountName'), variables('sq'), ' -z ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> startup.log 2>&1')]"
         }
       }
     }

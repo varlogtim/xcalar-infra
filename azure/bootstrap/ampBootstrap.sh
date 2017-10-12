@@ -6,10 +6,7 @@ INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/
 LICENSE_SERVER="https://x3xjvoyc6f.execute-api.us-west-2.amazonaws.com/production/license/api/v1.0/marketplacedeploy"
 HTML="http://pub.xcalar.net/azure/dev/html-4.tar.gz"
 XCALAR_ADVENTURE_DATASET="http://pub.xcalar.net/datasets/xcalarAdventure.tar.gz"
-SUBDOMAIN="azure.xcalar.io"
 CONTAINER="customer"
-export AWS_HOSTED_ZONE_ID="Z1B5U8RYSOLN6J" # for lego
-export AWS_DEFAULT_REGION=us-west-2
 
 # By default use the LetsEncrypt staging server so we don't trigger
 # CA limits for this domain
@@ -61,6 +58,14 @@ clean_fstab () {
     test -n "$1" && sed -i '\@'$1'@d' /etc/fstab
 }
 
+extract () {
+    sed -n '/^__TARBALL__/,$p' "$1" | tail -n+2
+}
+
+extract_top () {
+    sed -n '1,/^__TARBALL__$/p' "$1"
+}
+
 # mount_device /path /dev/partition will mount the given partition to the path. If
 # the partition doesn't exist it is created from the underlying device. If the
 # device is already mounted somewhere else, it is unmounted. *CAREFUL* when calling
@@ -102,94 +107,11 @@ mount_device () {
     clean_fstab $PARTIN && \
     mkdir -p $MOUNT && \
     if [ "$FSTYPE" = xfs ]; then
-        echo "UUID=$UUID   $MOUNT      xfs         defaults,discard,relatime,nobarrier  0   0" | tee -a /etc/fstab
+        echo "UUID=$UUID   $MOUNT      xfs         defaults,discard,relatime,nobarrier,nofail  0   0" | tee -a /etc/fstab
     elif [ "$FSTYPE" = ext4 ]; then
-        echo "UUID=$UUID   $MOUNT      ext4        defaults,discard,relatime,nobarrier  0   0" | tee -a /etc/fstab
+        echo "UUID=$UUID   $MOUNT      ext4        defaults,discard,relatime,nobarrier,nofail  0   0" | tee -a /etc/fstab
     fi
     mount $MOUNT
-}
-
-download_cert () {
-    local gpgfile="$(basename "$1")" try=0
-    local tarfile="$(basename "$gpgfile" .gpg)"
-    local pemfile= keyfile=
-    aws s3 cp "$1" "$gpgfile" >&2 && \
-    while [ $try -lt 10 ]; do
-        if [[ $gpgfile =~ \.gpg$ ]]; then
-            echo "$2"| gpg --passphrase-fd 0 --batch --quiet --yes --no-tty -d "$gpgfile" > "$tarfile"
-        fi && \
-        pemfile="$(tar tf "$tarfile" | grep -E '\.(pem|crt)' | head -1)" && \
-        keyfile="$(tar tf "$tarfile" | grep -E '\.key' | head -1)" && \
-        tar zxf "$tarfile" && \
-        echo "${PWD}/${pemfile}" && \
-        return 0
-        try=$((try+1))
-        sleep 5
-    done
-    return 1
-}
-
-lego_register_domain() {
-    if ! test -e /usr/local/bin/lego; then
-        safe_curl -L https://github.com/xenolf/lego/releases/download/v0.4.0/lego_linux_amd64.tar.xz | \
-            tar Jxvf - --no-same-owner lego_linux_amd64
-        mv lego_linux_amd64 /usr/local/bin/lego
-        chmod +x /usr/local/bin/lego
-        setcap cap_net_bind_service=+ep /usr/local/bin/lego
-    fi
-    local caserver="$1" domains=() domain=
-    shift
-    for domain in "$@"; do
-        domains+=(-d $domain)
-    done
-    if ! lego --server "$caserver" "${domains[@]}" --dns route53 --accept-tos --email "${ADMIN_EMAIL}" run; then
-        echo >&2 "Failed to acquire certificate"
-        return 1
-    fi
-    cp ".lego/certificates/${1}.crt" /etc/xcalar/ && cp ".lego/certificates/${1}.key" /etc/xcalar/ && \
-        return 0
-    return 1
-}
-
-# Create a resource record that points xd-standard-amit-0.westus2.cloud.azure.com -> yourprefix.azure.xcalar.cloud
-aws_route53_record () {
-    local CNAME="$1" NAME="$2" rrtmp="$(mktemp /tmp/rrsetXXXXXX.json)" change_id=
-    cat > $rrtmp <<EOF
-    { "HostedZoneId": "$AWS_HOSTED_ZONE_ID", "ChangeBatch": { "Comment": "Adding $CNAME",
-      "Changes": [ {
-        "Action": "UPSERT",
-          "ResourceRecordSet": { "Name": "$NAME", "Type": "CNAME", "TTL": 60,
-            "ResourceRecords": [ { "Value": "$CNAME" } ] } } ] } }
-EOF
-    change_id="$(set -o pipefail; aws route53 change-resource-record-sets --cli-input-json file://${rrtmp} | jq -r '.ChangeInfo.Id' | cut -d'/' -f3)"
-    if [ $? -eq 0 ] && [ "$change_id" != "" ]; then
-        echo "$change_id"
-        return 0
-    fi
-    return 1
-}
-
-pem_san_list () {
-    openssl x509 -noout -text -in "$1" | grep 'DNS:' | sed -r 's/ DNS://g; s/^[\t ]+//g; s/,/\n/g'
-}
-
-aws_route53_list () {
-    aws route53 list-resource-record-sets --hosted-zone-id "$AWS_HOSTED_ZONE_ID" --query 'ResourceRecordSets[].Name' --output text | tr '\t' '\n' | grep '\.'${SUBDOMAIN} | sort
-}
-
-dns_find_slot () {
-    aws_route53_list > zone_records.txt
-    pem_san_list "$1" > pem_san.txt
-    if grep -q '\*\.'${SUBDOMAIN} pem_san.txt; then
-        echo "${DNSLABELPREFIX}.${SUBDOMAIN}"
-        return 0
-    fi
-    comm -13 zone_records.txt pem_san.txt > allowed.txt
-    local precert="$(comm -13 zone_records.txt pem_san.txt | head -1 | tee -a dnsname.txt)"
-    if [ -z "$precert" ]; then
-        return 1
-    fi
-    echo "$precert"
 }
 
 setenforce Permissive
@@ -201,20 +123,40 @@ echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yum
 
 yum makecache fast
 
-# See https://docs.microsoft.com/en-us/azure/storage/common/storage-premium-storage#premium-storage-for-linux-vms
-rpm -e hypervkvpd || true
-yum install -y microsoft-hyper-v
+#Not used > 7.3
+if grep -q '7\.3' /etc/redhat-release; then
+    # See https://docs.microsoft.com/en-us/azure/storage/common/storage-premium-storage#premium-storage-for-linux-vms
+    rpm -e hypervkvpd || true
+    yum install -y microsoft-hyper-v
+fi
 
-yum install -y nfs-utils epel-release parted gdisk curl
-yum install -y jq python-pip awscli azure-cli
+yum install -y nfs-utils epel-release parted gdisk curl lvm2
+yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils
 
-# For CIFS
-yum install -y samba-client samba-common cifs-utils
+run_playload () {
+    #(set -o pipefail; extract "${BASH_SOURCE[0]}" | base64 -d | tar zxf - && cd payload && ./install.sh $INSTANCESTORE $DISK)
+    (tar zxf payload.tar.gz && cd payload && ./install.sh $INSTANCESTORE $DISK)
+}
 
-pip install jinja2
+setup_instancestore () {
+    # Remove waagent's role in managing the disk
+    sed -i 's/^ResourceDisk.Format=y/ResourceDisk.Format=n/g' /etc/waagent.conf
+    INSTANCESTORE=/ephemeral/data
+    DISK="$(readlink -f /dev/disk/azure/resource)"
+    if test -b "${DISK}1"; then
+        if OLDMOUNT=$(set -o pipefail; findmnt -n ${DISK}1 | awk '{print $1}'); then
+            mountpoint -q $OLDMOUNT && umount $OLDMOUNT || true
+        fi
+        parted "${DISK}" -s 'rm 1'
+    fi
 
+}
+
+setup_instancestore
+run_playload
+
+pip install -U jinja2
 test -n "$HTML" && safe_curl -sSL "$HTML" > html.tar.gz
-
 tar -zxvf html.tar.gz
 
 serveError() {
@@ -267,7 +209,7 @@ if [ `du installer.sh | cut -f 1` = "0" ]; then
 fi
 
 # Determine our CIDR by querying the metadata service
-safe_curl -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=2017-04-02&format=json" | jq . > metadata.json
+safe_curl -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=2017-08-01&format=json" | jq . > metadata.json
 retCode=$?
 if [ "$retCode" != "0" ]; then
     echo >&2 "ERROR: Could not contact metadata service"
@@ -280,42 +222,35 @@ MASK="$(<metadata.json jq -r '.network.interface[].ipv4.subnet[].prefix')"
 LOCALIPV4="$(<metadata.json jq -r '.network.interface[].ipv4.ipAddress[].privateIpAddress')"
 PUBLICIPV4="$(<metadata.json jq -r '.network.interface[].ipv4.ipAddress[].publicIpAddress')"
 LOCATION="$(<metadata.json jq -r '.compute.location')"
+VMSIZE="$(<metadata.json jq -r '.compute.vmSize')"
 
 # On some Azure instances /mnt/resource comes premounted but not aligned properly
-RESOURCEDEV="$(findmnt -n /mnt/resource | awk '{print $2}')"
-if [ -n "$RESOURCEDEV" ]; then
-    mount_device /mnt/resource $RESOURCEDEV SSD ext4
-    INSTANCESTORE=/mnt/resource
-fi
+#if ! test -d $INSTANCESTORE; then
+#    if ! RESOURCEDEV="$(set -o pipefail; findmnt -n $INSTANCESTORE | awk '{print $2}')"; then
+#		if test -b /dev/disk/azure/resource-part1; then
+#			RESOURCEDEV=$(readlink -f /dev/disk/azure/resource-part1)
+#		elif test -b /dev/disk/azure/resource; then
+#			RESOURCEDEV=$(readlink -f /dev/disk/azure/resource)1
+#		fi
+#	fi
+#    mount_device $INSTANCESTORE $RESOURCEDEV SSD ext4
+#fi
+
+MEMSIZEMB=$(free -m | awk '/Mem:/{print $2}')
+SWAPSIZEMB=$MEMSIZEMB
+case "$VMSIZE" in
+	Standard_E*) SWAPSIZEMB=$((MEMSIZEMB*2));;
+	*)
+esac
 
 # Format and mount additional SSD, and prefer to use that
-for DEV in /dev/sdb /dev/sdc /dev/sdd; do
+for DEV in /dev/sdc /dev/sdd; do
     if test -b ${DEV} && ! test -b "${DEV}1"; then
         mount_device /mnt/ssd  "${DEV}1" SSD2 xfs
         LOCALSTORE=/mnt/ssd
         break
     fi
 done
-
-# Create swapfile on local store, over using a partition. The speed is the
-# same according to online docs
-SWAPFILE="${INSTANCESTORE}/swapfile"
-
-MEMSIZEMB=$(free -m | awk '/Mem:/{print $2}')
-fallocate -l ${MEMSIZEMB}m $SWAPFILE
-chmod 0600 $SWAPFILE
-mkswap $SWAPFILE
-if ! swapon $SWAPFILE; then
-    rm -f $SWAPFILE
-    time dd if=/dev/zero of=$SWAPFILE bs=1MiB count=$MEMSIZEMB
-    chmod 0600 $SWAPFILE
-    mkswap $SWAPFILE
-    swapon $SWAPFILE
-fi
-if [ $? -eq 0 ]; then
-    clean_fstab $SWAPFILE
-    echo "$SWAPFILE   swap    swap    sw  0   0" | tee -a /etc/fstab
-fi
 
 # Node 0 will host NFS shared storage for the cluster
 if [ "$HOSTNAME" = "$NFSHOST" ]; then
@@ -348,28 +283,17 @@ fi
 
 ### Install Xcalar
 if [ -f "installer.sh" ]; then
-    if ! bash -x installer.sh --nostart --caddy; then
+    # We install our own systemd unit for xcalar in the payload so don't need --startonboot
+    if ! bash -x installer.sh --stop --nostart --caddy; then
         echo >&2 "ERROR: Failed to run installer"
         serveError "Failed to run installer" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
         exit 1
     fi
-    curl -sSL http://repo.xcalar.net/deps/caddy_linux_amd64_custom-0.10.3.tar.gz | tar zxf - -C ${XLRDIR}/bin caddy
+    curl -sSL http://repo.xcalar.net/deps/caddy_linux_amd64_custom-0.10.3.tar.gz | tar zxf - caddy
+    mv caddy ${XLRDIR}/bin/
     chmod 0755 $XLRDIR/bin/caddy
     chown root:root $XLRDIR/bin/caddy
     setcap cap_net_bind_service=+ep $XLRDIR/bin/caddy
-fi
-
-# Download PEM
-if [ -n "$PEM_URL" ] && [ -n "$PASSWORD" ]; then
-    if PEM="$(download_cert "$PEM_URL" "$PASSWORD")"; then
-        cp "$PEM" /etc/xcalar/cert.pem && \
-        cp "$(dirname $PEM)/$(basename $PEM .pem).key" /etc/xcalar/cert.key && \
-        chmod 0444 /etc/xcalar/cert.pem /etc/xcalar/cert.key && \
-        PEM="/etc/xcalar/cert.pem" || {
-            PEM=""
-            echo >&2 "Claimed to have downloaded cert, but there isn't one"
-        }
-    fi
 fi
 
 # Returns relative date in az compatible format
@@ -431,21 +355,21 @@ done
 
 # Register domain
 CNAME="${DNSLABELPREFIX}-${INDEX}.${LOCATION}.cloudapp.azure.com"
+if [ -z "$SUBDOMAIN" ]; then
+    SUBDOMAIN="${LOCATION}.cloudapp.azure.com"
+fi
 
 DEPLOYED_URL=""
 XCE_DNS=""
+cp -n /etc/xcalar/Caddyfile /etc/xcalar/Caddyfile.orig
 if [ "$PUBLICIPV4" != "" ]; then
     if [ "$INDEX" = 0 ]; then
-        if [ -n "$PEM" ]; then
-            XCE_DNS="$(dns_find_slot "$PEM")"
-        else
-            XCE_DNS="${DNSLABELPREFIX}.${SUBDOMAIN}"
-        fi
+        XCE_DNS="${DNSLABELPREFIX}.${SUBDOMAIN}"
     fi
     if [ -z "$XCE_DNS" ]; then
-        XCE_DNS="${DNSLABELPREFIX}-${INDEX}.${SUBDOMAIN}"
+        XCE_DNS="${DNSLABELPREFIX}${INDEX}.${SUBDOMAIN}"
     fi
-    aws_route53_record "${CNAME}" "${XCE_DNS}"
+    #aws_route53_record "${CNAME}" "${XCE_DNS}"
     (
     echo ":443, https://${XCE_DNS}:443 {"
     tail -n+2 /etc/xcalar/Caddyfile
@@ -456,31 +380,25 @@ if [ "$PUBLICIPV4" != "" ]; then
     mv /etc/xcalar/Caddyfile.$$ /etc/xcalar/Caddyfile
     # Have to add the -agree flag or caddy asks us interactively
     sed -i -e 's/caddy -quiet/caddy -quiet -agree/g' /etc/xcalar/supervisor.conf
-    if [ -n "$PEM" ]; then
-        sed -i -e "s|tls.*$|tls /etc/xcalar/cert.pem /etc/xcalar/cert.key|g" /etc/xcalar/Caddyfile
-        chmod 0644 /etc/xcalar/cert.*
-        DEPLOYED_URL="https://$XCE_DNS"
-    elif [ "$INDEX" = 0 ] && lego_register_domain "${CASERVER}" "${XCE_DNS}"; then
+    if [ "$INDEX" = 0 ] && test -e "/etc/xcalar/${XCE_DNS}.key"; then
         sed -i -e "s|tls.*$|tls /etc/xcalar/${XCE_DNS}.crt /etc/xcalar/${XCE_DNS}.key|g" /etc/xcalar/Caddyfile
-        DEPLOYED_URL="https://$XCE_DNS"
-    elif lego_register_domain "${CASTAGING}" "${XCE_DNS}"; then
-        sed -i -e "s|tls.*$|tls /etc/xcalar/${XCE_DNS}.crt /etc/xcalar/${XCE_DNS}.key|g" /etc/xcalar/Caddyfile
-        DEPLOYED_URL="https://$XCE_DNS"
     else
         sed -i -e 's/tls.*$/tls self_signed/g' /etc/xcalar/Caddyfile
-        DEPLOYED_URL="https://$CNAME"
     fi
+    DEPLOYED_URL="https://$XCE_DNS"
 else
     (
     echo ":443 {"
-    tail -n+2 /etc/xcalar/Caddyfile
+    tail -n+2 /etc/xcalar/Caddyfile.orig
     echo ":80 {"
     echo "  redir https://{host}{uri}"
     echo "}"
-    ) | tee /etc/xcalar/Caddyfile.$$
+    ) | sed -e 's/tls.*$/tls self_signed/g' | tee /etc/xcalar/Caddyfile.$$
     mv /etc/xcalar/Caddyfile.$$ /etc/xcalar/Caddyfile
 fi
 
+# Custom SerDes path on local storage
+XCE_XDBSERDESPATH="${INSTANCESTORE}/serdes"
 # Generate /etc/xcalar/default.cfg
 (
 if [ $COUNT -eq 1 ]; then
@@ -491,8 +409,6 @@ fi
 # Enable ASUP on Cloud deployments
 echo Constants.SendSupportBundle=true
 
-# Custom SerDes path on local storage
-XCE_XDBSERDESPATH="${INSTANCESTORE}/serdes"
 mkdir -m 0700 -p $XCE_XDBSERDESPATH && \
 chown xcalar:xcalar $XCE_XDBSERDESPATH && \
 echo Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH
@@ -506,8 +422,9 @@ chown -R xcalar:xcalar /etc/xcalar
 # Set up the mount for XcalarRoot
 mkdir -p "$XCE_HOME"
 clean_fstab $XCE_HOME
-echo "${NFSMOUNT}/xcalar   $XCE_HOME    nfs     defaults    0   0" | tee -a /etc/fstab
+echo "${NFSMOUNT}/xcalar   $XCE_HOME    nfs     defaults,nofail    0   0" | tee -a /etc/fstab
 
+# Set up the mount for XcalarRoot
 sed -r -i -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$XCE_HOME'@g' "$XCE_CONFIG"
 
 # Wait for Node0 NFS server to fully come up. Often times the other nodes get to this point before node0 has
@@ -547,12 +464,13 @@ if test -n "$XCALAR_ADVENTURE_DATASET"; then
     chmod -R 755 /netstore
 fi
 
-service xcalar start
+systemctl enable xcalar
+systemctl start xcalar
 
 # Add in the default admin user into Xcalar
 if [ ! -z "$ADMIN_USERNAME" ]; then
     mkdir -p $XCE_HOME/config
-    chown -R xcalar:xcalar $XCE_HOME/config
+    chown -R xcalar:xcalar $XCE_HOME/config /etc/xcalar
     jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"$ADMIN_USERNAME\", \"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\" }"
     echo "Creating default admin user $ADMIN_USERNAME ($ADMIN_EMAIL)"
     # Don't fail the deploy if this curl doesn't work
@@ -566,4 +484,5 @@ if [ ! -z "$DEPLOYED_URL" ]; then
     jsonData="{ \"key\": \"$LICENSE\", \"url\": \"$DEPLOYED_URL\", \"marketplaceName\": \"azure\" }"
     safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "$LICENSE_SERVER"
 fi
-
+exit
+__TARBALL__
