@@ -7,3 +7,56 @@ make && url=`../../bin/installer-url.sh -d s3 ./xdp-standard-package.zip | grep 
 To publish this into Azure marketplace,
 1) Delete applianceDefinitionId from mainTemplate.json
 2) Change kind to "marketplace"
+
+
+## deployFromAzureMP.sh
+
+- Browse to http://netstore/infra/aws/azure.html
+- Pick the last link, it'll take you to the portal where you can 'go through' with a deploy
+- At the end it'll error out.
+- Hit F12 (in Chrome), the Javascript console will have a block of json with parameters of your deployment. Something like
+```
+  { "vmSize": { "value": "Standard_E8s"} ... }
+```
+- Copy that entire block
+- Create a local file in this directory named parameters.main.json and paste the contents of your clipboard into here
+- Verify your license: ./check-licenses 'YOURLICENSE' NUM_NODES
+- This same license should've been part of the data you pasted into parameters.main.json
+- Now run create your resource group in the same location as you specified during template deployment ui
+```
+  export GROUP=mygroup-1
+  export LOCATION=westus2
+
+  az group create -n $GROUP -l $LOCATION
+```
+- If that succeeds, run deployFromAzureMP.sh
+```
+  ./deployFromAzureMP.sh -g $GROUP
+```
+It'll take a while ~10min or so. If you did this on a local Linux machine, it'll open up chrome to your GROUP. If not, it'll
+out the URL.
+
+- Now run get your IP address. Use the gui or cli:
+```
+  az vm list-ip-addresses -g $GROUP -otable
+
+  VirtualMachine    PublicIPAddresses    PrivateIPAddresses
+  ----------------  -------------------  --------------------
+  xdp-standard-vm0  52.247.205.127       10.0.0.4
+  xdp-standard-vm1                       10.0.0.5
+  xdp-standard-vm2                       10.0.0.6
+
+```
+
+- And finally
+
+```
+  ssh youruser@PublicIpFromAbove
+```
+
+You should also be able to browse to the domainNameLabel you specified during template creation (yourdnsname.westus2.cloudapp.azure.com)
+
+If you wish to redeploy the same template, you'll need to specify a new domainNameLabel. Either in the json, or append a
+parameter to ./deployFromAzureMP.sh -g $GROUP -- --parameters domainNameLabel=myotherunusedname-1
+
+
