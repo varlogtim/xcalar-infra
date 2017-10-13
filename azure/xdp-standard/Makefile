@@ -159,3 +159,7 @@ ssh/%:
 
 %.gpg.upload: %.gpg
 	aws s3 cp $< s3://xccerts/certs/$(ZONE)/bysha1/`sha1sum $< | cut -d' ' -f1`/$(<F)
+
+%.upload: %.pem %.key
+	aws s3 cp --acl public-read --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' $(<F).pem s3://xccerts/certs/xcalar.io/
+	aws s3 cp --acl public-read --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' $(<F).key s3://xccerts/certs/xcalar.io/

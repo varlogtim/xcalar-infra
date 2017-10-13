@@ -1,1 +1,2 @@
-parallel-ssh -h hosts -I < ./bootstrap.sh
+parallel-ssh -h <(awk '{print $1}' hosts) --user xcuser -I < ./bootstrap.sh
+./register-dns.sh --register < hosts
