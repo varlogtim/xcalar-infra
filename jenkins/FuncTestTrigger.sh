@@ -11,7 +11,7 @@ TAP="AllTests.tap"
 rm -f "$TAP"
 
 restartXcalar() {
-    sudo xcalar-infra/functests/launcher.sh $jemallocEnabled
+    sudo xcalar-infra/functests/launcher.sh 0
 }
 
 genSupport() {
@@ -91,13 +91,6 @@ genBuildArtifacts() {
 
 trap "genBuildArtifacts" EXIT
 
-# Run half of the jobs with jemalloc allocator
-if [ $(( $BUILD_ID % 2 )) -eq 0 ]; then
-    jemallocEnabled=1
-else
-    jemallocEnabled=0
-fi
-
 if [ "$CURRENT_ITERATION" = "0" ]; then
     set +e
     sudo /opt/xcalar/bin/xcalarctl stop-supervisor
@@ -115,11 +108,7 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
 
     sudo yum -y remove xcalar
 
-    if [ $jemallocEnabled -eq 1 ]; then
-        sudo /netstore/builds/byJob/BuildCustom/10251/prod/xcalar-1.2.2-10251-installer --noStart
-    else
-        sudo $INSTALLER_PATH --noStart
-    fi
+    sudo $INSTALLER_PATH --noStart
 
     sudo rm $XCE_CONFIG
     sudo -E $XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
