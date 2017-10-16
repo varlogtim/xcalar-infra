@@ -148,6 +148,13 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     # Build GuardRails
     make -C xcalar-infra/GuardRails
 
+    # kill any previous test run instances
+    for pid in $(pidof -x FuncTestTrigger.sh); do
+        if [ $pid != $$ ]; then
+            kill -9 $pid
+        fi
+    done
+
     restartXcalar || true
 
     if xccli -c version 2>&1 | grep -q 'Error'; then
