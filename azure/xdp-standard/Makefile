@@ -11,7 +11,7 @@ VALIDATE_RG = validate-$(LOCATION)-rg
 
 BOOTSTRAP ?= ../bootstrap/ampBootstrap.sh
 BUCKET ?= xcrepo
-S3_INSTALLER ?= s3://$(BUCKET)/builds/e5c22263-01d66bb7/prod/xcalar-1.2.2-1191-installer
+S3_INSTALLER ?= s3://$(BUCKET)/builds/2f08e5a2-b820c309/prod/xcalar-1.2.2-1264-installer
 S3_BOOTSTRAP ?= s3://$(BUCKET)/bysha1/$(shell sha1sum $(BOOTSTRAP) | awk '{print $$1}')/$(shell basename $(BOOTSTRAP))
 S3_BOOTSTRAP_KEY = $(subst s3://$(BUCKET)/,,$(S3_BOOTSTRAP))
 ZONE ?= azure.xcalar.io
