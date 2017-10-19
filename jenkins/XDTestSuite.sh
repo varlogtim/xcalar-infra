@@ -135,3 +135,4 @@ fi
 
 _ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop-supervisor"
 _ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop"
+_ssh $SSHUSER@$NODE "sudo rm -rf /var/www/xcalar-gui.tar.gz"
