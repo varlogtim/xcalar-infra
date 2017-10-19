@@ -78,7 +78,8 @@ _ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --start"
 
 echo "Installing UI in this build"
 scp xcalar-gui.tar.gz $SSHUSER@$NODE:/var/www
-_ssh $SSHUSER@$NODE "cd /var/www; rm -rf xcalar-gui; tar -zxvf xcalar-gui.tar.gz; mv $GUI_FOLDER xcalar-gui"
+_ssh $SSHUSER@$NODE "cd /var/www; rm -rf xcalar-gui; tar -zxvf xcalar-gui.tar.gz;"
+# mv $GUI_FOLDER xcalar-gui
 date
 timeOut=50
 counter=0
