@@ -133,3 +133,5 @@ else
   exit 0
 fi
 
+_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop-supervisor"
+_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop"
