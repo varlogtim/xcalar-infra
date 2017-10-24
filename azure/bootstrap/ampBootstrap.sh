@@ -325,8 +325,11 @@ if touch /etc/azure; then
     if [ -r /etc/default/xcalar ]; then
         # should filter out _KEY and only keep ACCOUNT_NAME and SAS_TOKEN in
         # /etc/default/xcalar. Since this file contains secrets, remove world
-        # readable bit
+        # readable bit.
+        # In addition, give xcalar group the read permissions so that any
+        # xcalarctl calls run as xcalar user can source the default file.
         chmod 0640 /etc/default/xcalar
+        chgrp xcalar /etc/default/xcalar
         cat /etc/azure | tee -a /etc/default/xcalar >/dev/null
         . /etc/default/xcalar
     else
