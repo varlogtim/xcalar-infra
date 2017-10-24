@@ -4,7 +4,8 @@
   "parameters": {
     "_artifactsLocation": {
       "metadata": {
-        "description": "Artifacts location"
+        "description": "Artifacts location",
+        "artifactsBaseUrl": ""
       },
       "type": "string",
       "defaultValue": "https://raw.githubusercontent.com/xcalar/azure-arm-cluster/master/"
@@ -366,5 +367,19 @@
         }
       }
     }
-  ]
+  ],
+  "outputs": {
+      "url": {
+          "type":"string",
+          "value": "[concat('https://',reference(concat(variables('vmName'), '0-publicIP')).dnsSettings.fqdn)]"
+      },
+      "publicIp": {
+          "type": "string",
+          "value": "[reference('Microsoft.Network/publicIPAddresses/', variables('vmName'),'0-publicIP'.properties.ipAddress)]"
+      },
+      "username": {
+          "type":"string",
+          "value": "[parameters('adminUsername')]"
+      }
+  }
 }

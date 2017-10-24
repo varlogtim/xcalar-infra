@@ -55,11 +55,13 @@ DEPLOY_URL="https://portal.azure.com/#resource/${GROUP_INFO[0]}/overview"
 NOW="$(date +%s)"
 DEPLOY="${DEPLOY:-${GROUP}-${NOW}-deploy}"
 if [ -n "$DISPLAY" ]; then
-    [[ "$OSID" =~ darwin ]]  && open "$DEPLOY_URL" || google-chrome "$DEPLOY_URL"
+    [[ "$OSTYPE" =~ darwin ]]  && open "$DEPLOY_URL" || google-chrome "$DEPLOY_URL"
 fi
-echo "You'll be able to ssh into your instance long before this next step completes."
 echo "DeploymentURL: $DEPLOY_URL"
 
+echo
+echo "You'll be able to ssh into your instance long before this next step completes."
+echo
 (set -x
 az group deployment create --name "${DEPLOY}" \
                            --resource-group "${GROUP}" \
