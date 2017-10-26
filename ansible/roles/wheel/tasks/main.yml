@@ -1,0 +1,13 @@
+---
+
+- name: Let wheel use sudo without password
+  lineinfile:
+    path: /etc/sudoers.d/99-wheel
+    create: true
+    owner: root
+    group: root
+    mode: 0440
+    regexp: '^%wheel\s'
+    line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+    validate: '/usr/sbin/visudo -cf %s'
+

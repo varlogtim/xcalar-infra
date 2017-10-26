@@ -1,0 +1,27 @@
+local   ansible_connection=local
+localhost   ansible_connection=local
+
+[all:vars]
+ansible_connection=ssh
+#ansible_become=true
+
+[abakshi-test-rg]
+abakshi-main1-rg.westus2.cloudapp.azure.com
+
+[trial-mlescohier-rg-01]
+trial-mlescohier-01.westus2.cloudapp.azure.com      ansible_user=mlescohier ansible_pass=wQ27j7GU
+
+[trial-element22-rg-01]
+trial-element22-01.westus2.cloudapp.azure.com
+
+[trial-jyen-rg-01]
+trial-jyen-01.westus2.cloudapp.azure.com
+
+[trial:children]
+abakshi-test-rg
+trial-mlescohier-rg-01
+trial-element22-rg-01
+trial-jyen-rg-01
+
+[vsts:children]
+abakshi-test-rg

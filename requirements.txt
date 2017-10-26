@@ -1,5 +1,7 @@
-requests[secure]
 awscli
-git-review
-setuptools
 crcmod
+ansible
+requests[secure]
+cfn-flip
+troposphere
+jinja2-cli

@@ -1,12 +1,18 @@
 SHELL=/bin/bash
 
-all: .venv/bin/activate
+VIRTUAL_ENV ?= $(HOME)/.local/lib/xcalar-infra
 
-.venv/bin/activate: .venv frozen.txt
-	.venv/bin/pip install -r frozen.txt
+all: $(VIRTUAL_ENV)/.updated
+
+$(VIRTUAL_ENV):
+	virtualenv $@
+
+$(VIRTUAL_ENV)/.updated: $(VIRTUAL_ENV) frozen.txt
+	$(VIRTUAL_ENV)/bin/pip install -r frozen.txt
 	touch $@
 
-.venv:
-	virtualenv $@
+update:
+	$(VIRTUAL_ENV)/bin/pip install -r requirements.txt
+	$(VIRTUAL_ENV)/bin/pip freeze > frozen.txt
 
 

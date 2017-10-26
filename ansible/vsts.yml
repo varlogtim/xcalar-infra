@@ -1,0 +1,5 @@
+---
+- hosts: vsts
+  roles:
+    - xcalar
+    - docker_host

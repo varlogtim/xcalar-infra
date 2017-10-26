@@ -1,0 +1,5 @@
+---
+- hosts: trial
+  roles:
+    - caddy
+    - dns
