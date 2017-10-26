@@ -171,8 +171,11 @@ def getKeys(name = None, organization = None):
 
     if not keys:
         return []
+    return [addDeploymentInfo(getKeyInfo(k[2]), k[3]) for k in keys]
 
-    return [getKeyInfo(k[2]) for k in keys]
+def addDeploymentInfo(keyInfo, deployementType):
+    keyInfo.update({"deploymentType": deployementType})
+    return keyInfo
 
 # Request handlers
 @app.errorhandler(404)
@@ -359,8 +362,8 @@ def marketplaceDeploy():
 @crossdomain(origin="*")
 def getDeployments(organizationName):
     with getDb().cursor() as cursor:
-        cursor.execute("SELECT url, marketplaceName, timestamp, license.license_key FROM marketplace INNER JOIN license ON marketplace.license_id = license.license_id INNER JOIN organization ON license.org_id = organization.org_id WHERE organization.name = %(orgName)s ORDER BY marketplace.timestamp DESC", { "orgName": organizationName })
-        headers = [ "url", "marketplaceName", "timestamp", "licenseKey" ]
+        cursor.execute("SELECT url, marketplaceName, timestamp, sas_uri, license.license_key FROM marketplace INNER JOIN license ON marketplace.license_id = license.license_id INNER JOIN organization ON license.org_id = organization.org_id WHERE organization.name = %(orgName)s ORDER BY marketplace.timestamp DESC", { "orgName": organizationName })
+        headers = [ "url", "marketplaceName", "timestamp", "sas_uri", "licenseKey" ]
         retVals = []
         for row in cursor.fetchall():
             dictionary = { name: value for (name, value) in zip(headers, row) }
