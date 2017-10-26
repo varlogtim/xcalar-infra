@@ -9,7 +9,7 @@ except:
 
 bucket = "xcrepo"
 installerPaths = {
-    "1.2.3": "builds/21cd1a3d-70297aad/prod/xcalar-1.2.3-1275-installer",
+    "1.2.3": "builds/3c9a47f4-65ad6827/prod/xcalar-1.2.3-1296-installer",
     "1.2.2": "builds/2f08e5a2-b820c309/prod/xcalar-1.2.2-1264-installer",
     "1.2.1": "builds/67cf7211-962b4eb4/prod/xcalar-1.2.1-1044-installer"
 }
