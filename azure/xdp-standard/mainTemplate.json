@@ -94,10 +94,9 @@
         "true": "[variables('scaleMinusOne')]",
         "false": "[int(1)]"
     },
-    "clusterName": "[parameters('clusterName')]",
+    "clusterName": "[replace(trim(toLower(parameters('clusterName'))),'_', '-')]",
     "vmName": "[concat(variables('clusterName'), '-vm')]",
-    "domainNameLabel": "[if(equals(parameters('domainNameLabel'),''), concat(variables('clusterName'), '-', uniquestring(resourceGroup().id)), parameters('domainNameLabel'))]",
-    "storageAccountType": "Standard_LRS",
+    "domainNameLabel": "[if(empty(parameters('domainNameLabel')), concat(variables('clusterName'), '-', uniquestring(resourceGroup().id)), parameters('domainNameLabel'))]",
     "storageAccountName": "[concat('xdpstorage', uniqueString(resourceGroup().id))]",
     "virtualNetworkName": "[concat(variables('clusterName'), '-vnet')]",
     "vnetAddressPrefix": "10.0.0.0/16",
@@ -141,7 +140,7 @@
           "type": "SystemAssigned"
       },
       "sku": {
-          "name": "[variables('storageAccountType')]"
+          "name": "Standard_LRS"
       },
       "properties": {
           "accessTier": "Hot"
@@ -367,19 +366,5 @@
         }
       }
     }
-  ],
-  "outputs": {
-      "url": {
-          "type":"string",
-          "value": "[concat('https://',reference(concat(variables('vmName'), '0-publicIP')).dnsSettings.fqdn)]"
-      },
-      "publicIp": {
-          "type": "string",
-          "value": "[reference('Microsoft.Network/publicIPAddresses/', variables('vmName'),'0-publicIP'.properties.ipAddress)]"
-      },
-      "username": {
-          "type":"string",
-          "value": "[parameters('adminUsername')]"
-      }
-  }
+  ]
 }

@@ -17,11 +17,20 @@ trial-element22-01.westus2.cloudapp.azure.com
 [trial-jyen-rg-01]
 trial-jyen-01.westus2.cloudapp.azure.com
 
+[trial-igork-rg-01]
+trial-igork-01.westus2.cloudapp.azure.com           ansible_user=igork  ansible_ssh_pass=dhM6jMpF ansible_become_pass=dhM6jMpF
+
+[abakshi]
+abakshi-3-rg.westus2.cloudapp.azure.com
+
+
 [trial:children]
 abakshi-test-rg
 trial-mlescohier-rg-01
 trial-element22-rg-01
 trial-jyen-rg-01
+abakshi
+trial-igork-rg-01
 
 [vsts:children]
 abakshi-test-rg

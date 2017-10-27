@@ -7,6 +7,9 @@ sure that `XLRINFRADIR` is set to where the project is location in your
 ```
 export XLRINFRADIR=$HOME/xcalar-infra
 export PATH=$XLRINFRADIR/bin:$PATH
+
+source $XLRINFRADIR/azure/azure-sh-lib
+
 ```
 
 If you're not using Xcalar Python Virtualenv from `XLRDIR`, add
@@ -16,13 +19,14 @@ If you're not using Xcalar Python Virtualenv from `XLRDIR`, add
 To your `~/.bashrc`, after running `make`.
 
 
-1. Add a section in `hosts` with the group name of the new resource group. This
+1. Add a section in `inventory/hosts` with the group name of the new resource group. This
 section should list out the hosts you wish to modify. For example, we have group
-`trial-jyen-rg-01` with a VM we wish to apply ansible to.
+`trial-jyen-rg-01` with a VM we wish to apply ansible to (change `ansible_user` and `ansible_*_pass`
+variables.
 
 ```
 [trial-jyen-rg-01]
-trial-jyen-01-vm0.westus2.cloudapp.azure.com
+trial-jyen-01-vm0.westus2.cloudapp.azure.com     ansible_user=jyen  ansible_ssh_pass=b3JmJfdb  ansible_become_pass=b3JmJfdb
 ```
 
 2. Add the group to the parent group `trial`. We use this mainly as a sanity
@@ -60,8 +64,6 @@ with the username, password, the CNAME given by the cloud provider, and your des
 
 ```
 # group_vars/trial-jyen-rg-01
-ansible_user: jyen
-ansible_ssh_pass: b3JmJfdb
 given_name: trial-jyen-01-vm0.westus2.cloudapp.azure.com
 desired_name: xdp-preview-106.xcalar.io.
 ```
@@ -105,3 +107,7 @@ trial-jyen-01.westus2.cloudapp.azure.com : ok=3    changed=2    unreachable=0   
 
 
 6. If that worked, run again without `--check`
+
+## TIPs
+
+- If something fails, rerun and add `-vvv`

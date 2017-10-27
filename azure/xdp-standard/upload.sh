@@ -77,46 +77,65 @@ KEY="$KEYBASE/$SHA1"
 
 upload "$1"
 
-set -x
 if echo "$1" | grep -q '\.zip$'; then
     mkdir -p $KEY
     zip=$(readlink -f $1)
     cd $KEY
     unzip -o $zip
     artifactsLoc="https://s3-us-west-2.amazonaws.com/${BUCKET}/${KEY}"
-    bootstrap_url="$(upload bootstrap.sh bootstrap.sh)"
-    template_url="$(sed -e 's|"defaultValue": "https://.*$|"defaultValue": "'${artifactsLoc}'/"|g' mainTemplate.json | upload - mainTemplate.json)"
+    sed -i -e 's|"defaultValue": "https://.*$|"defaultValue": "'${artifactsLoc}'/"|g' mainTemplate.json
+    bootstrap_url="$(upload bootstrap.sh)"
+    template_url="$(upload mainTemplate.json)"
     createui_url="$(upload createUiDefinition.json)"
     payload_url="$(upload payload.tar.gz)"
     cd - >/dev/null
     urlcode="$(rawurlencode "{\"initialData\":{},\"providerConfig\":{\"createUiDefinition\":\"$createui_url\"}}")"
-	URL="https://portal.azure.com/?clientOptimizations=false#blade/Microsoft_Azure_Compute/CreateMultiVmWizardBlade/internal_bladeCallId/anything/internal_bladeCallerParams/$urlcode"
+    URL="https://portal.azure.com/?clientOptimizations=false#blade/Microsoft_Azure_Compute/CreateMultiVmWizardBlade/internal_bladeCallId/anything/internal_bladeCallerParams/$urlcode"
     echo "<br/><a href=\"$URL\">[[Preview #${count}]]</a>" >> azure.html
-	echo "azure.html"
-	google-chrome "$URL"
+    echo "azure.html"
+
+    UUID=$(uuidgen | cut -d- -f1)
+    google-chrome "$URL"
+    echo
+    echo "TemplateURL: $template_url"
+    echo
     if [ "$2" = deploy ]; then
-        COUNT="$(cat count.txt 2>/dev/null || echo 0)"
-        COUNT=$((COUNT+1))
-        echo $COUNT > count.txt
-        CLUSTER=${USER}-${COUNT}-cluster
-        DNS=dns-$CLUSTER
+        COUNT="$(cat count.txt 2>/dev/null || echo 1)"
         GROUP=${USER}-${COUNT}-rg
         VMNAME=${USER}-${COUNT}-vm
+        CLUSTER=${USER}-${COUNT}-cluster
+        DEPLOY=${USER}-${COUNT}-deploy
+        DNS=${USER}-${COUNT}-${UUID}
         LOCATION="${LOCATION:-westus2}"
-        az group create -l "${LOCATION}" --name "$GROUP" --tags "Email:`git config user.email`"
-        DEPLOY="${USER}-${COUNT}-deploy"
+        if [ "$(az group exists --name $GROUP --output tsv)" != true ]; then
+            az group create -l "${LOCATION}" --name "$GROUP" --tags "Email:`git config user.email`" || exit 1
+        fi
         echo "GROUP=$GROUP" >> local.mk
         test -e parameters.main.json && echo "=== here's your original parameters.main.json ===" && cat parameters.main.json
         echo "====== save your params to parameters.main.json and press any key ====="
         read
+        (
+        set -x
+        az group deployment validate --template-uri "${template_url}" --parameters @parameters.main.json --parameters _artifactsLocation="$artifactsLoc" --parameters _artifactsLocationSasToken='' \
+                        --parameters "location=${LOCATION}" --parameters clusterName=${CLUSTER} \
+                        --parameters domainNameLabel=${DNS} \
+                        -g "${GROUP}"
         az group deployment create --template-uri "${template_url}" --parameters @parameters.main.json --parameters _artifactsLocation="$artifactsLoc" --parameters _artifactsLocationSasToken='' \
                         --parameters "location=${LOCATION}" --parameters clusterName=${CLUSTER} \
                         --parameters domainNameLabel=${DNS} \
                         -g "${GROUP}" --name "${DEPLOY}" --no-wait
         az group deployment wait --exists -g "$GROUP" --name "$DEPLOY"
         google-chrome "$(az_rg_deployment_url $GROUP $DEPLOY)"
+        )
+        echo $((COUNT+1)) > count.txt
+        az group deployment wait --created -g $GROUP --name $DEPLOY
+        az_group_dns $GROUP
     else
-        echo "$template_url"
-        echo "az group deployment create --template-uri \"${template_url}\" --parameters @parameters.main.json --parameters _artifactsLocation=\"$artifactsLoc\" --parameters _artifactsLocationSasToken='' --parameters clusterName=${GROUP%-rg}-cluster --parameters dnsNameLabel=anything-foo --parameters location=\${LOCATION} -g \${GROUP} --name \${DEPLOY} --no-wait"
+        cat <<-EOF
+        az group deployment create --template-uri "${template_url}" --parameters @parameters.main.json --parameters _artifactsLocation="$artifactsLoc" --parameters _artifactsLocationSasToken='' \
+                        --parameters "location=${LOCATION}" --parameters clusterName=${CLUSTER} \
+                        --parameters domainNameLabel=${DNS} \
+                        -g "${GROUP}" --name "${DEPLOY}" --no-wait
+		EOF
     fi
 fi

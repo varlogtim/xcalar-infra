@@ -8,7 +8,7 @@
   with_items:
     - cert.pem
     - cert.key
-  notify: restart-caddy
+  notify: restart caddy
 
 - name: Configure Caddyfile
   lineinfile:
@@ -17,4 +17,10 @@
     regexp: '^(\s*)tls .*$'
     line: '\1tls /etc/xcalar/cert.pem /etc/xcalar/cert.key'
     backrefs: yes
-  notify: restart-caddy
+  notify: restart caddy
+
+- name: restart-caddy
+  become: yes
+  become_user: xcalar
+  shell: XCE_WORKDIR=/var/tmp/xcalar-root /opt/xcalar/bin/supervisorctl -c /etc/xcalar/supervisor.conf "restart xcalar:caddy"
+
