@@ -11,7 +11,10 @@ def listTable(c, tableName):
     return ([convertToDict(rowHeaders, row) for row in resultSet])
 
 def listKeys(c, name, organization):
-    c.execute('SELECT owner.name, organization.name, license.license_key, license.deployment_type FROM license INNER JOIN owner ON license.org_id = owner.org_id INNER JOIN organization on owner.org_id = organization.org_id WHERE (%(name)s IS NULL OR owner.name = %(name)s) AND (%(organization)s IS NULL OR organization.name = %(organization)s)', {"name":name, "organization": organization})
+    if name is not None:
+        c.execute('SELECT owner.name, license.license_key, license.deployment_type FROM license INNER JOIN owner ON license.org_id = owner.org_id WHERE owner.name = %(name)s', {"name":name})
+    elif organization is not None:
+        c.execute('SELECT organization.name, license.license_key, license.deployment_type FROM license INNER JOIN organization on license.org_id = organization.org_id WHERE organization.name = %(organization)s', {"organization": organization})
     return c.fetchall()
 def insert(c, name, organization, key):
     if organization is None:
@@ -46,5 +49,3 @@ def deleteKey(c, key):
 
 def deleteOrganization(c, organization):
     c.execute("DELETE FROM organization WHERE name=:organization", {"organization": organization})
-
-

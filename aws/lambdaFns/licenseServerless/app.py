@@ -171,7 +171,7 @@ def getKeys(name = None, organization = None):
 
     if not keys:
         return []
-    return [addDeploymentInfo(getKeyInfo(k[2]), k[3]) for k in keys]
+    return [addDeploymentInfo(getKeyInfo(k[1]), k[2]) for k in keys]
 
 def addDeploymentInfo(keyInfo, deployementType):
     keyInfo.update({"deploymentType": deployementType})
