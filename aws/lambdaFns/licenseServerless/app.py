@@ -400,6 +400,14 @@ def getHtmlKeysByOrg(organizationName):
 
     output = sorted(keys, key=lambda k: datetime.strptime(k['expiration'], '%m/%d/%Y'), reverse=True)
     return render_template('_table_render.html', keys=output)
-
+@app.route('/license/api/v1.0/unusedkey', methods=['GET'])
+def getUnusedKey():
+    try:
+        keys = []
+        with getDb().cursor() as cursor:
+            keys = licenseServerApi.getUnusedKey(cursor, name, organization, key)
+    except:
+        abort(404)
+    return jsonify(keys)
 if __name__ == '__main__':
     app.run(debug=False,host='0.0.0.0')

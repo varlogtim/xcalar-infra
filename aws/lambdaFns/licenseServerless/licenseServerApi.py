@@ -16,6 +16,9 @@ def listKeys(c, name, organization):
     elif organization is not None:
         c.execute('SELECT organization.name, license.license_key, license.deployment_type FROM license INNER JOIN organization on license.org_id = organization.org_id WHERE organization.name = %(organization)s', {"organization": organization})
     return c.fetchall()
+def getUnusedKey(c):
+    c.execute('SELECT organization.name, license_key from license inner join organization on license.org_id = organization.org_id WHERE license_id NOT IN (SELECT DISTINCT license_id FROM activation)')
+    return c.fetchall()
 def insert(c, name, organization, key):
     if organization is None:
         raise ValueError("organization is required")
