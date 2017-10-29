@@ -56,6 +56,7 @@ jobs.xcalar.com. 3600 IN CNAME xcalar.com.
 license-api.xcalar.com. 600 IN CNAME x3xjvoyc6f.execute-api.us-west-2.amazonaws.com.
 livechat.xcalar.com. 900 IN CNAME xcalar-livechat.westus2.cloudapp.azure.com.
 mail.xcalar.com. 600 IN A 107.180.41.39
+<<<<<<< HEAD
 marketplace.xcalar.com. 600 IN A 104.198.211.142
 email.me.xcalar.com. 3600 IN CNAME mailgun.org.
 mg.xcalar.com. 3600 IN TXT "v=spf1 include:mailgun.org ~all"
@@ -69,6 +70,7 @@ support.xcalar.com. 600 IN A 107.180.41.39
 test1234.xcalar.com. 3600 IN A 3.3.3.3
 university.xcalar.com. 1800 IN A 104.154.244.26
 uploads.xcalar.com. 600 IN A 207.135.66.186
+university.xcalar.com. 300 IN A 104.154.244.26
 vpn.xcalar.com. 600 IN A 207.135.66.186
 webdisk.xcalar.com. 3600 IN CNAME xcalar.com.
 wells-student-01-1.xcalar.com. 1800 IN A 35.188.44.174

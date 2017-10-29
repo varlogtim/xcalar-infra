@@ -1,5 +1,4 @@
 ---
-
 - name: Fetch Docker installer
   get_url:
     url: https://get.docker.io
@@ -16,6 +15,3 @@
 
 - name: Run Docker
   service: name=docker  state=started enabled=yes
-
-
-

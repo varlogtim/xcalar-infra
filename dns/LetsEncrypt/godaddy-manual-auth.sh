@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# This script is called by certbot-auto to handle the DNS
+# TXT record registration it uses to verify domain ownership
+#
+
 set -e
 
 DOMAIN=$(expr match "$CERTBOT_DOMAIN" '.*\.\(.*\..*\)')
@@ -7,7 +12,6 @@ DATA="$CERTBOT_VALIDATION"
 TYPE=TXT
 TTL=600
 
-#eval $(pass xcalar.com/GoDaddyAPI)
 test -n "$GODADDY_KEY" && test -n "$GODADDY_SECRET" && test -n "$DOMAIN" || { \
     echo >&2 "Need to specify GODADDY_KEY, GODADDY_SECRET and DOMAIN"
     exit 1
@@ -20,6 +24,9 @@ cat <<EOF
 EOF
 ) | jq -r . | tee $INPUT
 # See https://developer.godaddy.com/doc#!/_v1_domains/recordAdd
+# PUT method will create or update. PATCH only creates. There is no
+# DELETE method so you need to go into the UI after the fact to clean
+# out old TXT records starting with _acme-xxx
 curl -sL \
      -X PUT \
      -H "Authorization: sso-key ${GODADDY_KEY}:${GODADDY_SECRET}" \

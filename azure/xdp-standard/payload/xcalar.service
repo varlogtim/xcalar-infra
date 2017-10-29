@@ -1,9 +1,8 @@
 [Unit]
 Documentation=https://xcalar.com/about.html
 Description=Xcalar Compute Engine
-After=remote-fs.target
-After=network-online.target
-Wants=network-online.target
+Wants=local-fs.target remote-fs.target network-online.target network.target
+After=local-fs.target remote-fs.target network-online.target network.target
 Conflicts=shutdown.target
 
 [Service]
@@ -13,11 +12,9 @@ IgnoreSIGPIPE=no
 KillMode=process
 GuessMainPID=no
 RemainAfterExit=yes
-ExecStartPre=/usr/bin/mkdir -p /ephemeral/data/serdes
-ExecStartPre=/usr/bin/chown xcalar:xcalar /ephemeral/data/serdes
+ExecStartPre=/bin/bash /usr/local/bin/xcalar-startpre.sh
 ExecStart=/etc/rc.d/init.d/xcalar start
 ExecStop=/etc/rc.d/init.d/xcalar stop
 
 [Install]
 WantedBy=multi-user.target
-

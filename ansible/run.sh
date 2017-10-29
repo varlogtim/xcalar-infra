@@ -19,7 +19,10 @@ parse_cmd () {
 
 # Unused
 ssh_auth () {
-    export SSHPASS="$(awk '/ansible_ssh_pass/{print $2}' group_vars/$GROUP)"
+    #export SSHPASS="$(awk '/ansible_ssh_pass/{print $2}' group_vars/$GROUP)"
+    if [ -z "$SSHPASS" ]; then
+        export SSHPASS="$(grep -Eow 'ansible_ssh_pass=[^ ]*' inventory/hosts | cut -d'=' -f2)"
+    fi
     if [ -n "$SSHPASS" ]; then
         ./pass.exp ansible-playbook --ssh-common-args "-oPubkeyAuthentication=no" -i inventory/hosts --ask-pass --ask-become-pass --become "$@"
     else
@@ -29,6 +32,7 @@ ssh_auth () {
 
 export ANSIBLE_HOST_KEY_CHECKING=False
 parse_cmd "$@"
-ansible-playbook --ssh-common-args "-oPubkeyAuthentication=no" -i inventory/hosts  --become "$@"
+ssh_auth "$@"
+#ansible-playbook --ssh-common-args '-oPubKeyAuthentication=no' -i inventory/hosts  --become "$@"
 exit
 

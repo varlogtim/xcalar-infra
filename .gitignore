@@ -1,8 +1,8 @@
 *.tar
 *.tar.gz
 *.tmp
-.venv/
-.direnv/
+.venv
+.direnv
 packer_cache/
 box/
 repo/apt/
@@ -13,3 +13,8 @@ repo/patches/
 pkg/*.deb
 pkg/*.rpm
 aws/billing/
+azure/xdp-standard/temp
+azure/xdp-standard/.tmp
+.vs
+.vscode
+.lego

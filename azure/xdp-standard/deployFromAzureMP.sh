@@ -1,16 +1,27 @@
 # edit these
 
-json_param () { jq -r "${1}" < "$PARAMETERS"; }
+json_param (){
+    local v=
+    if v="$(jq -r "${PARAMS}${1}" "$PARAMETERS")" && [ "$v" != null ]; then
+        echo $v
+        return 0
+    fi
+    return 1
+}
 
 PARAMETERS="${PARAMETERS:-parameters.main.json}"
 if [ -e $PARAMETERS ]; then
+    PARAMS=''
+    if [ "$(json_param .parameters)" != null ]; then
+        PARAMS=".parameters"
+    fi
     if [ -z "$LOCATION" ]; then
-        LOCATION="$(json_param .parameters.location.value)"
+        LOCATION="$(json_param .location.value)"
         echo >&2 "WARNING: Using location from $PARAMETERS: LOCATION=$LOCATION"
     fi
     if [ -z  "$CLUSTER" ]; then
-        CLUSTER="$(json_param .parameters.clusterName.value)"
-        echo >&2 "WARNING: Using clusterName from $PARAMETERS: CLUSTER=$CLUSTER"
+        CLUSTER="$(json_param .appName.value)"
+        echo >&2 "WARNING: Using appName from $PARAMETERS: CLUSTER=$CLUSTER"
     fi
 fi
 
@@ -41,7 +52,7 @@ fi
 
 if [ -z "$BASE_URL" ]; then
     if [ "${BASE_URL-x}" = x ]; then
-        BASE_URL=https://s3-us-west-2.amazonaws.com/xcrepo/temp/bysha1/7c978919
+        BASE_URL=https://s3-us-west-2.amazonaws.com/xcrepo/temp/bysha1/3eba12e6
     else
         BASE_URL="$(dirname $(./upload.sh -u xdp-standard-package.zip))"
     fi
@@ -65,8 +76,7 @@ az group deployment create --name "${DEPLOY}" \
                            --template-uri "$BASE_URL/mainTemplate.json" \
                            --parameters @${PARAMETERS} \
                            --parameters _artifactsLocation="$BASE_URL" \
-                           --parameters clusterName=$CLUSTER \
-                           --parameters location=$LOCATION "$@"
+                           ${CLUSTER:---parameters appName=$CLUSTER} --parameters location=$LOCATION "$@"
 )
 echo You can ssh into your first node via "ssh userfromjson@instance-vm0-from-below"
 az vm list-ip-addresses -g $GROUP -otable

@@ -1,11 +1,11 @@
 ; SOA Record
-; xcalar.com. 21600   IN  SOA ns-cloud-b1.googledomains.com. cloud-dns-hostmaster.google.com. (
-;                 1
-;                 21600
-;                 3600
-;                 259200
-;                 300
-;                 )
+xcalar.com. 21600   IN  SOA ns-cloud-b1.googledomains.com. cloud-dns-hostmaster.google.com. (
+                 1
+                 21600
+                 3600
+                 259200
+                 300
+                 )
 
 
 ; A Records
@@ -38,29 +38,29 @@ university	1800	IN	A	104.154.244.26
 
 ; CNAME Records
 cpanel	3600	IN	CNAME	@
-kevpwac72gpntsbgmhchs6kzntvhjerd._domainkey	3600	IN	CNAME	kevpwac72gpntsbgmhchs6kzntvhjerd.dkim.amazonses.com
-esiyawtav2qorljqmudqyugb6zkyvjag._domainkey	3600	IN	CNAME	esiyawtav2qorljqmudqyugb6zkyvjag.dkim.amazonses.com
-installer-api	600	IN	CNAME	zqdkg79rbi.execute-api.us-west-2.amazonaws.com
-livechat	900	IN	CNAME	xcalar-livechat.westus2.cloudapp.azure.com
+kevpwac72gpntsbgmhchs6kzntvhjerd._domainkey	3600	IN	CNAME	kevpwac72gpntsbgmhchs6kzntvhjerd.dkim.amazonses.com.
+esiyawtav2qorljqmudqyugb6zkyvjag._domainkey	3600	IN	CNAME	esiyawtav2qorljqmudqyugb6zkyvjag.dkim.amazonses.com.
+installer-api	600	IN	CNAME	zqdkg79rbi.execute-api.us-west-2.amazonaws.com.
+livechat	900	IN	CNAME	xcalar-livechat.westus2.cloudapp.azure.com.
 webdisk.admin	3600	IN	CNAME	@
 webdisk	3600	IN	CNAME	@
-email.me	3600	IN	CNAME	mailgun.org
-_domainconnect	3600	IN	CNAME	_domainconnect.gd.domaincontrol.com
+email.me	3600	IN	CNAME	mailgun.org.
+_domainconnect	3600	IN	CNAME	_domainconnect.gd.domaincontrol.com.
 whm	3600	IN	CNAME	@
 www.admin	3600	IN	CNAME	@
-kj533n5vnlvyeguqrgimsamgwsf634lv._domainkey	3600	IN	CNAME	kj533n5vnlvyeguqrgimsamgwsf634lv.dkim.amazonses.com
-email.mg	3600	IN	CNAME	mailgun.org
+kj533n5vnlvyeguqrgimsamgwsf634lv._domainkey	3600	IN	CNAME	kj533n5vnlvyeguqrgimsamgwsf634lv.dkim.amazonses.com.
+email.mg	3600	IN	CNAME	mailgun.org.
 www	3600	IN	CNAME	@
-discourse	1800	IN	CNAME	xcalar-discourse.westus2.cloudapp.azure.com
-repo	3600	IN	CNAME	c.storage.googleapis.com
-license-api	600	IN	CNAME	x3xjvoyc6f.execute-api.us-west-2.amazonaws.com
+discourse	1800	IN	CNAME	xcalar-discourse.westus2.cloudapp.azure.com.
+repo	3600	IN	CNAME	c.storage.googleapis.com.
+license-api	600	IN	CNAME	x3xjvoyc6f.execute-api.us-west-2.amazonaws.com.
 
 ; MX Records
-@	300	IN	MX	5	ALT1.ASPMX.L.GOOGLE.COM
-@	300	IN	MX	5	ALT2.ASPMX.L.GOOGLE.COM
-@	300	IN	MX	1	ASPMX.L.GOOGLE.COM
-@	300	IN	MX	10	ASPMX3.GOOGLEMAIL.COM
-@	300	IN	MX	10	ASPMX2.GOOGLEMAIL.COM
+@	300	IN	MX	5	ALT1.ASPMX.L.GOOGLE.COM.
+@	300	IN	MX	5	ALT2.ASPMX.L.GOOGLE.COM.
+@	300	IN	MX	1	ASPMX.L.GOOGLE.COM.
+@	300	IN	MX	10	ASPMX3.GOOGLEMAIL.COM.
+@	300	IN	MX	10	ASPMX2.GOOGLEMAIL.COM.
 
 ; TXT Records
 _amazonses	3600	IN	TXT	"Qj2CV+YtUddrQ0CBSNVhr7sUaEpbH7nhrgGu9xKrr2s="
@@ -79,14 +79,14 @@ mg	3600	IN	TXT	"v=spf1 include:mailgun.org ~all"
 @	3600	IN	TXT	"google-site-verification=bpPuHs9cKSbfMOKOBP3TZ_shm_fsctP71tlQW4wmqYA"
 
 ; NS Records
-gce	3600	IN	NS	ns-cloud-d3.googledomains.com
-azr	3600	IN	NS	ns1-06.azure-dns.com
-gce	3600	IN	NS	ns-cloud-d1.googledomains.com
-gce	3600	IN	NS	ns-cloud-d4.googledomains.com
-azr	3600	IN	NS	ns2-06.azure-dns.net
-gce	3600	IN	NS	ns-cloud-d2.googledomains.com
-aws	3600	IN	NS	ns-1675.awsdns-17.co.uk
-;@	21600	IN	NS	ns-cloud-b1.googledomains.com.
-;@	21600	IN	NS	ns-cloud-b2.googledomains.com.
-;@	21600	IN	NS	ns-cloud-b3.googledomains.com.
-;@	21600	IN	NS	ns-cloud-b4.googledomains.com.
+gce	3600	IN	NS	ns-cloud-d3.googledomains.com.
+azr	3600	IN	NS	ns1-06.azure-dns.com.
+gce	3600	IN	NS	ns-cloud-d1.googledomains.com.
+gce	3600	IN	NS	ns-cloud-d4.googledomains.com.
+azr	3600	IN	NS	ns2-06.azure-dns.net.
+gce	3600	IN	NS	ns-cloud-d2.googledomains.com.
+aws	3600	IN	NS	ns-1675.awsdns-17.co.uk.
+@	21600	IN	NS	ns-cloud-c1.googledomains.com.
+@	21600	IN	NS	ns-cloud-c2.googledomains.com.
+@	21600	IN	NS	ns-cloud-c3.googledomains.com.
+@	21600	IN	NS	ns-cloud-c4.googledomains.com.

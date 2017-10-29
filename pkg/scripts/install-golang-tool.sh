@@ -1,7 +1,7 @@
 #!/bin/bash
-
 # Common file for Golang based tools
 
+TMPDIR="$(mktemp -d --tmpdir  ${NAME}.XXXXXX)"
 TMPDIR="${TMPDIR:-/tmp/`id -u`}/${NAME}-${VERSION}"
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"

@@ -1,0 +1,403 @@
+#!/bin/bash
+#
+# Handy Azure aliases/shortcuts. Source this file in your ~/.bash_aliases
+# ## ~/.bash_aliases
+# export XLRINFRADIR=$HOME/xcalar-infra
+# . $XLRINFRADIR/azure/azure-sh-lib
+
+AZURE_PUBLIC_ACCOUNT=${AZURE_PUBLIC_ACCOUNT:-xcrepo}
+AZURE_PUBLIC_CONTAINER=${AZURE_PUBLIC_CONTAINER:-public}
+NO_CACHE='no-cache, no-store, must-revalidate, max-age=0, no-transform'
+AZ_CACHEDIR="$HOME/.cache/azure"
+HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
+AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
+HOSTED_ZONEID="Z2S03H582J2UUD" ## .xcalar.io
+TODAY=$(date +%Y%m%d)
+NOW="${TODAY}$(date +%H%M)"
+
+mkdir -p "$AZ_CACHEDIR" &&
+
+. $XLRINFRADIR/bin/infra-sh-lib
+
+az_version()  {
+    az --version | head -1 | sed -r 's/^(azure-cli).*\(([0-9]+)\.([0-9]+)\.([0-9]+)\)$/\2 \3 \4/g'
+}
+
+az_rg_exists() {
+    [[ "$(az group exists -g $1 -otsv)" = true ]]
+}
+
+az_rg_create() {
+    local name="$1"
+    local location=${2:-${LOCATION:-westus2}}
+    az_rg_exists "$name" || [[ "$(az group create -n "$name" -l $location -ojson --query 'properties.provisioningState' -otsv)" = Succeeded ]]
+}
+
+# Returns Azure instance metadata like this:
+# LOCATION=westus2
+# NAME=trial-rmadugula-01-vm0
+# OFFER=CentOS
+az_metadata_instance()  {
+    curl --connect-timeout 1 -fsSL -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=2017-12-01&format=json" | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'
+}
+
+# Returns any scheduled events in this format:
+## { "DocumentIncarnation": 0, "Events": [] }
+az_metadata_event()  {
+    curl --connect-timeout 1 -fsSL -H Metadata:True "http://169.254.169.254/metadata/scheduledevents?api-version=2017-12-01&format=json" | jq -r . #| jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'; echo "${PIPESTATUS[0]}";
+}
+
+az_metadata_env() {
+    (
+        set -eo pipefail
+        local tmp
+        tmp="$(mktemp --tmpdir az_metadata-XXXXX.env)"
+        curl -fsSL -H Metadata:true 'http://169.254.169.254/metadata/instance?api-version=2017-12-01&format=json' |
+            jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/AZURE_\U\1 /g' |
+            while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""
+            done | tee $tmp
+        . $tmp
+        if [ -n "$AZURE_TAGS" ]; then
+            echo "$AZURE_TAGS" | tr ';' '\n' | sed -r 's/^([^:]+):/AZURE_TAG_\U\1 /g' | while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""; done | tee -a $tmp
+        fi
+        curl -fsSL -H Metadata:true 'http://169.254.169.254/metadata/instance?api-version=2017-12-01&format=json' |
+            jq -r '.network.interface[0].ipv4.ipAddress[0]|[.privateIpAddress,.publicIpAddress]|@tsv' |
+            while read LOCALIP4 PUBLICIPV4; do
+                echo "AZURE_LOCALIPV4=${LOCALIP4}"
+                test -z "$PUBLICIPV4" || echo "AZURE_PUBLICIPV4=${PUBLICIPV4}"
+            done | tee -a $tmp
+        . $tmp
+        test -z "$AZURE_PUBLICIPV4" || echo "AZURE_DNSLABEL=${AZURE_NAME}.${AZURE_LOCATION}.cloudapp.azure.com"
+        rm -f $tmp
+    )
+    return $?
+}
+
+az_vm_ids() {
+    az vm list -ojson "$@" | jq -r '.[].id'
+}
+
+az_groups()  {
+    local groups=$AZ_CACHEDIR/allgroups.json name group groupdir
+    az group list -ojson >$groups
+    jq -r '.[].id' <$groups >$AZ_CACHEDIR/allgroups.txt
+    groupdir=$AZ_CACHEDIR/groups/${NOW}
+    mkdir -p $groupdir
+    for name in $(cat $AZ_CACHEDIR/allgroups.txt); do
+        name=$(basename $name)
+        echo >&2 "Updating $name ..."
+        az group show -g ${name} -ojson >$groupdir/${name}.json
+    done
+    ln -sfn $NOW $groupdir/../current
+}
+
+az_rg_vms()  {
+    az vm list -g "$1" -ojson --query '[].id' -otsv
+}
+
+# For all vms in group $1 perform action $2
+# eg, az_rg_vms_do abakshi-50-rg deallocate
+az_rg_vms_do()  {
+    local action=$1 vmid  ids  pids=() rg
+    shift
+    if [ -z "$1" ]; then
+        error "Must specify at least one resource group"
+        return 1
+    fi
+    for rg; do
+        ids+=($(az_rg_vms $rg))
+    done
+    if [ "${#ids[@]}" -eq 0 ]; then
+        return
+    fi
+    for vmid in ${ids[*]}; do
+        az vm $action --ids $vmid &
+        pids+=($!)
+    done
+    echo >&2 "Waiting for ${ids[*]} to $action"
+    wait ${pids[*]}
+}
+
+az_rg_vms_stop_start_all()  {
+    local rg="$1" rc ip
+    if [ -z "$rg" ] || [ "$(az group exists -g $rg -otsv)" != true ]; then
+        error "Need to specify existing resource group"
+        return 1
+    fi
+    if ! ip="$(az_rg_dns_or_ip "$rg")" || [ -z "$ip" ]; then
+        error "Couldn't find IP for RG: $ip"
+        return 1
+    fi
+    az_rg_vms_do deallocate $rg &&
+        az_rg_vms_do start $rg
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        error "$rc: Failed to stop/start RG $rg"
+        return 1
+    fi
+    if ! ip="$(az_rg_dns_or_ip "$rg")"; then
+        warn "Unable to get IP of $rg, it may still be booting up."
+        return 0
+    fi
+    until ssh $ip; do
+        echo "Waiting for $ip (RG: $1) to come up ..."
+    done
+}
+
+az_rg_pip()  {
+    az resource list -g "$1" --namespace Microsoft.Network --resource-type publicIPAddresses -ojson --query '[].id' -otsv
+}
+
+az_rg_deallocate()  {
+    az_rg_vms_do deallocate "$@"
+}
+
+az_rg_start()  {
+    az_rg_vms_do start "$@"
+}
+
+# Pass an Azure publicIPAddress resource like
+# /subscriptions/861014e9-bb2e-40ff-b6f6-85a511035bfd/resourceGroups/test-1-rg/providers/Microsoft.Network/publicIPAddresses/centos74PublicIP
+az_rg_ip() {
+    local rg="$1" ip_id ip_data ip
+    if ! ip_id=$(az vm list-ip-addresses -g "$rg" -ojson --query '[0].virtualMachine.network.publicIpAddresses[0].id' -otsv) || test -z "$ip_id"; then
+        return 1
+    fi
+    if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
+        return 1
+    fi
+    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
+        echo $ip
+        return 0
+    fi
+    return 1
+}
+
+az_rg_dns_or_ip()  {
+    local rg="$1" ip_id ip_data dns ip
+    if ! ip_id=$(az vm list-ip-addresses -g "$rg" -ojson --query '[0].virtualMachine.network.publicIpAddresses[0].id' -otsv) || test -z "$ip_id"; then
+        return 1
+    fi
+    if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
+        return 1
+    fi
+    if dns="$(jq -r .properties.dnsSettings.fqdn <<< $ip_data)" && test -n "$dns" && test "$dns" != null; then
+        echo $dns
+        return 0
+    fi
+    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
+        echo $ip
+        return 0
+    fi
+    return 1
+}
+
+az_rg_ssh()  {
+    local pip ip dns
+    if pip=$(az_rg_pip "$1") && test -n "$pip"; then
+        shift
+        if dns="$(az resource show --ids "$pip" -ojson --query 'properties.dnsSettings.fqdn' -otsv)" && test -n "$dns"; then
+            ssh $dns "$@"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+az_rg_deployment_url()  {
+    GROUP_SHOW=($(az group show --resource-group "$1" --output tsv)) &&
+        echo "https://portal.azure.com/#resource/${GROUP_SHOW[0]}/deployments"
+}
+
+az_dns()  {
+    local location
+    if ! location=$(az group show -g $1 -ojson --query location -otsv); then
+        return 1
+    fi
+    echo "$1.${location}.cloudapp.azure.com"
+}
+
+# The deploy.sh scripts from exportTemplate function gives shell scripts with Windows
+# line endings. This function will take a filename (or stdin) and print the fixed version
+# to stdout
+az_fix_deploysh()  {
+    local tmp=$(mktemp /tmp/deployXXXXXX.sh)
+    (
+        set -e
+        if test -f "$1"; then
+            dos2unix -q -n "$1" $tmp
+        else
+            cat - >$tmp
+            dos2unix -q $tmp
+        fi
+        sed '/^$/d' $tmp | sed -e 's/^#/\n#/g' | shfmt -i 2 -ci
+        rm -f $tmp
+    )
+}
+
+az_vm_cache()  {
+           http_proxy= https_proxy= curl "${HTTPCACHE}" -s -o $AZ_ALLVMS
+}
+
+az_vms()  {
+    if [ "$(file_age $AZ_ALLVMS)" -gt $((3 * 60 * 60)) ] || [ "$1" = "-f" ]; then
+        az_vm_cache >$AZ_ALLVMS  || return 1
+    fi
+    cat "${AZ_ALLVMS}"
+}
+
+az_vm_running()  {
+    local subs="$(az account list -otsv 2>/dev/null | awk '{print $2}')"
+    az_vm_details | grep running #| tr -d "'" | awk '{printf("/subscriptions/'${subs}'/resourceGroups/%s/providers/Microsoft.Compute/virtualMachines/%s\n",tolower($1),$2)}'
+}
+
+az_vm_details_update()  {
+    mkdir -p "$AZ_CACHEDIR" &&
+           az vm list -d -ojson >"${AZ_ALLVMS}.tmp" &&
+           mv -f "${AZ_ALLVMS}.tmp" "${AZ_ALLVMS}"
+    return
+}
+
+az_vm_details()  {
+    az_vms | jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps]|@sh' | column -t #jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps ]|@tsv' | column -t
+}
+
+az_provider_api_versions()  {
+    az provider show --namespace "${1:-Microsoft.Compute}" --query "resourceTypes[].[resourceType,apiVersions[]]" --out table
+}
+
+az_provider_operations() {
+    # JQ version for reference
+    # az provider operation show --namespace "${1:-Microsoft.Compute}" -ojson | jq -r '.resourceTypes[].operations[]|[.name,.description]'
+    az provider operation show --namespace "${1:-Microsoft.Compute}" -ojson --query 'resourceTypes[].operations[].[name,description]' -otable
+}
+
+az_provider_resource() {
+    # JQ version for reference
+    # az provider operation show --namespace "${1:-Microsoft.Compute}" -ojson | jq -r '.resourceTypes[].operations[]|[.name,.description]'
+    az provider operation show --namespace "${1:-Microsoft.Compute}" -ojson --query 'resourceTypes[].[name]' -otable
+}
+
+
+az_provider_operations_list() {
+    az provider operation show --namespace "${1:-Microsoft.Storage}" -ojson --query "resourceTypes[?name=='storageAccounts'].operations[].name | [?contains(@, 'list')]"
+}
+
+az_blob_upload_public()  {
+    local fname="$1"
+    test -f "$fname" || return 1
+    local name="${2:-$fname}"
+    az storage blob upload -f "$fname" -n "$name" --account-name ${AZURE_PUBLIC_ACCOUNT} --container-name "${AZURE_PUBLIC_CONTAINER}" --content-cache-control "$NO_CACHE" >/dev/null \
+        && az storage blob url --account-name ${AZURE_PUBLIC_ACCOUNT} --container-name "${AZURE_PUBLIC_CONTAINER}" --name "$name" -otsv
+}
+
+az_blob_upload_batch_public()  {
+    local src="$1"
+    local dst="$2"
+    az storage blob upload-batch --account-name ${AZURE_PUBLIC_ACCOUNT} --destination "${AZURE_PUBLIC_CONTAINER}" --content-cache-control "$NO_CACHE" --source "$src" --destination-path "$dst" \
+        && az storage blob url --account-name ${AZURE_PUBLIC_ACCOUNT} --container-name "${AZURE_PUBLIC_CONTAINER}" --name "$dst" -otsv
+}
+
+
+az_blob_url_public() {
+    az storage blob url --account-name ${AZURE_PUBLIC_ACCOUNT} --container-name "${AZURE_PUBLIC_CONTAINER}" --name "$1" -otsv
+}
+
+az_blob_container_du()  {
+    az storage blob list --account-name "$1" --container-name "$2" --query "[*].[properties.contentLength]" --output tsv | tee "${1}_${2}.tsv" | paste --serial --delimiters=+ | bc
+}
+
+az_storage_accounts() {
+    az storage account list -ojson --query  '[*].id' --output tsv
+}
+
+az_containers() {
+    az storage container list --account-name $(basename $1) --output json --query '[*].name' --output tsv
+}
+
+az_container_size() {
+    local account_id account container bn
+    for account_id in $(az_storage_accounts); do
+        account=$(basename $account_id)
+        for container in $(az_containers $account); do
+            echo "$account/$container: $(az_blob_container_du $account $container)"
+        done
+    done
+}
+
+# Returns the entire json document
+az_meta_json()  {
+    safe_curl -sH Metadata:True "http://169.254.169.254/metadata/instance?api-version=2017-12-01&format=json"
+}
+
+# az_meta_text <key>, for example compute/name
+az_meta_text()  {
+    safe_curl -sH Metadata:True "http://169.254.169.254/metadata/instance/$1?api-version=2017-12-01&format=text"
+}
+
+## Resource group level functions
+az_rg_ips()  {
+    az vm list-ip-addresses --resource-group "$1" --output json --query '[].virtualMachine.network.publicIpAddresses[].[name,ipAddress]' --output tsv
+}
+
+az_rg_deployment_url()  {
+    GROUP_SHOW=($(az group show --resource-group "$1" --output tsv)) &&
+        echo "https://portal.azure.com/#resource/${GROUP_SHOW[0]}/deployments"
+}
+
+az_browse()  {
+    local group_info
+    if group_info=($(az group show -g $1 -otsv)) && [ -n "${group_info[0]}" ]; then
+        local url="https://portal.azure.com/#resource${group_info[0]}/overview"
+        echo "$url"
+        if test -n "$DISPLAY"; then
+            if [[ $OSTYPE =~ linux ]]; then
+                google-chrome "$url"
+            elif [[ $OSTYPE =~ darwin ]]; then
+                open "$url"
+            fi
+        fi
+    fi
+}
+
+# Example:
+# $ curl http://localhost:50342/oauth2/token --data "resource=https://management.azure.com/" -H Metadata:true
+#{ "access_token": "eyJ0.....4iHCdf7hB", "expires_in": "3599", "expires_on": "1521513683", "not_before": "1521509783", "resource": "https://management.azure.com/", "token_type": "Bearer" }
+
+az_msi() {
+    curl -s http://localhost:50342/oauth2/token --data "resource=https://management.azure.com/" -H Metadata:true
+}
+
+
+list_functions()  {
+    grep '^[a-z]' | grep '{$' | awk '{print $1}' | tr '\n' ' '
+}
+
+export_all()  {
+    export -f safe_curl say error file_age az_version az_rg_vms az_rg_vms_do az_rg_vms_stop_start_all az_rg_pip az_rg_dns az_rg_ssh \
+              az_fix_deploysh az_vms az_vm_running az_vm_details_update az_vm_details az_provider_api_versions az_blob_upload_public az_meta_json az_meta_text az_rg_deployment_url \
+              az_browse list_functions az_msi az_container_size az_containers az_storage_accounts
+}
+
+az_sub_browse() {
+    local subscription
+    subscription=$(az account show -ojson --query 'id' -otsv)
+    if [ $? -ne 0 ] || [ -z "$subscription" ]; then
+        echo >&2 "Failed to get subscription"
+        return 1
+    fi
+    local url="https://resources.azure.com/subscriptions/${subscription}/resourceGroups"
+    if [ -n "$DISPLAY" ]; then
+        chrome "$url"
+    else
+        echo "$url"
+    fi
+}
+
+az_sp_find_homepage() {
+    az ad sp list -ojson --query "[?additionalProperties.homepage=='$1']" -otable
+}
+
+az_sp_list() {
+    az ad sp list -ojson --query '[].{Id: objectId, SPN: servicePrincipalNames[0]}' -otable
+}

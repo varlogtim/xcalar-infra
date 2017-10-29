@@ -5,7 +5,7 @@ DISKS=/dev/xvdb
 ENABLE_MD=0
 
 # RAID level
-MD_LEVEL=1
+MD_LEVEL=0
 
 # RAID device
 MD_DEVICE=/dev/md0
@@ -38,7 +38,7 @@ LV_DATA_EXTENTS=90%FREE
 MOUNT_FSTYPE=ext4
 
 # mount options
-MOUNT_OPTIONS="defaults,nofail,noatime,nodev,nosuid"
+MOUNT_OPTIONS="defaults,nofail,relatime,barrier=0,nodev,nosuid"
 
 # mountpoint *** DON'T CHANGE THIS SETTING ***
 MOUNT_PATH=/ephemeral/data

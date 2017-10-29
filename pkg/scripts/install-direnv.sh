@@ -1,6 +1,6 @@
 #!/bin/bash
 NAME=direnv
-VER=2.13.3
+VER=2.15.2
 ITERATION="${ITERATION:-1}"
 REPO=github.com/direnv/direnv
 

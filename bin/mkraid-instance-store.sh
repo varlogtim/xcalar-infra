@@ -111,6 +111,13 @@ fi
 until test -b $PART; do
     sleep 2
 done
+sed -i '/^# Start of mkraid configuration/,/^# End of mkraid configuration/{d}' "$MD_CONFIG"
+(
+    echo "# Start of mkraid configuration"
+    mdadm --detail --scan
+    echo "# End of mkraid configuration"
+) | tee -a "$MD_CONFIG"
+
 
 #
 if [ "$FSTYPE" = ext4 ]; then

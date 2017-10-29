@@ -7,5 +7,3 @@
 - name: Configure Route53
   become: false
   local_action: "shell aws route53 change-resource-record-sets --cli-input-json file://./route53-{{ given_name }}.json"
-
-

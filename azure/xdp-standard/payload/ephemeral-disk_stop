@@ -58,8 +58,8 @@ if [ "$DESTROY_ON_STOP" -eq "1" ]; then
         echo "Wiping RAID partitions ${partitions_list[*]} ..."
         mdadm --zero-superblock ${partitions_list[*]}
     else
-        echo "Removing LVM PV(s) ${disks_list[*]} ..."
-        pvremove -f ${disks_list[*]}
+        echo "Removing LVM PV(s) ${partitions_list[*]} ..."
+        pvremove -f ${partitions_list[*]}
     fi
 
     echo "Wiping disks ${disks_list[*]} ..."

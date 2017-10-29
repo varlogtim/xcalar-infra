@@ -2,31 +2,48 @@
   "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location of resources"
+      }
+    },
     "_artifactsLocation": {
       "metadata": {
         "description": "Artifacts location",
         "artifactsBaseUrl": ""
       },
       "type": "string",
-      "defaultValue": "https://raw.githubusercontent.com/xcalar/azure-arm-cluster/master/"
+      "defaultValue": "https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v3"
     },
     "_artifactsLocationSasToken": {
+      "type": "string",
+      "defaultValue": "",
       "metadata": {
         "description": "Artifacts Sas token"
-      },
-      "defaultValue": "",
-      "type": "string"
+      }
     },
-    "clusterName": {
+    "appName": {
       "type": "string",
       "defaultValue": "xdp-standard",
       "metadata": {
         "description": "Must be valid for a hostname (all lower case, no underscores, periods etc)"
       }
     },
+    "installerUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Custom installer URL"
+      }
+    },
     "licenseKey": {
       "type": "securestring",
-      "defaultValue": ""
+      "defaultValue": "",
+      "metadata": {
+        "description": "Valid license key"
+      }
     },
     "scaleNumber": {
       "type": "int",
@@ -38,21 +55,21 @@
     },
     "domainNameLabel": {
       "type": "string",
-      "defaultValue": "",
+      "defaultValue": "[concat('xdp-standard-', uniqueString(resourceGroup().id))]",
       "metadata": {
         "description": "Domain name label for public ip"
       }
     },
-    "adminUsername": {
+    "appUsername": {
       "type": "string",
       "metadata": {
-        "description": "Administrator's username for the Xcalar cluster"
+        "description": "XDP Administrator's username"
       }
     },
-    "adminPassword": {
+    "appPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Administrator's password for the Xcalar cluster"
+        "description": "XDP Administrator's password"
       }
     },
     "adminEmail": {
@@ -61,105 +78,261 @@
         "description": "Administrator's email address"
       }
     },
-    "location": {
+    "adminUsername": {
       "type": "string",
-      "defaultValue": "West US 2",
       "metadata": {
-        "description": "Location of resources"
+        "description": "VM Administrator's username for the Xcalar cluster"
       }
+    },
+    "authenticationType": {
+      "type": "string",
+      "defaultValue": "sshPublicKey",
+      "allowedValues": [
+        "password",
+        "sshPublicKey"
+      ],
+      "metadata": {
+        "description": "Authentication to use (password of sshkey)"
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "VM Administrator's password for the Xcalar cluster. Not used when using SSH keys."
+      }
+    },
+    "adminSSHPublicKey": {
+      "type": "string",
+      "metadata": {
+        "description": "VM Administrator's SSH Key"
+      },
+      "defaultValue": ""
     },
     "vmDiskType": {
       "type": "string",
       "defaultValue": "Premium_LRS",
       "allowedValues": [
-          "Premium_LRS",
-          "Standard_DRS"
-       ],
+        "Premium_LRS",
+        "Standard_LRS"
+      ],
       "metadata": {
         "description": "Type of disk for your VM"
       }
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_DS14_v2",
+      "defaultValue": "Standard_DS13_v2",
       "metadata": {
         "description": "Size of the VM"
+      }
+    },
+    "publicIpAddressNewOrExisting": {
+      "type": "string",
+      "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing"
+      ],
+      "metadata": {
+        "description": "New or existing IP address"
+      }
+    },
+    "publicIpAddressRG": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Resource group of ipAddrress"
+      }
+    },
+    "publicIpAddressName": {
+      "type": "string",
+      "defaultValue": "[concat(parameters('appName'),'-pip')]",
+      "metadata": {
+        "description": "IP Address to use"
+      }
+    },
+    "storageAccountNewOrExisting": {
+      "type": "string",
+      "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing"
+      ],
+      "metadata": {
+        "description": "New or existing Storage account"
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "[concat('xdpstorage', uniqueString(resourceGroup().id))]",
+      "metadata": {
+        "description": "Storage account name"
+      }
+    },
+    "storageAccountType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_GRS",
+        "Standard_RAGRS"
+      ],
+      "metadata": {
+        "description": "Storage Account type"
+      }
+    },
+    "storageAccountRG": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Storage account resource group"
+      }
+    },
+    "bootDiagnostics": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable storing boot diagnostics"
       }
     }
   },
   "variables": {
-    "sq": "'",
-    "scaleMinusOne": "[sub(parameters('scaleNumber'), 1)]",
-    "scaleMinusOneHack": {
-        "true": "[variables('scaleMinusOne')]",
-        "false": "[int(1)]"
-    },
-    "clusterName": "[replace(trim(toLower(parameters('clusterName'))),'_', '-')]",
-    "vmName": "[concat(variables('clusterName'), '-vm')]",
-    "domainNameLabel": "[if(empty(parameters('domainNameLabel')), concat(variables('clusterName'), '-', uniquestring(resourceGroup().id)), parameters('domainNameLabel'))]",
-    "storageAccountName": "[concat('xdpstorage', uniqueString(resourceGroup().id))]",
-    "virtualNetworkName": "[concat(variables('clusterName'), '-vnet')]",
+    "vmName": "[concat(toLower(parameters('appName')), '-vm')]",
+    "nicName": "[concat(parameters('appName'), '-nic')]",
+    "virtualNetworkName": "[concat(parameters('appName'), '-vnet')]",
     "vnetAddressPrefix": "10.0.0.0/16",
-    "publicIPAddressType": "Dynamic",
     "vnetID": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
-    "subnet1Name": "[concat(variables('clusterName'),'-subnet-1')]",
+    "subnet1Name": "[concat(variables('virtualNetworkName'),'-subnet-1')]",
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
+    "networkSecurityGroupName": "[concat(parameters('appName'),'-nsg')]",
+    "publicIPAddressLookup": {
+      "new": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]",
+      "existing": "[resourceId(parameters('publicIpAddressRG'),'Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]"
+    },
+    "publicIPAddress": {
+      "id": "[variables('publicIPAddressLookup')[parameters('publicIpAddressNewOrExisting')]]"
+    },
+    "storageAccountLookup": {
+      "new": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+      "existing": "[resourceId(parameters('storageAccountRG'),'Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+    },
+    "storageAccountId": "[variables('storageAccountLookup')[parameters('storageAccountNewOrExisting')]]",
     "customScriptFilePath": "[concat(parameters('_artifactsLocation'),'/bootstrap.sh', parameters('_artifactsLocationSasToken'))]",
     "payloadFilePath": "[concat(parameters('_artifactsLocation'),'/payload.tar.gz', parameters('_artifactsLocationSasToken'))]",
     "customScriptCommandToExecute": "/bin/bash bootstrap.sh ",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.4",
-    "vmExtensionName": "xcalarBootstrapExtension",
-    "dataDiskSize": 1023
+    "shareName": "[concat('xcalar-', toLower(resourceGroup().name))]",
+    "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
+    "linuxConfiguration": {
+      "sshPublicKey": {
+        "disablePasswordAuthentication": "true",
+        "ssh": {
+          "publicKeys": [
+            {
+              "path": "[concat('/home/',parameters('adminUsername'),'/.ssh/authorized_keys')]",
+              "keyData": "[parameters('adminSSHPublicKey')]"
+            }
+          ]
+        }
+      },
+      "password": {}
+    },
+    "osDiskSize": 127
   },
   "resources": [
     {
-      "type": "Microsoft.Compute/disks",
-      "name": "[concat(variables('vmName'),'0-datadisk')]",
-      "apiVersion": "2017-03-30",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "[parameters('vmDiskType')]"
-      },
-      "properties": {
-          "creationData": {
-              "createOption": "Empty"
-          },
-          "diskSizeGB": "[variables('dataDiskSize')]"
-      }
-    },
-    {
+      "apiVersion": "2017-10-01",
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "[variables('storageAccountName')]",
-      "apiVersion": "2017-06-01",
+      "name": "[parameters('storageAccountName')]",
+      "condition": "[equals(parameters('storageAccountNewOrExisting'),'new')]",
       "location": "[parameters('location')]",
-      "kind": "BlobStorage",
-      "identity": {
-          "type": "SystemAssigned"
+      "tags": {
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
       },
       "sku": {
-          "name": "Standard_LRS"
+        "name": "[parameters('storageAccountType')]"
       },
+      "kind": "StorageV2",
       "properties": {
-          "accessTier": "Hot"
+        "accessTier": "Hot"
       }
     },
     {
       "apiVersion": "2017-09-01",
       "type": "Microsoft.Network/publicIPAddresses",
-      "name": "[concat(variables('vmName'), copyIndex(), '-publicIP')]",
+      "name": "[parameters('publicIPAddressName')]",
+      "condition": "[equals(parameters('publicIpAddressNewOrExisting'), 'new')]",
       "location": "[parameters('location')]",
-      "copy": {
-        "name": "numIp",
-        "count": 1
+      "tags": {
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
       },
       "properties": {
-        "publicIPAllocationMethod": "[variables('publicIPAddressType')]",
+        "publicIPAllocationMethod": "Dynamic",
         "dnsSettings": {
-          "domainNameLabel": "[variables('domainNameLabel')]"
+          "domainNameLabel": "[parameters('domainNameLabel')]"
         }
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('networkSecurityGroupName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "ssh_rule",
+            "properties": {
+              "description": "Allow SSH access",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "22",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "https_rule",
+            "properties": {
+              "description": "Allow HTTPS access",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 102,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "http_rule",
+            "properties": {
+              "description": "Allow HTTP access",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 103,
+              "direction": "Inbound"
+            }
+          }
+        ]
       }
     },
     {
@@ -167,6 +340,13 @@
       "type": "Microsoft.Network/virtualNetworks",
       "name": "[variables('virtualNetworkName')]",
       "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+      ],
+      "tags": {
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
+      },
       "properties": {
         "addressSpace": {
           "addressPrefixes": [
@@ -177,7 +357,10 @@
           {
             "name": "[variables('subnet1Name')]",
             "properties": {
-              "addressPrefix": "[variables('subnet1Prefix')]"
+              "addressPrefix": "[variables('subnet1Prefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+              }
             }
           }
         ]
@@ -186,15 +369,20 @@
     {
       "apiVersion": "2017-09-01",
       "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('vmName'), copyIndex(),'-nic')]",
+      "name": "[concat(variables('nicName'), copyIndex())]",
       "location": "[parameters('location')]",
       "copy": {
         "name": "nicLoop",
-        "count": 1
+        "count": "[parameters('scaleNumber')]"
+      },
+      "tags": {
+        "nodeId": "[copyIndex()]",
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
       },
       "dependsOn": [
-        "[concat('Microsoft.Network/publicIPAddresses/', variables('vmName'), copyIndex(),'-publicIP')]",
-        "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
+        "[variables('publicIpAddress').id]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
       ],
       "properties": {
         "ipConfigurations": [
@@ -203,9 +391,7 @@
             "properties": {
               "privateIPAllocationMethod": "Static",
               "privateIPAddress": "[concat('10.0.0.', copyIndex(4))]",
-              "publicIPAddress": {
-                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(variables('vmName'), copyIndex(), '-publicIP'))]"
-              },
+              "publicIPAddress": "[if(equals(copyIndex(), 0), variables('publicIPAddress'), json('null'))]",
               "subnet": {
                 "id": "[variables('subnet1Ref')]"
               }
@@ -215,137 +401,78 @@
       }
     },
     {
-        "apiVersion": "2017-03-30",
-        "type": "Microsoft.Compute/virtualMachines",
-        "name": "[concat(variables('vmName'), copyIndex())]",
-        "location": "[parameters('location')]",
-        "copy": {
-            "name": "nodeId",
-            "count": 1
-        },
-        "dependsOn": [
-            "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
-            "[concat('Microsoft.Network/networkInterfaces/', variables('vmName'), copyIndex(),'-nic')]",
-            "[concat('Microsoft.Compute/disks/', variables('vmName'), copyIndex(), '-datadisk')]"
-        ],
-        "properties": {
-            "hardwareProfile": {
-                "vmSize": "[parameters('vmSize')]"
-            },
-            "osProfile": {
-                "computername": "[concat(variables('vmName'), copyIndex())]",
-                "adminUsername": "[parameters('adminUsername')]",
-                "adminPassword": "[parameters('adminPassword')]"
-            },
-            "storageProfile": {
-                "imageReference": {
-                    "publisher": "[variables('imagePublisher')]",
-                    "offer": "[variables('imageOffer')]",
-                    "sku": "[variables('imageSKU')]",
-                    "version": "latest"
-                },
-                "osDisk": {
-                    "createOption": "FromImage"
-                },
-                "dataDisks": [
-                  {
-                    "lun": 0,
-                    "name": "[concat(variables('vmName'), copyIndex(), '-datadisk')]",
-                    "createOption": "Attach",
-                    "managedDisk": {
-                      "id": "[resourceId('Microsoft.Compute/disks/', concat(variables('vmName'), copyIndex(), '-datadisk'))]"
-                    }
-                  }
-                ]
-            },
-            "networkProfile": {
-                "networkInterfaces": [
-                    {
-                        "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('vmName'), copyIndex(), '-nic'))]"
-                    }
-                ]
-            }
-        }
-    },
-    {
-        "apiVersion": "2017-03-30",
-        "type": "Microsoft.Compute/virtualMachines",
-        "name": "[concat(variables('vmName'), copyIndex(1))]",
-        "location": "[parameters('location')]",
-        "condition": "[greater(variables('scaleMinusOne'), 0)]",
-        "copy": {
-            "name": "nodeId",
-            "count": "[variables('scaleMinusOneHack')[string(greater(variables('scaleMinusOne'), 0))]]"
-        },
-        "dependsOn": [
-            "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
-            "[concat('Microsoft.Network/networkInterfaces/', variables('vmName'), copyIndex(1),'-nic')]"
-        ],
-        "properties": {
-            "hardwareProfile": {
-                "vmSize": "[parameters('vmSize')]"
-            },
-            "osProfile": {
-                "computername": "[concat(variables('vmName'), copyIndex(1))]",
-                "adminUsername": "[parameters('adminUsername')]",
-                "adminPassword": "[parameters('adminPassword')]"
-            },
-            "storageProfile": {
-                "imageReference": {
-                    "publisher": "[variables('imagePublisher')]",
-                    "offer": "[variables('imageOffer')]",
-                    "sku": "[variables('imageSKU')]",
-                    "version": "latest"
-                },
-                "osDisk": {
-                    "createOption": "FromImage"
-                }
-            },
-            "networkProfile": {
-                "networkInterfaces": [
-                    {
-                        "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('vmName'), copyIndex(1), '-nic'))]"
-                    }
-                ]
-            }
-        }
-    },
-    {
-      "apiVersion": "2017-09-01",
-      "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('vmName'), copyIndex(1),'-nic')]",
+      "apiVersion": "2017-12-01",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('vmName'), copyIndex())]",
       "location": "[parameters('location')]",
-      "condition": "[greater(variables('scaleMinusOne'), 0)]",
       "copy": {
-        "name": "nicLoop",
-        "count": "[variables('scaleMinusOneHack')[string(greater(variables('scaleMinusOne'), 0))]]"
+        "name": "nodeId",
+        "count": "[parameters('scaleNumber')]"
+      },
+      "tags": {
+        "nodeId": "[copyIndex()]",
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
       },
       "dependsOn": [
-        "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
+        "[concat('Microsoft.Storage/storageAccounts/', parameters('storageAccountName'))]",
+        "[concat('Microsoft.Network/networkInterfaces/',variables('nicName'), copyIndex())]"
       ],
       "properties": {
-        "ipConfigurations": [
-          {
-            "name": "ipconfig1",
-            "properties": {
-              "privateIPAllocationMethod": "Static",
-              "privateIPAddress": "[concat('10.0.0.', copyIndex(5))]",
-              "subnet": {
-                "id": "[variables('subnet1Ref')]"
-              }
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "osProfile": {
+          "computername": "[concat(variables('vmName'), copyIndex())]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[if(equals(parameters('authenticationType'), 'password'), parameters('adminPassword'), json('null'))]",
+          "linuxConfiguration": "[variables('linuxConfiguration')[parameters('authenticationType')]]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('imageSKU')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat(variables('vmName'), copyIndex(), '-osdisk')]",
+            "createOption": "FromImage",
+            "caching": "ReadWrite",
+            "diskSizeGB": "[int(variables('osDiskSize'))]",
+            "managedDisk": {
+              "storageAccountType": "[parameters('vmDiskType')]"
             }
           }
-        ]
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('nicName'), copyIndex()))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": "[parameters('bootDiagnostics')]",
+            "storageUri": "[reference(variables('storageAccountId'), '2017-10-01').primaryEndpoints.blob]"
+          }
+        }
       }
     },
     {
+      "apiVersion": "2017-12-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('vmName'), copyIndex(), '/', variables('vmExtensionName'))]",
-      "apiVersion": "2017-03-30",
+      "name": "[concat(variables('vmName'), copyIndex(), '/bootstrap')]",
       "location": "[parameters('location')]",
       "copy": {
         "name": "numExt",
         "count": "[parameters('scaleNumber')]"
+      },
+      "tags": {
+        "nodeId": "[copyIndex()]",
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
       },
       "dependsOn": [
         "[concat('Microsoft.Compute/virtualMachines/', variables('vmName'), copyIndex())]"
@@ -362,9 +489,15 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -d ', variables('domainNameLabel'),' -i ', copyIndex(), ' -c ', variables('vmName'),' -n ', parameters('scaleNumber'), ' -l ', variables('sq'), parameters('licenseKey'), variables('sq'), ' -v ', variables('sq'), parameters('adminEmail'), variables('sq'), ' -w ', variables('sq'), parameters('adminUsername'), variables('sq'), ' -x ', variables('sq'), parameters('adminPassword'), variables('sq'), ' -y ', variables('sq'), variables('storageAccountName'), variables('sq'), ' -z ', variables('sq'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, variables('sq'), ' >> startup.log 2>&1')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', variables('shareName'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -c ', variables('vmName'),' -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'),'\"')]"
         }
       }
     }
-  ]
+  ],
+  "outputs": {
+    "fqdn": {
+      "value": "[reference(variables('publicIpAddress').id,'2017-09-01').dnsSettings.fqdn]",
+      "type": "string"
+    }
+  }
 }

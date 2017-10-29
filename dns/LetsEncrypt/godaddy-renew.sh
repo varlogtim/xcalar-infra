@@ -11,10 +11,15 @@ test -n "$GODADDY_KEY" && test -n "$GODADDY_SECRET" && test -n "$DOMAIN" || { \
     exit 1
 }
 
+test $# -gt 0 || {
+    echo >&2 "Need to specify some hosts!"
+    exit 1
+}
+
 test -e certbot || git clone https://github.com/certbot/certbot
 
 HOSTS=()
 for HOST in "$@"; do
     HOSTS+=(-d $HOST)
 done
-certbot/certbot-auto certonly --manual --preferred-challenges dns --manual-auth-hook `pwd`/godaddy-add.sh --email devaccounts@xcalar.com "${HOSTS[@]}"
+echo ./certbot/certbot-auto certonly --manual --preferred-challenges dns --manual-auth-hook ./godaddy-add.sh --email devaccounts@xcalar.com ${HOSTS[*]}

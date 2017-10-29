@@ -6,4 +6,3 @@ vsts_agent: "{{ vsts_id }}-{{ ansible_hostname }}"
 vsts_root_dir: /ephemeral/data/{{ vsts_id }}
 vsts_token_file: "{{ vsts_root_dir}}/vsts-token"
 vsts_work_dir: "{{ vsts_root_dir}}/work"
-

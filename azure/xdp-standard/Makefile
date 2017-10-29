@@ -1,19 +1,18 @@
 .PHONY: all clean deploy group deploy
 
 SHELL = /bin/bash
+V ?= 0
+
+ifeq ($(V),0)
+.SILENT:
+endif
+
 NOW = $(shell date +'%Y%m%d%H%M')
 
 GROUP ?= $(shell id -un)-rg
 LOCATION  ?= westus2
 DEPLOY = $(GROUP)-deploy
-VALIDATE_RG = validate-$(LOCATION)-rg
 
-
-BOOTSTRAP ?= ../bootstrap/ampBootstrap.sh
-BUCKET ?= xcrepo
-S3_INSTALLER ?= s3://$(BUCKET)/builds/2f08e5a2-b820c309/prod/xcalar-1.2.2-1264-installer
-S3_BOOTSTRAP ?= s3://$(BUCKET)/bysha1/$(shell sha1sum $(BOOTSTRAP) | awk '{print $$1}')/$(shell basename $(BOOTSTRAP))
-S3_BOOTSTRAP_KEY = $(subst s3://$(BUCKET)/,,$(S3_BOOTSTRAP))
 ZONE ?= azure.xcalar.io
 PARAMETERS ?= parameters.json
 PARAMETERS_DEFAULTS ?= parameters.json.defaults
@@ -21,9 +20,6 @@ TEMPLATE ?= azuredeploy.json
 S3CP= aws s3 cp --quiet
 PUBLIC = --acl public-read --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform'
 S3PUBLIC = $(S3CP) $(PUBLIC)
-
-PASSWORD=$(shell jq -r '.parameters.adminPassword.value' $(PARAMETERS))
-USERNAME=$(shell jq -r '.parameters.adminUsername.value' $(PARAMETERS))
 
 SCRIPTS_PATH=$(shell jq -r '[.variables.scriptsUri,.variables.customScriptName]|join("/")' mainTemplate.json | sed -e 's@^http://@@g')
 SCRIPTS_SHA1=$(shell sha1sum $(BOOTSTRAP) | cut -d' ' -f1)
@@ -41,37 +37,39 @@ s3url = $(shell aws s3 presign $(1))
 BOOTSTRAP_URL = https://s3-us-west-2.amazonaws.com/$(BUCKET)/$(S3_BOOTSTRAP_KEY)
 INSTALLER_URL = $(call s3url, $(S3_INSTALLER))
 
-all: xdp-standard-package.zip
+JSON5 = $(wildcard *.json5)
+JSON = $(patsubst %.json5,%.json,$(JSON5))
+
+all: $(JSON)
+
+%.json: %.json5
+	@echo "Building $@ <- $<"
+	json5 < $< > $@
+
+%.json: %.yaml
+	cfn-flip < $< > $@
+
+lint:
+	yamllint .
+
+package: xdp-standard-package.zip
 
 clean:
 	rm -f xdp-standard-package.zip payload.tar.gz
 	rm -rf .tmp
 
-/usr/bin/sshpass:
-	@echo "You need sshpass installed. Please use 'sudo apt-get install -y sshpass' on Ubuntu and 'sudo yum install -y sshpass' on EL"
-	exit 1
-
-jq15:
-	@if ! jq --version | grep -q '1.5'; then sudo curl -o $(JQ).tmp -fsSL https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64 && sudo chmod +x $(JQ).tmp && sudo mv $(JQ).tmp $(JQ); fi
-	@hash -r; jq --version | grep -q '1.5' || { echo "jq 1.5 had to be installed. Please run 'hash -r', and make sure jq is $(JQ) in your PATH"; exit 2; }
-
 payload.tar.gz: $(PAYLOAD)
+	@echo "Building $@ <- $^"
 	rm -f $@
-	fakeroot tar czvf $@ $^
+	fakeroot tar czf $@ $^
 
-.PHONY: xdp-standard-package.zip
 xdp-standard-package.zip: createUiDefinition.json mainTemplate.json bootstrap.sh payload.tar.gz
+	@echo "Building $@ <- $^"
 	rm -rf .tmp
 	mkdir -p .tmp
 	cp $^ .tmp
-	#(cat bootstrap.sh; base64 payload.tar.gz) > .tmp/bootstrap.sh
 	rm -f $@
-	(cd .tmp/ && zip ../$@ * && cp ../$@ .)
-
-$(VALIDATE_RG) $(GROUP):
-	@if ! test "`az group exists --name $@ --output tsv`" = true; then \
-        az group create --name $@ --location $(LOCATION); \
-    fi
+	(cd .tmp/ && zip -q ../$@ $^ && cp ../$@ .)
 
 destroy:
 	-az group delete --no-wait --name $(GROUP)

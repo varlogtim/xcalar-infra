@@ -1,11 +1,9 @@
 [Unit]
 Description=Setup ephemeral disk
-Requires=ephemeral-data.mount ephemeral-units.service
-Before=ephemeral-data.mount ephemeral-units.service
+Requires=ephemeral-data.mount ephemeral-units.service lvm2-monitor.service
+After=lvm2-monitor.service
+Before=local-fs.target ephemeral-data.mount ephemeral-units.service
 ConditionPathIsMountPoint=!/ephemeral/data
-
-[Install]
-WantedBy=local-fs.target
 
 [Service]
 Type=oneshot
@@ -13,3 +11,6 @@ RemainAfterExit=yes
 ExecStart=/etc/ephemeral-scripts/ephemeral-disk_start
 TimeoutStartSec=300
 ExecStop=/etc/ephemeral-scripts/ephemeral-disk_stop
+
+[Install]
+WantedBy=local-fs.target

@@ -19,6 +19,8 @@ IFS=$oldIFS
 disks_list=${disks_list## }
 partitions_list=${partitions_list## }
 
+pvscan -v --cache --activate ay || true
+
 LV_DISK="/dev/$VG_NAME/$LV_DATA"
 
 if [ ! -b "$LV_DISK" ]; then
@@ -71,7 +73,13 @@ if [ ! -b "$LV_DISK" ]; then
         vgcreate -f "$VG_NAME" ${partitions_list[*]}
     fi
 
-    if [ "$ENABLE_SWAP" -eq "1" ]; then
+    if [ "$ENABLE_SWAP" -eq "1" ] && [ "$LV_SWAP_SIZE" != 0 ]; then
+        if [ "$LV_SWAP_SIZE" = MEMSIZE ]; then
+            MEMSIZE=$(free -m | awk '/Mem:/{print $2}')
+            LV_SWAP_SIZE="${MEMSIZE}M"
+            echo "Setting LVM Swap size = $LV_SWAP_SIZE"
+        fi
+
         echo "Creating LVM LV $VG_NAME/$LV_SWAP ..."
         lvcreate --yes -L "$LV_SWAP_SIZE" -n "$LV_SWAP" "$VG_NAME"
 
@@ -83,13 +91,15 @@ if [ ! -b "$LV_DISK" ]; then
     lvcreate --yes -l "$LV_DATA_EXTENTS" -n "$LV_DATA" "$VG_NAME"
 
     echo "Formating data partition ..."
-    sh -c "mkfs.$MOUNT_FSTYPE -F \"/dev/$VG_NAME/$LV_DATA\""
+    sh -c "mkfs.$MOUNT_FSTYPE -L ephemeral-data -m 0 -F \"/dev/$VG_NAME/$LV_DATA\""
 fi
 
 if [ "$ENABLE_SWAP" -eq "1" ]; then
     echo "Activating swap ..."
     swapon "/dev/$VG_NAME/$LV_SWAP"
 fi
+
+pvscan -v --cache --activate ay || true
 
 echo "Creating data mountpoint ..."
 mkdir -p "$MOUNT_PATH"

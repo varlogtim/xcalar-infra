@@ -5,11 +5,6 @@ AWS_AMI_OWNER_CANONICAL=099720109477
 AWS_AMI_MARKETPLACE=679593333241
 AWS_AMI_FILTERS=('Name=state,Values=available' 'Name=architecture,Values=x86_64' 'Name=virtualization-type,Values=hvm' 'Name=root-device-type,Values=ebs') #'Name=ena-support,Values=true')
 
-say () {
-    echo >&2 "$*"
-}
-
-
 aws_sh_setup () {
     export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-west-2}"
     export TMPDIR="${TMPDIR:-/tmp/$(id -u)}/$(basename $0 .sh)/$$"
@@ -261,4 +256,33 @@ aws_s3_du() {
         --statistics Average \
         --dimensions Name=BucketName,Value=$1 Name=StorageType,Value=StandardStorage \
         --query 'Datapoints[].Average' --output text
+}
+
+aws_inventory() {
+    local bucket="$1" s3base="s3://xclogs/inventory/$1/$1/"
+    if [ -z "$bucket" ]; then
+        return 1
+    fi
+    local subkey=$(aws s3 ls "$s3base" | awk '{print $2}' | grep 2018- | sort -h | tail -1)
+    if [ -z "$subkey" ]; then
+        echo >&2 "No subkey found for bucket $1 in $s3base"
+        return 1
+    fi
+    local manifest="${s3base}${subkey}manifest.json" key=
+    for key in $(aws s3 cp $manifest - | jq -r '.files[].key'); do
+        echo "s3://xclogs/$key"
+        aws s3 cp --quiet s3://xclogs/$key .
+    done
+}
+
+# Print out pairs of: 'ZONEID foo.dns.'
+aws_zoneid_to_dns()  {
+    aws route53 list-hosted-zones --query 'HostedZones[][].[Id,Name]' --output text | sed -e 's@^/hostedzone/@@g'
+}
+
+aws_cname_mappings()  {
+    local zone_id
+    if zone_id=$(aws_zoneid_to_dns | grep "$1" | awk '{print $1}') && [ -n "$zone_id" ]; then
+        aws route53 list-resource-record-sets --hosted-zone-id $zone_id | jq -r '.[][] | select(.Type == "CNAME")|[.ResourceRecords[0].Value,.Name]|@tsv'
+    fi
 }

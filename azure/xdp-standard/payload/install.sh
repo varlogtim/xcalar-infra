@@ -3,18 +3,20 @@
 MOUNT=$1
 shift
 DISKS="$*"
-MEMSIZEMB="$(free -m | awk '/Mem:/{print $2}')"
 
-VMSIZE=$(curl -sH Metadata:True "http://169.254.169.254/metadata/instance/compute/vmSize?api-version=2017-08-01&format=text")
 # Defaults file
 mkdir -p /etc/default
 cp ephemeral-disk /etc/default
 echo "DISKS=\"$DISKS\"" >> /etc/default/ephemeral-disk
-echo "LV_SWAP_SIZE=\"${MEMSIZEMB}M\"" >> /etc/default/ephemeral-disk
+echo "ENABLE_SWAP=1" >> /etc/default/ephemeral-disk
+echo "LV_SWAP_SIZE=MEMSIZE" >> /etc/default/ephemeral-disk
 
 # Run scripts
 mkdir -p /etc/ephemeral-scripts/
 cp ephemeral-disk_start ephemeral-disk_stop /etc/ephemeral-scripts/
+
+mkdir -p /usr/local/bin
+cp xcalar-startpre.sh /usr/local/bin/
 
 # Systemd units
 cp ephemeral-data.mount  ephemeral-disk.service  ephemeral-units.service /etc/systemd/system/

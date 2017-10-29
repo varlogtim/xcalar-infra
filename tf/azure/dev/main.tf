@@ -6,14 +6,14 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "dev" {
-  name     = "dev-rg"
+  name     = "xcalarDEV"
   location = "westus2"
 }
 
 module "network" {
   source              = "Azure/network/azurerm"
-  resource_group_name = "dev-rg"
-  vnet_name           = "dev-vnet"
+  resource_group_name = "${azurerm_resource_group.dev.name}"
+  vnet_name           = "${azurerm_resource_group.dev.name}-vNET"
   location            = "westus2"
   address_space       = "10.0.0.0/16"
   subnet_prefixes     = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
@@ -24,5 +24,6 @@ module "network" {
   tags                = {
     environment = "dev"
     costcenter  = "it"
+    owner   = "autoeng"
   }
 }

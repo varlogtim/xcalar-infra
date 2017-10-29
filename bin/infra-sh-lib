@@ -1,0 +1,192 @@
+#!/bin/bash
+#
+#
+#
+
+YELLOW='\e[33m'
+RESET='\e[0m'
+RED='\e[31m'
+
+say () {
+    echo >&2 "$*"
+}
+
+debug () {
+    test "${DEBUG-1}" = "1" && say "debug: $*"
+    "$@"
+    local rc=$?
+    test "${DEBUG-1}" = "1" && test $rc -ne 0 && say "debug: Returned code $rc"
+    return $rc
+}
+
+warn() {
+    if test -t 2; then
+        echo -ne "${YELLOW}WARNING${RESET}: " >&2
+        say "$1"
+    else
+        say "WARNING: $1"
+    fi
+}
+
+error () {
+    if test -t 2; then
+        echo -ne "${RED}ERROR${RESET}: " >&2
+        say "$1"
+    else
+        say "ERROR: $1"
+    fi
+}
+
+please_use_puppet () {
+    error "$1. Please enroll in puppet: http://wiki.int.xcalar.com/mediawiki/index.php/Puppet"
+}
+
+die_with_status () {
+    local rc=$1
+    shift
+    say "ERROR($rc): $*"
+    exit $rc
+}
+
+die () {
+    say "ERROR: $*"
+    exit 1
+}
+
+strjoin () {
+    local IFS="$1"
+    shift
+    echo "$*"
+}
+
+path_remove() {
+  # Delete path by parts so we can never accidentally remove sub paths
+  while [ $# -gt 0 ]; do
+    PATH=${PATH//":$1:"/":"} # delete any instances in the middle
+    PATH=${PATH/#"$1:"/} # delete any instance at the beginning
+    PATH=${PATH/%":$1"/} # delete any instance in the at the end
+    shift
+  done
+}
+
+# Return the age of a file in seconds
+file_age () {
+    if ! test -f "$1"; then
+        echo 9999999
+        return 1
+    fi
+    echo $(( $(date +%s) - $(stat -c '%Y' "$1") ))
+}
+
+# $1 'key="value"' $2 json document
+json_set () {
+    local tmp="${2}.$$"
+    jq -r "$1" "$2" >  "$tmp" && mv "$tmp" "$2" && return 0 || return 1
+}
+
+json_param () {
+    if [ -z "$2" ] && [ -z "$PARAMETERS" ]; then
+        die "Need to pass a parameters.json or set PARAMETERS"
+    fi
+    local v=
+    if v="$(jq -r ".parameters${1}" "${2:-$PARAMETERS}")" && [ "$v" != null ]; then
+        echo $v
+    elif v="$(jq -r "${1}" "${2:-$PARAMETERS}")" && [ "$v" != null ]; then
+        echo $v
+    else
+        return 1
+    fi
+}
+
+# Convert a json object to shell compatible K=V pairse
+json_tokv() {
+    jq -r "to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"
+}
+
+json_parameters_merge () {
+     jq -r -s '.[0] * .[1] | .parameters | {\
+                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,
+                                           dnsLabelPrefix: {value:"'$GROUP'"},
+                                           installerUrl: {value:"'$INSTALLER_URL'"},
+                                           bootstrapUrl: {value:"'$BOOTSTRAP_URL'"}
+                                           }|tojson' "$@" --output json
+}
+
+
+## Generic helpers
+have_command () {
+    command -v "$1" >/dev/null
+}
+
+preflight () {
+    if ! jq --version | grep -q '^jq-1.5'; then
+      curl -sL https://github.com/stedolan/jq/releases/download/jq-1.5/jq-osx-amd64 -o $XLRINFRADIR/bin/jq && \
+        chmod +x $XLRINFRADIR/bin/jq ||
+        please_use_puppet 'Need at least jq version 1.5. Please see https://stedolan.github.io/jq/download/'
+    fi
+    if ! have_command sshpass; then
+        please_use_puppet 'Need to have sshpass installed.'
+    fi
+    return 0
+}
+
+safe_curl () {
+    debug curl -4 --location --retry 20 --retry-delay 5 --retry-max-time 60 "$@"
+}
+
+check_url() {
+    local code=
+    if code="$(curl -fsSL -H 'Range:bytes=0-1'-w '%{http_code}\n' -o /dev/null "$1")"; then
+        if [[ $code =~ ^[23] ]]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+get_sha1 () {
+    shasum $1 | cut -d' ' -f1 | cut -c1-8
+}
+
+if [ "$(uname -s)" = Darwin ]; then
+    readlink_f () {
+        (
+        target="$1"
+        cd "$(dirname $target)"
+        target="$(basename $target)"
+        while [ -L "$target" ]; do
+            target="$(readlink $target)"
+            cd "$(dirname $target)"
+            target="$(basename $target)"
+        done
+        echo "$(pwd -P)/$target"
+        )
+    }
+else
+    readlink_f () {
+        readlink -f "$@"
+    }
+fi
+
+file_sizemb() {
+    echo $(stat -c %b "$1")'/(2*1024)' | bc
+}
+
+# There ya go.. "namespaces"
+infra::filesize_mb() {
+    echo $(stat -c %b "$1")'/(2*1024)' | bc
+}
+
+ip_network() {
+    ip route get 8.8.8.8 |head -1| awk '{print $3}'
+}
+
+ip_localaddr() {
+    hostname -i
+}
+
+ip_cidr() {
+    ip -o -f inet addr show | awk '/scope global/ {print $4}' | head -1
+}
+
+
