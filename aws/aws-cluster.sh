@@ -26,7 +26,7 @@ BOOTSTRAP=aws-cfn-bootstrap.sh
 SUBNET=subnet-b9ed4ee0  # subnet-4e6e2d15
 ROLE="xcalar_field"
 #BOOTSTRAP_URL="${BOOTSTRAP_URL:-http://repo.xcalar.net/scripts/aws-asg-bootstrap-field-new.sh}"
-INSTALLER="${INSTALLER:-s3://xcrepo/builds/2f08e5a2-b820c309/prod/xcalar-1.2.2-1264-installer}"
+INSTALLER="${INSTALLER:-s3://xcrepo/builds/3c9a47f4-65ad6827/prod/xcalar-1.2.3-1296-installer}"
 STACK_NAME="aws-cluster-$NOW"
 #BootstrapUrl	http://repo.xcalar.net/scripts/aws-asg-bootstrap-field.sh
 #InstallerUrl    "$(aws s3 presign s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer)"
@@ -44,7 +44,7 @@ EOF
 
 upload_bysha1 () {
     local sha1= bn= key= s3path=
-    sha1="$(sha1sum "$1" | cut -d' ' -f1)"
+    sha1="$(shasum "$1" | cut -d' ' -f1)"
     bn="$(basename "$1")"
     key="bysha1/${sha1}/${bn}"
     s3path="s3://${BUCKET}/${key}"
