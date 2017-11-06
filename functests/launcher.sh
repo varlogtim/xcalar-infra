@@ -60,7 +60,7 @@ for ii in $(seq 0 $(( $NumNodes - 1 ))); do
     if [ $1 -eq 1 ]; then
         MALLOC_CONF=tcache:false,junk:true /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
     else
-        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+        LD_PRELOAD=/opt/xcalar/lib/libfaulthandler.so /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
     fi
     pid=$!
     echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
