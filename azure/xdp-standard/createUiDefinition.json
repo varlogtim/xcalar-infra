@@ -110,12 +110,12 @@
       {
         "name": "adminUsername",
         "type": "Microsoft.Common.TextBox",
-        "label": "Username",
+        "label": "Username (Case Sensitive)",
         "toolTip": "Enter username to be used for administrating the cluster",
         "constraints": {
           "required": true,
           "regex": "^[A-Za-z][A-Za-z0-9_\\.-]+[A-Za-z0-9]$",
-          "validationMessage": "Must be a valid user name matching ^[A-Z][A-Za-z0-9_\\.-]+[A-Za-z0-9]$"
+          "validationMessage": "Must be a valid user name matching ^[A-Za-z][A-Za-z0-9_\\.-]+[A-Za-z0-9]$"
         },
         "options": {},
         "visible": true
@@ -140,7 +140,7 @@
         "name": "adminEmail",
         "type": "Microsoft.Common.TextBox",
         "label": "Email address",
-        "toolTip": "Enter an email address with which notifications about the deployment will be sent",
+        "toolTip": "Enter an email address to which notifications about the deployment will be sent",
         "constraints": {
           "required": true,
           "regex": "^\\S+@\\S+[\\.][0-9a-z]+$",
