@@ -36,6 +36,11 @@ stop:
 run: image stop clean
 	docker run -d -t $(CONTAINER_ARGS)
 
+strip-binaries:
+	docker exec -it $(CONTAINER_NAME) strip /opt/xcalar/bin/usrnode /opt/xcalar/bin/childnode \
+		/opt/xcalar/bin/clistener /opt/xcalar/bin/listener /opt/xcalar/bin/licenseCheck \
+		/opt/xcalar/bin/xccli /opt/xcalar/bin/xcMapRClient /opt/xcalar/bin/xcmgmtd /opt/xcalar/bin/xcmonitor
+
 install:
 	docker exec -it $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
 
@@ -83,6 +88,6 @@ xccli:
 shell:
 	docker exec -ti $(CONTAINER_NAME) /bin/bash -l
 
-docker-image: run install replace-hostname createuser disable-https restart commit save
+docker-image: run install strip-binaries replace-hostname createuser disable-https restart commit save
 
-run-xcalar: run install replace-hostname createuser disable-https restart
+run-xcalar: run install strip-binaries replace-hostname createuser disable-https restart
