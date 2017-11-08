@@ -5,18 +5,15 @@ json_param () { jq -r "${1}" < "$PARAMETERS"; }
 PARAMETERS="${PARAMETERS:-parameters.main.json}"
 if [ -e $PARAMETERS ]; then
     if [ -z "$LOCATION" ]; then
-        LOCATION="$(json_param .location.value)"
+        LOCATION="$(json_param .parameters.location.value)"
         echo >&2 "WARNING: Using location from $PARAMETERS: LOCATION=$LOCATION"
     fi
     if [ -z  "$CLUSTER" ]; then
-        CLUSTER="$(json_param .clusterName.value)"
+        CLUSTER="$(json_param .parameters.clusterName.value)"
         echo >&2 "WARNING: Using clusterName from $PARAMETERS: CLUSTER=$CLUSTER"
     fi
 fi
 
-
-LOCATION="$(json_param .location.value)"
-CLUSTER="$(json_param .clusterName.value)"
 while getopts "g:n:l:" opt; do
     case "$opt" in
         g) GROUP="$OPTARG";;

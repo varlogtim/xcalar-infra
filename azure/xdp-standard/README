@@ -1,3 +1,5 @@
+## Start at "START HERE"
+
 To publish something as a internal package for deployment,
 1) Change kind to ServiceCatalog in mainTemplate.json and run
 
@@ -19,8 +21,11 @@ To publish this into Azure marketplace,
   { "vmSize": { "value": "Standard_E8s"} ... }
 ```
 - Copy that entire block
-- Create a local file in this directory named parameters.main.json and paste the contents of your clipboard into here
-- Verify your license: ./check-licenses 'YOURLICENSE' NUM_NODES
+
+=== START HERE ===
+=== Create a parameters.main.json (use parameters.main.json.example as example) ===
+
+- Verify your license: ./check-license.sh 'YOURLICENSE' NUM_NODES
 - This same license should've been part of the data you pasted into parameters.main.json
 - Now run create your resource group in the same location as you specified during template deployment ui
 ```
