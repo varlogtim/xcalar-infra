@@ -3,6 +3,9 @@
 # Create an AWS Cloudformation Stack
 #
 # Usage:
+#  ./aws-cluster.sh -h
+#
+# Usage (legacy, will be deprecated):
 #  ./aws-cluster.sh [node-count (default:2)] [instance-type (default: i3.4xlarge)]
 #
 # RECOMMENDED INSTANCE TYPES for DEMOS
@@ -14,7 +17,11 @@
 # Compare EC2 instance types for CPU, RAM, SSD with this calculator:
 # http://www.ec2instances.info/?min_memory=60&min_vcpus=32&min_storage=1&region=us-west-2)
 #
-XLRINFRADIR="${XLRINFRADIR:-$HOME/xcalar-infra}"
+DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+
+if test -z "$XLRINFRADIR"; then
+    export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
+fi
 
 NOW=$(date +%Y%m%d%H%M)
 TEMPLATE="file://./cfn/XCE-CloudFormationMultiNodeInternal.yaml"
@@ -27,7 +34,8 @@ SUBNET=subnet-b9ed4ee0  # subnet-4e6e2d15
 ROLE="xcalar_field"
 #BOOTSTRAP_URL="${BOOTSTRAP_URL:-http://repo.xcalar.net/scripts/aws-asg-bootstrap-field-new.sh}"
 INSTALLER="${INSTALLER:-s3://xcrepo/builds/3c9a47f4-65ad6827/prod/xcalar-1.2.3-1296-installer}"
-STACK_NAME="aws-cluster-$NOW"
+LOGNAME="${LOGNAME:-`id -un`}"
+STACK_NAME="$LOGNAME-cluster-$NOW"
 #BootstrapUrl	http://repo.xcalar.net/scripts/aws-asg-bootstrap-field.sh
 #InstallerUrl    "$(aws s3 presign s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer)"
 IMAGE=ami-f729da8f
@@ -54,6 +62,16 @@ upload_bysha1 () {
     aws s3 presign --expires-in 3600 "$s3path"
 }
 
+check_url () {
+    local code=
+    if code="$(curl -fsSL -r 0-0 -w '%{http_code}\n' -o /dev/null "$1")"; then
+        if [[ $code =~ ^[23] ]]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 while getopts "ha:i:u:t:c:n:s:b:f:r:" opt "$@"; do
     case "$opt" in
         h) usage;;
@@ -78,13 +96,18 @@ if [ -z "$INSTALLER_URL" ]; then
     if [ "$INSTALLER" = "none" ]; then
         INSTALLER_URL="http://none"
     elif [[ "$INSTALLER" =~ ^s3:// ]]; then
-        INSTALLER_URL="$(aws s3 presign "$INSTALLER")"
+        if ! INSTALLER_URL="$(aws s3 presign "$INSTALLER")"; then
+            echo >&2 "Unable to sign the s3 uri: $INSTALLER"
+        fi
     elif [[ "$INSTALLER" =~ ^gs:// ]]; then
         INSTALLER_URL="http://${INSTALLER#gs://}"
     elif [[ "$INSTALLER" =~ ^http[s]?:// ]]; then
         INSTALLER_URL="$INSTALLER"
     else
-        INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d s3 "$INSTALLER")"
+        if ! INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d s3 "$INSTALLER")"; then
+            echo >&2 "Failed to upload or generate a url for $INSTALLER"
+            exit 1
+        fi
     fi
 fi
 
@@ -98,6 +121,13 @@ if [ -z "$INSTALLER_URL" ]; then
     echo >&2 "Bad installer url or unable to open provided url"
     exit 1
 fi
+
+for URL in "$INSTALLER_URL" "$BOOTSTRAP_URL"; do
+    if ! check_url "$URL"; then
+        echo >&2 "Failed to access the installer url: $URL"
+        exit 1
+    fi
+done
 
 PARMS=(\
 BootstrapUrl	"${BOOTSTRAP_URL}"
