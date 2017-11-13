@@ -92,7 +92,7 @@ optUsername=""
 optPassword=""
 optTunnelOnly=false
 optHostPrefix="xdp-standard-xce-vm"
-optForwPort="10000"
+optTunPort="10000"
 
 myName=$(basename $0)
 
@@ -110,8 +110,11 @@ usage()
     Example using tunnel to scp file to VM number 2 through tunnel:
         scp -P 10002 /tmp/tmp.txt azureuser@localhost:/tmp
 
+    Parallel scp to VMs 1 and 2 via tunnel:
+        sshpass -p <password> parallel-scp -Avl auser -h <(echo -e "localhost:10001\nlocalhost:10002") bar.txt /tmp
+
     Usage: $myName <options>
-        -f <port>       Base port for tunneling (default: $optForwPort)
+        -f <port>       Base port for tunneling (default: $optTunPort)
         -i <ip>         Public facing IP of node 0
         -n <numVms>     Total number of VMs
         -p <hostPre>    VM hostname prefix (default: $optHostPrefix)
@@ -123,7 +126,7 @@ EOF
 
 while getopts "f:i:p:P:n:u:th" opt; do
   case $opt in
-      f) optForwPort="$OPTARG";;
+      f) optTunPort="$OPTARG";;
       i) optPubIp="$OPTARG";;
       n) optNumVms="$OPTARG";;
       p) optHostPrefix="$OPTARG";;
@@ -134,7 +137,7 @@ while getopts "f:i:p:P:n:u:th" opt; do
   esac
 done
 
-if [ ! "$TMUX" ]
+if ! $optTunnelOnly && [ ! "$TMUX" ]
 then
     echo "Requires running in tmux session. Try:"
     echo "    tmux new"
@@ -158,5 +161,5 @@ fi
 shift $(($OPTIND - 1))
 posArgs="$1"
 
-$tunnelOnly && trap 'kill $(jobs -p)' EXIT
-sshGo "$TMUX_PANE" "$optPubIp" "$optHostPrefix" "$optNumVms" "$optUsername" "$optPassword" "$optForwPort" "$optTunnelOnly"
+$optTunnelOnly && trap 'kill $(jobs -p)' EXIT
+sshGo "$TMUX_PANE" "$optPubIp" "$optHostPrefix" "$optNumVms" "$optUsername" "$optPassword" "$optTunPort" "$optTunnelOnly"
