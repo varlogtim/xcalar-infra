@@ -1,7 +1,13 @@
-awscli
-crcmod
 ansible
-requests[secure]
+ansible[azure]
+ansible-container[docker]
+awscli
+azure>=2.0.0
+bumpversion
 cfn-flip
-troposphere
+crcmod
+git-review
 jinja2-cli
+requests[secure]
+troposphere
+yaml2json

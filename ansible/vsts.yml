@@ -1,5 +1,10 @@
 ---
-- hosts: vsts
+
+- hosts: all
+  vars_files:
+    - vars/vars.yml
+    - vars/vault.yml
   roles:
-    - xcalar
-    - docker_host
+    - docker_galaxy
+    - vsts
+
