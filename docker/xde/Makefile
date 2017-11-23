@@ -19,11 +19,12 @@ CONTAINER_ARGS = --cap-add=ALL --cap-drop=MKNOD \
                  -e TZ=$(TZ) \
                  -e IN_DOCKER=1 \
                  -e XLRDIR=/opt/xcalar \
+				 -e XCE_HTTP_PORT=8080 \
                  -e container=docker \
                  -v /var/run/docker.sock:/var/run/docker.sock \
                  -v $(INSTALLER_PATH):/tmp/xcalarInstaller \
                  --name $(CONTAINER_NAME) \
-                 -p 443:443 -p 5000:5000 -p 8000:8000 -p 8443:8443 \
+				 -p 8080:8080 -p 443:443 -p 5000:5000 -p 8000:8000 -p 8443:8443 \
                  -p 9090:9090 -p 8889:8889 -p 12124:12124 -p 18552:18552 \
                  $(CONTAINER_IMAGE)
 
@@ -46,6 +47,12 @@ install:
 
 replace-hostname:
 	docker exec -it --user xcalar $(CONTAINER_NAME) sed -i 's/Node.0.IpAddr=.*/Node.0.IpAddr=127.0.0.1/' /etc/xcalar/default.cfg
+
+replace-port:
+	docker exec -it --user xcalar $(CONTAINER_NAME) sed -i 's/8443/8080/' /etc/xcalar/Caddyfile
+
+install-license:
+	docker cp XcalarLic.key $(CONTAINER_NAME):/etc/xcalar/XcalarLic.key
 
 createuser:
 	docker exec -it --user xcalar $(CONTAINER_NAME) mkdir -p /var/opt/xcalar/config/ && curl -4 -H "Content-Type: application/json" -X POST -d "{ \"defaultAdminEnabled\": true, \"username\": \"admin\", \"email\": \"admin@xyz.com\", \"password\": \"admin\" }" "http://127.0.0.1:12124/login/defaultAdmin/set"
@@ -88,6 +95,6 @@ xccli:
 shell:
 	docker exec -ti $(CONTAINER_NAME) /bin/bash -l
 
-docker-image: run install strip-binaries replace-hostname createuser disable-https restart commit save
+docker-image: run install strip-binaries install-license replace-hostname replace-port createuser disable-https restart commit save
 
-run-xcalar: run install strip-binaries replace-hostname createuser disable-https restart
+run-xcalar: run install strip-binaries install-license replace-hostname replace-port createuser disable-https restart

@@ -1,5 +1,5 @@
 ## Xcalar Desktop Edition
-Single node XDP running inside el7 docker container.
+Single node XDP running inside el7 docker container(with single node license valid till 22/12/2017).
 
 ### Sample invocations through make
 
@@ -27,5 +27,5 @@ Single node XDP running inside el7 docker container.
     docker rm -f xcde
 
 ### Start chrome browser
-    Open http://127.0.0.1:8443 (username/password: admin/admin)
+    Open http://127.0.0.1:8080 (username/password: admin/admin)
     Xcalar adventure datasets can be found under /datasets
