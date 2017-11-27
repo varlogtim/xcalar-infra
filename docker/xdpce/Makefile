@@ -1,8 +1,8 @@
 .PHONY: image stop run logs logsf xccli shell
 all: image run
 
-CONTAINER_IMAGE ?= xcde:latest
-CONTAINER_NAME  ?= xcde
+CONTAINER_IMAGE ?= xdpce:latest
+CONTAINER_NAME  ?= xdpce
 TZ ?= America/Los_Angeles
 INSTALLER_PATH ?= /netstore/qa/Downloads/ReleaseCandidates/xcalar-1.2.3-RC4/20171024-3c9a47f4/prod/xcalar-1.2.3-1296-installer
 DEFAULT_CFG_PATH ?= default.cfg
@@ -37,27 +37,30 @@ stop:
 run: image stop clean
 	docker run -d -t $(CONTAINER_ARGS)
 
-strip-binaries:
+strip-binaries: install
 	docker exec -it $(CONTAINER_NAME) strip /opt/xcalar/bin/usrnode /opt/xcalar/bin/childnode \
 		/opt/xcalar/bin/clistener /opt/xcalar/bin/listener /opt/xcalar/bin/licenseCheck \
 		/opt/xcalar/bin/xccli /opt/xcalar/bin/xcMapRClient /opt/xcalar/bin/xcmgmtd /opt/xcalar/bin/xcmonitor
 
-install:
+install: run
 	docker exec -it $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
 
-replace-hostname:
+enforce-samplesize: install-license
+	docker exec -it --user xcalar $(CONTAINER_NAME) bash -c "echo Constants.MaxInteractiveDataSize=1073741824 >> /etc/xcalar/default.cfg"
+
+replace-hostname: install-license
 	docker exec -it --user xcalar $(CONTAINER_NAME) sed -i 's/Node.0.IpAddr=.*/Node.0.IpAddr=127.0.0.1/' /etc/xcalar/default.cfg
 
-replace-port:
+replace-port: install-license
 	docker exec -it --user xcalar $(CONTAINER_NAME) sed -i 's/8443/8080/' /etc/xcalar/Caddyfile
 
-install-license:
+install-license: strip-binaries
 	docker cp XcalarLic.key $(CONTAINER_NAME):/etc/xcalar/XcalarLic.key
 
-createuser:
+createuser: install-license
 	docker exec -it --user xcalar $(CONTAINER_NAME) mkdir -p /var/opt/xcalar/config/ && curl -4 -H "Content-Type: application/json" -X POST -d "{ \"defaultAdminEnabled\": true, \"username\": \"admin\", \"email\": \"admin@xyz.com\", \"password\": \"admin\" }" "http://127.0.0.1:12124/login/defaultAdmin/set"
 
-disable-https:
+disable-https: install-license
 	docker exec -it --user xcalar $(CONTAINER_NAME) sed -i 's/https/http/' /etc/xcalar/Caddyfile
 
 stop-xcalar:
@@ -95,6 +98,6 @@ xccli:
 shell:
 	docker exec -ti $(CONTAINER_NAME) /bin/bash -l
 
-docker-image: run install strip-binaries install-license replace-hostname replace-port createuser disable-https restart commit save
+docker-image: run install strip-binaries install-license replace-hostname replace-port enforce-samplesize createuser disable-https restart commit save
 
 run-xcalar: run install strip-binaries install-license replace-hostname replace-port createuser disable-https restart
