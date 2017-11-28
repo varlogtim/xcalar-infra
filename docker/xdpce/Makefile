@@ -78,7 +78,7 @@ commit:
 	docker commit $(CONTAINER_NAME) $(CONTAINER_NAME)
 
 save:
-	docker save -o $(CONTAINER_NAME).tar.gz $(CONTAINER_NAME)
+	docker save $(CONTAINER_NAME) | gzip > $(CONTAINER_NAME).tar.gz
 
 runWithCfg: image stop clean
 	docker run -d -t -v $(DEFAULT_CFG_PATH):/etc/xcalar/default.cfg $(CONTAINER_ARGS)
