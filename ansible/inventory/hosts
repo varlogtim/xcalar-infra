@@ -23,6 +23,8 @@ trial-igork-01.westus2.cloudapp.azure.com           ansible_user=igork  ansible_
 [abakshi]
 abakshi-3-rg.westus2.cloudapp.azure.com
 
+[xcalar-rg]
+abakshi-99-cluster.westus2.cloudapp.azure.com      ansible_user=azureuser
 
 [trial:children]
 abakshi-test-rg
