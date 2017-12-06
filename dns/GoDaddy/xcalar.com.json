@@ -1,0 +1,293 @@
+[
+  {
+    "data": "107.180.41.39",
+    "type": "A",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "207.135.66.186",
+    "type": "A",
+    "name": "customer-upload",
+    "ttl": 600
+  },
+  {
+    "data": "107.180.41.39",
+    "type": "A",
+    "name": "mail",
+    "ttl": 1800
+  },
+  {
+    "data": "1.2.3.4",
+    "type": "A",
+    "name": "testfoo",
+    "ttl": 3600
+  },
+  {
+    "data": "207.135.66.186",
+    "type": "A",
+    "name": "vpn",
+    "ttl": 3600
+  },
+  {
+    "data": "107.180.41.39",
+    "type": "A",
+    "name": "www",
+    "ttl": 3600
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "blog",
+    "ttl": 1800
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "blogs",
+    "ttl": 600
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "cpanel",
+    "ttl": 3600
+  },
+  {
+    "data": "xcalar-discourse.westus2.cloudapp.azure.com",
+    "type": "CNAME",
+    "name": "discourse",
+    "ttl": 3600
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "documentation",
+    "ttl": 1800
+  },
+  {
+    "data": "esiyawtav2qorljqmudqyugb6zkyvjag.dkim.amazonses.com",
+    "type": "CNAME",
+    "name": "esiyawtav2qorljqmudqyugb6zkyvjag._domainkey",
+    "ttl": 3600
+  },
+  {
+    "data": "zqdkg79rbi.execute-api.us-west-2.amazonaws.com",
+    "type": "CNAME",
+    "name": "installer-api",
+    "ttl": 1800
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "jobs",
+    "ttl": 3600
+  },
+  {
+    "data": "kevpwac72gpntsbgmhchs6kzntvhjerd.dkim.amazonses.com",
+    "type": "CNAME",
+    "name": "kevpwac72gpntsbgmhchs6kzntvhjerd._domainkey",
+    "ttl": 3600
+  },
+  {
+    "data": "kj533n5vnlvyeguqrgimsamgwsf634lv.dkim.amazonses.com",
+    "type": "CNAME",
+    "name": "kj533n5vnlvyeguqrgimsamgwsf634lv._domainkey",
+    "ttl": 3600
+  },
+  {
+    "data": "x3xjvoyc6f.execute-api.us-west-2.amazonaws.com",
+    "type": "CNAME",
+    "name": "license-api",
+    "ttl": 1800
+  },
+  {
+    "data": "xcalar-livechat.westus2.cloudapp.azure.com",
+    "type": "CNAME",
+    "name": "livechat",
+    "ttl": 900
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "new",
+    "ttl": 3600
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "solutions",
+    "ttl": 600
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "support",
+    "ttl": 1800
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "webdisk",
+    "ttl": 600
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "webdisk.admin",
+    "ttl": 600
+  },
+  {
+    "data": "@",
+    "type": "CNAME",
+    "name": "www.admin",
+    "ttl": 600
+  },
+  {
+    "data": "_domainconnect.gd.domaincontrol.com",
+    "type": "CNAME",
+    "name": "_domainconnect",
+    "ttl": 1800
+  },
+  {
+    "priority": 5,
+    "data": "ALT1.ASPMX.L.GOOGLE.COM",
+    "type": "MX",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "priority": 5,
+    "data": "ALT2.ASPMX.L.GOOGLE.COM",
+    "type": "MX",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "priority": 1,
+    "data": "ASPMX.L.GOOGLE.COM",
+    "type": "MX",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "google-site-verification=Kkbg8LcviBFSrsBrf0pod65Exrn3eHqG8ykTBuCASx4",
+    "type": "TXT",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "google-site-verification=Sd1qZjZZROcnhg1-1Uz4OCGewhMP0NdBIgP2TTxPIq0",
+    "type": "TXT",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "keybase-site-verification=1PlrGKMgQXMyW_06rY1Tki4ZR6BfrIB4G61GC__HCWs",
+    "type": "TXT",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "MS=ms88783797",
+    "type": "TXT",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "v=spf1 include:_spf.google.com include:_spf.salesforce.com ~all",
+    "type": "TXT",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCb5nFSkx9BPBuNomYoE+lUF1neq1jvBgqjgftqIL5/7QKlV9LXESrrRpz6jYDiGr9PjvTPsQ9s9U4eJUQ9og/dfVw5N117K0PT7U9th52R5ly9LF0OlGkw+fJGtQgRKVMJ5EtSLvSr43jIIQz2Nic47HkutV+JNuuFxGqAY4sanQIDAQAB",
+    "type": "TXT",
+    "name": "google._domainkey",
+    "ttl": 3600
+  },
+  {
+    "data": "V=DKIM1; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCkEtWeLmpvXF+7EMHe9T4gSAaNZ3toeJiTfpFwMin7LlxIHbHhXwiLfBMjV8ZQDxUMqs41eKixTkoJ29y98B9/dbSfw/fO1BBSuj7POt7DgsxAfXk/271mQPGYh4zXwFb/TfqoOtUtn5NdtJeYrLZ3RywvctXkUYa3mrr1PyLTWwIDAQAB",
+    "type": "TXT",
+    "name": "xcalar._domainkey",
+    "ttl": 3600
+  },
+  {
+    "data": "Lm93Hk5GTRtkE8mMCIgs36PjF4FryB0yH6KhIUX91wo",
+    "type": "TXT",
+    "name": "_acme-challenge.blogs",
+    "ttl": 600
+  },
+  {
+    "data": "Y4LSha5RVVm4h1io1hxaNy_x1fji6VcJvSaUbcNqCrE",
+    "type": "TXT",
+    "name": "_acme-challenge.discourse",
+    "ttl": 600
+  },
+  {
+    "data": "DSSfHMcoXVUC3b6m1Uts3DeAvI4K4GmbMYJAtwBH7Tc",
+    "type": "TXT",
+    "name": "_acme-challenge.documentation",
+    "ttl": 600
+  },
+  {
+    "data": "i3_a3BP_NKhjRoOOiH7zvMuFMOR3edEaKL6uerZTnLA",
+    "type": "TXT",
+    "name": "_acme-challenge.ftp",
+    "ttl": 600
+  },
+  {
+    "data": "8xw1m0KrXwkee5_cmpSl90TCpipLVtOiVcrSB1n9Cto",
+    "type": "TXT",
+    "name": "_acme-challenge.getstarted",
+    "ttl": 600
+  },
+  {
+    "data": "cBnlo5KVh57B1C-KTucLk4GzEE33s4JKcGkeIKaKn_I",
+    "type": "TXT",
+    "name": "_acme-challenge.jobs",
+    "ttl": 600
+  },
+  {
+    "data": "NAHk3Ri2fkhd1jmfg_sHJvZqaNECyhXeMM5noKZYqfM",
+    "type": "TXT",
+    "name": "_acme-challenge.marketplace",
+    "ttl": 600
+  },
+  {
+    "data": "VJ_4WEjN_Nz_1vtYBZvmNixLMtpT0r8kh6iYP27CDck",
+    "type": "TXT",
+    "name": "_acme-challenge.news",
+    "ttl": 600
+  },
+  {
+    "data": "Qj2CV+YtUddrQ0CBSNVhr7sUaEpbH7nhrgGu9xKrr2s=",
+    "type": "TXT",
+    "name": "_amazonses",
+    "ttl": 900
+  },
+  {
+    "data": "ns51.domaincontrol.com",
+    "type": "NS",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "ns52.domaincontrol.com",
+    "type": "NS",
+    "name": "@",
+    "ttl": 3600
+  },
+  {
+    "data": "ns1-06.azure-dns.com",
+    "type": "NS",
+    "name": "azr",
+    "ttl": 3600
+  },
+  {
+    "data": "ns2-06.azure-dns.net",
+    "type": "NS",
+    "name": "azr",
+    "ttl": 3600
+  }
+]

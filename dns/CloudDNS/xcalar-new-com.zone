@@ -1,0 +1,92 @@
+; SOA Record
+; xcalar.com. 21600   IN  SOA ns-cloud-b1.googledomains.com. cloud-dns-hostmaster.google.com. (
+;                 1
+;                 21600
+;                 3600
+;                 259200
+;                 300
+;                 )
+
+
+; A Records
+solutions	600	IN	A	107.180.41.39
+blogs	600	IN	A	107.180.41.39
+admin	600	IN	A	107.180.41.39
+@	600	IN	A	107.180.41.39
+blog	600	IN	A	107.180.41.39
+customer-upload	600	IN	A	207.135.66.186
+mail	600	IN	A	107.180.41.39
+marketplace	600	IN	A	104.198.211.142
+wells-student-01-1	1800	IN	A	35.188.44.174
+getstarted.xcalar.com	600	IN	A	107.180.41.39
+test1234	3600	IN	A	3.3.3.3
+dogfood	900	IN	A	52.175.224.63
+support	600	IN	A	107.180.41.39
+documentation.xcalar.com	600	IN	A	107.180.41.39
+uploads	600	IN	A	207.135.66.186
+support.xcalar.com	600	IN	A	107.180.41.39
+*	600	IN	A	130.211.225.110
+citi	600	IN	A	52.8.251.149
+wells-student-02-1	1800	IN	A	104.197.77.63
+documentation	600	IN	A	107.180.41.39
+vpn	600	IN	A	207.135.66.186
+news	600	IN	A	107.180.41.39
+getstarted	600	IN	A	107.180.41.39
+jobs	600	IN	A	107.180.41.39
+products	600	IN	A	107.180.41.39
+university	1800	IN	A	104.154.244.26
+
+; CNAME Records
+cpanel	3600	IN	CNAME	@
+kevpwac72gpntsbgmhchs6kzntvhjerd._domainkey	3600	IN	CNAME	kevpwac72gpntsbgmhchs6kzntvhjerd.dkim.amazonses.com
+esiyawtav2qorljqmudqyugb6zkyvjag._domainkey	3600	IN	CNAME	esiyawtav2qorljqmudqyugb6zkyvjag.dkim.amazonses.com
+installer-api	600	IN	CNAME	zqdkg79rbi.execute-api.us-west-2.amazonaws.com
+livechat	900	IN	CNAME	xcalar-livechat.westus2.cloudapp.azure.com
+webdisk.admin	3600	IN	CNAME	@
+webdisk	3600	IN	CNAME	@
+email.me	3600	IN	CNAME	mailgun.org
+_domainconnect	3600	IN	CNAME	_domainconnect.gd.domaincontrol.com
+whm	3600	IN	CNAME	@
+www.admin	3600	IN	CNAME	@
+kj533n5vnlvyeguqrgimsamgwsf634lv._domainkey	3600	IN	CNAME	kj533n5vnlvyeguqrgimsamgwsf634lv.dkim.amazonses.com
+email.mg	3600	IN	CNAME	mailgun.org
+www	3600	IN	CNAME	@
+discourse	1800	IN	CNAME	xcalar-discourse.westus2.cloudapp.azure.com
+repo	3600	IN	CNAME	c.storage.googleapis.com
+license-api	600	IN	CNAME	x3xjvoyc6f.execute-api.us-west-2.amazonaws.com
+
+; MX Records
+@	300	IN	MX	5	ALT1.ASPMX.L.GOOGLE.COM
+@	300	IN	MX	5	ALT2.ASPMX.L.GOOGLE.COM
+@	300	IN	MX	1	ASPMX.L.GOOGLE.COM
+@	300	IN	MX	10	ASPMX3.GOOGLEMAIL.COM
+@	300	IN	MX	10	ASPMX2.GOOGLEMAIL.COM
+
+; TXT Records
+_amazonses	3600	IN	TXT	"Qj2CV+YtUddrQ0CBSNVhr7sUaEpbH7nhrgGu9xKrr2s="
+mailo._domainkey.mg	3600	IN	TXT	"k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC+4XpVAP/xuiiX2EeFI13e1QEfNR1Q8zqERLjrgvt4fnKiy5aBe4GIAfhS3FcHahdBuu0ClADTH/GXbz4idQOZnfAq0MV5bjlMOrL7NVsKRBD1suIyn5WlzfbC28elG9KL3ta5wn28WJwBLq4nTYSIu7sL6rihaTmZStamytjwTwIDAQAB"
+@	3600	IN	TXT	"keybase-site-verification=1PlrGKMgQXMyW_06rY1Tki4ZR6BfrIB4G61GC__HCWs"
+@	3600	IN	TXT	"v=spf1 include:_spf.google.com include:_spf.salesforce.com ~all"
+@	3600	IN	TXT	"google-site-verification=flEkmEr2C3Q_J8FoZprsQKHJlxw3N2X9L7wNaj-h8Nc"
+xcalar._domainkey	1800	IN	TXT	"V=DKIM1; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCkEtWeLmpvXF+7EMHe9T4gSAaNZ3toeJiTfpFwMin7LlxIHbHhXwiLfBMjV8ZQDxUMqs41eKixTkoJ29y98B9/dbSfw/fO1BBSuj7POt7DgsxAfXk/271mQPGYh4zXwFb/TfqoOtUtn5NdtJeYrLZ3RywvctXkUYa3mrr1PyLTWwIDAQAB"
+@	3600	IN	TXT	"68omsnaYcWriuiQJKKgDKO4S-H5pC4NBa8uGahGMU-I"
+google._domainkey	3600	IN	TXT	"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCb5nFSkx9BPBuNomYoE+lUF1neq1jvBgqjgftqIL5/7QKlV9LXESrrRpz6jYDiGr9PjvTPsQ9s9U4eJUQ9og/dfVw5N117K0PT7U9th52R5ly9LF0OlGkw+fJGtQgRKVMJ5EtSLvSr43jIIQz2Nic47HkutV+JNuuFxGqAY4sanQIDAQAB"
+@	3600	IN	TXT	"MS=ms88783797"
+getstarted	3600	IN	TXT	"68omsnaYcWriuiQJKKgDKO4S-H5pC4NBa8uGahGMU-I"
+@	3600	IN	TXT	"google-site-verification=Kkbg8LcviBFSrsBrf0pod65Exrn3eHqG8ykTBuCASx4"
+mg	3600	IN	TXT	"v=spf1 include:mailgun.org ~all"
+@	3600	IN	TXT	"google-site-verification=Sd1qZjZZROcnhg1-1Uz4OCGewhMP0NdBIgP2TTxPIq0"
+@	3600	IN	TXT	"google-site-verification=bpPuHs9cKSbfMOKOBP3TZ_shm_fsctP71tlQW4wmqYA"
+
+; NS Records
+gce	3600	IN	NS	ns-cloud-d3.googledomains.com
+azr	3600	IN	NS	ns1-06.azure-dns.com
+gce	3600	IN	NS	ns-cloud-d1.googledomains.com
+gce	3600	IN	NS	ns-cloud-d4.googledomains.com
+azr	3600	IN	NS	ns2-06.azure-dns.net
+gce	3600	IN	NS	ns-cloud-d2.googledomains.com
+aws	3600	IN	NS	ns-1675.awsdns-17.co.uk
+;@	21600	IN	NS	ns-cloud-b1.googledomains.com.
+;@	21600	IN	NS	ns-cloud-b2.googledomains.com.
+;@	21600	IN	NS	ns-cloud-b3.googledomains.com.
+;@	21600	IN	NS	ns-cloud-b4.googledomains.com.

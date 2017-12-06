@@ -1,36 +1,17 @@
 #!/bin/bash
-#
-# Update a GoDaddy DNS entry. Pass in a line formatted like a ZONE entry:
-#
-#
-# ./godaddy.sh  www  3600 IN  A   1.2.3.4
-#
-# HIGHLY recommend backing up all entries first via ./godaddy-backup.py
-#
 set -e
 
-NAME="${1?Must specify name}"
-TTL="${2:-900}"
-IN=${3:-IN}
-TYPE="${4?Must specify type A, CNAME or TXT}"
-DATA="${5?Must specify value to set}"
+DOMAIN=$(expr match "$CERTBOT_DOMAIN" '.*\.\(.*\..*\)')
+NAME="_acme-challenge.$CERTBOT_DOMAIN"
+DATA="$CERTBOT_VALIDATION"
+TYPE=TXT
+TTL=600
 
-if [ "$TYPE" != A ] && [ "$TYPE" != CNAME ] && [ "$TYPE" != TXT ] && [ "$TYPE" != NS ]; then
-    echo >&2 "Must specify type A, CNAME or TXT!"
-    exit 1
-fi
-
-set +x
-set -o pipefail
-test -n "$GODADDY_KEY" && test -n "$GODADDY_SECRET" && test -n "$DOMAIN" || eval $(pass xcalar.com/GoDaddyAPI)
+#eval $(pass xcalar.com/GoDaddyAPI)
 test -n "$GODADDY_KEY" && test -n "$GODADDY_SECRET" && test -n "$DOMAIN" || { \
     echo >&2 "Need to specify GODADDY_KEY, GODADDY_SECRET and DOMAIN"
     exit 1
 }
-if [ "$IN" != IN ]; then
-    echo >&2 "Don't know what to do with IN=$IN type"
-    exit 1
-fi
 TMP="$(mktemp /tmp/godaddyXXXX-out.json)"
 INPUT="$(mktemp /tmp/godaddyXXXX-in.json)"
 (
@@ -52,4 +33,5 @@ if [ $? -ne 0 ] || [ "$(jq -r .code < $TMP)" != null ]; then
     exit 1
 fi
 rm -f $TMP $INPUT
+sleep 30
 exit 0

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
+
+NAME="$(basename ${BASH_SOURCE[0]} .sh)"
+
+set -o pipefail
+python "${NAME}.py" "$@" | jq -r .
