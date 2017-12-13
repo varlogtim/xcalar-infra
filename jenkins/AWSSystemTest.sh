@@ -7,9 +7,9 @@ export TAP="AllTests.tap"
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
 if $BUILD; then
-    build clean
-    build config
-    build
+    cmBuild clean
+    cmBuild config debug
+    cmBuild
 fi
 
 if [ -n "$INSTALLER_PATH" ]; then
