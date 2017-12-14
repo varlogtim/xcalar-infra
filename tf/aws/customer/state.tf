@@ -6,7 +6,7 @@ terraform {
   }
 }
 
-data "terraform_remote_state" "network" {
+data "terraform_remote_state" "customer" {
   backend = "s3"
   config {
     bucket = "xctfstate-us-east-1"
