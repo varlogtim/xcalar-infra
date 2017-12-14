@@ -1,10 +1,10 @@
 #s3://xclogs/AWSLogs/559166403383/S3/
 
-module "customer_msci" {
+module "customer_vion" {
     source = "../modules/customer"
-    name = "xc-msci"
+    name = "xc-vion"
     tags  = {
-      Customer    = "MSCI"
+      Customer    = "VION"
       Billing     = "customer"
       Environment = "prod"
    }

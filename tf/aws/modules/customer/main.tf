@@ -17,6 +17,7 @@ resource "aws_iam_group" "mod" {
 
 resource "aws_iam_user" "mod" {
   name = "${var.name}"
+  force_destroy = true
 }
 
 resource "aws_iam_group_membership" "mod" {
@@ -39,33 +40,27 @@ resource "aws_iam_group_policy" "s3_full_access" {
   name  = "${var.name}-s3-full-access"
   group = "${aws_iam_group.mod.id}"
   policy = <<EOF
-  {
-      "Version": "2012-10-17",
-      "Statement": [
-          {
-              "Sid": "AllowListBuckets",
-              "Effect": "Allow",
-              "Action": [
-                  "s3:ListBucket"
-              ],
-              "Resource": [
-                  "arn:aws:s3:::${aws_s3_bucket.mod.id}"
-              ]
-          },
-          {
-              "Sid": "AllowRWBucket",
-              "Effect": "Allow",
-              "Action": [
-                  "s3:PutObject",
-                  "s3:GetObject",
-                  "s3:DeleteObject"
-              ],
-              "Resource": [
-                  "arn:aws:s3:::${aws_s3_bucket.mod.id}/*"
-              ]
-          }
-      ]
-  }
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowListBuckets",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::${aws_s3_bucket.mod.id}"
+    },
+    {
+      "Sid": "AllowRWBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::${aws_s3_bucket.mod.id}/*"
+    }
+  ]
+}
 EOF
 
 }
