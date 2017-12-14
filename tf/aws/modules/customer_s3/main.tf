@@ -43,6 +43,7 @@ resource "aws_iam_group_policy" "s3_full_access" {
       "Version": "2012-10-17",
       "Statement": [
           {
+              "Sid": "AllowListBuckets",
               "Effect": "Allow",
               "Action": [
                   "s3:ListBucket"
@@ -52,6 +53,7 @@ resource "aws_iam_group_policy" "s3_full_access" {
               ]
           },
           {
+              "Sid": "AllowRWBucket",
               "Effect": "Allow",
               "Action": [
                   "s3:PutObject",
@@ -64,6 +66,6 @@ resource "aws_iam_group_policy" "s3_full_access" {
           }
       ]
   }
-  EOF
+EOF
 
 }
