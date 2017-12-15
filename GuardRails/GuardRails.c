@@ -19,11 +19,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#define USE_GP
 
 static volatile bool isInit;
-// TODO: finer grained locking using usrAddr % prime...
+
 static pthread_mutex_t gMutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -47,6 +47,7 @@ static pthread_mutex_t gMutex = PTHREAD_MUTEX_INITIALIZER;
 typedef struct ElmHdr {
     uint64_t magic;
     size_t binNum;
+    size_t slotNum;
     // Pointer returned to user
     void *usrData;
     // Allocation size requested by user
@@ -87,26 +88,48 @@ typedef struct MemHisto {
 #define MB (1024ULL * 1024ULL)
 #define GB (1024ULL * 1024ULL * 1024ULL)
 
-#define MAX_MEM_POOLS 128
-#define MEMPOOL_MIN_EXPAND_SIZE (1ULL * GB)
+#define MAX_MEM_POOLS 256
+#define MEMPOOL_MIN_EXPAND_SIZE (1000ULL * MB)
 #define MAX_ALLOC_POWER 40
 #define MAX_PREALLOC_POWER 18
+
+// Multiplier for amount of pool to allocate over and above the amount requierd
+// to meet all high water marks during init
+#define START_POOL_MULT 2
+
+// The maximum allocation that's allowed to be round-robined amongst all the
+// slots.  Allocations exceeding this will all go to slot 0 to prevent
+// scattering very large freed blocks across different slots.
+#define MAX_FLOATING_SIZE (1 * MB)
 
 #define MAGIC_INUSE 0xf005ba11
 #define MAGIC_FREE  0xbedabb1e
 
-static long pageSize;
 static size_t currMemPool = -1;
 
-static size_t numGuardPages;
+// #define NUM_GP 0
+#define NUM_GP 1
+
+#define PAGE_SIZE 4096
+static const size_t guardSize = NUM_GP * PAGE_SIZE;
+
+// Use to pick a slot round-robin, intentionally racy
+static volatile size_t racySlotRr = 0;
+
+#define NUM_SLOTS 16
+typedef struct MemSlot {
+    MemBin memBins[MAX_ALLOC_POWER];
+    pthread_mutex_t lock; // = PTHREAD_MUTEX_INITIALIZER;
+} MemSlot;
 
 static MemPool memPools[MAX_MEM_POOLS];
-static MemBin memBins[MAX_ALLOC_POWER];
+//static MemBin memBins[MAX_ALLOC_POWER];
+MemSlot memSlots[NUM_SLOTS];
 
 // Histogram of the -actual- size requested, which differs from what the
 // allocator provides due to adjustments needed for the guard page, mprotect
 // and alignment.
-static MemHisto memHisto[MAX_ALLOC_POWER];
+static MemHisto memHisto[NUM_SLOTS][MAX_ALLOC_POWER];
 
 // Actual number of bytes requested by user, used to track allocator efficiency
 static size_t totalUserRequestedBytes;
@@ -114,7 +137,6 @@ static size_t totalUserFreedBytes;
 
 static void
 insertElmHead(struct ElmHdr **head, struct ElmHdr *elm) {
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&gMutex));
     if (*head) {
         (*head)->prev = elm;
     }
@@ -126,7 +148,6 @@ insertElmHead(struct ElmHdr **head, struct ElmHdr *elm) {
 
 static struct ElmHdr *
 rmElm(struct ElmHdr **head, struct ElmHdr *elm) {
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&gMutex));
     if (*head == elm) {
         *head = elm->next;
     }
@@ -159,17 +180,17 @@ log2fast(uint64_t val) {
 
 static int
 addNewMemPool(const size_t poolSizeReq) {
-    const size_t poolSize = (poolSizeReq / pageSize + 1) * pageSize;
+    const size_t poolSize = (poolSizeReq / PAGE_SIZE + 1) * PAGE_SIZE;
 
     GR_ASSERT_ALWAYS(pthread_mutex_trylock(&gMutex));
-    GR_ASSERT_ALWAYS((poolSize % pageSize) == 0);
+    GR_ASSERT_ALWAYS((poolSize % PAGE_SIZE) == 0);
 
     void *mapStart = mmap(NULL, poolSize, PROT_READ|PROT_WRITE,
                                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (mapStart == MAP_FAILED) {
         return(-1);
     }
-    GR_ASSERT_ALWAYS(((uint64_t)mapStart % pageSize) == 0);
+    GR_ASSERT_ALWAYS(((uint64_t)mapStart % PAGE_SIZE) == 0);
 
     currMemPool++;
     GR_ASSERT_ALWAYS(currMemPool < MAX_MEM_POOLS);
@@ -186,15 +207,17 @@ addNewMemPool(const size_t poolSizeReq) {
 // Pool memory is already initialized to zero by mmap
 static void *
 getFromPool(const size_t size) {
-    const size_t guardSize = numGuardPages * pageSize;
     const size_t binTotalSize = size + guardSize;
 
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&gMutex));
+    int ret = pthread_mutex_lock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
     if (memPools[currMemPool].remainingSizeBytes < binTotalSize) {
         // Dynamically grow by adding new pools and also support small number
         // of huge allocs (eg malloc backed b$)
-        int ret = addNewMemPool(MAX(MEMPOOL_MIN_EXPAND_SIZE, size));
+        ret = addNewMemPool(MAX(MEMPOOL_MIN_EXPAND_SIZE, size));
         if (ret) {
+            ret = pthread_mutex_unlock(&gMutex);
+            GR_ASSERT_ALWAYS(ret == 0);
             return(NULL);
         }
     }
@@ -205,10 +228,10 @@ getFromPool(const size_t size) {
     memPools[currMemPool].startFree += binTotalSize;
     memPools[currMemPool].remainingSizeBytes -= binTotalSize;
 
-    if (numGuardPages > 0) {
-        GR_ASSERT_ALWAYS(((uint64_t)hdr % pageSize) == 0);
+    if (NUM_GP > 0) {
+        GR_ASSERT_ALWAYS(((uint64_t)hdr % PAGE_SIZE) == 0);
         void *guardStart = (void *)hdr + size;
-        GR_ASSERT_ALWAYS(((uint64_t)guardStart % pageSize) == 0);
+        GR_ASSERT_ALWAYS(((uint64_t)guardStart % PAGE_SIZE) == 0);
 
         // This will result in a TLB invalidation.  Also splits the mapping
         // likely requiring setting max maps like so:
@@ -217,21 +240,24 @@ getFromPool(const size_t size) {
         GR_ASSERT_ALWAYS(ret == 0);
     }
 
+    ret = pthread_mutex_unlock(&gMutex);
+    GR_ASSERT_ALWAYS(ret == 0);
     return(hdr);
 }
 
 static int
-replenishBin(const size_t binNum) {
+replenishBin(const size_t slotNum, const size_t binNum) {
     const size_t binSize = (1UL << binNum);
 
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&gMutex));
+    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&memSlots[slotNum].lock));
+    MemBin *bin = &memSlots[slotNum].memBins[binNum];
     // When using guard pages minimum alloc size must be one page
-    if (numGuardPages > 0 && binSize < pageSize) {
+    if (NUM_GP > 0 && binSize < PAGE_SIZE) {
         return(0);
     }
 
-    if (!memBins[binNum].headFree ||
-            memBins[binNum].numFree < memBins[binNum].lowWater) {
+    if (!bin->headFree ||
+            bin->numFree < bin->lowWater) {
         // Handle ad-hoc request for a bin with high/low setting of zero
         do {
             ElmHdr *hdr = (ElmHdr *)getFromPool(binSize);
@@ -239,20 +265,21 @@ replenishBin(const size_t binNum) {
                 return(-1);
             }
 
+            hdr->slotNum = slotNum;
             hdr->binNum = binNum;
             hdr->magic = MAGIC_FREE;
-            insertElmHead(&memBins[binNum].headFree, hdr);
-            memBins[binNum].numFree++;
-        } while (memBins[binNum].numFree < memBins[binNum].highWater);
+            insertElmHead(&bin->headFree, hdr);
+            bin->numFree++;
+        } while (bin->numFree < bin->highWater);
     }
     return(0);
 }
 
 static int
-replenishBins(void) {
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&gMutex));
+replenishBins(const size_t slotNum) {
+    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&memSlots[slotNum].lock));
     for (int binNum = 0; binNum < MAX_PREALLOC_POWER; binNum++) {
-        int ret = replenishBin(binNum);
+        int ret = replenishBin(slotNum, binNum);
         if (ret != 0) {
             return(ret);
         }
@@ -261,58 +288,88 @@ replenishBins(void) {
 }
 
 static int
+replenishSlots(void) {
+    for (int slotNum = 0; slotNum < NUM_SLOTS; slotNum++) {
+        int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
+        GR_ASSERT_ALWAYS(ret == 0);
+        replenishBins(slotNum);
+        ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
+        GR_ASSERT_ALWAYS(ret == 0);
+    }
+    return(0);
+}
+
+static size_t
 initBinsMeta(void) {
-    int startBuf = log2fast(pageSize);
-    int binNum;
+    int startBuf = log2fast(PAGE_SIZE);
+    size_t initSize = 0;
 
-    // When the low water mark is hit for a bin, batch allocate from the pool
-    // until hitting high-water.
-    // Because of the guard page strategy, most allocation activity will be of
-    // pageSize, so put some big numbers here.
-    memBins[startBuf].lowWater = 10000;
-    memBins[startBuf].highWater = 20000;
+    for (int slotNum = 0; slotNum < NUM_SLOTS; slotNum++) {
+        pthread_mutex_init(&memSlots[slotNum].lock, NULL);
 
-    for (binNum = startBuf + 1; binNum < 18; binNum++) {
-        memBins[binNum].lowWater = 100;
-        memBins[binNum].highWater = 200;
+        // When the low water mark is hit for a bin, batch allocate from the pool
+        // until hitting high-water.
+        // Because of the guard page strategy, most allocation activity will be of
+        // PAGE_SIZE, so put some big numbers here.
+        memSlots[slotNum].memBins[startBuf].lowWater = 100;
+        memSlots[slotNum].memBins[startBuf].highWater = 200;
+
+        initSize += memSlots[slotNum].memBins[startBuf].highWater * ((1 << startBuf) + guardSize);
+
+        for (int binNum = startBuf + 1; binNum < 18; binNum++) {
+            memSlots[slotNum].memBins[binNum].lowWater = 100;
+            memSlots[slotNum].memBins[binNum].highWater = 200;
+            initSize += memSlots[slotNum].memBins[binNum].highWater * ((1 << binNum) + guardSize);
+        }
     }
 
-    return(0);
+    return(initSize);
 }
 
 static void *
 getBuf(size_t allocSize, void **end, size_t usrSize) {
-#ifdef USE_GP
-    const size_t reqSize = MAX(pageSize, allocSize);
-#else
-    const size_t reqSize = allocSize;
-#endif
-    const int binNum = log2fast(reqSize);
+    size_t reqSize;
+
+    if (NUM_GP > 0) {
+        reqSize = MAX(PAGE_SIZE, allocSize);
+    } else {
+        reqSize = allocSize;
+    }
+
+    const size_t binNum = log2fast(reqSize);
     const size_t binSize = (1UL << binNum);
+
+    size_t slotNum = 0;
+    if (likely(usrSize < MAX_FLOATING_SIZE)) {
+        slotNum = racySlotRr++ % NUM_SLOTS;
+    }
+
     // Used only for stats
     const int usrSizeBin = log2fast(usrSize);
 
-    int ret = pthread_mutex_lock(&gMutex);
+    int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
 
-    ret = replenishBin(binNum);
+    ret = replenishBin(slotNum, binNum);
     if (ret) {
-        ret = pthread_mutex_unlock(&gMutex);
+        ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
         GR_ASSERT_ALWAYS(ret == 0);
         return(NULL);
     }
 
-    ElmHdr *hdr = memBins[binNum].headFree;
-    rmElm(&memBins[binNum].headFree, hdr);
-    insertElmHead(&memBins[binNum].headInUse, hdr);
-    memBins[binNum].numFree--;
-    memBins[binNum].allocs++;
+    MemBin *bin = &memSlots[slotNum].memBins[binNum];
+
+    ElmHdr *hdr = bin->headFree;
+    rmElm(&bin->headFree, hdr);
+    insertElmHead(&bin->headInUse, hdr);
+    bin->numFree--;
+    bin->allocs++;
 
     GR_ASSERT_ALWAYS(usrSizeBin < MAX_ALLOC_POWER);
-    memHisto[usrSizeBin].allocs++;
+    memHisto[slotNum][usrSizeBin].allocs++;
     totalUserRequestedBytes += usrSize;
 
-    ret = pthread_mutex_unlock(&gMutex);
+    ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
 
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_FREE);
@@ -323,25 +380,28 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
 
 static void
 putBuf(void *buf) {
-    int ret = pthread_mutex_lock(&gMutex);
-    GR_ASSERT_ALWAYS(ret == 0);
-
     ElmHdr *hdr = buf;
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_INUSE);
     hdr->magic = MAGIC_FREE;
 
+    const size_t slotNum = hdr->slotNum;
+
+    int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
+    const int binNum = hdr->binNum;
+    MemBin *bin = &memSlots[slotNum].memBins[binNum];
+    GR_ASSERT_ALWAYS(ret == 0);
+
     const int usrSizeBin = log2fast(hdr->usrDataSize);
     GR_ASSERT_ALWAYS(usrSizeBin < MAX_ALLOC_POWER);
-    memHisto[usrSizeBin].frees++;
+    memHisto[slotNum][usrSizeBin].frees++;
     totalUserFreedBytes += hdr->usrDataSize;
 
-    const int binNum = hdr->binNum;
-    rmElm(&memBins[binNum].headInUse, hdr);
-    insertElmHead(&memBins[binNum].headFree, hdr);
-    memBins[binNum].numFree++;
-    memBins[binNum].frees++;
+    rmElm(&bin->headInUse, hdr);
+    insertElmHead(&bin->headFree, hdr);
+    bin->numFree++;
+    bin->frees++;
 
-    ret = pthread_mutex_unlock(&gMutex);
+    ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
 }
 
@@ -351,29 +411,31 @@ initialize(void) {
         return;
     }
 
-    pageSize = sysconf(_SC_PAGE_SIZE);
-    GR_ASSERT_ALWAYS(pageSize == 4096);
+    GR_ASSERT_ALWAYS(sysconf(_SC_PAGE_SIZE) == PAGE_SIZE);
     GR_ASSERT_ALWAYS((sizeof(ElmHdr) % sizeof(void *)) == 0);
 
-    int ret = pthread_mutex_lock(&gMutex);
+    int ret = pthread_mutex_lock(&initMutex);
     GR_ASSERT_ALWAYS(ret == 0);
     if (!isInit) {
-#ifdef USE_GP
-        numGuardPages = 1;
-#endif
-        printf("Initializing GuardRails\n");
-        ret = addNewMemPool(200 * MB);
+        size_t initSize;
+        // Allocate memory to accomodate all bins at their high water mark plus
+        // additional preallocated memory for the first backing pool.
+        initSize = START_POOL_MULT * initBinsMeta();
+
+        printf("Initializing GuardRails with %lu byte starting pool\n", initSize);
+        ret = pthread_mutex_lock(&gMutex);
+        GR_ASSERT_ALWAYS(ret == 0);
+        ret = addNewMemPool(initSize);
+        GR_ASSERT_ALWAYS(ret == 0);
+        ret = pthread_mutex_unlock(&gMutex);
         GR_ASSERT_ALWAYS(ret == 0);
 
-        ret = initBinsMeta();
-        GR_ASSERT_ALWAYS(ret == 0);
-
-        ret = replenishBins();
+        ret = replenishSlots();
         GR_ASSERT_ALWAYS(ret == 0);
 
         isInit = true;
     }
-    ret = pthread_mutex_unlock(&gMutex);
+    ret = pthread_mutex_unlock(&initMutex);
     GR_ASSERT_ALWAYS(ret == 0);
 }
 
@@ -504,16 +566,16 @@ posix_memalign(void **memptr, size_t alignment, size_t usrSize) {
 void *
 valloc (size_t usrSize) {
     GR_ASSERT_ALWAYS(false);
-    return(memalign(pageSize, usrSize));
+    return(memalign(PAGE_SIZE, usrSize));
 }
 
 void *
 pvalloc (size_t usrSize) {
     GR_ASSERT_ALWAYS(false);
-    if (usrSize < pageSize) {
-        usrSize = pageSize;
+    if (usrSize < PAGE_SIZE) {
+        usrSize = PAGE_SIZE;
     } else if (!IS_POW2(usrSize)) {
-        usrSize = (usrSize / pageSize + 1) * pageSize;
+        usrSize = (usrSize / PAGE_SIZE + 1) * PAGE_SIZE;
     }
 
     return(valloc(usrSize));
@@ -536,29 +598,32 @@ onExit(void) {
     const char *printAllocFmt =
     "Bin %2lu size %12lu, allocs: %11lu, frees: %11lu, leaked bytes: %11lu\n";
 
-    printf("Number mem pools used: %lu\n", currMemPool+1);
-    printf("Actual allocation bins:\n");
-    for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
-        const size_t binAllocedBytes = memBins[i].allocs * (1UL << i);
-        const size_t binFreedBytes = memBins[i].frees * (1UL << i);
-        printf(printAllocFmt, i, 1UL << i,
-                memBins[i].allocs, memBins[i].frees,
-                binAllocedBytes - binFreedBytes);
-        totalAllocedBytes += memBins[i].allocs * (1UL << i);
-        totalAllocedBytesGP += memBins[i].allocs * ((1UL << i) + pageSize);
+    for (size_t slotNum = 0; slotNum < NUM_SLOTS; slotNum++) {
+        printf("Number mem pools used: %lu\n", currMemPool+1);
+        printf("Actual allocation bins (slot %lu):\n", slotNum);
+        for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
+            MemBin *bin = &memSlots[slotNum].memBins[i];
+            const size_t binAllocedBytes = bin->allocs * (1UL << i);
+            const size_t binFreedBytes = bin->frees * (1UL << i);
+            printf(printAllocFmt, i, 1UL << i,
+                    bin->allocs, bin->frees,
+                    binAllocedBytes - binFreedBytes);
+            totalAllocedBytes += bin->allocs * (1UL << i);
+            totalAllocedBytesGP += bin->allocs * ((1UL << i) + PAGE_SIZE);
+        }
+
+        printf("\nRequested user allocation bins (slot %lu):\n", slotNum);
+        for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
+            const size_t binAllocedBytes = memHisto[slotNum][i].allocs * (1UL << i);
+            const size_t binFreedBytes = memHisto[slotNum][i].frees * (1UL << i);
+            printf(printAllocFmt, i, 1UL << i,
+                    memHisto[slotNum][i].allocs, memHisto[slotNum][i].frees,
+                    binAllocedBytes - binFreedBytes);
+            totalRequestedPow2Bytes += binAllocedBytes;
+        }
     }
 
-    printf("\nRequested user allocation bins:\n");
-    for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
-        const size_t binAllocedBytes = memHisto[i].allocs * (1UL << i);
-        const size_t binFreedBytes = memHisto[i].frees * (1UL << i);
-        printf(printAllocFmt, i, 1UL << i,
-                memHisto[i].allocs, memHisto[i].frees,
-                binAllocedBytes - binFreedBytes);
-        totalRequestedPow2Bytes += binAllocedBytes;
-    }
-
-    if (numGuardPages > 0) {
+    if (NUM_GP > 0) {
         printf("\nActual allocator efficiency w/guard: %lu%%\n",
                 100UL * totalUserRequestedBytes / totalAllocedBytesGP);
     }
@@ -570,6 +635,7 @@ onExit(void) {
     printf("Total user bytes -- alloced: %lu, freed: %lu, leaked: %lu\n",
             totalUserRequestedBytes, totalUserFreedBytes,
             totalUserRequestedBytes - totalUserFreedBytes);
+
 #if 0
     // XXX: Dump this to a file or something
     for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
