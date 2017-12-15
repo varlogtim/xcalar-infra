@@ -51,10 +51,12 @@ genBuildArtifacts() {
     find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2>/dev/null | xargs cp --parents -rt $XLRDIR/tmpdir/
 
     PIDS=()
-    for dir in tmpdir /var/log/xcalar; do
+    for dir in tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
         if [ -d $dir ]; then
             if [ "$dir" = "/var/log/xcalar" ]; then
-                tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 $dir &
+                sudo tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 $dir &
+            elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
+                sudo tar -cf xcalar_dataflows.tar.bz2 --use-compress-prog=pbzip2 $dir &
             else
                 tar -cf $dir.tar.bz2 --use-compress-prog=pbzip2 $dir &
             fi
@@ -68,11 +70,14 @@ genBuildArtifacts() {
         echo >&2 "ERROR($ret): tar failed"
     fi
 
-    for dir in core tmpdir /var/log/xcalar; do
+    for dir in core tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
         if [ "$dir" = "/var/log/xcalar" ]; then
             cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-            rm var_log_xcalar.tar.bz2
-            rm $dir/*
+            sudo rm var_log_xcalar.tar.bz2
+            sudo rm $dir/*
+        elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
+            cp xcalar_dataflows.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+            sudo rm xcalar_dataflows.tar.bz2
         else
             if [ -f $dir.tar.bz2 ]; then
                 cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
