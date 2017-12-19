@@ -234,10 +234,12 @@ for Test in "${TestsToRun[@]}"; do
     done
 
     if [ $anyfailed -eq 1 ]; then
-        # copy out the usrnode binary
+        # copy out the usrnode binary and retinas
         now=$(date +"%T")
         filepath="`pwd`/usrnode.$now"
+        retinapath="`pwd`/retina.$now"
         sudo cp /opt/xcalar/bin/usrnode "$filepath"
+        sudo cp -r /var/opt/xcalar/dataflows/ "$retinapath"
         # mark the test as failed
         funcstatsd "$Test" "FAIL" "$gitsha"
         echo "not ok ${ii} - $Test" | tee -a $TAP
