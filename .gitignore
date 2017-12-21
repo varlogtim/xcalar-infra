@@ -2,6 +2,7 @@
 *.tar.gz
 *.tmp
 .venv/
+.direnv/
 packer_cache/
 box/
 repo/apt/

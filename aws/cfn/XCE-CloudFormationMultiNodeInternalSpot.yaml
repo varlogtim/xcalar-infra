@@ -44,6 +44,8 @@ Parameters:
     Type: String
     Default: i3.2xlarge
     AllowedValues:
+      - c5.2xlarge
+      - m5.2xlarge
       - c3.8xlarge
       - c4.8xlarge
       - r3.2xlarge
@@ -80,8 +82,8 @@ Parameters:
   SpotPrice:
     Description: SpotPrice of fleet
     Type: String
-    AllowedPattern: ^([01])\.\(d{1,4}A)
-    ConstraintDescription: Must be a valid url.
+    AllowedPattern: (\d{1})\.(\d{1,4})
+    Default: '0.10'
 Resources:
   PlacementGroup:
     Type: AWS::EC2::PlacementGroup
@@ -126,6 +128,8 @@ Resources:
         - http-from-office
         - open-to-users-at-home
       KeyName: !Ref 'KeyName'
+      EbsOptimized: true
+      SpotPrice: !Ref 'SpotPrice'
       UserData:
         Fn::Base64: !Sub |
             #!/bin/bash -x

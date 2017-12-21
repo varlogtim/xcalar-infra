@@ -40,7 +40,17 @@ sed -i -e '/ puppet$/d' /etc/hosts
 echo '172.31.6.119  puppet' | tee -a /etc/hosts
 
 
-/opt/puppetlabs/bin/puppet agent -t -v
+RETRY=5
+while [ $RETRY -gt 0 ]; do
+    /opt/puppetlabs/bin/puppet agent -t -v
+    rc=$?
+    if [ $rc -eq 0 ] || [ $rc -eq 2 ]; then
+        break
+    fi
+    RETRY=$((RETRY-1))
+    echo >&2 "Puppet returned $rc .. retrying after a short wait... ($RETRY retries left)"
+    sleep 5
+done
 
 
 eval $(ec2-tags -i -s)

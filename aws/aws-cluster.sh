@@ -23,8 +23,11 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
+. aws-sh-lib
+
 NOW=$(date +%Y%m%d%H%M)
-TEMPLATE="file://./cfn/XCE-CloudFormationMultiNodeInternal.yaml"
+DEFAULT_TEMPLATE="file://./cfn/XCE-CloudFormationMultiNodeInternal.yaml"
+DEFAULT_SPOT_TEMPLATE="$(dirname $DEFAULT_TEMPLATE)/$(basename $DEFAULT_TEMPLATE .yaml)Spot.yaml"
 BUCKET=xcrepo
 COUNT=2
 INSTANCE_TYPE='i3.2xlarge'
@@ -39,12 +42,14 @@ STACK_NAME="$LOGNAME-cluster-$NOW"
 #BootstrapUrl	http://repo.xcalar.net/scripts/aws-asg-bootstrap-field.sh
 #InstallerUrl    "$(aws s3 presign s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer)"
 IMAGE=ami-f729da8f
+SPOT=0
 
 usage () {
     cat << EOF
 usage: $0 [-a image-id (default: $IMAGE)] [-i installer (default: $INSTALLER)] [-u installer-url (default: $INSTALLER_URL)]
           [-t instance-type (default: $INSTANCE_TYPE)] [-c count (default: $COUNT)] [-n stack-name (default: $STACK_NAME)]
-          [-b bootstrap (default: $BOOTSTRAP)] [-f template (default: $TEMPLATE) [-s subnet-id (default: $SUBNET)]
+          [-b bootstrap (default: $BOOTSTRAP)] [-f template (default: $DEFAULT_TEMPLATE) [-e subnet-id (default: $SUBNET)]
+          [-s spot-price multiplier (0 to disable, default: $SPOT)]
 
 EOF
     exit 1
@@ -72,7 +77,7 @@ check_url () {
     return 1
 }
 
-while getopts "ha:i:u:t:c:n:s:b:f:r:" opt "$@"; do
+while getopts "ha:i:u:t:c:n:s:b:f:r:e:" opt "$@"; do
     case "$opt" in
         h) usage;;
         a) IMAGE="$OPTARG";;
@@ -81,7 +86,8 @@ while getopts "ha:i:u:t:c:n:s:b:f:r:" opt "$@"; do
         t) INSTANCE_TYPE="$OPTARG";;
         c) COUNT="$OPTARG";;
         n) STACK_NAME="$OPTARG";;
-        s) SUBNET="$OPTARG";;
+        e) SUBNET="$OPTARG";;
+        s) SPOT="$OPTARG";;
         b) BOOTSTRAP="$OPTARG";;
         f) TEMPLATE="$OPTARG";;
         r) ROLE="$OPTARG";;
@@ -89,6 +95,29 @@ while getopts "ha:i:u:t:c:n:s:b:f:r:" opt "$@"; do
         *) echo >&2 "Unknown option $opt"; usage;;
     esac
 done
+
+
+if [ -z "$TEMPLATE" ]; then
+    if [ "$SPOT" = 0 ]; then
+        TEMPLATE="$DEFAULT_TEMPLATE"
+    else
+        TEMPLATE="$DEFAULT_SPOT_TEMPLATE"
+    fi
+fi
+
+case "$TEMPLATE" in
+    http://*) ;;
+    https://*) ;;
+    file://*) ;;
+    *)
+    if test -f "$TEMPLATE"; then
+        TEMPLATE="file://${TEMPLATE}"
+    else
+        echo >&2 "WARNING: Couldn't parse $TEMPLATE"
+        echo >&2 "WARNING: This Cfn stack could fail!!"
+    fi
+    ;;
+esac
 
 shift $((OPTIND-1))
 
@@ -140,15 +169,25 @@ Subnet	        $SUBNET
 ImageId         $IMAGE
 VpcId	        vpc-22f26347)
 
+if [ "$SPOT" != 0 ]; then
+    ZONE=$(aws_subnet_to_zone $SUBNET)
+    SPOTPRICE=$(aws_spot_price $INSTANCE_TYPE $ZONE | head -1 | awk '{print $(NF-1)}')
+    BIDPRICE="$(echo "$SPOTPRICE * $SPOT" | bc)"
+    BIDPRICE="$(printf '%1.4f' $BIDPRICE)"
+    PARMS+=(SpotPrice $BIDPRICE)
+    echo >&2 "$INSTANCE_TYPE: SpotPrice: $SPOTPRICE , MaxBid: $BIDPRICE, Zone: $ZONE"
+fi
+
 ARGS=()
 for ii in $(seq 0 2 $(( ${#PARMS[@]} - 1)) ); do
     k=$(( $ii + 0 ))
     v=$(( $ii + 1 ))
     ARGS+=(ParameterKey=${PARMS[$k]},ParameterValue=\"${PARMS[$v]}\")
+    echo >&2 "Parameter: ${PARMS[$k]}=${PARMS[$v]}"
 done
 
 set -e
-aws cloudformation validate-template --template-body ${TEMPLATE}
+aws cloudformation validate-template --template-body ${TEMPLATE} >/dev/null
 aws cloudformation create-stack \
         --stack-name ${STACK_NAME} \
         --template-body ${TEMPLATE} \
