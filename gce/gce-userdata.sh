@@ -96,6 +96,7 @@ do_install () {
     os_version > /var/tmp/os_version
     case "$(os_version)" in
         rhel*|el*)
+            $sh_c "yum remove -y xcalar xcalar-python27"
             gcsfuseRepo="/etc/yum.repos.d/gcsfuse.repo"
             if true; then
                 $sh_c "rm -f $gcsfuseRepo"
@@ -115,6 +116,7 @@ do_install () {
             $sh_c "yum localinstall -y http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm"
             ;;
         ub*)
+            $sh_c "apt-get remove -y xcalar xcalar-python27"
             export DEBIAN_FRONTEND=noninteractive
             $sh_c 'echo "deb http://packages.cloud.google.com/apt gcsfuse-`lsb_release -c -s` main" > /etc/apt/sources.list.d/gcsfuse.list'
             $sh_c 'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -'
