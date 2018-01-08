@@ -6,6 +6,9 @@ export TAP="AllTests.tap"
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
+source $XLRDIR/doc/env/xc_aliases
+xcEnvEnter
+
 if $BUILD; then
     cmBuild clean
     cmBuild config debug
@@ -177,10 +180,6 @@ mountSsd
 restartXcalar
 
 waitForUsrnodes
-
-source $XLRDIR/doc/env/xc_aliases
-
-xcEnvEnter
 
 xcalar-infra/aws/aws-cloudformation-ssh.sh $cluster "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
 
