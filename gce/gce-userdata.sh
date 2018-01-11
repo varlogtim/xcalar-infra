@@ -225,6 +225,14 @@ $sh_c 'service collectd start'
 # Download and run the installer
 WORKDIR=/var/tmp/gce-userdata
 mkdir -p "$WORKDIR"
+mkdir -p $NFSMOUNT/config
+safe_curl "$(get_metadata_value attributes/ldapConfig)" > $WORKDIR/ldapConfig.json
+if ! test -e /etc/redhat-release; then
+    sed -i -e  "s@/etc/pki/tls/cert.pem@/etc/ssl/certs/ca-certificates.crt@" $WORKDIR/ldapConfig.json
+fi
+if [[ "$HOSTNAME_S" == *1 ]]; then
+    cp $WORKDIR/ldapConfig.json $NFSMOUNT/config
+fi
 safe_curl "$(get_metadata_value attributes/installer)" > $WORKDIR/xcalar-installer
 get_metadata_value attributes/config > $WORKDIR/config
 $sh_c 'mkdir -p /etc/xcalar'

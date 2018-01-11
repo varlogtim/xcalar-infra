@@ -74,6 +74,7 @@ INSTALLER_FNAME="$(basename $INSTALLER)"
 COUNT="${2:-3}"
 CLUSTER="${3:-`whoami`-xcalar}"
 CONFIG=/tmp/$CLUSTER-config.cfg
+LDAP_CONFIG="http://repo.xcalar.net/ldap/gceLdapConfig.json"
 UPLOADLOG=/tmp/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
 EMAIL="$(git config user.email)"
@@ -212,7 +213,7 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --network=${NETWORK} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size ${DISK_SIZE}GB \
-    --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
+    --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL,ldapConfig=$LDAP_CONFIG" \
     --tags=http-server,https-server ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
 if [ "$res" -ne 0 ]; then
