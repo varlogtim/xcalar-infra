@@ -138,7 +138,7 @@ else
 fi
 
 if ! aws cloudformation validate-template --template-body ${CLOUDFORMATION_JSON}; then
-    die "Cloudormation template validation failed"
+    die "Cloudformation template validation failed"
 fi
 
 if ! aws cloudformation create-stack \
