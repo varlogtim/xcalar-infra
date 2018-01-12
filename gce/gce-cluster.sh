@@ -160,10 +160,9 @@ fi
 rm -f $CONFIG
 # if CONFIG_TEMPLATE isn't set, use the default template.cfg
 CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
-# monitor timeouts must be sufficiently large (VMs may go AWOL for long times)
 (echo "Constants.BufferCacheLazyMemLocking=true";
- echo "Constants.XcMonSlaveMasterTimeout=21600";
- echo "Constants.XcMonMasterSlaveTimeout=21600";
+ echo "Constants.XcMonSlaveMasterTimeout=180";
+ echo "Constants.XcMonMasterSlaveTimeout=240";
  $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}") > $CONFIG
 
 ARGS=()
