@@ -16,41 +16,71 @@
 #define IMAX 100
 #define JMAX 4000
 
+extern char __executable_start;
+extern char __etext;
+
+void allocLeak(void) {
+#if 1
+    char *buf = malloc(20);
+    buf[0] = 1;
+#endif
+}
+
+void useAfterFree(void) {
+    int *ptr = malloc(sizeof(int));
+
+    *ptr = 7;
+    // fool optimizer
+    printf("ptr: %d\n", *ptr);
+    free(ptr);
+    printf("ptr: %d\n", *ptr);
+    *ptr = 8;
+    printf("ptr: %d\n", *ptr);
+}
+
 int
 main() {
     srand(time(NULL));
     int i, j;
     const int maxRand = (1 << 16);
 
+    printf("exec start: %p\n", &__executable_start);
     printf("imax:jmax:sz: %d:%d:%d\n", IMAX, JMAX, maxRand);
-    for (i = 0; i < IMAX; i++) {
-        size_t totalMem = 0;
-        void *bufs[JMAX];
-        memset(bufs, 0, sizeof(void *)*JMAX);
-        for (j = 0; j < JMAX; j++) {
-            int randSize = rand() % maxRand;
-            // int randSize = (rand() % maxRand) / 8 * 8;
-            // printf("%d:%d: %6d\n", i, j, randSize);
-            bufs[j] = malloc(randSize);
-            memset(bufs[j], 0x5a, randSize);
+    do {
+        for (i = 0; i < IMAX; i++) {
+            size_t totalMem = 0;
+            void *bufs[JMAX];
+            memset(bufs, 0, sizeof(void *)*JMAX);
+            allocLeak();
+            for (j = 0; j < JMAX; j++) {
+                int randSize = rand() % maxRand;
+                // int randSize = (rand() % maxRand) / 8 * 8;
+                // printf("%d:%d: %6d\n", i, j, randSize);
+                bufs[j] = malloc(randSize);
+                memset(bufs[j], 0x5a, randSize);
 #if 0
-            char *ptr  = (char *)bufs[j] + randSize;
-            *(ptr++) = 1;
-            *(ptr++) = 1;
-            *(ptr++) = 1;
-            *(ptr++) = 1;
-            *(ptr++) = 1;
-            *(ptr++) = 1;
-            *(ptr++) = 1;
-            *(ptr++) = 1;
+                char *ptr  = (char *)bufs[j] + randSize;
+                *(ptr++) = 1;
+                *(ptr++) = 1;
+                *(ptr++) = 1;
+                *(ptr++) = 1;
+                *(ptr++) = 1;
+                *(ptr++) = 1;
+                *(ptr++) = 1;
+                *(ptr++) = 1;
 #endif
-            totalMem += randSize;
+                totalMem += randSize;
+            }
+            // sleep(5);
+            for (j = 0; j < JMAX; j++) {
+                free(bufs[j]);
+                bufs[j] = NULL;
+            }
         }
-        // sleep(5);
-        for (j = 0; j < JMAX; j++) {
-            free(bufs[j]);
-            bufs[j] = NULL;
-        }
-    }
+        printf("enter to continue\n");
+        //getchar();
+    } while (0);
+
+    // useAfterFree();
     return (0);
 }

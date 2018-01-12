@@ -1,129 +1,52 @@
-// Copyright 2017 Xcalar, Inc. All rights reserved.
+// Copyright 2017-2018 Xcalar, Inc. All rights reserved.
 //
 // No use, or distribution, of this source code is permitted in any form or
 // means without a valid, written license agreement with Xcalar, Inc.
 // Please refer to the included "COPYING" file for terms and conditions
 // regarding the use and redistribution of this software.
 
+#include "GuardRails.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <signal.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <pthread.h>
 #include <stdbool.h>
-#include <assert.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <locale.h>
+
+#include <libunwind.h>
+
+#define UNW_LOCAL_ONLY
 
 
-static volatile bool isInit;
+static GRArgs grArgs;
+char argStr[ARG_MAX_BYTES];
+
+#define ELM_HDR_SZ (sizeof(ElmHdr) + grArgs.maxTrackFrames * MEMB_SZ(ElmHdr, allocBt[0]))
+
+static bool isInit;
 
 static pthread_mutex_t gMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define IS_POW2(val) ((val) != 0 && (((val) & ((val) - 1)) == 0))
-
-#define likely(condition)   __builtin_expect(!!(condition), 1)
-#define unlikely(condition) __builtin_expect(!!(condition), 0)
-
-#define MALLOC(size) memalignInt(sizeof(void *), size,\
-        __builtin_return_address(0))
-
-// Avoids any formatted output which can lead to malloc faults
-#define GR_ASSERT_ALWAYS(cond) \
-    do {\
-        if (unlikely(!(cond))) {\
-            abort();\
-        }\
-    }\
-    while (0);
-
-typedef struct ElmHdr {
-    uint64_t magic;
-    size_t binNum;
-    size_t slotNum;
-    // Pointer returned to user
-    void *usrData;
-    // Allocation size requested by user
-    size_t usrDataSize;
-    void *ra[1];
-    struct ElmHdr *next;
-    struct ElmHdr *prev;
-} ElmHdr;
-
-typedef struct MemPool {
-    size_t totalSizeBytes;
-    size_t remainingSizeBytes;
-    // Start of this memory pool
-    void *start;
-    // Start of this pools free space
-    void *startFree;
-    // Last valid address; somewhat redundant
-    void *end;
-} MemPool;
-
-typedef struct MemBin {
-    size_t allocs;
-    size_t frees;
-    size_t highWater;
-    size_t lowWater;
-    size_t numFree;
-    struct ElmHdr *headFree;
-    struct ElmHdr *headInUse;
-    // TODO: Add delayed free list with PROT_NONE to catch user-after-frees
-} MemBin;
-
-typedef struct MemHisto {
-    size_t allocs;
-    size_t frees;
-} MemHisto;
-
-#define KB (1024ULL)
-#define MB (1024ULL * 1024ULL)
-#define GB (1024ULL * 1024ULL * 1024ULL)
-
-#define MAX_MEM_POOLS 256
-#define MEMPOOL_MIN_EXPAND_SIZE (1000ULL * MB)
-#define MAX_ALLOC_POWER 40
-#define MAX_PREALLOC_POWER 18
-
-// Multiplier for amount of pool to allocate over and above the amount requierd
-// to meet all high water marks during init
-#define START_POOL_MULT 2
-
-// The maximum allocation that's allowed to be round-robined amongst all the
-// slots.  Allocations exceeding this will all go to slot 0 to prevent
-// scattering very large freed blocks across different slots.
-#define MAX_FLOATING_SIZE (1 * MB)
-
-#define MAGIC_INUSE 0xf005ba11
-#define MAGIC_FREE  0xbedabb1e
-
 static size_t currMemPool = -1;
 
-// #define NUM_GP 0
-#define NUM_GP 1
-
-#define PAGE_SIZE 4096
 static const size_t guardSize = NUM_GP * PAGE_SIZE;
 
 // Use to pick a slot round-robin, intentionally racy
 static volatile size_t racySlotRr = 0;
 
-#define NUM_SLOTS 16
-typedef struct MemSlot {
-    MemBin memBins[MAX_ALLOC_POWER];
-    pthread_mutex_t lock; // = PTHREAD_MUTEX_INITIALIZER;
-} MemSlot;
-
 static MemPool memPools[MAX_MEM_POOLS];
-//static MemBin memBins[MAX_ALLOC_POWER];
 MemSlot memSlots[NUM_SLOTS];
 
 // Histogram of the -actual- size requested, which differs from what the
@@ -131,11 +54,38 @@ MemSlot memSlots[NUM_SLOTS];
 // and alignment.
 static MemHisto memHisto[NUM_SLOTS][MAX_ALLOC_POWER];
 
-// Actual number of bytes requested by user, used to track allocator efficiency
-static size_t totalUserRequestedBytes;
-static size_t totalUserFreedBytes;
+static void onExit(void);
 
-static void
+static void grPrintf(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+
+    if (grArgs.verbose) {
+        vprintf(fmt, args);
+    }
+
+    va_end(args);
+}
+
+static ssize_t
+getBacktrace (void **buf, const ssize_t maxFrames) {
+    unw_cursor_t cursor;
+    unw_context_t uc;
+    unw_word_t ip;
+    size_t currFrame = 0;
+
+    unw_getcontext(&uc);
+    unw_init_local(&cursor, &uc);
+    while (unw_step(&cursor) > 0 && currFrame < maxFrames) {
+        unw_get_reg(&cursor, UNW_REG_IP, &ip);
+        buf[currFrame] = (void *)ip;
+        currFrame++;
+    }
+
+    return currFrame;
+}
+
+void
 insertElmHead(struct ElmHdr **head, struct ElmHdr *elm) {
     if (*head) {
         (*head)->prev = elm;
@@ -367,7 +317,7 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
 
     GR_ASSERT_ALWAYS(usrSizeBin < MAX_ALLOC_POWER);
     memHisto[slotNum][usrSizeBin].allocs++;
-    totalUserRequestedBytes += usrSize;
+    memSlots[slotNum].totalUserRequestedBytes += usrSize;
 
     ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
@@ -394,15 +344,93 @@ putBuf(void *buf) {
     const int usrSizeBin = log2fast(hdr->usrDataSize);
     GR_ASSERT_ALWAYS(usrSizeBin < MAX_ALLOC_POWER);
     memHisto[slotNum][usrSizeBin].frees++;
-    totalUserFreedBytes += hdr->usrDataSize;
+    memSlots[slotNum].totalUserFreedBytes += hdr->usrDataSize;
 
     rmElm(&bin->headInUse, hdr);
-    insertElmHead(&bin->headFree, hdr);
-    bin->numFree++;
+
+    if (grArgs.useDelay) {
+        delayPut(&memSlots[slotNum], hdr);
+    } else {
+        insertElmHead(&bin->headFree, hdr);
+        bin->numFree++;
+    }
+
     bin->frees++;
 
     ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
+}
+
+void sigUsr2Handler(int sig) {
+    GR_ASSERT_ALWAYS(sig == SIGUSR2);
+    if (sig == SIGUSR2) {
+        // XXX: Move this call to a thread CV'd from here
+        onExit();
+    }
+}
+
+int
+parseArgs(GRArgs *args) {
+    // We get loaded before the loader sets up argv/argc for main.  So read the
+    // args from a file instead.
+    int fd = open(ARG_FILE, O_RDONLY);
+    if (fd < 0) {
+        return (0);
+    }
+
+    ssize_t bytesRead = read(fd, argStr, ARG_MAX_BYTES - 1);
+    GR_ASSERT_ALWAYS(bytesRead >= 0);
+    close(fd);
+    fd = -1;
+    argStr[bytesRead] = '\0';
+
+    if (bytesRead > 0 && argStr[bytesRead - 1] == '\n') {
+        argStr[bytesRead - 1] = '\0';
+    }
+
+    char argStrTok[ARG_MAX_BYTES];
+
+    strncpy(argStrTok, argStr, sizeof(argStrTok));
+
+    char *argv[ARG_MAX_NUM];
+    size_t argc = 0;
+    char *cursor = strtok(argStrTok, " ");
+
+    memset(argv, 0, sizeof(argv));
+    while (cursor) {
+        argv[++argc] = cursor;
+        cursor = strtok(NULL, " ");
+    }
+
+    int c;
+    opterr = 0;
+
+    memset(args, 0, sizeof(*args));
+    argv[0] = "GuardRails";
+    argc++;
+
+    while ((c = getopt(argc, argv, "dt:v")) != -1) {
+        switch (c) {
+            case 'd':
+                args->useDelay = true;
+                break;
+            case 't':
+                args->maxTrackFrames = atoi(optarg);
+                break;
+            case 'v':
+                args->verbose = true;
+                break;
+            default:
+                GR_ASSERT_ALWAYS(false);
+        }
+    }
+
+    // Ughh, if we don't reset this global state, subsequent calls to getopt
+    // (eg in main()) will get messed up in confusing ways.
+    optind = 0;
+    optopt = 0;
+    opterr = 0;
+    return (argc);
 }
 
 __attribute__((constructor)) static void
@@ -412,9 +440,13 @@ initialize(void) {
     }
 
     GR_ASSERT_ALWAYS(sysconf(_SC_PAGE_SIZE) == PAGE_SIZE);
-    GR_ASSERT_ALWAYS((sizeof(ElmHdr) % sizeof(void *)) == 0);
+    GR_ASSERT_ALWAYS(ELM_HDR_SZ < PAGE_SIZE);
+    GR_ASSERT_ALWAYS((ELM_HDR_SZ % sizeof(void *)) == 0);
 
-    int ret = pthread_mutex_lock(&initMutex);
+    int ret = parseArgs(&grArgs);
+    GR_ASSERT_ALWAYS(ret >= 0);
+
+    ret = pthread_mutex_lock(&initMutex);
     GR_ASSERT_ALWAYS(ret == 0);
     if (!isInit) {
         size_t initSize;
@@ -434,21 +466,27 @@ initialize(void) {
         GR_ASSERT_ALWAYS(ret == 0);
 
         isInit = true;
+
+        sighandler_t sigRet;
+
+        sigRet = signal(SIGUSR2, sigUsr2Handler);
+        GR_ASSERT_ALWAYS(sigRet != SIG_ERR);
     }
     ret = pthread_mutex_unlock(&initMutex);
     GR_ASSERT_ALWAYS(ret == 0);
 }
 
 static void *
-memalignInt(size_t alignment, size_t usrSize, void *ra) {
+memalignInt(size_t alignment, size_t usrSize) {
     void *buf;
     void *endBuf;
     void *usrData;
     ElmHdr *hdr;
+    int ret;
     uint64_t misalignment;
     // Add space to the request to satisfy header needs, header pointer and
     // alignment request
-    const size_t allocSize = sizeof(ElmHdr) + sizeof(void *) + usrSize +
+    const size_t allocSize = ELM_HDR_SZ + sizeof(void *) + usrSize +
         (alignment > 1 ? alignment : 0);
 
     if (!isInit) {
@@ -461,6 +499,13 @@ memalignInt(size_t alignment, size_t usrSize, void *ra) {
     }
 
     hdr = buf;
+
+    if (grArgs.maxTrackFrames > 0) {
+        memset(hdr->allocBt, 0, sizeof(hdr->allocBt[0]) * grArgs.maxTrackFrames);
+        ret = getBacktrace(hdr->allocBt, grArgs.maxTrackFrames);
+        GR_ASSERT_ALWAYS(ret >= 0);
+    }
+
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_FREE);
     hdr->magic = MAGIC_INUSE;
     hdr->usrDataSize = usrSize;
@@ -484,14 +529,12 @@ memalignInt(size_t alignment, size_t usrSize, void *ra) {
     // Pointer to the start of the metadata one word before the user memory
     *(void **)(usrData - sizeof(void *)) = buf;
     hdr->usrData = usrData;
-    // TODO: use libc backtrace here for larger allocations
-    hdr->ra[0] = ra;
     return(usrData);
 }
 
 void *
 memalign(size_t alignment, size_t usrSize) {
-    return(memalignInt(alignment, usrSize, __builtin_return_address(0)));
+    return(memalignInt(alignment, usrSize));
 }
 
 void *
@@ -502,13 +545,13 @@ malloc(size_t usrSize) {
     // the end of the allocated data and the guard page.  We could catch this
     // by adding/checking some trailing known bytes.  Most allocations seem to
     // be a word size multiple.
-    return(MALLOC(usrSize));
+    return(memalignInt(sizeof(void *), usrSize));
 }
 
 void *
 calloc(size_t nmemb, size_t usrSize) {
     size_t totalSize = nmemb * usrSize;
-    void *buf = MALLOC(totalSize);
+    void *buf = memalignInt(sizeof(void *), totalSize);
 
     memset(buf, 0, totalSize);
     return(buf);
@@ -517,7 +560,7 @@ calloc(size_t nmemb, size_t usrSize) {
 void *
 realloc(void *origBuf, size_t newUsrSize) {
     if (origBuf == NULL) {
-        return(MALLOC(newUsrSize));
+        return(memalignInt(sizeof(void *), newUsrSize));
     } else {
         ElmHdr *hdr;
         void *newBuf;
@@ -526,7 +569,7 @@ realloc(void *origBuf, size_t newUsrSize) {
             initialize();
         }
 
-        newBuf = MALLOC(newUsrSize);
+        newBuf = memalignInt(sizeof(void *), newUsrSize);
         memcpy(newBuf, origBuf, MIN(newUsrSize, hdr->usrDataSize));
         free(origBuf);
 
@@ -594,33 +637,71 @@ __attribute__((destructor)) static void
 onExit(void) {
     size_t totalAllocedBytes = 0;
     size_t totalAllocedBytesGP = 0;
+    size_t totalFreedBytesGP = 0;
     size_t totalRequestedPow2Bytes = 0;
+    size_t totalUserRequestedBytes = 0;
+    size_t totalUserFreedBytes = 0;
     const char *printAllocFmt =
-    "Bin %2lu size %12lu, allocs: %11lu, frees: %11lu, leaked bytes: %11lu\n";
+    "Bin %2lu size %12lu, allocs: %11lu, frees: %11lu, leaked allocs: %11lu, leaked bytes: %11lu\n";
 
+    int outfd = -1;
+
+    if (grArgs.maxTrackFrames > 0) {
+        outfd = open(TRACKER_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        GR_ASSERT_ALWAYS(outfd > 0);
+    }
+
+    printf("================ BEGIN GUARDRAILS OUTPUT ================\n");
+    printf("Ran with args: %s\n", argStr);
+    // For comma-deliniated integers.
+    // Note: setlocale leaks 3,659 user bytes
+    char *origLocale = setlocale(LC_NUMERIC, "");
+    GR_ASSERT_ALWAYS(origLocale);
     for (size_t slotNum = 0; slotNum < NUM_SLOTS; slotNum++) {
+        totalUserRequestedBytes += memSlots[slotNum].totalUserRequestedBytes;
+        totalUserFreedBytes += memSlots[slotNum].totalUserFreedBytes;
         printf("Number mem pools used: %lu\n", currMemPool+1);
-        printf("Actual allocation bins (slot %lu):\n", slotNum);
+        grPrintf("Actual allocation bins (slot %lu):\n", slotNum);
         for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
             MemBin *bin = &memSlots[slotNum].memBins[i];
             const size_t binAllocedBytes = bin->allocs * (1UL << i);
             const size_t binFreedBytes = bin->frees * (1UL << i);
-            printf(printAllocFmt, i, 1UL << i,
-                    bin->allocs, bin->frees,
+            grPrintf(printAllocFmt, i, 1UL << i,
+                    bin->allocs, bin->frees, bin->allocs - bin->frees,
                     binAllocedBytes - binFreedBytes);
             totalAllocedBytes += bin->allocs * (1UL << i);
             totalAllocedBytesGP += bin->allocs * ((1UL << i) + PAGE_SIZE);
+            totalFreedBytesGP += bin->frees * ((1UL << i) + PAGE_SIZE);
+            struct ElmHdr *headInUse = bin->headInUse;
+            while (outfd != -1 && headInUse != NULL) {
+                dprintf(outfd, "%lu,", headInUse->usrDataSize);
+                for (size_t j = 0; j < grArgs.maxTrackFrames; j++) {
+                    if (!headInUse->allocBt[j]) {
+                        dprintf(outfd, ",");
+                    } else {
+                        dprintf(outfd, "%p,", headInUse->allocBt[j]);
+                    }
+                }
+                dprintf(outfd, "\n");
+                headInUse = headInUse->next;
+            }
         }
 
-        printf("\nRequested user allocation bins (slot %lu):\n", slotNum);
+        grPrintf("\nRequested user allocation bins (slot %lu):\n", slotNum);
         for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
             const size_t binAllocedBytes = memHisto[slotNum][i].allocs * (1UL << i);
             const size_t binFreedBytes = memHisto[slotNum][i].frees * (1UL << i);
-            printf(printAllocFmt, i, 1UL << i,
+            grPrintf(printAllocFmt, i, 1UL << i,
                     memHisto[slotNum][i].allocs, memHisto[slotNum][i].frees,
+                    memHisto[slotNum][i].allocs - memHisto[slotNum][i].frees,
                     binAllocedBytes - binFreedBytes);
             totalRequestedPow2Bytes += binAllocedBytes;
         }
+    }
+
+    if (outfd != -1) {
+        close(outfd);
+        outfd = -1;
     }
 
     if (NUM_GP > 0) {
@@ -632,19 +713,15 @@ onExit(void) {
     printf("Theoretical allocator efficiency : %lu%%\n",
             100UL * totalUserRequestedBytes / totalRequestedPow2Bytes);
 
-    printf("Total user bytes -- alloced: %lu, freed: %lu, leaked: %lu\n",
+    printf("Total user bytes -- alloced: %'lu, freed: %'lu, leaked: %'lu\n",
             totalUserRequestedBytes, totalUserFreedBytes,
             totalUserRequestedBytes - totalUserFreedBytes);
+    printf("Total actual bytes -- alloced: %'lu, freed: %'lu, leaked: %'lu\n",
+            totalAllocedBytesGP, totalFreedBytesGP,
+            totalAllocedBytesGP - totalFreedBytesGP);
 
-#if 0
-    // XXX: Dump this to a file or something
-    for (size_t i = 0; i < MAX_ALLOC_POWER; i++) {
-        ElmHdr *elm = memBins[i].headInUse;
-        while (elm) {
-            printf("LEAK: Bin %2lu size %10lu, usrSize: %8lu, allocator: %p\n",
-                    i, 1UL << i, elm->usrDataSize, elm->ra[0]);
-            elm = elm->next;
-        }
-    }
-#endif
+    printf("================== END GUARDRAILS OUTPUT ================\n");
+    fflush(stdout);
+
+    setlocale(LC_NUMERIC, origLocale);
 }
