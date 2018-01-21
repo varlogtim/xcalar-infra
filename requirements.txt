@@ -8,6 +8,6 @@ cfn-flip
 crcmod
 git-review
 jinja2-cli
-requests[secure]
+requests
 troposphere
-yaml2json
+yml2json

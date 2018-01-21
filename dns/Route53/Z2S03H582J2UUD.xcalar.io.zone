@@ -1,0 +1,1318 @@
+{
+    "ResourceRecordSets": [
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1963.awsdns-53.co.uk."
+                }, 
+                {
+                    "Value": "ns-1108.awsdns-10.org."
+                }, 
+                {
+                    "Value": "ns-69.awsdns-08.com."
+                }, 
+                {
+                    "Value": "ns-863.awsdns-43.net."
+                }
+            ], 
+            "Type": "NS", 
+            "Name": "xcalar.io.", 
+            "TTL": 172800
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1963.awsdns-53.co.uk. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ], 
+            "Type": "SOA", 
+            "Name": "xcalar.io.", 
+            "TTL": 900
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "130.211.225.110"
+                }
+            ], 
+            "Type": "A", 
+            "Name": "\\052.xcalar.io.", 
+            "TTL": 300
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "abakshi-main1-rg.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "abakshi-main1-rg.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "ns-212.awsdns-26.com."
+                }, 
+                {
+                    "Value": "ns-1396.awsdns-46.org."
+                }, 
+                {
+                    "Value": "ns-1576.awsdns-05.co.uk."
+                }, 
+                {
+                    "Value": "ns-555.awsdns-05.net."
+                }
+            ], 
+            "Type": "NS", 
+            "Name": "azure.xcalar.io.", 
+            "TTL": 300
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "10.10.3.184"
+                }
+            ], 
+            "Type": "A", 
+            "Name": "grafana.prometheus.default.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "10.10.3.184"
+                }
+            ], 
+            "Type": "A", 
+            "Name": "influxdb.prometheus.default.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "10.10.3.184"
+                }
+            ], 
+            "Type": "A", 
+            "Name": "prometheus.prometheus.default.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "\"influxdb.prometheus.default.xcalar.io.\""
+                }, 
+                {
+                    "Value": "\"prometheus.prometheus.default.xcalar.io.\""
+                }, 
+                {
+                    "Value": "\"grafana.prometheus.default.xcalar.io.\""
+                }
+            ], 
+            "Type": "TXT", 
+            "Name": "external-dns-adminproject.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-100.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-0.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-101.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-1.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-100.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-100.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-101.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-101.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-102.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-102.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-103.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-103.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-104.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-104.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanfordlab-105.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-105.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-106.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-106.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-107.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-107.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-108.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-108.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-109.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-109.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-110.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-110.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-111.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-111.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-112.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-112.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-113.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-113.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-114.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-114.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-115.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-115.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-116.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-116.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-117.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-117.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-118.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-118.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-119.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-119.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-120.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-120.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-121.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-121.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-122.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-122.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-123.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-123.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-124.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-124.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-125.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-125.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-126.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-126.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-127.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-127.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-128.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-128.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-129.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-129.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-130.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-130.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-131.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-131.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-132.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-132.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-133.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-133.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-134.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-134.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-135.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-135.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-136.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-136.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-137.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-137.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-138.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-138.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-139.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-139.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-140.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-140.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-141.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-141.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-142.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-142.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-143.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-143.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-144.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-144.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-145.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-145.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-146.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-146.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-147.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-147.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-148.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-148.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-149.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-149.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-150.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-150.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-151.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-151.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-152.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-152.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-153.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-153.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-154.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-154.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-155.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-155.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-156.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-156.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-157.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-157.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-158.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-158.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-159.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-159.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-160.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-160.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-161.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-161.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-162.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-162.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-163.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-163.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-164.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-164.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-165.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-165.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-166.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-166.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-167.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-167.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-168.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-168.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-169.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-169.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-170.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-170.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-171.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-171.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-172.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-172.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-173.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-173.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-174.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-174.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-175.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-175.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-176.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-176.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-177.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-177.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-178.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-178.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-179.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-179.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-180.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-180.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-181.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-181.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-182.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-182.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-183.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-183.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-184.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-184.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-185.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-185.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-186.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-186.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-187.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-187.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-188.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-188.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-189.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-189.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-190.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-190.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-102.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-2.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-103.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-3.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-104.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-4.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-100.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-admin.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-101.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-dev.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-102.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab-int.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xcalar-stanford-103.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xcalar-stanfordlab.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-delitor-v13-oct24.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-glen-delitor.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xdp-standard-qeacvxaarosak.westcentralus.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-pete-hsing.xcalar.io.", 
+            "TTL": 300
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xdp-standard-qeacvxaarosak.westcentralus.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-102.xcalar.io.", 
+            "TTL": 300
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-mlescohier-01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-104.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-element22-01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-105.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "abakshi-3-rg.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-106.xcalar.io.", 
+            "TTL": 300
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-igork-01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-107.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-avora-01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-109.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-vtandon-02.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-110.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-gkagan-v01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-111.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-lulstrup-v01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-112.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-dhushon-v01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-113.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-llian-v01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-114.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-mmusaelian-v01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-115.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-cbrune-v01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-116.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "test-dshetty-v01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-preview-117.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "xdp-standard-qeacvxaarosak.westcentralus.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-standard-102.xcalar.io.", 
+            "TTL": 300
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-igork-01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-standard-107.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "abakshi-main1-rg.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-standard-123.xcalar.io.", 
+            "TTL": 60
+        }, 
+        {
+            "ResourceRecords": [
+                {
+                    "Value": "trial-vjoshi-01.westus2.cloudapp.azure.com"
+                }
+            ], 
+            "Type": "CNAME", 
+            "Name": "xdp-vikram-joshi.xcalar.io.", 
+            "TTL": 60
+        }
+    ]
+}
