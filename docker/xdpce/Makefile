@@ -11,7 +11,7 @@ EXEC_INPUT := $(shell test -t 0 && echo "-i")
 EXEC_TERMINAL ?= -t
 EXEC_ARGS := $(EXEC_TERMINAL) $(EXEC_INPUT)
 
-CONTAINER_ARGS = --cap-add=ALL --cap-drop=MKNOD \
+CONTAINER_ARGS_COMMON = --cap-add=ALL --cap-drop=MKNOD \
                  --security-opt seccomp:unconfined \
                  --ulimit core=0:0 \
                  --ulimit nofile=64960 \
@@ -23,14 +23,15 @@ CONTAINER_ARGS = --cap-add=ALL --cap-drop=MKNOD \
                  -e TZ=$(TZ) \
                  -e IN_DOCKER=1 \
                  -e XLRDIR=/opt/xcalar \
-				 -e XCE_HTTP_PORT=8080 \
+                 -e XCE_HTTP_PORT=8080 \
                  -e container=docker \
                  -v /var/run/docker.sock:/var/run/docker.sock \
-                 -v $(INSTALLER_PATH):/tmp/xcalarInstaller \
                  --name $(CONTAINER_NAME) \
-				 -p 8080:8080 -p 443:443 -p 5000:5000 -p 8000:8000 -p 8443:8443 \
-                 -p 9090:9090 -p 8889:8889 -p 12124:12124 -p 18552:18552 \
-                 $(CONTAINER_IMAGE)
+                 -p 8080:8080 -p 443:443 -p 5000:5000 -p 8000:8000 -p 8443:8443 \
+                 -p 9090:9090 -p 8889:8889 -p 12124:12124 -p 18552:18552
+
+INSTALLER_ARGS = $(CONTAINER_ARGS_COMMON) -v $(INSTALLER_PATH):/tmp/xcalarInstaller $(CONTAINER_IMAGE)
+RUN_ARGS = $(CONTAINER_ARGS_COMMON)  $(CONTAINER_IMAGE)
 
 image:
 	docker build -t $(CONTAINER_IMAGE) .
@@ -39,7 +40,7 @@ stop:
 	docker stop $(CONTAINER_NAME) 2>/dev/null || true
 
 run: image stop clean
-	docker run -d -t $(CONTAINER_ARGS)
+	docker run -d -t $(INSTALLER_ARGS)
 
 strip-binaries: install
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) strip /opt/xcalar/bin/usrnode /opt/xcalar/bin/childnode \
@@ -85,7 +86,7 @@ save:
 	docker save $(CONTAINER_NAME) | gzip > $(CONTAINER_NAME).tar.gz
 
 runWithCfg: image stop clean
-	docker run -d -t -v $(DEFAULT_CFG_PATH):/etc/xcalar/default.cfg $(CONTAINER_ARGS)
+	docker run -d -t -v $(DEFAULT_CFG_PATH):/etc/xcalar/default.cfg $(INSTALLER_ARGS)
 
 clean: stop
 	docker rm -f $(CONTAINER_NAME) 2>/dev/null || true
@@ -105,3 +106,6 @@ shell:
 docker-image: run install strip-binaries install-license replace-hostname replace-port enforce-samplesize createuser disable-https restart commit save
 
 run-xcalar: run install strip-binaries install-license replace-hostname replace-port createuser disable-https restart
+
+run_xdpce:
+	docker run -v /Volumes:/mnt/Volumes -v /Users:/mnt/Users -d -t --user xcalar $(RUN_ARGS) bash && docker exec -it --user xcalar xdpce /opt/xcalar/bin/xcalarctl start
