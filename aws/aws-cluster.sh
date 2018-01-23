@@ -43,13 +43,14 @@ STACK_NAME="$LOGNAME-cluster-$NOW"
 #InstallerUrl    "$(aws s3 presign s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer)"
 IMAGE=ami-f729da8f
 SPOT=0
+LICENSE=""
 
 usage () {
     cat << EOF
 usage: $0 [-a image-id (default: $IMAGE)] [-i installer (default: $INSTALLER)] [-u installer-url (default: $INSTALLER_URL)]
           [-t instance-type (default: $INSTANCE_TYPE)] [-c count (default: $COUNT)] [-n stack-name (default: $STACK_NAME)]
           [-b bootstrap (default: $BOOTSTRAP)] [-f template (default: $DEFAULT_TEMPLATE) [-e subnet-id (default: $SUBNET)]
-          [-s spot-price multiplier (0 to disable, default: $SPOT)]
+          [-s spot-price multiplier (0 to disable, default: $SPOT)] [-l "licensefile-or-key"]
 
 EOF
     exit 1
@@ -77,7 +78,7 @@ check_url () {
     return 1
 }
 
-while getopts "ha:i:u:t:c:n:s:b:f:r:e:" opt "$@"; do
+while getopts "ha:i:u:t:c:n:s:b:f:r:e:l:" opt "$@"; do
     case "$opt" in
         h) usage;;
         a) IMAGE="$OPTARG";;
@@ -91,6 +92,7 @@ while getopts "ha:i:u:t:c:n:s:b:f:r:e:" opt "$@"; do
         b) BOOTSTRAP="$OPTARG";;
         f) TEMPLATE="$OPTARG";;
         r) ROLE="$OPTARG";;
+        l) LICENSE="$OPTARG";;
         --) break;;
         *) echo >&2 "Unknown option $opt"; usage;;
     esac
@@ -167,6 +169,10 @@ KeyName	        xcalar-us-west-2
 SSHLocation	    0.0.0.0/0
 Subnet	        $SUBNET
 ImageId         $IMAGE
+AdminUsername   xdpadmin
+AdminPassword   Welcome1
+AdminEmail      "$(git config user.email || test@xcalar.com)"
+LicenseKey      $LICENSE
 VpcId	        vpc-22f26347)
 
 if [ "$SPOT" != 0 ]; then

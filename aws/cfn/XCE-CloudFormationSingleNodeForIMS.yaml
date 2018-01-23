@@ -1,7 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: XCE AWS CloudFormation Template (Single Instance) -  **WARNING** This
-  template creates an Amazon EC2 instance. You will be billed for the AWS resources
-  used if you create a stack from this template.
+Description: XCE AWS CloudFormation Template (Single Instance) v20180123-1
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -16,13 +14,12 @@ Parameters:
     Type: AWS::EC2::KeyPair::KeyName
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
   InstallerUrl:
-    Description: XCE Installer
+    Description: XCE Installer URL
     Type: String
     MinLength: '8'
     MaxLength: '256'
-    AllowedPattern: http[s]?://[a-zA-Z][a-zA-Z0-9/\\?%&\\.=-]*
-    ConstraintDescription: Must be a valid url.
-    Default: http://repo.xcalar.net/builds/prod/xcalar-1.1.2-784-installer
+    ConstraintDescription: 'Must be a valid url. The default is valid until Jan 30/2018.'
+    Default: https://xcrepo.s3.amazonaws.com/builds/55aa56b4-c3e56403/prod/xcalar-1.3.0-1524-installer?AWSAccessKeyId=AKIAJU4DLXF3P2I7WGCQ&Expires=1517301898&Signature=pDmZIpbAxJ4VEdOlmA0BmQ%2Bmlfc%3D
   LicenseKey:
     NoEcho: true
     Description: XCE License
@@ -48,15 +45,22 @@ Parameters:
     Type: String
     Default: r4.4xlarge
     AllowedValues:
-      - r4.4xlarge
       - r4.2xlarge
+      - r4.4xlarge
       - i3.2xlarge
       - i3.4xlarge
       - i3.8xlarge
       - i3.16xlarge
       - x1.16xlarge
       - x1.32xlarge
-    ConstraintDescription: must be a valid EC2 instance type.
+    ConstraintDescription: Must be a valid EC2 instance type
+  ELRelease:
+    Description: 'Enterprise Linux Distro. RHEL7 is RedHat Enterprise Linux 7.4, EL7 is CentOS 7.4'
+    Type: String
+    Default: RHEL7
+    AllowedValues:
+      - RHEL7
+      - EL7
   CidrLocation:
     Description: ' The IP address range to allow SSH/HTTPS access from'
     Type: String
@@ -68,12 +72,18 @@ Parameters:
   RootSize:
     Description: Size of root disk
     Type: Number
-    Default: '300'
+    Default: '200'
+  SwapSize:
+    Description: 'Size of swap disk. NOTE: This should be at least 2x the size of physical memory.'
+    Type: Number
+    Default: '500'
 Mappings:
   RegionMap:
     us-east-1:
+      "RHEL7": "ami-26ebbc5c"
       "EL7": "ami-1e9da864"
     us-west-2:
+      "RHEL7": "ami-223f945a"
       "EL7": "ami-bf40f0c7"
 Metadata:
   AWS::CloudFormation::Interface:
@@ -91,6 +101,7 @@ Metadata:
         Parameters:
           - InstanceType
           - RootSize
+          - SwapSize
       - Label:
           default: Security configuration
         Parameters:
@@ -116,11 +127,16 @@ Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", "EL7"]
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", !Ref "ELRelease"]
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
             VolumeSize: !Ref 'RootSize'
+            VolumeType: gp2
+            DeleteOnTermination: true
+        - DeviceName: /dev/sdm
+          Ebs:
+            VolumeSize: !Ref 'SwapSize'
             VolumeType: gp2
             DeleteOnTermination: true
         - DeviceName: /dev/sdb
@@ -146,16 +162,56 @@ Resources:
           XCE_HOME=/var/opt/xcalar
           LICENSE_SERVER="https://x3xjvoyc6f.execute-api.us-west-2.amazonaws.com/production/license/api/v1.0/marketplacedeploy"
           export PATH=$PATH:/opt/aws/bin
-          yum install -y epel-release
-          yum install -y awscli jq nfs-utils
-          RELEASE_RPM=$(rpm -qf /etc/redhat-release)
-          RELEASE=$(rpm -q --qf %{VERSION} $RELEASE_RPM)
-          ELVERSION="$(echo $RELEASE | sed -e 's/Server//g')"
-          rpm -q aws-cfn-bootstrap || yum localinstall -y http://repo.xcalar.net/deps/aws-cfn-bootstrap-1.4-18.el$ELVERSION.noarch.rpm
-          cfn-init -v  --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+          if [ -e /etc/redhat-release ]; then
+            RELEASE_RPM=$(rpm -qf /etc/redhat-release)
+            RELEASE=$(rpm -q --qf %{VERSION} $RELEASE_RPM)
+            ELVERSION="$(echo $RELEASE | sed -e 's/Server//g')"
+            ELV="$(echo $ELVERSION | cut -c 1)"
+            yum install -y yum-utils
+            if [[ $RELEASE_RPM =~ ^redhat ]]; then
+                case "$RELEASE" in
+                6*)
+                    yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
+                    ;;
+                7*) 
+                    yum-config-manager --enable rhel-server-rhscl-7-rpms
+                    yum-config-manager --enable rhel-7-server-rpms
+                    yum-config-manager --enable rhel-7-server-optional-rpms
+                    yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+                    ;;
+                esac
+            elif [[ $RELEASE_RPM =~ ^centos ]]; then
+                yum install -y epel-release
+            fi
+            yum makecache fast
+            yum install -y python-pip python-virtualenv
+            yum install -y jq nfs-utils unzip
+            yum install -y ntp
+            if [ "$ELV" = 6 ]; then
+              service ntpd start
+              chkconfig ntpd on
+              service rsyslog restart
+            else
+              firewall-cmd --add-service=ntp --permanent || true
+              firewall-cmd --reload || true
+              systemctl enable --now ntpd
+              systemctl restart rsyslog
+            fi
+            rpm -q aws-cfn-bootstrap || yum localinstall -y http://repo.xcalar.net/deps/aws-cfn-bootstrap-1.4-18.el$ELV.noarch.rpm
+          fi
+          if [ -z "$NO_AWSCLI" ]; then
+            safe_curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "/tmp/awscli-bundle.zip" && (cd /tmp/ && unzip awscli-bundle.zip && ./awscli-bundle/install -i /usr/local/share/awscli -b /usr/local/bin/aws)
+          fi
+          if [ -z "$NO_AWSCFN" ]; then
+            mkdir -p /tmp/awscfn
+            safe_curl http://repo.xcalar.net/deps/aws-cfn-bootstrap-latest.tar.gz | tar zxf - -C /tmp/awscfn --strip-components=1
+            (cd /tmp/awscfn && python setup.py install)
+          fi
+          # Needed for AutoScale
+          # cfn-init -v  --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
           mkdir -p /etc/xcalar
           echo "${LicenseKey}" > /etc/xcalar/XcalarLic.key
-          safe_curl "${InstallerUrl}" -o installer.sh
+          safe_curl -f "${InstallerUrl}" -o installer.sh && \
           /bin/bash -x installer.sh --caddy --startonboot --nostart >> /var/log/startup.log 2>&1
           rc=$?
           if [ $rc != 0 ]; then
@@ -169,26 +225,26 @@ Resources:
           /opt/xcalar/scripts/genConfig.sh /etc/xcalar/template.cfg - localhost
           echo "Constants.SendSupportBundle=true"
           ) | tee /etc/xcalar/default.cfg
-          # Mount extra instance store
           SWAPFILE="/swapfile"
-          for RESOURCEDEV in /dev/nvme0n1 /dev/xvdb /dev/xvdc /dev/xvdd /xvde /xvdf; do
+          # Mount extra instance store
+          for RESOURCEDEV in /dev/nvme0n1 /dev/xvdb /dev/xvdc /dev/xvdd /dev/xvde /dev/xvdf /dev/xvdm; do
             if [[ $RESOURCEDEV =~ nvme ]]; then
               RESOURCEPART="$RESOURCEDEV"p1
             else
               RESOURCEPART="$RESOURCEDEV"1
             fi
-            if test -b $RESOURCEDEV && ! test -b $RESOURCEPART; then
+            if [ -b $RESOURCEDEV ] && ! [ -b $RESOURCEPART ]; then
               parted $RESOURCEDEV -s 'mklabel gpt mkpart ext2 1 -1'
               for ii in `seq 10`; do
                 sleep 2
                 mkfs.ext4 -m 0 -L $LABEL -F $RESOURCEPART    && break
               done
-              if test -b $RESOURCEPART; then
+              if [ -b $RESOURCEPART ]; then
                 INSTANCESTORE=/ssd
                 SERDES=$INSTANCESTORE/xdbser
                 mkdir -p $INSTANCESTORE $SERDES
                 chown xcalar:xcalar $INSTANCESTORE $SERDES
-                chmod 0777 $INSTANCESTORE
+                chmod 0755 $INSTANCESTORE $SERDES
                 UUID="$(blkid -s UUID -o value $RESOURCEPART)"
                 echo "UUID=\"$UUID\"     $INSTANCESTORE      ext4   defaults,nofail    0   2  # user-data $RESOURCEPART"  | tee -a /etc/fstab
                 mount $INSTANCESTORE
@@ -204,7 +260,7 @@ Resources:
               INSTANCESTORE=
             fi
           done
-          if false; then #[ -n "$SWAPFILE" ]; then
+          if [ -n "$SWAPFILE" ]; then
             DISKFREEMB=$(df -B M $(dirname $SWAPFILE) | tail -1 | awk '{print $2}' | sed -e 's/[GM]$//g')
             MEMSIZEMB=$(free -m | awk '/Mem:/{print $2}')
             SWAPSIZEMB=$((MEMSIZEMB*2))
@@ -271,4 +327,4 @@ Outputs:
     Description: Default administrator username for XD
   SSH:
     Value: !Join ['', ['ssh -i ~/.ssh/', !Ref 'KeyName','.pem ec2-user@', !GetAtt 'EC2Instance.PublicDnsName']]
-    Description: Default administrator username for XD
+    Description: SSH instructions

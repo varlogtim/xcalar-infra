@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# Copies an installer to S3/GCS, then provides a signed
+# URL with $EXPIRY seconds validity.
+
+# Links expire in 30min by default
+EXPIRY=${EXPIRY:-1800}
 
 if [ "$(uname -s)" = Darwin ]; then
     readlink_f () {
@@ -37,21 +43,31 @@ if [ $# -eq 0 ]; then
     set -- -h
 fi
 
-case "$1" in
-    -h|--help)
-        say "usage: $0 [-d <gs|s3>] <path/to/installer>"
-        say " upload the installer to repo.xcalar.net and print out new http url"
-        exit 1
-        ;;
-    -d|--dest)
-        DEST="$2"
-        shift 2
-        ;;
-    -*)
-        say "ERROR: Unknown option $1"
-        exit 1
-        ;;
-esac
+while [ $# -gt 0 ]; do
+    cmd="$1"
+    case "$cmd" in
+        -h|--help)
+            say "Usage: $0 [-d <gs|s3>] [-e expires-in-seconds ($EXPIRY default) <path/to/installer>"
+            say " upload the installer to repo.xcalar.net and print out new http url"
+            exit 1
+            ;;
+        -e|--expiry)
+            EXPIRY="$2"
+            shift 2
+            ;;
+
+        -d|--dest)
+            DEST="$2"
+            shift 2
+            ;;
+        -*)
+            say "ERROR: Unknown option $1"
+            exit 1
+            ;;
+        --) shift; break;;
+        *) break;;
+    esac
+done
 INSTALLER="$1"
 
 
@@ -84,7 +100,7 @@ if test -f "$INSTALLER"; then
                 say "Uploading $INSTALLER to $DEST_URL"
                 aws s3 cp --only-show-errors "$INSTALLER" "$DEST_URL"
             fi
-            aws s3 presign --expires-in ${EXPIRY:-1800} "$DEST_URL"
+            aws s3 presign --expires-in $EXPIRY "$DEST_URL"
             ;;
         gs://*)
             if ! gsutil ls "$DEST_URL"; then
