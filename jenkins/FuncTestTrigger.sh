@@ -140,6 +140,7 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     echo 10000000 | sudo tee /proc/sys/vm/max_map_count
 
     # Build GuardRails
+    make -C xcalar-infra/GuardRails deps
     make -C xcalar-infra/GuardRails
 
     # kill any previous test run instances
