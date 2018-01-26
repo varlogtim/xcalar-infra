@@ -81,7 +81,7 @@ _ssh_cmd() {
             ;;
     esac
 
-    ssh $SSH_DEBUG -tt -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" "$HOST" "$@"  >"$TMPDIR/stdout"  2>"$TMPDIR/stderr"
+    ssh $SSH_DEBUG -tt -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" $AWS_SSH_OPT "$HOST" "$@"  >"$TMPDIR/stdout"  2>"$TMPDIR/stderr"
 }
 
 bg_ssh_cmd() {
@@ -95,7 +95,7 @@ bg_ssh_cmd() {
             ;;
     esac
 
-    ssh $SSH_DEBUG -n -f -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" "$HOST" "$@" >"$TMPDIR/stdout" 2>"$TMPDIR/stderr"
+    ssh $SSH_DEBUG -n -f -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" $AWS_SSH_OPT "$HOST" "$@" >"$TMPDIR/stdout" 2>"$TMPDIR/stderr"
 
     rc=$?
     t_end="$(date +%s)"
@@ -146,7 +146,7 @@ scp_cmd() {
             ;;
     esac
 
-    scp $SSH_DEBUG -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" "$SRC" "$DEST" >"$TMPDIR/stdout"  2>"$TMPDIR/stderr"
+    scp $SSH_DEBUG $SSH_THROTTLE -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" $AWS_SSH_OPT "$SRC" "$DEST" >"$TMPDIR/stdout"  2>"$TMPDIR/stderr"
     rc=$?
     t_end="$(date +%s)"
     dt=$(( $t_end - $t_start ))
@@ -173,7 +173,7 @@ pssh_cmd () {
 
         OUTDIR="${TMPDIR}/${n}"
         mkdir -p "$OUTDIR"
-        ssh $SSH_DEBUG -tt -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" $host "$@" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &
+        ssh $SSH_DEBUG -tt -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" $AWS_SSH_OPT $host "$@" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &
         pids+=($!)
         n=$(( $n + 1 ))
     done
@@ -213,7 +213,7 @@ pscp_cmd () {
 
         OUTDIR="${TMPDIR}/${n}"
         mkdir -p "$OUTDIR"
-        scp -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" "$1" "${host}:${2}" >"$OUTDIR/stdout"  2>"$OUTDIR/stderr" &
+        scp $SSH_DEBUG $SSH_THROTTLE -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" -o "UserKnownHostsFile=/dev/null" $AWS_SSH_OPT "$1" "${host}:${2}" >"$OUTDIR/stdout"  2>"$OUTDIR/stderr" &
         pids+=($!)
         n=$(( $n + 1 ))
     done
