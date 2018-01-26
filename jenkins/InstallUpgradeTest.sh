@@ -69,7 +69,7 @@ PUB_KEY_FILE="${PRIV_KEY_FILE}.pub"
 
 ssh-keygen -t rsa -N "" -f $PRIV_KEY_FILE
 
-export BUILD_PUBLIC_KEY=$(readlink -f ./$PUB_KEY_FILE)
+export BUILD_PUBLIC_KEY=$(readlink -f $PUB_KEY_FILE)
 export BUILD_LICENSE_FILE=$(readlink -f $LICENSE_FILE)
 
 INSTALLER_FILE=$BUILD_DIRECTORY/$BUILD_FILE
