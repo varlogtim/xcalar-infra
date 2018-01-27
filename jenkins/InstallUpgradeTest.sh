@@ -83,17 +83,16 @@ echo ${CLOUD_PROVIDER:-aws}
 
 export BUILD_PROTOCOL="${BUILD_PROTOCOL:-1.3.0}"
 
-$GUITSTDIR/gen-build-template.sh > "$WRKDIR/cluster_build.json" 2>&1 || exit 1
+$GUITSTDIR/gen-build-template.sh > "${WRKDIR}/cluster_build.json" 2>&1 || exit 1
 
 NEW_INSTALLER_FILE=${JOB_TMPDIR}/${BUILD_INSTALLER_FILE}
 
 INSTALLER_FILE=$(readlink -f $PRE_UPGRADE_FILE)
-export BUILD_INSTALLER_FILE=$(basename $INSTALLER_FILE)
-export BUILD_INSTALLER_DIR=$(dirname $INSTALLER_FILE)
+export BUILD_INSTALLER_FILE=$(basename $INSTALLER_FILE) export BUILD_INSTALLER_DIR=$(dirname $INSTALLER_FILE)
 export BUILD_PRECONFIG_FILE="${PRE_UPGRADE_PRECONFIG_FILE:-NULL}"
 export BUILD_PROTOCOL="${PREUPGRADE_BUILD_PROTOCOL:-$BUILD_PROTOCOL}"
 
-$GUITSTDIR/gen-build-template.sh > "$WRKDIR/cluster_preupgrade.json" 2>&1 || exit 1
+$GUITSTDIR/gen-build-template.sh > "${WRKDIR}/cluster_preupgrade.json" 2>&1 || exit 1
 
 OLD_INSTALLER_FILE=${JOB_TMPDIR}/${BUILD_INSTALLER_FILE}
 
@@ -111,7 +110,7 @@ STAGE_5_COMPLETE=1
 echo "#"
 echo "# Test Config"
 echo "#"
-cat "$WRKDIR/cluster_build.json"
+cat "${WRKDIR}/cluster_build.json"
 
 echo "## Stage 1"
 echo "## run-gui-installer-test - create cluster"
@@ -120,12 +119,12 @@ echo "## curl installer -- install $NEW_INSTALLER_FILE"
 echo "## add-ldap-users -- add extra ldap users"
 echo "## test-running -- verify all processes running"
 
-$GUITSTDIR/run-gui-installer-test.sh -f "$WRKDIR/cluster_build.json" -o "$WRKDIR/cluster.data" && \
-    cat "$WRKDIR/cluster.data" && echo && sleep 20 && \
-    $GUITSTDIR/nfs-manage.sh -c -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && \
-    $GUITSTDIR/curl-installer.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 10 && \
-    $GUITSTDIR/add-ldap-users.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && \
-    $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data"
+$GUITSTDIR/run-gui-installer-test.sh -f "${WRKDIR}/cluster_build.json" -o "${WRKDIR}/cluster.data" && \
+    cat "${WRKDIR}/cluster.data" && echo && sleep 20 && \
+    $GUITSTDIR/nfs-manage.sh -c -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && \
+    $GUITSTDIR/curl-installer.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && sleep 10 && \
+    $GUITSTDIR/add-ldap-users.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && \
+    $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
 STAGE_1_RUNNING=$?
 
 echo "## STAGE_1_RUNNING: $STAGE_1_RUNNING"
@@ -138,11 +137,11 @@ echo "## uinstaller - uninstall $NEW_INSTALLER_FILE"
 
 #if [ 1 -eq 0 ]; then
 if [ $STAGE_1_RUNNING -eq 0 ]; then
-    $GUITSTDIR/test-ui.sh -i "$WRKDIR/cluster.data" && sleep 10 && \
-        $GUITSTDIR/test-login.sh -i "$WRKDIR/cluster.data" -u "$TEST_USER_NAME" -p "$TEST_PASSWORD" && \
-        $GUITSTDIR/shutdown-delete.sh -t -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && \
-        $GUITSTDIR/curl-uninstaller.sh -d -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && \
-        $GUITSTDIR/uninstaller.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 10 && \
+    $GUITSTDIR/test-ui.sh -i "${WRKDIR}/cluster.data" && sleep 10 && \
+        $GUITSTDIR/test-login.sh -i "${WRKDIR}/cluster.data" -u "$TEST_USER_NAME" -p "$TEST_PASSWORD" && \
+        $GUITSTDIR/shutdown-delete.sh -t -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && \
+        $GUITSTDIR/curl-uninstaller.sh -d -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && \
+        $GUITSTDIR/uninstaller.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && sleep 10 && \
         STAGE_1_COMPLETE=$?
 fi
 
@@ -156,13 +155,13 @@ echo
 
 #if [ 1 -eq 0 ]; then
 if [ $STAGE_1_COMPLETE -eq 0 ]; then
-    cat $WRKDIR/"${WRKDIR}/cluster_preupgrade.json"
+    cat "${WRKDIR}/cluster_preupgrade.json"
 
-    $GUITSTDIR/restart-installer.sh -f "$WRKDIR/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" && \
-        $GUITSTDIR/curl-installer.sh -f "$WRKDIR/cluster_preupgrade.json" -i "$WRKDIR/cluster.data"
+    $GUITSTDIR/restart-installer.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "${WRKDIR}/cluster.data" && \
+        $GUITSTDIR/curl-installer.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "${WRKDIR}/cluster.data"
     STAGE_2_RUNNING=$?
 
-    $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data"
+    $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
 fi
 
 echo "## STAGE_2_RUNNING: $STAGE_2_RUNNING"
@@ -174,9 +173,9 @@ echo "## backup-recover - backup the shared storage"
 
 #if [ 1 -eq 0 ]; then
 if [ $STAGE_2_RUNNING -eq 0 ]; then
-    $GUITSTDIR/test-ui.sh -i "$WRKDIR/cluster.data" && sleep 30 && \
-        $GUITSTDIR/shutdown-delete.sh -t -f "${WRKDIR}/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" && \
-        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" -b
+    $GUITSTDIR/test-ui.sh -i "${WRKDIR}/cluster.data" && sleep 30 && \
+        $GUITSTDIR/shutdown-delete.sh -t -f "${WRKDIR}/cluster_preupgrade.json" -i "${WRKDIR}/cluster.data" && \
+        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "${WRKDIR}/cluster.data" -b
     STAGE_2_COMPLETE=$?
 fi
 
@@ -191,11 +190,11 @@ echo "## test-running -- verify all processes running"
 
 #if [ 1 -eq 0 ]; then
 if [ $STAGE_2_COMPLETE -eq 0 ]; then
-    $GUITSTDIR/restart-installer.sh -f "$WRKDIR/"${WRKDIR}/cluster_build.json"" -i "$WRKDIR/cluster.data" && \
-        $GUITSTDIR/curl-installer.sh -f "$WRKDIR/"${WRKDIR}/cluster_build.json"" -i "$WRKDIR/cluster.data" && \
+    $GUITSTDIR/restart-installer.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && \
+        $GUITSTDIR/curl-installer.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && \
         sleep 10 && \
-        $GUITSTDIR/add-ldap-users.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && \
-        $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data"
+        $GUITSTDIR/add-ldap-users.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && \
+        $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
     STAGE_3_RUNNING=$?
 fi
 
@@ -209,9 +208,9 @@ echo "## backup-recover - recover the shared storage"
 
 if [ $STAGE_3_RUNNING -eq 0 ]; then
     # UI Verification Test here && \
-    $GUITSTDIR/test-login.sh -i "$WRKDIR/cluster.data" -u "$TEST_USER_NAME" -p "$TEST_PASSWORD" && \
-        $GUITSTDIR/shutdown-delete.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 10 && \
-        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" -r
+    $GUITSTDIR/test-login.sh -i "${WRKDIR}/cluster.data" -u "$TEST_USER_NAME" -p "$TEST_PASSWORD" && \
+        $GUITSTDIR/shutdown-delete.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && sleep 10 && \
+        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "${WRKDIR}/cluster.data" -r
     STAGE_3_COMPLETE=$?
 fi
 
@@ -226,11 +225,11 @@ echo "## Run UI Verification test on the upgraded instance with old files"
 echo "## test-ui - run a UI test on the upgraded instance with old files"
 
 if [ $STAGE_3_COMPLETE -eq 0 ]; then
-    $GUITSTDIR/startup.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data"  && sleep 20 && \
-        $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" # && sleep 10 && \
+    $GUITSTDIR/startup.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"  && sleep 20 && \
+        $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" # && sleep 10 && \
     # UI Verification Test here &&
     # UI Workspace Modify here && \
-    #$GUITSTDIR/test-ui.sh -i "$WRKDIR/cluster.data"
+    #$GUITSTDIR/test-ui.sh -i "${WRKDIR}/cluster.data"
     STAGE_4_RUNNING=$?
 fi
 
@@ -248,13 +247,13 @@ echo "## test-running - verify all processes have restarted"
 if [ $STAGE_4_RUNNING -eq 0 ]; then
     CRASH_WAIT=$(( 15 + ${RANDOM}%10 ))
 
-    $GUITSTDIR/shutdown-delete.sh -d -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 10 && \
-        $GUITSTDIR/startup.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 10 && \
-        $GUITSTDIR/test-ui.sh -i "$WRKDIR/cluster.data" -s && sleep $CRASH_WAIT && \
-        $GUITSTDIR/kill-usrnode.sh -i "$WRKDIR/cluster.data" && sleep 10 && \
-        $GUITSTDIR/shutdown-delete.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 30 && \
-        $GUITSTDIR/startup.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 10 && \
-        $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data"
+    $GUITSTDIR/shutdown-delete.sh -d -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && sleep 10 && \
+        $GUITSTDIR/startup.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && sleep 10 && \
+        $GUITSTDIR/test-ui.sh -i "${WRKDIR}/cluster.data" -s && sleep $CRASH_WAIT && \
+        $GUITSTDIR/kill-usrnode.sh -i "${WRKDIR}/cluster.data" && sleep 10 && \
+        $GUITSTDIR/shutdown-delete.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && sleep 30 && \
+        $GUITSTDIR/startup.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data" && sleep 10 && \
+        $GUITSTDIR/test-running.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
     STAGE_4_COMPLETE=$?
 fi
 echo "## STAGE_4_COMPLETE: $STAGE_4_COMPLETE"
@@ -264,7 +263,7 @@ echo "##"
 rm -f ${NEW_INSTALLER_FILE} ${OLD_INSTALLER_FILE} && \
     echo "${NEW_INSTALLER_FILE} and ${OLD_INSTALLER_FILE} deleted" && echo
 
-$GUITSTDIR/delete-gui-installer-test.sh -f "$WRKDIR/cluster_build.json" -i "$WRKDIR/cluster.data"
-$GUITSTDIR/nfs-manage.sh -r -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data"
+$GUITSTDIR/delete-gui-installer-test.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
+$GUITSTDIR/nfs-manage.sh -r -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
 
 exit $STAGE_4_COMPLETE
