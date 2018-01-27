@@ -361,6 +361,11 @@ cloud_cluster_create() {
     case "${CLOUD_PROVIDER}" in
         aws)
             "$XLRINFRADIR/aws/aws-cloudformation.sh" "$@"
+            local INSTANCE_IDS=$(aws ec2 describe-instances \
+                --filters "Name=tag:aws:cloudformation:stack-name,Values=${CLUSTER_NAME}" | \
+                jq -r ".Reservations[].Instances[].InstanceId")
+
+            aws ec2 wait instance-status-ok --instance-ids $INSTANCE_IDS
             ;;
         gce)
             "$XLRINFRADIR/gce/gce-cluster.sh" "$@"
