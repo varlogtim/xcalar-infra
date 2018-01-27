@@ -110,7 +110,7 @@ for host in "${hosts_array[@]}"; do
     mkdir -p "$OUTDIR"
     case "${CLOUD_PROVIDER}" in
         aws)
-            ssh -tt -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" ${AWS_USER}@$host "${remote_path} ${INSTALL_DIR}/opt/xcalar/bin/xcalarctl status" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &
+            ssh $SSH_DEBUG -tt -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" $AWS_SSH_OPT ${AWS_USER}@$host "${remote_path} ${INSTALL_DIR}/opt/xcalar/bin/xcalarctl status" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &
             ;;
         gce)
             ssh -tt -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking no" -o "ServerAliveInterval 5" $host "${remote_path} ${INSTALL_DIR}/opt/xcalar/bin/xcalarctl status" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &
@@ -162,7 +162,7 @@ for host in "${hosts_array[@]}"; do
     OUTDIR="${TMPDIR}/${n}"
     case "${CLOUD_PROVIDER}" in
         aws)
-            ssh -tt -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking no" "${AWS_USER}@${host}" "${remote_path} supervisorctl -c ${INSTALL_DIR}/etc/xcalar/supervisor.conf status" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &
+            ssh $SSH_DEBUG -tt -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking no" $AWS_SSH_OPT "${AWS_USER}@${host}" "${remote_path} supervisorctl -c ${INSTALL_DIR}/etc/xcalar/supervisor.conf status" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &
             ;;
         gce)
             ssh -tt -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking no" $host "${remote_path} supervisorctl -c ${INSTALL_DIR}/etc/xcalar/supervisor.conf status" >"$OUTDIR/stdout" 2>"$OUTDIR/stderr" </dev/null &

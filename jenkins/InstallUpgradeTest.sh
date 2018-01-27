@@ -35,7 +35,7 @@ export TMPDIR="/tmp/$(id -un)/$JOB_NAME"
 export JOB_TMPDIR="${TMPDIR:-/tmp/$(id -un)}/gui-tst"
 LICENSE_FILE="${LICENSE_FILE:-$XLRDIR/src/data/XcalarLic.key}"
 
-rm -f ${WRKDIR}/jenkins-test-key* ${WRKDIR}/cluster_*.json ${WRKDIR}/cluster.data
+rm -f ${WRKDIR}/jenkins-test-* ${WRKDIR}/cluster_*.json ${WRKDIR}/cluster.data
 
 . $XLRDIR/bin/osid > /dev/null
 
@@ -263,7 +263,6 @@ echo "##"
 
 rm -f ${NEW_INSTALLER_FILE} ${OLD_INSTALLER_FILE} && \
     echo "${NEW_INSTALLER_FILE} and ${OLD_INSTALLER_FILE} deleted" && echo
-rm -f ${WRKDIR}/jenkins-test-key* ${WRKDIR}/cluster_*.json ${WRKDIR}/cluster.data
 
 $GUITSTDIR/delete-gui-installer-test.sh -f "$WRKDIR/cluster_build.json" -i "$WRKDIR/cluster.data"
 $GUITSTDIR/nfs-manage.sh -r -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data"
