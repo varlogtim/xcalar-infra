@@ -30,12 +30,17 @@ if [ -z $PATH_TO_XDP_INSTALLER ]; then
 	exit 1
 fi
 
+if [ -z $CONFIG_FILE_TO_COPY ]; then
+	echo "CONFIG_FILE_TO_COPY not defined!"
+	exit 1
+fi
+
 cd $WORKSPACE/$XLRINFRADIR/docker/xdpce/
 
 make docker-image INSTALLER_PATH=$PATH_TO_XDP_INSTALLER
 
 cp $WORKSPACE/$XLRINFRADIR/docker/xdpce/xdpce.tar.gz $WORKSPACE/$GRAFANA_DIR/
-cp $WORKSPACE/$XLRINFRADIR/docker/xdpce/xem.cfg $WORKSPACE/$GRAFANA_DIR/xem.cfg
+cp $WORKSPACE/$XLRINFRADIR/docker/xdpce/$CONFIG_FILE_TO_COPY $WORKSPACE/$GRAFANA_DIR/xem.cfg
 
 cd $WORKSPACE/$GRAFANA_DIR
 
