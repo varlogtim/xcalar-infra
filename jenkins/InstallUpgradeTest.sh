@@ -156,7 +156,7 @@ echo
 
 #if [ 1 -eq 0 ]; then
 if [ $STAGE_1_COMPLETE -eq 0 ]; then
-    cat $WRKDIR/"${WRKDIR}/cluster_preupgrade.sh"
+    cat $WRKDIR/"${WRKDIR}/cluster_preupgrade.json"
 
     $GUITSTDIR/restart-installer.sh -f "$WRKDIR/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" && \
         $GUITSTDIR/curl-installer.sh -f "$WRKDIR/cluster_preupgrade.json" -i "$WRKDIR/cluster.data"
@@ -175,8 +175,8 @@ echo "## backup-recover - backup the shared storage"
 #if [ 1 -eq 0 ]; then
 if [ $STAGE_2_RUNNING -eq 0 ]; then
     $GUITSTDIR/test-ui.sh -i "$WRKDIR/cluster.data" && sleep 30 && \
-        $GUITSTDIR/shutdown-delete.sh -t -f "${WRKDIR}/cluster_preupgrade.sh" -i "$WRKDIR/cluster.data" && \
-        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.sh" -i "$WRKDIR/cluster.data" -b
+        $GUITSTDIR/shutdown-delete.sh -t -f "${WRKDIR}/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" && \
+        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" -b
     STAGE_2_COMPLETE=$?
 fi
 
@@ -211,7 +211,7 @@ if [ $STAGE_3_RUNNING -eq 0 ]; then
     # UI Verification Test here && \
     $GUITSTDIR/test-login.sh -i "$WRKDIR/cluster.data" -u "$TEST_USER_NAME" -p "$TEST_PASSWORD" && \
         $GUITSTDIR/shutdown-delete.sh -f "${WRKDIR}/cluster_build.json" -i "$WRKDIR/cluster.data" && sleep 10 && \
-        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.sh" -i "$WRKDIR/cluster.data" -r
+        $GUITSTDIR/backup-recover.sh -f "${WRKDIR}/cluster_preupgrade.json" -i "$WRKDIR/cluster.data" -r
     STAGE_3_COMPLETE=$?
 fi
 
