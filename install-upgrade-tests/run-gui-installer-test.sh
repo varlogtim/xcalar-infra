@@ -97,6 +97,7 @@ parse_test_file() {
     INSTALLER_SRC=$(jq -r ".InstallerFile.Source" $TEST_FILE)
     eval INSTALLER_SRC=$INSTALLER_SRC
     INSTALLER_SRC=$(readlink -f "$INSTALLER_SRC")
+    CLUSTER_INSTANCE_OSVER=$(jq -r ".TestClusterConfig.OSVersion" $TEST_FILE)
     CLUSTER_INSTANCE_TYPE=$(jq -r ".TestClusterConfig.MachineType" $TEST_FILE)
     INSTALLER_OSVER=$(jq -r ".DockerInstallHostConfig.OSVersion" $TEST_FILE)
     INSTALLER_INSTANCE_TYPE=$(jq -r ".DockerInstallHostConfig.MachineType" $TEST_FILE)
@@ -367,10 +368,14 @@ setup_cluster_auth() {
     task "Setting up ${CLOUD_PROVIDER} cluster authentication"
     t_start="$(date +%s)"
 
-    case $INSTALLER_OSVER in
+    case $CLUSTER_INSTANCE_OSVER in
         centos7|CENTOS7|rhel7|RHEL7)
             pssh_cmd sudo yum -y update
             pssh_cmd sudo yum install -y net-tools bind-utils
+            ;;
+        centos6|CENTOS6|rhel6|RHEL6)
+            pssh_cmd sudo yum -y update
+            pssh_cmd '! command -v scp >/dev/null 2>&1 && sudo yum install -y openssh-clients'
             ;;
     esac
 
