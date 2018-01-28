@@ -266,4 +266,27 @@ rm -f ${NEW_INSTALLER_FILE} ${OLD_INSTALLER_FILE} && \
 $GUITSTDIR/delete-gui-installer-test.sh -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
 $GUITSTDIR/nfs-manage.sh -r -f "${WRKDIR}/cluster_build.json" -i "${WRKDIR}/cluster.data"
 
+if [ -n "$GRAPHITE" ]; then
+    GRAPHITE_OUTPUT="prod.instupgradetests.${BUILD_TEST_NAME}.${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}:${STAGE_4_COMPLETE}|g"
+
+    echo  "$GRAPHITE_OUTPUT" | nc -w 1 -u $GRAPHITE 8125
+
+    echo "Value sent to graphite: $GRAPHITE_OUTPUT"
+
+    source ${WRKDIR}/cluster.data
+
+    if [ "$STAGE_4_COMPLETE" = "0" ]; then
+        echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.status:0|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numPass:1|c" | nc -w 1 -u $GRAPHITE 8125
+else
+        echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.status:1|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO.numFail:1|c" | nc -w 1 -u $GRAPHITE 8125
+    fi
+
+    echo "prod.tests.$XCE_GIT_SHA.instupgradetests.${BUILD_TEST_NAME}-${BUILD_NFS_TYPE}${BUILD_LDAP_TYPE}.$NODE_NAME_ZERO"
+fi
+
+
 exit $STAGE_4_COMPLETE
