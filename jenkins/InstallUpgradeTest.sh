@@ -26,7 +26,7 @@
 set -o pipefail
 
 export WRKDIR="${WRKDIR:-$WORKSPACE}"
-export XLRDIR="${$WRKDIR}/xcalar"
+export XLRDIR="${WRKDIR}/xcalar"
 export XLRINFRADIR="${WRKDIR}/xcalar-infra"
 export PATH="$XLRDIR/bin:$HOME/google-cloud-sdk/bin:$PATH"
 export GUITSTDIR="$XLRINFRADIR/install-upgrade-tests"
