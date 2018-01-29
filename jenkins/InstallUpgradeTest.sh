@@ -25,6 +25,7 @@
 
 set -o pipefail
 
+export PATH="/opt/xcalar/bin:$PATH"
 export WRKDIR="${WRKDIR:-$WORKSPACE}"
 export XLRDIR="${WRKDIR}/xcalar"
 export XLRINFRADIR="${WRKDIR}/xcalar-infra"
@@ -64,6 +65,27 @@ case "$distro" in
         ;;
 esac
 
+case "$CLOUD_PROVIDER" in
+    aws)
+        export AWS_SSH_OPT="-o IdentityFile=$AWS_PEM"
+        ;;
+    gce)
+        if [ -z "GCE_SLAVE_SETUP" ]; then
+            /netstore/users/jenkins/slave/setup.sh
+
+            if test -z "$SSH_AUTH_SOCK"; then
+                eval `ssh-agent`
+            fi
+
+            if test -n "$SSH_AUTH_SOCK" && test -w "$SSH_AUTH_SOCK"; then
+                if ! ssh-add -l | grep -q 'google_compute_engine'; then
+                    test -f ~/.ssh/google_compute_engine && ssh-add ~/.ssh/google_compute_engine
+                fi
+            fi
+        fi
+        ;;
+esac
+
 PRIV_KEY_FILE="${WRKDIR}/jenkins-test-${RANDOM}"
 PUB_KEY_FILE="${PRIV_KEY_FILE}.pub"
 
@@ -77,6 +99,9 @@ INSTALLER_FILE=$(readlink -f $INSTALLER_FILE)
 
 export BUILD_INSTALLER_FILE=$(basename $INSTALLER_FILE)
 export BUILD_INSTALLER_DIR=$(dirname $INSTALLER_FILE)
+
+XCE_JENKINS_BUILD="$(echo "$BUILD_INSTALLER_FILE" | cut -d - -f 5 | cut -d . -f)"
+XCE_GIT_SHA="$(cat /netstore/builds/byJob/BuiltTrunk/${XCE_JENKINS_BUILD}/BUILD_SHA | head -1 | cut -d '(' -f 2 | cut -d ')' -f 1)"
 
 echo "cloud provider"
 echo ${CLOUD_PROVIDER:-aws}
