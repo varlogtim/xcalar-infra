@@ -100,8 +100,8 @@ INSTALLER_FILE=$(readlink -f $INSTALLER_FILE)
 export BUILD_INSTALLER_FILE=$(basename $INSTALLER_FILE)
 export BUILD_INSTALLER_DIR=$(dirname $INSTALLER_FILE)
 
-XCE_JENKINS_BUILD="$(echo "$BUILD_INSTALLER_FILE" | cut -d - -f 5 | cut -d . -f)"
-XCE_GIT_SHA="$(cat /netstore/builds/byJob/BuiltTrunk/${XCE_JENKINS_BUILD}/BUILD_SHA | head -1 | cut -d '(' -f 2 | cut -d ')' -f 1)"
+XCE_JENKINS_BUILD_DIR="$(dirname "$BUILD_INSTALLER_DIR")"
+XCE_GIT_SHA="$(cat ${XCE_JENKINS_BUILD_DIR}/BUILD_SHA | head -1 | cut -d '(' -f 2 | cut -d ')' -f 1)"
 
 echo "cloud provider"
 echo ${CLOUD_PROVIDER:-aws}
