@@ -51,12 +51,28 @@ class grDump(object):
         leakFreq.sort(key=lambda x: x[1], reverse=True)
         leakFreq = [str(x[1]) + "," + x[0] for x in leakFreq]
 
-        for row in csv.reader(leakFreq, delimiter=','):
+        csvReader = csv.reader(leakFreq, delimiter=',')
+        skipped = 0
+        while True:
+            try:
+                row = csvReader.next()
+            except csv.Error:
+                skipped += 1
+                continue
+            except StopIteration:
+                break
+
             leak = filter(lambda x: x, row)
             count = int(leak[0])
             elmBytes = int(leak[1])
             totBytes = count * elmBytes
             self.leaks.append({'count': count, 'elmBytes': elmBytes, 'totBytes': totBytes, 'backtrace': leak[2:]})
+
+        if skipped:
+            # Error rows are likely due to either a known bug in libunwind or
+            # GuardRail's current naughty use of SIGUSR2.  They are rare enough
+            # it shouldn't really matter for leak tracking purposes...
+            print "Skipped %d erroneous leak record" % skipped
 
 
     def printLeaks(self):
@@ -90,7 +106,7 @@ class grDump(object):
                 for sym in syms.split('\n'):
                     if not sym:
                         continue
-                    shortSym = re.sub(r'\(.*\)', r'', sym)
+                    shortSym = re.sub(r'\(.*?\)', r'', sym)
                     print "#{: <2} {}".format(leakNum, shortSym)
                     leakNum += 1
             else:
