@@ -23,6 +23,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <locale.h>
+#include <sys/syscall.h>
+#include <limits.h>
 
 #include <libunwind.h>
 
@@ -661,7 +663,13 @@ onExit(void) {
     int outfd = -1;
 
     if (grArgs.maxTrackFrames > 0) {
-        outfd = open(TRACKER_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        pid_t tid = syscall(SYS_gettid);
+        char of[NAME_MAX];
+
+        int ret = snprintf(of, NAME_MAX, "%s-%d.txt", TRACKER_FILE_PRE, tid);
+        GR_ASSERT_ALWAYS(ret > 0);
+
+        outfd = open(of, O_WRONLY | O_CREAT | O_TRUNC, 0666);
         GR_ASSERT_ALWAYS(outfd > 0);
     }
 

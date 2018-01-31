@@ -58,7 +58,7 @@
 #define ARG_MAX_NUM 64
 #define ARG_FILE "grargs.txt"
 
-#define TRACKER_FILE "grtrack.txt"
+#define TRACKER_FILE_PRE "grtrack"
 
 #define MAGIC_INUSE 0x4ef9e433f005ba11ULL
 #define MAGIC_FREE  0xcd656727bedabb1eULL
