@@ -32,7 +32,10 @@
 static GRArgs grArgs;
 char argStr[ARG_MAX_BYTES];
 
-#define ELM_HDR_SZ (sizeof(ElmHdr) + grArgs.maxTrackFrames * MEMB_SZ(ElmHdr, allocBt[0]))
+#define ELM_HDR_SZ (sizeof(ElmHdr) + \
+        grArgs.maxTrackFrames * MEMB_SZ(ElmHdr, allocBt[0]) + \
+        grArgs.maxTrackFreeFrames * MEMB_SZ(ElmHdr, allocBt[0]))
+
 
 static bool isInit;
 
@@ -409,13 +412,16 @@ parseArgs(GRArgs *args) {
     argv[0] = "GuardRails";
     argc++;
 
-    while ((c = getopt(argc, argv, "dt:v")) != -1) {
+    while ((c = getopt(argc, argv, "dt:T:v")) != -1) {
         switch (c) {
             case 'd':
                 args->useDelay = true;
                 break;
             case 't':
                 args->maxTrackFrames = atoi(optarg);
+                break;
+            case 'T':
+                args->maxTrackFreeFrames = atoi(optarg);
                 break;
             case 'v':
                 args->verbose = true;
@@ -587,6 +593,14 @@ free(void *ptr) {
 
     hdr = *(ElmHdr **)(ptr - sizeof(void *));
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_INUSE);
+
+    if (grArgs.maxTrackFreeFrames > 0) {
+        void *freeOff = (uint8_t *)hdr->allocBt + sizeof(hdr->allocBt[0]) *
+            grArgs.maxTrackFrames;
+        memset(freeOff, 0, sizeof(hdr->allocBt[0]) * grArgs.maxTrackFreeFrames);
+        int ret = getBacktrace(freeOff, grArgs.maxTrackFreeFrames);
+        GR_ASSERT_ALWAYS(ret >= 0);
+    }
 
     putBuf(hdr);
 }
