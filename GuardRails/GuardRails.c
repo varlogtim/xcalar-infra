@@ -26,10 +26,8 @@
 #include <sys/syscall.h>
 #include <limits.h>
 
+#define UNW_LOCAL_ONLY // Must come before libunwind.h
 #include <libunwind.h>
-
-#define UNW_LOCAL_ONLY
-
 
 static GRArgs grArgs;
 char argStr[ARG_MAX_BYTES];
@@ -52,12 +50,12 @@ static const size_t guardSize = NUM_GP * PAGE_SIZE;
 static volatile size_t racySlotRr = 0;
 
 static MemPool memPools[MAX_MEM_POOLS];
-MemSlot memSlots[NUM_SLOTS];
+MemSlot memSlots[MAX_SLOTS];
 
 // Histogram of the -actual- size requested, which differs from what the
 // allocator provides due to adjustments needed for the guard page, mprotect
 // and alignment.
-static MemHisto memHisto[NUM_SLOTS][MAX_ALLOC_POWER];
+static MemHisto memHisto[MAX_SLOTS][MAX_ALLOC_POWER];
 
 static void onExit(void);
 
@@ -244,7 +242,7 @@ replenishBins(const size_t slotNum) {
 
 static int
 replenishSlots(void) {
-    for (int slotNum = 0; slotNum < NUM_SLOTS; slotNum++) {
+    for (int slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
         int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
         GR_ASSERT_ALWAYS(ret == 0);
         replenishBins(slotNum);
@@ -259,7 +257,7 @@ initBinsMeta(void) {
     int startBuf = log2fast(PAGE_SIZE);
     size_t initSize = 0;
 
-    for (int slotNum = 0; slotNum < NUM_SLOTS; slotNum++) {
+    for (int slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
         pthread_mutex_init(&memSlots[slotNum].lock, NULL);
 
         // When the low water mark is hit for a bin, batch allocate from the pool
@@ -296,7 +294,7 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
 
     size_t slotNum = 0;
     if (likely(usrSize < MAX_FLOATING_SIZE)) {
-        slotNum = racySlotRr++ % NUM_SLOTS;
+        slotNum = racySlotRr++ % grArgs.numSlots;
     }
 
     // Used only for stats
@@ -414,10 +412,14 @@ parseArgs(GRArgs *args) {
     argv[0] = "GuardRails";
     argc++;
 
-    while ((c = getopt(argc, argv, "dt:T:v")) != -1) {
+    args->numSlots = 1;
+    while ((c = getopt(argc, argv, "ds:t:T:v")) != -1) {
         switch (c) {
             case 'd':
                 args->useDelay = true;
+                break;
+            case 's':
+                args->numSlots = atoi(optarg);
                 break;
             case 't':
                 args->maxTrackFrames = atoi(optarg);
@@ -432,6 +434,8 @@ parseArgs(GRArgs *args) {
                 GR_ASSERT_ALWAYS(false);
         }
     }
+
+    GR_ASSERT_ALWAYS(args->numSlots < MAX_SLOTS);
 
     // Ughh, if we don't reset this global state, subsequent calls to getopt
     // (eg in main()) will get messed up in confusing ways.
@@ -520,7 +524,7 @@ memalignInt(size_t alignment, size_t usrSize) {
     GR_ASSERT_ALWAYS((uint64_t)endBuf > usrSize);
 
     // Pointer returned to the user is relative to the -end- of the buffer,
-    // such that the ending address is as close as possible to the guard page.
+    // such that the ending adtdress is as close as possible to the guard page.
     // Leaves wasted space between the header and start of the user data.
     usrData = endBuf - usrSize;
     GR_ASSERT_ALWAYS(usrData > buf);
@@ -679,7 +683,7 @@ onExit(void) {
     // Note: setlocale leaks 3,659 user bytes
     char *origLocale = setlocale(LC_NUMERIC, "");
     GR_ASSERT_ALWAYS(origLocale);
-    for (size_t slotNum = 0; slotNum < NUM_SLOTS; slotNum++) {
+    for (size_t slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
         totalUserRequestedBytes += memSlots[slotNum].totalUserRequestedBytes;
         totalUserFreedBytes += memSlots[slotNum].totalUserFreedBytes;
         printf("Number mem pools used: %lu\n", currMemPool+1);

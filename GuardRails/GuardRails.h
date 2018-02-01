@@ -52,7 +52,7 @@
 // #define NUM_GP 0
 #define NUM_GP 1
 #define PAGE_SIZE 4096
-#define NUM_SLOTS 1
+#define MAX_SLOTS 128
 
 #define ARG_MAX_BYTES 1024
 #define ARG_MAX_NUM 64
@@ -66,6 +66,7 @@
 typedef struct GRArgs {
     size_t maxTrackFrames;
     size_t maxTrackFreeFrames;
+    size_t numSlots;
     bool useDelay;
     bool verbose;
 } GRArgs;

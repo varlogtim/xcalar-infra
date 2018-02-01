@@ -12,7 +12,8 @@ MAGIC_FREE = 0xcd656727bedabb1e
 MAGIC_INUSE = 0x4ef9e433f005ba11
 
 class GRFindDelayList (gdb.Command):
-    """ Search Guard Rails delayed free list for a given address.
+    """
+        Search Guard Rails delayed free list for a given address.
 
         (gdb) gr-find-delay-list <delayListAddress> <addressToFind>
 
@@ -87,20 +88,21 @@ class GRFindDelayList (gdb.Command):
             traceback.print_exc()
 
 class GRPrintAddrInfo (gdb.Command):
-    """ Try to print GuardRails info about an address.
+    """
+        Try to print GuardRails info about an address.
 
         The address must be either the beginning of a header or beginning of a
-        user allocation.  If the address is unknown first try to find it on
-        the delay list with find-delay-list.
+        user allocation.  If the address is a random memory address not known
+        to point to a header or beginning allocation, first try to find the
+        associated header address using gr-find-header.
 
-        allocFrameDepth and freeFrameDepth correspond to the -t <depth> and
-        -T <depth> guardrails arguments respectively.  If tracking was not
-        enabled during the run use zero.
+        If GuardRails was run with -t and/or -T options, traces will also be
+        dumped for allocations/frees.
 
-        (gdb) gr-print-addr-info <address> <allocFrameDepth> <freeFrameDepth>
+        (gdb) gr-print-addr-info <address>
 
         Example:
-        (gdb) gr-print-addr-info 0x7fc6aa5f2000 30 30
+        (gdb) gr-print-addr-info 0x7fc6aa5f2000
     """
 
     def __init__ (self):
@@ -110,6 +112,10 @@ class GRPrintAddrInfo (gdb.Command):
         return magic == MAGIC_INUSE or magic == MAGIC_FREE
 
     def dumpSymTrace(self, trace, offset, maxFrames):
+        if not maxFrames:
+            print("Memory tracking not enabled; to enable rerun GuardRails with -t/-T options")
+            return
+
         for i in range(offset, maxFrames + offset):
             addrInt = int(trace[i])
             if not addrInt:
@@ -120,14 +126,14 @@ class GRPrintAddrInfo (gdb.Command):
 
     def invokeHelper(self, arg, from_tty):
         argv = gdb.string_to_argv(arg)
-        if len(argv) != 3:
+        if len(argv) != 1:
             print("Malformed arguments; see help")
             return
 
         hdrPtr = gdb.parse_and_eval('(ElmHdr *) ' + argv[0])
         hdr = hdrPtr.dereference()
-        maxAllocFrames = int(argv[1])
-        maxFreeFrames = int(argv[2])
+        maxAllocFrames = int(gdb.parse_and_eval('grArgs.maxTrackFrames'))
+        maxFreeFrames = int(gdb.parse_and_eval('grArgs.maxTrackFreeFrames'))
 
         if self.isValid(hdr['magic']):
             print("Address %s is a header" % argv[0])
@@ -139,6 +145,11 @@ class GRPrintAddrInfo (gdb.Command):
             else:
                 print("Address %s doesn't look valid" % argv[0])
                 return
+
+        if hdr['magic'] == MAGIC_INUSE:
+            print("Address %s is in-use" % argv[0])
+        elif hdr['magic'] == MAGIC_FREE:
+            print("Address %s is free" % argv[0])
 
         print("Header:")
         print(hdr)
@@ -157,5 +168,55 @@ class GRPrintAddrInfo (gdb.Command):
             print(str(e))
             traceback.print_exc()
 
+class GRFindHeader(gdb.Command):
+    """
+        Try to find the GuardRails header address for an arbitrary address
+
+        Use this to find the header address associated with an arbitrary memory
+        address.  The output address of this command can be used with
+        gr-print-addr-info.
+
+        (gdb) gr-find-header <address>
+
+        Example:
+        (gdb) gr-find-header 0x7fc6aa5f2327
+    """
+
+    def __init__ (self):
+        super (GRFindHeader, self).__init__ ("gr-find-header", gdb.COMMAND_USER)
+
+    def isValid(self, magic):
+        return magic == MAGIC_INUSE or magic == MAGIC_FREE
+
+    def invokeHelper(self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+        if len(argv) != 1:
+            print("Malformed arguments; see help")
+            return
+
+        addr = int(argv[0], 16)
+        mask = 0xffffffffffffffff - PAGE_SIZE + 1
+        headerStart = addr & mask
+
+        currHeader = headerStart
+        while (True):
+            hdrPtr = gdb.parse_and_eval('((ElmHdr *) ' + str(currHeader) + ')')
+            hdr = hdrPtr.dereference()
+            if self.isValid(hdr['magic']):
+                # XXX: Add header sanity checks here
+                print("Found valid header at: 0x%x" % currHeader)
+                break
+
+            assert(currHeader > PAGE_SIZE)
+            currHeader -= PAGE_SIZE
+
+    def invoke(self, arg, from_tty):
+        try:
+            self.invokeHelper(arg, from_tty)
+        except Exception as e:
+            print(str(e))
+            traceback.print_exc()
+
 GRFindDelayList()
 GRPrintAddrInfo()
+GRFindHeader()
