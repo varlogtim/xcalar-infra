@@ -26,7 +26,9 @@
 #include <sys/syscall.h>
 #include <limits.h>
 
-#define UNW_LOCAL_ONLY // Must come before libunwind.h
+// XXX: Causes occasional crash when unwinding across swapcontext in
+// FiberCache::put
+// #define UNW_LOCAL_ONLY // Must come before libunwind.h
 #include <libunwind.h>
 
 static GRArgs grArgs;
