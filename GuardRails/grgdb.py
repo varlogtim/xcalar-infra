@@ -8,8 +8,9 @@ import re
 PAGE_SIZE = 4096
 NUM_GUARD_PAGES = 1
 GUARD_SIZE = NUM_GUARD_PAGES * PAGE_SIZE
-MAGIC_FREE = 0xcd656727bedabb1e
+MAGIC_FREE  = 0xcd656727bedabb1e
 MAGIC_INUSE = 0x4ef9e433f005ba11
+MAGIC_GUARD = 0xfd44ba54deadbabe
 
 class GRFindDelayList (gdb.Command):
     """
@@ -190,11 +191,14 @@ class GRFindHeader(gdb.Command):
 
     def invokeHelper(self, arg, from_tty):
         argv = gdb.string_to_argv(arg)
-        if len(argv) != 1:
+        if len(argv) != 1 and (len(argv) == 2 and argv[1] != 'quiet') or len(argv) > 2:
             print("Malformed arguments; see help")
             return
 
         addr = int(argv[0], 16)
+        quiet = False
+        if len(argv) == 2:
+            quiet = argv[1] == 'quiet'
         mask = 0xffffffffffffffff - PAGE_SIZE + 1
         headerStart = addr & mask
 
@@ -204,7 +208,10 @@ class GRFindHeader(gdb.Command):
             hdr = hdrPtr.dereference()
             if self.isValid(hdr['magic']):
                 # XXX: Add header sanity checks here
-                print("Found valid header at: 0x%x" % currHeader)
+                if quiet:
+                    print("0x%x" % currHeader)
+                else:
+                    print("Found valid header at: 0x%x" % currHeader)
                 break
 
             assert(currHeader > PAGE_SIZE)
@@ -217,6 +224,85 @@ class GRFindHeader(gdb.Command):
             print(str(e))
             traceback.print_exc()
 
+class GRHeapMetaCorruption(gdb.Command):
+    """
+        Try to determine if a faulting address would cause heap corruption.
+
+        This command indicates if accessing a given address would cause
+        corruption by determining if the access falls on a guard page.
+
+        (gdb) gr-heap-meta-corruption <address>
+
+        Example:
+        (gdb) gr-heap-meta-corruption 0x7fc6aa5f2327
+    """
+
+    def __init__ (self):
+        super (GRHeapMetaCorruption, self).__init__ ("gr-heap-meta-corruption", gdb.COMMAND_USER)
+
+    def invokeHelper(self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+        if len(argv) != 1:
+            print("Malformed arguments; see help")
+            return
+
+        addr = int(argv[0], 16)
+        currHeader = gdb.execute("gr-find-header 0x%x quiet" % (addr), to_string=True)
+        hdrPtr = gdb.parse_and_eval('((ElmHdr *) ' + str(currHeader) + ')')
+        hdr = hdrPtr.dereference()
+        hdrPtrAddr = int(hdrPtr)
+        guardStartAddr = hdrPtrAddr + (1 << hdr['binNum'])
+        guardEndAddr = guardStartAddr + GUARD_SIZE - 1
+
+        verifyGuard = gdb.parse_and_eval("*((uint64_t *) 0x%x)" % guardStartAddr)
+        assert(verifyGuard == MAGIC_GUARD)
+        if guardStartAddr <= addr <= guardEndAddr:
+            print("CORRUPTION: Access of 0x%x appears to corrupt the heap metadata and/or overrun the buffer" % addr)
+        else:
+            print("Access of 0x%x doesn't appear to be heap metadata corruption or overrun" % addr)
+
+    def invoke(self, arg, from_tty):
+        try:
+            self.invokeHelper(arg, from_tty)
+        except Exception as e:
+            print(str(e))
+            traceback.print_exc()
+
+class GRPrintSegv(gdb.Command):
+    """
+        Print address of access that caused the current segfault.
+
+        (gdb) gr-print-segv
+
+        Example:
+        (gdb) gr-print-segv
+    """
+
+    def __init__ (self):
+        super (GRPrintSegv, self).__init__ ("gr-print-segv", gdb.COMMAND_USER)
+
+    def invokeHelper(self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+        if len(argv) != 0:
+            print("Malformed arguments; see help")
+            return
+
+        sigInfo = gdb.parse_and_eval("$_siginfo")
+        if sigInfo['si_signo'] == 7 or sigInfo['si_signo'] == 11:
+            print("Memory fault at: " + str(sigInfo['_sifields']['_sigfault']['si_addr']))
+        else:
+            print("Unknown fault, signal %d" % sigInfo['si_signo'])
+
+    def invoke(self, arg, from_tty):
+        try:
+            self.invokeHelper(arg, from_tty)
+        except Exception as e:
+            print(str(e))
+            traceback.print_exc()
+
+
 GRFindDelayList()
 GRPrintAddrInfo()
 GRFindHeader()
+GRHeapMetaCorruption()
+GRPrintSegv()

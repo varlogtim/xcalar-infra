@@ -188,6 +188,9 @@ getFromPool(const size_t size) {
         void *guardStart = (void *)hdr + size;
         GR_ASSERT_ALWAYS(((uint64_t)guardStart % PAGE_SIZE) == 0);
 
+        // Touch the guard page so it makes it into core dump
+        *((uint64_t *)guardStart) = MAGIC_GUARD;
+
         // This will result in a TLB invalidation.  Also splits the mapping
         // likely requiring setting max maps like so:
         //      echo 10000000 | sudo tee /proc/sys/vm/max_map_count
