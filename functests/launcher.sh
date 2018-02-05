@@ -56,9 +56,12 @@ NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
 for ii in $(seq 0 $(( $NumNodes - 1 ))); do
     monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
-    # if jemallocEnabled is set then startup usrnode with the right env
+    # memAllocator = 1(jemalloc) and memAllocator = 2(guardrails)
     if [ $1 -eq 1 ]; then
         MALLOC_CONF=tcache:false,junk:true /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+    elif [ $1 -eq 2 ]; then
+        grlibpath="`pwd`/xcalar-infra/GuardRails/libguardrails.so.0.0"
+        /opt/xcalar/bin/xcmonitor -n $ii -m $numNodes -c "$XCE_CONFIG" -g "$grlibpath" > $monitorLog 2>&1 &
     else
         /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
     fi

@@ -11,7 +11,7 @@ TAP="AllTests.tap"
 rm -f "$TAP"
 
 restartXcalar() {
-    sudo xcalar-infra/functests/launcher.sh 0
+    sudo xcalar-infra/functests/launcher.sh $memAllocator
 }
 
 genSupport() {
@@ -96,6 +96,11 @@ genBuildArtifacts() {
 
 trap "genBuildArtifacts" EXIT
 
+if [ $MemoryAllocator -eq 2 ]; then
+    memAllocator=2
+else
+    memAllocator=0
+
 if [ "$CURRENT_ITERATION" = "0" ]; then
     set +e
     sudo /opt/xcalar/bin/xcalarctl stop-supervisor
@@ -137,7 +142,7 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     sudo mount -o remount /dev/shm
 
     # Increase the mmap map count for GuardRails to work
-    echo 10000000 | sudo tee /proc/sys/vm/max_map_count
+    echo 100000000 | sudo tee /proc/sys/vm/max_map_count
 
     # Build GuardRails
     make -C xcalar-infra/GuardRails deps
