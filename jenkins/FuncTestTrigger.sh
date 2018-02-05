@@ -100,6 +100,7 @@ if [ $MemoryAllocator -eq 2 ]; then
     memAllocator=2
 else
     memAllocator=0
+fi
 
 if [ "$CURRENT_ITERATION" = "0" ]; then
     set +e
