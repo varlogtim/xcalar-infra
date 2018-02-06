@@ -102,6 +102,8 @@ else
     memAllocator=0
 fi
 
+echo $GuardRailsArgs > grargs.txt
+
 if [ "$CURRENT_ITERATION" = "0" ]; then
     set +e
     sudo /opt/xcalar/bin/xcalarctl stop-supervisor
