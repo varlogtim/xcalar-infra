@@ -61,7 +61,7 @@ for ii in $(seq 0 $(( $NumNodes - 1 ))); do
         MALLOC_CONF=tcache:false,junk:true /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
     elif [ $1 -eq 2 ]; then
         grlibpath="`pwd`/xcalar-infra/GuardRails/libguardrails.so.0.0"
-        /opt/xcalar/bin/xcmonitor -n $ii -m $numNodes -c "$XCE_CONFIG" -g "$grlibpath" > $monitorLog 2>&1 &
+        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" > $monitorLog 2>&1 &
     else
         /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
     fi
