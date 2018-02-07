@@ -15,16 +15,16 @@
 #include <stdarg.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <pthread.h>
 #include <stdbool.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <locale.h>
 #include <sys/syscall.h>
 #include <limits.h>
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
 
 // XXX: Causes occasional crash when unwinding across swapcontext in
 // FiberCache::put
@@ -59,6 +59,7 @@ MemSlot memSlots[MAX_SLOTS];
 // and alignment.
 static MemHisto memHisto[MAX_SLOTS][MAX_ALLOC_POWER];
 
+static void onExitHelper(bool useLocale);
 static void onExit(void);
 
 static void grPrintf(const char *fmt, ...) {
@@ -143,9 +144,27 @@ addNewMemPool(const size_t poolSizeReq) {
     void *mapStart = mmap(NULL, poolSize, PROT_READ|PROT_WRITE,
                                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     if (mapStart == MAP_FAILED) {
+        struct rlimit vaLimit;
+        int ret = getrlimit(RLIMIT_AS, &vaLimit);
+        GR_ASSERT_ALWAYS(ret == 0);
+        // Allow debug code to test intentional allocation failure above rlim
+        if (poolSizeReq < vaLimit.rlim_cur) {
+            printf("Failed to mmap more memory\n");
+            onExitHelper(false);
+            GR_ASSERT_ALWAYS(false);
+        }
         return(-1);
     }
     GR_ASSERT_ALWAYS(((uint64_t)mapStart % PAGE_SIZE) == 0);
+
+    if (grArgs.maxMemPct) {
+        int ret = mlock(mapStart, poolSize);
+        if (ret != 0) {
+            printf("Failed to mlock memory\n");
+            onExitHelper(false);
+            GR_ASSERT_ALWAYS(false);
+        }
+    }
 
     currMemPool++;
     GR_ASSERT_ALWAYS(currMemPool < MAX_MEM_POOLS);
@@ -418,10 +437,14 @@ parseArgs(GRArgs *args) {
     argc++;
 
     args->numSlots = 1;
-    while ((c = getopt(argc, argv, "ds:t:T:v")) != -1) {
+    while ((c = getopt(argc, argv, "dm:s:t:T:v")) != -1) {
         switch (c) {
             case 'd':
                 args->useDelay = true;
+                break;
+            case 'm':
+                args->maxMemPct = atoi(optarg);
+                GR_ASSERT_ALWAYS(args->maxMemPct <= 100);
                 break;
             case 's':
                 args->numSlots = atoi(optarg);
@@ -472,6 +495,7 @@ initialize(void) {
         initSize = START_POOL_MULT * initBinsMeta();
 
         printf("Initializing GuardRails with %lu byte starting pool\n", initSize);
+
         ret = pthread_mutex_lock(&gMutex);
         GR_ASSERT_ALWAYS(ret == 0);
         ret = addNewMemPool(initSize);
@@ -489,6 +513,18 @@ initialize(void) {
         sigRet = signal(SIGUSR2, sigUsr2Handler);
         GR_ASSERT_ALWAYS(sigRet != SIG_ERR);
     }
+    // Must be done post-init as these functions allocate memory
+    ssize_t totalMem = get_phys_pages() * getpagesize();
+    printf("Total system physical memory: %ld\n", totalMem);
+    if (grArgs.maxMemPct != 0) {
+        struct rlimit vaLimit;
+        ret = getrlimit(RLIMIT_AS, &vaLimit);
+        GR_ASSERT_ALWAYS(ret == 0);
+        vaLimit.rlim_cur = grArgs.maxMemPct * totalMem / 100;
+        ret = setrlimit(RLIMIT_AS, &vaLimit);
+        GR_ASSERT_ALWAYS(ret == 0);
+    }
+
     ret = pthread_mutex_unlock(&initMutex);
     GR_ASSERT_ALWAYS(ret == 0);
 }
@@ -659,7 +695,7 @@ void *aligned_alloc(size_t alignment, size_t usrSize) {
 }
 
 __attribute__((destructor)) static void
-onExit(void) {
+onExitHelper(bool useLocale) {
     size_t totalAllocedBytes = 0;
     size_t totalAllocedBytesGP = 0;
     size_t totalFreedBytesGP = 0;
@@ -670,12 +706,13 @@ onExit(void) {
     "Bin %2lu size %12lu, allocs: %11lu, frees: %11lu, leaked allocs: %11lu, leaked bytes: %11lu\n";
 
     int outfd = -1;
+    int ret;
 
     if (grArgs.maxTrackFrames > 0) {
         pid_t tid = syscall(SYS_gettid);
         char of[NAME_MAX];
 
-        int ret = snprintf(of, NAME_MAX, "%s-%d.txt", TRACKER_FILE_PRE, tid);
+        ret = snprintf(of, NAME_MAX, "%s-%d.txt", TRACKER_FILE_PRE, tid);
         GR_ASSERT_ALWAYS(ret > 0);
 
         outfd = open(of, O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -684,10 +721,19 @@ onExit(void) {
 
     printf("================ BEGIN GUARDRAILS OUTPUT ================\n");
     printf("Ran with args: %s\n", argStr);
-    // For comma-deliniated integers.
-    // Note: setlocale leaks 3,659 user bytes
-    char *origLocale = setlocale(LC_NUMERIC, "");
-    GR_ASSERT_ALWAYS(origLocale);
+    char *origLocale = NULL;
+    if (useLocale) {
+        // For comma-deliniated integers.
+        // Note: setlocale leaks 3,659 user bytes
+        origLocale = setlocale(LC_NUMERIC, "");
+        GR_ASSERT_ALWAYS(origLocale);
+    }
+    if (grArgs.maxMemPct != 0) {
+        struct rlimit vaLimit;
+        ret = getrlimit(RLIMIT_AS, &vaLimit);
+        printf("Memory limit: %lu\n", vaLimit.rlim_cur);
+    }
+
     for (size_t slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
         totalUserRequestedBytes += memSlots[slotNum].totalUserRequestedBytes;
         totalUserFreedBytes += memSlots[slotNum].totalUserFreedBytes;
@@ -754,5 +800,12 @@ onExit(void) {
     printf("================== END GUARDRAILS OUTPUT ================\n");
     fflush(stdout);
 
-    setlocale(LC_NUMERIC, origLocale);
+    if (useLocale) {
+        setlocale(LC_NUMERIC, origLocale);
+    }
+}
+
+__attribute__((destructor)) static void
+onExit(void) {
+    onExitHelper(true);
 }

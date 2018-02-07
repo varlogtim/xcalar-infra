@@ -68,6 +68,7 @@ typedef struct GRArgs {
     size_t maxTrackFrames;
     size_t maxTrackFreeFrames;
     size_t numSlots;
+    size_t maxMemPct;
     bool useDelay;
     bool verbose;
 } GRArgs;
