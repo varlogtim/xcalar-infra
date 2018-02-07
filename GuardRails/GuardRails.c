@@ -401,14 +401,18 @@ parseArgs(GRArgs *args) {
     // We get loaded before the loader sets up argv/argc for main.  So read the
     // args from a file instead.
     int fd = open(ARG_FILE, O_RDONLY);
-    if (fd < 0) {
-        return (0);
+    size_t bytesRead = 0;
+    memset(args, 0, sizeof(*args));
+    if (fd > 0) {
+        bytesRead = read(fd, argStr, ARG_MAX_BYTES - 1);
+        GR_ASSERT_ALWAYS(bytesRead >= 0);
+        close(fd);
+        fd = -1;
+    } else {
+        // No config file, set some defaults
+        args->verbose = true;
     }
 
-    ssize_t bytesRead = read(fd, argStr, ARG_MAX_BYTES - 1);
-    GR_ASSERT_ALWAYS(bytesRead >= 0);
-    close(fd);
-    fd = -1;
     argStr[bytesRead] = '\0';
 
     if (bytesRead > 0 && argStr[bytesRead - 1] == '\n') {
@@ -432,7 +436,6 @@ parseArgs(GRArgs *args) {
     int c;
     opterr = 0;
 
-    memset(args, 0, sizeof(*args));
     argv[0] = "GuardRails";
     argc++;
 
@@ -598,7 +601,11 @@ malloc(size_t usrSize) {
     // the end of the allocated data and the guard page.  We could catch this
     // by adding/checking some trailing known bytes.  Most allocations seem to
     // be a word size multiple.
-    return(memalignInt(sizeof(void *), usrSize));
+    //
+    // UPDATE: clang5 uses SSE instructions for things like zeroing small
+    // memory allocations comprising more than two words.  This requires
+    // 16-byte alignment.  See Bug 11105 for further details.
+    return(memalignInt(usrSize > sizeof(void *) ? 16 : 8, usrSize));
 }
 
 void *
@@ -694,7 +701,7 @@ void *aligned_alloc(size_t alignment, size_t usrSize) {
     return(memalign(alignment, usrSize));
 }
 
-__attribute__((destructor)) static void
+static void
 onExitHelper(bool useLocale) {
     size_t totalAllocedBytes = 0;
     size_t totalAllocedBytesGP = 0;
