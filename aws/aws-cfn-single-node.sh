@@ -3,7 +3,7 @@
 # Create an AWS Cloudformation Stack for Field Demos
 #
 # Usage:
-#  ./aws-cfn-field-demo.sh [node-count (default:2)] [instance-type (default: c3.8xlarge)]
+#  ./aws-cfn-single-node.sh [node-count (default:2)] [instance-type (default: c3.8xlarge)]
 #
 # c3.8xlarge = 32 vCPUs x 60GB x 600GB SSD = $1.680/hr
 # r3.8xlarge = 32 vCPUs x 244GB x 600GB SSD = $2.660/hr
@@ -20,7 +20,7 @@ TEMPLATE="${PWD}/cfn/XCE-CloudFormationSingleNodeForCustomers.yaml"
 INSTALLER_URL="${1:-s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer}"
 INSTANCE_TYPE="${2:-i3.2xlarge}"
 LICENSE="$(cat license.key)"
-export AWS_DEFAULT_REGION=us-east-1
+#export AWS_DEFAULT_REGION=us-east-1
 
 INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d s3 "$INSTALLER_URL")"
 
@@ -35,10 +35,10 @@ InstallerUrl    "$INSTALLER_URL"
 AdminUsername   xcalar
 AdminPassword   Welcome1
 AdminEmail      "$(git config user.email)"
-InstanceType	${INSTANCE_TYPE}
+InstanceType	  ${INSTANCE_TYPE}
 KeyName	        xcalar-us-east-1
-CidrLocation	0.0.0.0/0
-VpcId	        vpc-30100e55
+CidrLocation	  0.0.0.0/0
+VpcId	          vpc-30100e55
 Subnet	        subnet-e55cc480
 RootSize        250
 LicenseKey      "${LICENSE}")

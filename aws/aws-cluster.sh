@@ -26,24 +26,26 @@ fi
 . aws-sh-lib
 
 NOW=$(date +%Y%m%d%H%M)
-DEFAULT_TEMPLATE="file://./cfn/XCE-CloudFormationMultiNodeInternal.yaml"
+DEFAULT_TEMPLATE="file://./cfn/XCE-CloudFormationSingleNodeForCustomers.yaml"
 DEFAULT_SPOT_TEMPLATE="$(dirname $DEFAULT_TEMPLATE)/$(basename $DEFAULT_TEMPLATE .yaml)Spot.yaml"
 BUCKET=xcrepo
-COUNT=2
+COUNT=1
 INSTANCE_TYPE='i3.2xlarge'
 NODEID=0
 BOOTSTRAP=aws-cfn-bootstrap.sh
 SUBNET=subnet-b9ed4ee0  # subnet-4e6e2d15
 ROLE="xcalar_field"
 #BOOTSTRAP_URL="${BOOTSTRAP_URL:-http://repo.xcalar.net/scripts/aws-asg-bootstrap-field-new.sh}"
-INSTALLER="${INSTALLER:-s3://xcrepo/builds/3c9a47f4-65ad6827/prod/xcalar-1.2.3-1296-installer}"
+INSTALLER="${INSTALLER:-s3://xcrepo/builds/prod/xcalar-1.3.0-1548-installer}"
 LOGNAME="${LOGNAME:-`id -un`}"
 STACK_NAME="$LOGNAME-cluster-$NOW"
 #BootstrapUrl	http://repo.xcalar.net/scripts/aws-asg-bootstrap-field.sh
 #InstallerUrl    "$(aws s3 presign s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer)"
 IMAGE=ami-f729da8f
 SPOT=0
-LICENSE=""
+LICENSE="license.txt"
+
+aws_sh_setup
 
 usage () {
     cat << EOF
@@ -76,6 +78,27 @@ check_url () {
         fi
     fi
     return 1
+}
+
+parameter_keys() {
+  if [[ "$1" =~ ^http ]]; then
+    if echo "$1" | grep -q '.yaml$'; then
+      curl -L "$1" | cfn-flip | jq -r '.Parameters|keys[]'
+    else
+      curl -L "$1" | jq -r '.Parameters|keys[]'
+    fi
+  else
+    if echo "$1" | grep -q '.yaml$'; then
+      cfn-flip < "${1#file://}" | jq -r '.Parameters|keys[]'
+    else
+      jq -r '.Parameters|keys[]' < "${1#file://}"
+    fi
+  fi
+}
+
+is_param() {
+    test -z "$VALID_PARAMS" && VALID_PARAMS=$(parameter_keys "$TEMPLATE")
+    grep -q "$1" <<< "$VALID_PARAMS"
 }
 
 while getopts "ha:i:u:t:c:n:s:b:f:r:e:l:" opt "$@"; do
@@ -142,7 +165,7 @@ if [ -z "$INSTALLER_URL" ]; then
     fi
 fi
 
-if [ -z "$BOOTSTRAP_URL" ]; then
+if [ -n "$BOOTSTRAP_URL" ] && [ -z "$BOOTSTRAP_URL" ]; then
     if ! BOOTSTRAP_URL="$(upload_bysha1 ${BOOTSTRAP})"; then
         echo >&2 "Failed to upload $BOOTSTRAP"
     fi
@@ -154,11 +177,17 @@ if [ -z "$INSTALLER_URL" ]; then
 fi
 
 for URL in "$INSTALLER_URL" "$BOOTSTRAP_URL"; do
-    if ! check_url "$URL"; then
+    if test -n "$URL" && ! check_url "$URL"; then
         echo >&2 "Failed to access the installer url: $URL"
         exit 1
     fi
 done
+
+if test -e "$LICENSE"; then
+  LICENSE="$(cat $LICENSE)" || { echo >&2 "Failed to read license file"; exit 1; }
+fi
+
+VALID_PARAMS=$(parameter_keys $TEMPLATE)
 
 PARMS=(\
 BootstrapUrl	"${BOOTSTRAP_URL}"
@@ -166,16 +195,16 @@ InstallerUrl    "${INSTALLER_URL}"
 InstanceCount	${COUNT}
 InstanceType	${INSTANCE_TYPE}
 KeyName	        xcalar-us-west-2
-SSHLocation	    0.0.0.0/0
+CidrLocation   0.0.0.0/0
 Subnet	        $SUBNET
 ImageId         $IMAGE
 AdminUsername   xdpadmin
 AdminPassword   Welcome1
 AdminEmail      "$(git config user.email || test@xcalar.com)"
-LicenseKey      $LICENSE
+LicenseKey      "$LICENSE"
 VpcId	        vpc-22f26347)
 
-if [ "$SPOT" != 0 ]; then
+if grep -q SpotPrice <<< "$VALID_PARAMS" && [ "$SPOT" != 0 ]; then
     ZONE=$(aws_subnet_to_zone $SUBNET)
     SPOTPRICE=$(aws_spot_price $INSTANCE_TYPE $ZONE | head -1 | awk '{print $(NF-1)}')
     BIDPRICE="$(echo "$SPOTPRICE * $SPOT" | bc)"
@@ -188,8 +217,12 @@ ARGS=()
 for ii in $(seq 0 2 $(( ${#PARMS[@]} - 1)) ); do
     k=$(( $ii + 0 ))
     v=$(( $ii + 1 ))
-    ARGS+=(ParameterKey=${PARMS[$k]},ParameterValue=\"${PARMS[$v]}\")
-    echo >&2 "Parameter: ${PARMS[$k]}=${PARMS[$v]}"
+    if is_param "${PARMS[$k]}"; then
+      ARGS+=(ParameterKey=${PARMS[$k]},ParameterValue=\"${PARMS[$v]}\")
+      echo >&2 "Parameter: ${PARMS[$k]}=${PARMS[$v]}"
+    else
+      echo >&2 "Skipping Parameter: ${PARMS[$k]}"
+    fi
 done
 
 set -e
