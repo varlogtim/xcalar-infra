@@ -96,6 +96,13 @@ genBuildArtifacts() {
 
 trap "genBuildArtifacts" EXIT
 
+# Build the source
+source doc/env/xc_aliases
+xcEnvEnter
+cmBuild clean
+cmBuild config debug
+cmBuild
+
 if [ $MemoryAllocator -eq 2 ]; then
     memAllocator=2
 else
