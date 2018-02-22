@@ -254,8 +254,10 @@ for Test in "${TestsToRun[@]}"; do
         now=$(date +"%T")
         filepath="`pwd`/usrnode.$now"
         retinapath="`pwd`/retina.$now"
+        exportpath="`pwd`/export.$now"
         sudo cp /opt/xcalar/bin/usrnode "$filepath"
         sudo cp -r /var/opt/xcalar/dataflows/ "$retinapath"
+        sudo cp -r /var/opt/xcalar/export/ "$exportpath"
         # mark the test as failed
         funcstatsd "$Test" "FAIL" "$gitsha"
         echo "not ok ${ii} - $Test" | tee -a $TAP
