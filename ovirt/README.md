@@ -1,12 +1,16 @@
 SUMMARY:
-This initial tool will provision a single VM
-and bring it up as a single-node Xcalar cluster
-with the most recent RC build.
+This tool will provision n VMs on Ovirt,
+and bring them up as a Xcalar cluster with the
+most recent RC build.
 
 Basic usage:
 
-	python ovirttool.py --create_one_node_cluster
+	python ovirttool.py --num_vms=4
 
+----------------------------------------------------
+This is the early stage of this tool.  In coming phase:
+	- specify custom build to install on nodes
+	- supply custom values for RAM, cores, etc.
 -----------------------------------------------------
 
 Setup:
@@ -28,17 +32,27 @@ filepaths directly when you invoke the script using options below:)
 
 ----------------------------------------------------
 
-Run script:
+Examples:
 
-	python ovirttool.py --create_one_node_cluster
+Create a 4 node cluster from VMs on node4-cluster, with the latest RC build
 
-Specify another cluster to build the vm on (defaults to node4-cluster)
+	python ovirttool.py --num_vms=4
 
-	python ovirttool.py --create_one_node_cluster --homenode=node2-cluster
+Create a 4 node cluster, but make VMs on node2-cluster (node4-cluster is default)
 
-Supply your username to bypass script prompting you for username:
+	python ovirttool.py --num_vms=3 --homenode=node2-cluster
 
-	python ovirttool.py --create_one_node_cluster --user=you
+Create a single node with the latest RC build
+
+	python ovirttool.py --num_vms=1
+
+Create 2 single VMs with latest RC build, but do not make them in to a cluster
+
+	python ovirttool.py --num_vms=2 --dont_create_cluster
+
+Supply you username to bypass script prompting you for username:
+
+	python ovirttool.py --num_vms=2 <other options> --user=you
 
 To delete VMs created you no longer need, to free up resources::
 

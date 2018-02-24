@@ -39,9 +39,17 @@ import ovirtsdk4.types as types
 import shutil
 import subprocess
 import urllib
+import multiprocessing
+import random
+
 import paramiko
 
 logging.basicConfig(level=logging.DEBUG, filename='example.log')
+
+MAX_VMS_ALLOWED=6
+
+NETSTORE_IP='10.10.1.107'
+XUID = '1001'
 
 RAM_VALID_VALUES = [32,64,128]
 CORES_VALID_VALUES = [2,4,8,16]
@@ -49,14 +57,18 @@ CORES_VALID_VALUES = [2,4,8,16]
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--user", type=str, help="Your SSO username (no '@xcalar.com')")
-#parser.add_argument("--vms", type=int, default=1, help="Number of VMs you'd like to create, or comma sep list of names of VMs you'd like to create")
+parser.add_argument("--num_vms", type=int, default=0, help="Number of VMs you'd like to create, or comma sep list of names of VMs you'd like to create")
+parser.add_argument('--quick', action='store_true', default=False, help='test')
+parser.add_argument('--quickcluster', type=str)
 #parser.add_argument("--ram", type=int, choices=RAM_VALID_VALUES, default=32, help="RAM on VM(s) (in GB)")
 #parser.add_argument("--cores", type=int, choices=CORES_VALID_VALUES, default=4, help="Number of cores per VM.")
 #parser.add_argument("--create_xcalar_cluster", action='store_true', help="Create a cluster of the new VMs.")
 #parser.add_argument("--cluster_name", type=str, help="Name you want the cluster to have.  If not supplied will generate random name based on timestamp")
 #parser.add_argument("--installer", type=str, default='/last-successful/', help="Path (on NETSTORE) to the Xcalar instance to install on your cluster.  If not supplied, and you've requested a xcalar cluster, will use latest successful build")
 #parser.add_argument("--dump", type=str, help="testing")
-parser.add_argument("--create_one_node_cluster", action='store_true', help="testing")
+parser.add_argument("--dont_install_xcalar", action="store_true", default=False, help="testing")
+parser.add_argument("--dont_create_cluster", action='store_true', default=False, help="testing")
+#parser.add_argument("--create_cluster", action='store_true', help="testing")
 parser.add_argument("--homenode", type=str, default='node4-cluster', help="Which node to create the VM(s) on.  Defaults to node4-cluster")
 parser.add_argument("--remove_vm", type=str, help="testing purposes")
 parser.add_argument("--licfile", type=str, help="Path to XcalarLic.key on your local machine (If not supplied, will look for it in cwd)")
@@ -64,20 +76,20 @@ parser.add_argument("--pubsfile", type=str, help="Path to EcdsaPub.key on your l
 #parser.add_argument("--ssh", help="Testing")
 args = parser.parse_args()
 
-TMP_DIR='/tmp/ovirt_tool/'
+TMPDIR='/tmp/ovirt_tool/'
 CONN=None
+PUBSFILENAME='EcdsaPub.key'
+LICFILENAME='XcalarLic.key'
 LICFILEPATH=None
 PUBSFILEPATH=None
-
-def create_one_node_cluster(**kwargs):
-    print("\nCreate a new VM")
-    vmname, ip = create_vm(**kwargs)
-    #print("\tCreated VM: {} with IP : {}".format(vmname, ip))
-
-    #create_xcalar_cluster([new_ip])
-    print("\nMake VM {} @ ip {} in to a single node xcalar cluster.".format(vmname, ip))
-    make_vm_into_single_node_cluster(ip)
-    print("Success! VM {} brought up as single node cluster!!\n".format(vmname))
+REMOTE_TMPDIR=None
+#REMOTE_TMPDIR='/tmp/ovirt_tool/' + str(time.time())
+ROOT_VM = None
+CLUSTER_DIR_REMOTE = None
+CLUSTER_DIR_LOCAL = '/mnt/xcalar'
+INSTALLER_SH_SCRIPT = 'e2einstaller.sh'
+TEMPLATE_HELPER_SH_SCRIPT = 'templatehelper.sh'
+ADMIN_HELPER_SH_SCRIPT = 'setupadmin.sh'
 
 '''
 See if a vm by given name exist.
@@ -112,7 +124,7 @@ def get_vm_service(name):
 
     # Find the virtual machine:
     myvm = vm_exists(name)
-    if myvm is None:
+    if None:
         print("No VM found called {}; can't return VM service!".format(name))
         raise Exception("Can't find service for {} - VM does not exist!".format(name))
 
@@ -122,17 +134,66 @@ def get_vm_service(name):
     return vms_service.vm_service(myvm.id)
 
 '''
+    Generate n unique unused names for vms,
+    on the cluster.
+    Do in convention
+    <vm name>, <vm name>-1, so we can put in cluster like thiat
+'''
+def generate_unique_vm_names(cluster, n):
+
+    print("\nGenerate {} new vm names on cluster {}".format(n, cluster))
+
+    # Get the reference to the "vms" service:
+    vms_service = CONN.system_service().vms_service()
+
+    names = []
+
+    # get the first unique vm name
+    basevmname = None
+    tries = 50
+    vmid = random.randint(1,200)
+    while True and tries:
+        basevmname = "ovirt-tool-auto-vm-" + str(vmid)
+        if vm_exists(basevmname):
+            tries -= 1
+            vmid += 1
+        else:
+            print("Found base name {}".format(basevmname))
+            global ROOT_VM
+            ROOT_VM = basevmname
+            global REMOTE_TMPDIR
+            REMOTE_TMPDIR = '/tmp/ovirt_tool/' + ROOT_VM
+            names.append(basevmname)
+            break
+    if not tries:
+        raise Exception("Need to delete some VMs to clear up resources:\n\tpython ovirttool.py --remove_vm=" + myvmname)
+
+    # now base the others off that
+    cnt = 0
+    for i in range(n-1):
+        cnt += 1
+        while True:
+            vmname = '{}-{}'.format(basevmname, str(cnt))
+            if not vm_exists(vmname):
+                print("Found new name... {}".format(vmname))
+                names.append(vmname)
+                break        
+
+    return names
+
+'''
     Create a new vm and wait until you can get ip
 
     @returns: vm name, ip
 
     if never find ip throw exception
 '''
-def create_vm(**kwargs):
+def create_vm(myvmname, cluster, template):
 
-    cluster, template = get_template_name(**kwargs)
+    #cluster, template = get_template_name(**kwargs)
     print("Create a new VM based on cluster {}, using template {}".format(cluster, template))
 
+    '''
     print("\nget vms service")
     # Get the reference to the "vms" service:
     vms_service = CONN.system_service().vms_service()
@@ -151,6 +212,10 @@ def create_vm(**kwargs):
             break
     if not tries:
         raise Exception("Need to delete some VMs to clear up resources:\n\tpython ovirttool.py --remove_vm=" + myvmname)
+    '''
+
+    # Get the reference to the "vms" service:
+    vms_service = CONN.system_service().vms_service()
 
     # add the vm
     print("No VM by name {} yet; create VM with this name...".format(myvmname))
@@ -178,6 +243,7 @@ def create_vm(**kwargs):
     # wait for IP to show up
     print("\nGet IP of vm: {}".format(myvmname))
     new_ip = get_vm_ip(myvmname, tries=50)
+    # mark if its the root ip
     print("\tIP: {}".format(new_ip))
 
     print("\nSuccessfully created a new VM!!\n\tVM: {}\n\tIP: {}\n\tCluster: {}\n\tTemplate {}".format(myvmname, new_ip, cluster, template))
@@ -239,9 +305,9 @@ def _get_pem_cert():
     #print(response.text)
     # save in a tmp file and return that
     tmpfilename = 'ctmp.pem'
-    if not os.path.isdir(TMP_DIR):
-        os.makedirs(TMP_DIR)
-    tmpfilepath = TMP_DIR + tmpfilename
+    if not os.path.isdir(TMPDIR):
+        os.makedirs(TMPDIR)
+    tmpfilepath = TMPDIR + tmpfilename
     pemfile = open(tmpfilepath, 'w')
     pemfile.write(response.text)
     pemfile.close()
@@ -257,108 +323,40 @@ def _close_connection(conn):
     else:
         print("Connection pass is null")
 
-def create_cluster(**kwargs):
-
-    get_installer_from_netstore()
-
-    '''
-    # custom install dir on netstore
-    installdir = 'latest-successful'
-    if 'installdir' in kwargs:
-        installdir = kwargs['insatlldir']
-    # get the installer
-    accessiblefilepath = get_installer_from_netstore(installdir)
-
-    # get one of the vms...
-    node
-    if 'nodes' in kwargs:
-        node = kwargs['nodes'][0]
-    '''
-
-def get_installer_from_netstore(installpath=0):
-
-    if not installpath:
-        installpath = 'builds/Release/xcalar-latest/prod/xcalar-1.3.0-1548-installer'
-    url = 'http://netstore/' + installpath
-    print("call at url " + url)
-    response = requests.get(url, stream=True)
-    print("got response...")
-    with open('afile', 'wb') as out_file:
-        shutil.copyfileobj(response.raw, out_file)
-    del response
-
-def create_xcalar_cluster(hosts):
-
-    print("Install xcalar on all hosts: {}, then join as cluster".format(hosts))
-
-    for host in hosts:
-        install_xcalar(host)
-    # join as cluster
-
-    # bring up all nodes
-    for host in hosts:
-        bring_up_xcalar(host)
-
 '''
-    Copy filepaths on local machine, to remote host at a path on that host
-    @host: remote host to copy files on to
-    @files: list of filespaths of files on local machine to copy
-    @loc: path to copy the files in to on host
+    Copy necessary license files on to a remote node
+    @node: IP of node to copy files on to
 '''
-def copy_lic_files(host, files, loc):
+def copy_lic_files(node, dest='/etc/xcalar'):
 
-    print("\nCopy licences files in to {} via scp".format(host))
+    print("\nCopy licences files in to {} via scp".format(node))
 
     '''
          scp in the license files in to the VM
     '''
-    for myfile in files:
-        cmd = 'scp -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + myfile + ' root@' + host + ':' + loc
-        print("\n\t~ {}\n".format(cmd))
-        os.system(cmd)
+    files = [LICFILEPATH, PUBSFILEPATH]
+    for licfile in files:
+        print("dest: " + dest)
+        print("node: " + node)
+        print("lic file: " + licfile)
+        scp_file(node, licfile, dest)
 
 '''
-    Given the IP of a VM, install xcalar on it
-    and bring up
+    scp a file from the local machine to a remove machine
+    @node ip of remote machine to copy file on to
+    @localfilepath filepath of the file on the local machine
+    @remotefilepath filepath where to put the file on the remote machine
 '''
-def make_vm_into_single_node_cluster(host):
+def scp_file(node, localfilepath, remotefilepath):
 
-    '''
-        Copy in latest RC installer and install Xcalar on host
-    '''
-    print("\nInstall Xcalar on {}".format(host))
-    cmds = [['echo "hellow"'],
-            ['curl http://netstore/' + get_latest_RC_prod() + ' -o installer.sh', 300],
-            ['bash installer.sh --nostart --caddy --startonboot | tee /tmp/installer' + str(time.time()) + '.log',1000]]
-    run_cmds(host, cmds)
+    print("\nSCP: Copy file {} from host, to {}:{}".format(localfilepath, node, remotefilepath))
 
-    '''
-        copy the lic files
-    '''
-    copy_lic_files(host, [LICFILEPATH, PUBSFILEPATH], '/etc/xcalar')
+    cmd = 'scp -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
+    print("\n\t~ {}\n".format(cmd))
+    os.system(cmd)
+    #bring_up_xcalar(node)
 
-    '''
-        post installation
-    '''
-    print("\nSetup admin acct; perform post-installation tasks")
-    cmds = [# this will set up an admin account
-            ['mkdir -p /var/opt/xcalar/config'],
-            ["echo '{" + '"username":"admin","password":"6d51d4b15ded3bc357f6f1547de49cc81579e6a3b1ec85bbf50dcca20618d1c4","email":"support@xcalar.com","defaultAdminEnabled":"true"' + "}' " + '> /var/opt/xcalar/config/defaultAdmin.json'],
-            ['chmod 0600 /var/opt/xcalar/config/defaultAdmin.json'],
-            # ted had to do this, too
-            ['chown -R xcalar:xcalar /var/opt/xcalar/config'],
-            # this will change the hostname to localhost (was having issue with service starting before this)
-            ['/opt/xcalar/scripts/genConfig.sh /etc/xcalar/template.cfg - localhost > /etc/xcalar/default.cfg'],
-            # for now set this permission because my old VM im using as the template has some permissions messing this up
-            #['sudo chown -R xcalar:xcalar /tmp/xcalar_sock'],
-            # restart XCE, intermittent problem with service coming back up
-            ['service xcalar stop-supervisor'],
-            ['service xcalar start | tee /tmp/servicestart' + str(time.time()), 200]]
-    run_cmds(host,cmds)
-
-    print("\n\n\n\n\tTry: https://" + host + ":8443\n\n\t\tusername: admin\n\n")
-
-def run_cmds(host, cmds):
+def run_ssh_cmds(host, cmds):
 
     print("\nTry ssh root@{} ...\n\n".format(host))
 
@@ -370,52 +368,244 @@ def run_cmds(host, cmds):
         extraops = {}
         if len(cmd) > 1:
             extraops['timeout'] = cmd[1]
-        status = send_cmd(host, cmd[0], **extraops)
+        status = run_ssh_cmd(host, cmd[0], **extraops)
         if status:
             errorFound = True
 
     if errorFound:
         raise Exception("Found error while executing one of the commands!!!")
 
-def send_cmd(host, command, port=22, user='root', bufsize=-1, key_filename='', timeout=10, pkey=None):
+def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, key_filename='', timeout=120, pkey=None):
     print("[" + user + "@" + host +  "] " + command)
-    #print("\n~ Will try to 'ssh {}@{}' .. ".format(user, host))
+    print("\n~ Will try to 'ssh {}@{}' .. ".format(user, host))
     client = paramiko.SSHClient()
-    #print("\tD: Made Client obj...")
+    print("\tD: Made Client obj...")
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    #print("\tD: set missing host key")
+    print("\tD: try to connect on port {}".format(port))
     client.connect(hostname=host, port=port, username=user)#, key_filename=key_filename, banner_timeout=10)
-    #print("\tconnected to : {}".format(host))
+    print("\tconnected to : {}".format(host))
     chan = client.get_transport().open_session()
-    #print("\tOpened session...")
+    print("\tOpened session...")
     chan.settimeout(timeout)
-    #print("\tD: set timeout to {}".format(timeout))
+    print("\tD: set timeout to {}".format(timeout))
     chan.set_combine_stderr(True)
-    #print("\tD: chan3")
+    print("\tD: chan3")
     chan.get_pty()
-    #print("\t\t~~ SEND CMD: {}".format(command))
-    #print("[" + user + "@" + host +  "] " + command, end='')
+    print("\t\t~~ SEND CMD: {}".format(command))
+    print("[" + user + "@" + host +  "] " + command, end='')
     chan.exec_command(command)
-    #print("\t\t\tD: success")
+    print("\t\t\tD: success")
     stdout = chan.makefile('r', bufsize)
-    #print("\tReading stdout ...")
-    #print("\t\t\tD: made a file")
+    print("\tReading stdout ...")
+    print("\t\t\tD: made a file")
     stdout_text = stdout.read()
-    #print("\t\t\tstdout: {}".format(stdout_text))
+    print("\t\t\tstdout: {}".format(stdout_text))
     status = int(chan.recv_exit_status())
-    #print("\t\t\tstatus: {}".format(status))
+    print("\t\t\tstatus: {}".format(status))
     if status:
         print("\tGot non-0 status!!  stdout text:\n{}".format(stdout_text))
 
     client.close()
-    #print("\tclosed client connection")
+    print("\tclosed client connection")
     return status
+
+
+
+
+'''
+    provisions n vms in parallel.
+    waits for all vms to come up with ips displaying
+    Return a list of names of vms created in Ovirt
+'''
+def provision_vms(n):
+
+    print("\nProvision {} vms".format(n))
+
+    # create num vms with these attributes
+    cluster, template = get_template_name()
+    vm_names = generate_unique_vm_names(cluster, n)
+    print("Got names: {}".format(vm_names))
+    procs = []
+    for newvm in vm_names:
+
+        print("\nFork new process to create a new VM by name {}".format(newvm))
+        proc = multiprocessing.Process(target=create_vm, args=(newvm, cluster, template))
+        proc.start()
+        # sleep
+        time.sleep(20)
+        print("Complete sleep... start new...")
+        procs.append(proc)
+
+    # wait for the processes
+    process_wait(procs)
+
+    return vm_names
+
+'''
+    Install xcalar on node with given ip
+    Copy in helper shell scripts used for instlalation
+    and cluster creation
+    start service if requested
+'''
+def setup_xcalar(nodename, ip, start=False):
+
+    print("\nCopy in license files and installer script on {} (IP: {})".format(nodename, ip))
+
+    # create tmp dir to hold the files
+    run_ssh_cmd(ip, 'mkdir -p {}'.format(REMOTE_TMPDIR))
+
+    # copy all these files in to that dir (each el is [local filepath, destination filepath]
+    fileslist = [[PUBSFILEPATH, REMOTE_TMPDIR + '/' + PUBSFILENAME], # i want to rename to the std name in case they supplied a file with a diff name, because e2e script will call by st name
+        [LICFILEPATH, REMOTE_TMPDIR + '/' + LICFILENAME],
+        [TEMPLATE_HELPER_SH_SCRIPT, REMOTE_TMPDIR],
+        [ADMIN_HELPER_SH_SCRIPT, REMOTE_TMPDIR],
+        [INSTALLER_SH_SCRIPT, REMOTE_TMPDIR]]
+    for filedata in fileslist:
+        scp_file(ip, filedata[0], filedata[1])
+
+    # run the shell script over ssh and return the status
+    #cmd = 'ssh -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no root@{} {} {} {}'.format(nodeip, installerScriptRemotePath, nodename, start)
+    remotefilepath = REMOTE_TMPDIR + '/' + INSTALLER_SH_SCRIPT
+    installScript = get_latest_RC_prod() # for now just get latest RC on netstore.  this path should be rel netstore root
+    cmds = [['chmod u+x ' + remotefilepath],
+             ['/bin/bash ' + remotefilepath + ' ' + installScript + ' ' + nodename + ' ' + ip + ' | tee installlog.log', 600]]
+    run_ssh_cmds(ip, cmds)
+
+def process_wait(procs):
+
+    # wait for all the processes to complete
+    while procs:
+        print("\t:: Check processes... ({} remain)".format(len(procs)))
+        for i, proc in enumerate(procs):
+            if proc.is_alive():
+                time.sleep(10)
+                print("process still alive...")
+            else:
+                exitcode = proc.exitcode
+                print("process completed with exit code: {}".format(exitcode))
+                if exitcode:
+                    raise Exception("Non-0 exit code ")
+                del procs[i]
+                break
+
+    print("All processes completed with 0 exit code")
+
+'''
+    List of VM names as they appear in Ovirt
+    For each VM, fork process to install and setup xcalar.
+    Once xcalar installation completes on all of them,
+    form in to a cluster unless specified otherwise
+'''
+
+def initialize_xcalar(nodes, nocluster=False):
+
+    print("\nSetup xcalar on node set")
+
+    procs = []
+    ips = []
+    for node in nodes:
+        # get ip
+        ip = get_vm_ip(node) 
+        ips.append(ip)
+        print("\nStart new process to setup xcalar on {}, {}".format(node, ip))
+        proc = multiprocessing.Process(target=setup_xcalar, args=(node, ip))
+        procs.append(proc)
+        proc.start()
+
+    # wait
+    process_wait(procs)
+    
+    # form the nodes in to a cluster if requested
+    if not nocluster and len(ips) > 1:
+        create_cluster(ips)
+
+'''
+    Configure a node to be part of a cluster
+    by generating its default.cfg with a nodelist,
+    and bringing up the node
+    @node: ip of node
+    @nodeliststr: string of ips in the cluster ws sep i.e., '10.10.2.30 10.10.2.31'
+'''
+def configure_cluster_node(node, nodeliststr, start=True):
+
+    print("\nConfigure cluster node of {}, nodelist: {}".format(node, nodeliststr))
+
+    # generate config file with the nodelist and start xcalar service
+    # mount the central cluster dir on netstore
+    remotefilepath = REMOTE_TMPDIR + '/' + TEMPLATE_HELPER_SH_SCRIPT
+    print("cluster dir: {} {}".format(CLUSTER_DIR_LOCAL, CLUSTER_DIR_REMOTE))
+
+    print("remote filepath: {}".format(remotefilepath))
+    #freenas2.int.xcalar.com:/mnt/public/netstore/ /mnt/xcalar
+    cmds = [['mkdir -p ' + CLUSTER_DIR_LOCAL + '; mount -t nfs  ' + NETSTORE_IP + ':/mnt/public/netstore/' + CLUSTER_DIR_REMOTE + ' ' + CLUSTER_DIR_LOCAL + '; chown ' + XUID + ':' + XUID + ' ' + CLUSTER_DIR_LOCAL, 60],
+            ['chmod u+x ' + remotefilepath],
+            ['/bin/bash ' + remotefilepath + ' ' + CLUSTER_DIR_LOCAL + ' ' + nodeliststr]]
+    if start:
+        print("Will also start xcalar service....")
+        cmds.append(['service xcalar start', 120])
+        cmds.append(['chmod u+x ' + REMOTE_TMPDIR + '/' + ADMIN_HELPER_SH_SCRIPT])
+        cmds.append(['/bin/bash ' + REMOTE_TMPDIR + '/' + ADMIN_HELPER_SH_SCRIPT])
+    run_ssh_cmds(node, cmds)
+
+'''
+    Create a dir on netstore by the cluster name
+    (so cluster nodes can mount as shared storage)
+'''
+def create_cluster_dir():
+
+    # create a dir on netstore, name after root node
+    global CLUSTER_DIR_REMOTE
+    CLUSTER_DIR_REMOTE = 'ovirtgen/' + ROOT_VM
+
+    # do it on netstore
+    cmd = 'sudo mkdir -p /netstore/{}/config'.format(CLUSTER_DIR_REMOTE)
+    print("rn cmd: {}".format(cmd))
+    os.system(cmd)
+    cmd = 'sudo chown ' + XUID + ':' + XUID  + ' /netstore/' + CLUSTER_DIR_REMOTE
+    cmd2 = 'sudo chown ' + XUID + ':' + XUID  + ' /netstore/' + CLUSTER_DIR_REMOTE + '/config'
+    print("rn cmd: {}".format(cmd))
+    print("rn cmd: {}".format(cmd2))
+    os.system(cmd)
+    os.system(cmd2)
+
+'''
+    List of IPs of nodes with xcalar installed.
+    For each node, fork process to configure the node
+    as part of a cluster and bring up xcalar
+'''
+def create_cluster(nodeips, start=True):
+    print("root vm: {}".format(ROOT_VM))
+    # create dir for cluster on netstore
+    create_cluster_dir()
+    
+    # for each node, generate config file with the nodelist
+    # and then bring up the xcalar service
+    nodelist = ' '.join(nodeips)
+    print("\nCreate cluster of nodes : {}".format(nodelist))
+    procs = []
+    for ip in nodeips:
+        print("\n\tFork cluster config for {} [node list: {}]\n".format(ip, nodelist))
+        proc = multiprocessing.Process(target=configure_cluster_node, args=(ip, nodelist))
+        procs.append(proc)
+        proc.start()
+        time.sleep(10)
+
+    # wait for all the proceses to complte
+    process_wait(procs)
+
+    # display to them
+    print("\n\n~~~~~~~~~~ A NEW CLUSTER EXISTS ~~~~~~~~~~")
+    print("\n\thttps://{}:8443".format(nodeips[0]))
+    print("\n\t\tusername: xdpadmin")
+    print("\t\tpassword: Welcome1")
+    print("\nRoot VM: {}".format(ROOT_VM))
+    print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
 def get_latest_RC_prod():
 
-    return 'builds/Release/xcalar-latest/prod/xcalar-1.3.0-1548-installer'
+    return 'builds/Release/xcalar-latest-installer-prod'
 
-def get_vm_ip(name, tries=1):
+def get_vm_ip(name, tries=10):
 
     print("Try to get IP of VM {} (try {} times)".format(name, tries))
 
@@ -544,6 +734,12 @@ def remove_vm(name):
         list_vms()
         return None
 
+    # get the ip
+    vm_ip = get_vm_ip(name)
+    # release the ip
+    cmds = [['dhclient -v -r']]
+    run_ssh_cmds(vm_ip, cmds)    
+
     print("Get VM service...")
     vm_service = get_vm_service(name)
 
@@ -615,8 +811,8 @@ def dump_vm_data(name):
 
 def init():
 
-    # only need to do this if they're making cluster
-    if args.create_one_node_cluster:
+    # only need to do this if they're making vms to install xcalar on
+    if args.num_vms or args.quick:
         # if they didn't supply lic or pub file,
         # make sure ther eis one in their cwd
         print("\nMake sure license keys are present....")
@@ -624,11 +820,9 @@ def init():
 
         global LICFILEPATH
         LICFILEPATH = args.licfile
-        licfilename = 'XcalarLic.key'
-        print("{}...".format(licfilename))
         if not LICFILEPATH:
-            print("\tYou did not supply --licfile option... will look in cwd for file {}...".format(licfilename))
-            LICFILEPATH = cwd + '/' + licfilename
+            LICFILEPATH = LICFILENAME
+            print("\tYou did not supply --licfile option... will look in cwd for {}...".format(LICFILEPATH))
         # normalize
         LICFILEPATH = os.path.abspath(LICFILEPATH)
         if not os.path.exists(LICFILEPATH):
@@ -637,18 +831,31 @@ def init():
 
         global PUBSFILEPATH
         PUBSFILEPATH = args.pubsfile
-        pubsfilename = 'EcdsaPub.key'
-        print("{}...".format(pubsfilename))
         if not PUBSFILEPATH:
-            print("\tYou did not supply --pubsfile option... will look in cwd for file {}...".format(pubsfilename))
-            PUBSFILEPATH = cwd + '/' + pubsfilename
+            PUBSFILEPATH = PUBSFILENAME
+            print("\tYou did not supply --pubsfile option... will look in cwd for {}...".format(PUBSFILEPATH))
         PUBSFILEPATH = os.path.abspath(PUBSFILEPATH)
         if not os.path.exists(PUBSFILEPATH):
             raise Exception("\nFile {} does not exist!  (Re-run with --pubsfile=<path to your licence file>, or, copy the file in to the directory you are running this script from".format(PUBSFILEPATH))
         print("\tfound {}".format(PUBSFILEPATH))
 
+def summary(vmdata):
+
+    print("\n\n--------FULL VM SUMMARY-----------")
+    print("")
+    for i, data in enumerate(vmdata):
+        vmname = data[0]
+        ip = data[1]
+        url = 'https://{}:8443'.format(ip)
+        print("\nVM REQUEST #{}".format(i))
+        print("\n\tname: {}\n\tIP: {}".format(vmname,ip))
+    print("\n---------------------------")
+
 if __name__ == "__main__":
 
+    '''
+        init
+    '''
     init()
 
     #open connection
@@ -659,27 +866,29 @@ if __name__ == "__main__":
         vms_to_remove = args.remove_vm.split(',')
         for vm in vms_to_remove:
             remove_vm(vm)
+        sys.exit(0)
 
-    # create num vms with these attributes
+    ''' validation '''
     vms = []
-    if args.create_one_node_cluster:
-        print("create a one node clusteR")
-        #create_one_node_cluster(ram=int(args.ram), cores=int(args.cores))
-        create_one_node_cluster()
-        #make_vm_into_single_node_cluster()
-        #sys.exit(0)
+    if not args.num_vms:
+        print("Please re-run this script with arg --num_vms=<number of vms you want>")
+        sys.exit(0)
+    elif args.num_vms > MAX_VMS_ALLOWED:
+        print("Pleasae re-run this script with a value < {} for --num_vms ".format(MAX_VMS_ALLOWED))
+        sys.exit(0)
+
+    ''''
+        main driver
+    '''
+
+    # returns list names of vms created
+    vms = provision_vms(args.num_vms)
+    if not args.dont_install_xcalar:
+        # installs xcalar on all the vms in parallel, then forms in to a cluster unless specified not to
+        initialize_xcalar(vms, nocluster=args.dont_create_cluster)
+
+    #summary()
 
     # close connection
     _close_connection(CONN)
-    '''
-    if args.vms and not args.ssh:
-        print("THey passed vms arg")
-        for n in range(int(args.vms)):
-            # createa  vm
-            vms.append(create_vm(ram=int(args.ram), cores=int(args.cores)))
-
-    # put the vms in to a cluster
-    #cluster = create_cluster(nodes=vms, installdir=args.installer)
-    '''
-
 
