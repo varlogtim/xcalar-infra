@@ -45,14 +45,7 @@
       "defaultValue": "Standard_E8s_v3",
       "metadata": {
         "description": "Size of the VM"
-      },
-      "allowedValues": [
-          "Standard_DS13_v2_Promo",
-          "Standard_DS14_v2_Promo",
-          "Standard_DS15_v2_Promo",
-          "Standard_E8s_v3",
-          "Standard_E16s_v3"
-        ]
+      }
     },
     "dataDiskSize": {
       "type": "int",

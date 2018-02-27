@@ -109,7 +109,7 @@ validate: $(VALIDATE_RG) parameters.json
 	@az group deployment validate --resource-group $(VALIDATE_RG) \
      --template-file "$(TEMPLATE)" \
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
-                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,\
+                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize, vmSize,\
                                            dnsLabelPrefix: {value:"$(GROUP)"},\
                                            installerUrl: {value:"$(INSTALLER_URL)"},\
                                            bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
@@ -120,7 +120,7 @@ deploy: $(GROUP) validate
 	time az group deployment create --resource-group $(GROUP) --name $(DEPLOY) \
      --template-file "$(TEMPLATE)" \
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
-                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,\
+                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize, vmSize,\
                                            dnsLabelPrefix: {value:"$(GROUP)"},\
                                            installerUrl: {value:"$(INSTALLER_URL)"},\
                                            bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
@@ -136,7 +136,7 @@ deployDev: $(GROUP) validate
 	time az group deployment create --resource-group $(GROUP) --name $(DEPLOY) \
      --template-file applianceDevTemplate.json \
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
-                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber,\
+                                           adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, vmSize,\
                                            dnsLabelPrefix: {value:"$(GROUP)"},\
                                            installerUrl: {value:"$(INSTALLER_URL)"},\
                                            bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
