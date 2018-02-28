@@ -113,14 +113,12 @@ echo $GuardRailsArgs > grargs.txt
 
 if [ "$CURRENT_ITERATION" = "0" ]; then
     set +e
-    sudo /opt/xcalar/bin/xcalarctl stop-supervisor
-    ret=$?
-    if [ "$ret" != "0" ]; then
-        echo "Failed to stop Xcalar. Forcefully murdering usrnodes now"
-        sudo pkill -9 usrnode
-        sudo pkill -9 childnode
-        sudo pkill -9 xcmonitor
-    fi
+    # Kill previous instances of xcalar processes
+    sudo pkill -9 usrnode
+    sudo pkill -9 childnode
+    sudo pkill -9 xcmonitor
+    sudo pkill -9 xcmgmtd
+    sleep 60
 
     sudo find /var/opt/xcalar -type f -not -path "/var/opt/xcalar/support/*" -delete
     sudo find . -name "core.childnode.*" -type f -delete
