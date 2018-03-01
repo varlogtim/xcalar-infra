@@ -1,0 +1,6 @@
+{
+	"domain": "test.xcalar.com",
+	"certUrl": "https://acme-staging.api.letsencrypt.org/acme/cert/fa0bd0201a5fac9688607ebe8640cc00e0c3",
+	"certStableUrl": "",
+	"accountRef": "https://acme-staging.api.letsencrypt.org/acme/reg/5643738"
+}

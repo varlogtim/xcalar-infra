@@ -1,0 +1,6 @@
+{
+	"domain": "blogs.xcalar.com",
+	"certUrl": "https://acme-v01.api.letsencrypt.org/acme/cert/0334a2ec5ae3dc5e508908ffdc296310ff75",
+	"certStableUrl": "",
+	"accountRef": "https://acme-v01.api.letsencrypt.org/acme/reg/30292543"
+}

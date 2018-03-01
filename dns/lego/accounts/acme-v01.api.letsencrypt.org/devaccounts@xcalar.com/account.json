@@ -1,0 +1,22 @@
+{
+	"email": "devaccounts@xcalar.com",
+	"registration": {
+		"body": {
+			"resource": "reg",
+			"id": 30292543,
+			"key": {
+				"kty": "EC",
+				"crv": "P-384",
+				"x": "G5lGLdL5XMR0fC3jYopoKdUJ00AZapfL_oEdBxncu7uq4U2zl0a9vi-Tgn2Uvzgu",
+				"y": "iI6BVHHzMq1ehgkvoZHudgalb1Nalzv2NOoD6LtLHGP4IKqkJ_w0djc97VZjEhV4"
+			},
+			"contact": [
+				"mailto:devaccounts@xcalar.com"
+			],
+			"agreement": "https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf"
+		},
+		"uri": "https://acme-v01.api.letsencrypt.org/acme/reg/30292543",
+		"new_authzr_uri": "https://acme-v01.api.letsencrypt.org/acme/new-authz",
+		"terms_of_service": "https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf"
+	}
+}
