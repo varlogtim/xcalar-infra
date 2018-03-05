@@ -12,7 +12,7 @@ xcEnvEnter
 if $BUILD; then
     cmBuild clean
     cmBuild config debug
-    cmBuild
+    cmBuild qa
 fi
 
 if [ -n "$INSTALLER_PATH" ]; then
