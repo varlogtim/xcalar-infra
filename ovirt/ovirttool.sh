@@ -7,13 +7,22 @@ if [[ $@ == *"--help"* ]]; then
   exit 0
 fi
 
-# check if ovirtsdk installed on their machine
+# check if required modules installed on their machine
 python -c "import ovirtsdk4" >&2
-if [ $? != 0 ]; then
+rc=$?
+if [ $rc != 0 ]; then
   echo >&2
   echo "Please install the ovirtsdk4 module before running this tool." >&2
   echo "To install: pip install ovirt-engine-sdk-python" >&2
-  exit $?
+  exit $rc
+fi
+python -c "import paramiko" >&2
+rc=$?
+if [ $rc != 0 ]; then
+  echo >&2
+  echo "You must install paramiko module before running this tool." >&2
+  echo "To install: pip install paramiko" >&2
+  exit $rc
 fi
 
 # if they didn't pass the --user arg, prompt for it

@@ -19,6 +19,7 @@ Setup:
 (1) Required libraries (one time install)
 
     pip install ovirt-engine-sdk-python
+    pip install paramiko
 
 (2) Xcalar License Files
 
