@@ -40,7 +40,7 @@ fi
 tar -zcvf xcalar-gui.tar.gz $GUI_FOLDER
 
 #NUM_USERS=$(shuf -i 2-3 -n 1)
-NUM_USERS=2
+NUM_USERS=1
 
 echo "Installing required packages"
 if ! grep -q Ubuntu /etc/os-release; then
