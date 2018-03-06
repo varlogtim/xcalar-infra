@@ -66,7 +66,7 @@ sshGo() {
             fi
         fi
         # Prevent "pane too small" while creating
-        ! $tunnelOnly && tmux select-layout -t "$targetPane" even-vertical
+        ! $tunnelOnly && tmux select-layout -t "$targetPane" tiled
         sleep 0.5
     done;
 
@@ -105,13 +105,13 @@ usage()
     Must be run within tmux.
 
     Example invocation:
-        $myName -i 52.250.121.94 -u azureuser -p azpassword -n 8
+        $myName -i 52.250.121.94 -u azureuser -P azpassword -n 8
 
     Example using tunnel to scp file to VM number 2 through tunnel:
         scp -P 10002 /tmp/tmp.txt azureuser@localhost:/tmp
 
     Parallel scp to VMs 1 and 2 via tunnel:
-        sshpass -p <password> parallel-scp -Avl auser -h <(echo -e "localhost:10001\nlocalhost:10002") bar.txt /tmp
+        sshpass -p <password> parallel-scp -Avl auser -H localhost:10001 -H localhost:10002 bar.txt /tmp
 
     Usage: $myName <options>
         -f <port>       Base port for tunneling (default: $optTunPort)
