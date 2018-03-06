@@ -1345,7 +1345,7 @@ def path_exists_on_node(node, path):
 def get_cluster_priority(prioritize=None):
 
     # try the clusters in this order
-    clusterPriority = ['node3-cluster', 'node2-cluster', 'node4-cluster', 'node1-cluster']
+    clusterPriority = ['feynman-dc', 'node3-cluster', 'node2-cluster', 'node4-cluster', 'node1-cluster']
     validClusters = []
     mapping = get_template_mapping() # get the official template mapping
     if prioritize:
@@ -1362,6 +1362,7 @@ def get_template_mapping():
 
     return {
         #'node1-cluster': {'Blank'},
+        'feynman-dc'   : 'el7-template-1',
         'node2-cluster': 'ovirt-cli-tool-node2-template',
         'node3-cluster': 'ovirt-cli-tool-node3-template',
         'node4-cluster': 'ovirt-cli-tool-node4-template',
@@ -1721,7 +1722,7 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--force", action="store_true", default=False, help="Force certain operations such as provisioning, delete, when script would fail normally")
     parser.add_argument("--ram", type=int, default=8, help="RAM on VM(s) (in GB)")
     parser.add_argument("--noxcalar", action="store_true", default=False, help="Don't install Xcalar on provisioned VMs")
-    parser.add_argument("--ovirtnode", type=str, default='node3-cluster', help="Which node to create the VM(s) on.  Defaults to node4-cluster")
+    parser.add_argument("--ovirtnode", type=str, default='feynman-dc', help="Which node to create the VM(s) on.  Defaults to node4-cluster")
     parser.add_argument("--tryotherclusters", action="store_true", default=False, help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
     parser.add_argument("--licfile", type=str, help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
     parser.add_argument("--pubsfile", type=str, help="Path to an EcdsaPub.key file on your local machine (If not supplied, will look for it in cwd)")
