@@ -147,12 +147,6 @@ addNewMemPool(const size_t poolSizeReq) {
         struct rlimit vaLimit;
         int ret = getrlimit(RLIMIT_AS, &vaLimit);
         GR_ASSERT_ALWAYS(ret == 0);
-        // Allow debug code to test intentional allocation failure above rlim
-        if (poolSizeReq < vaLimit.rlim_cur) {
-            printf("Failed to mmap more memory\n");
-            onExitHelper(false);
-            GR_ASSERT_ALWAYS(false);
-        }
         return(-1);
     }
     GR_ASSERT_ALWAYS(((uint64_t)mapStart % PAGE_SIZE) == 0);
