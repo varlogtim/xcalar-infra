@@ -39,7 +39,7 @@ import math
 import multiprocessing
 import os
 import paramiko
-import random
+import re
 import requests
 import shutil
 import socket
@@ -86,13 +86,15 @@ class NoIpException(Exception):
     and showing up in Ovirt
 
     :param vmid: unique id of VM (ovirtsdk4:types:Vm.id attr)
-    :param waitForIP: (optional, False) don't return until IP assigned and displaying
-
-    :returns: None
+    :param waitForIP: (optional boolean, default to false)
+        - if True: wait for IP to be assigned and displaying before returning
+            (throws TimeoutError if not up after certain time)
+        - if False, return immediately after vm status is UP; don't
+            wait for IP assignment
 
     :throws Exception if any stage not successfull
 '''
-def bring_up_vm(vmid, waitForIP=False):
+def bring_up_vm(vmid, waitForIP=None):
 
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
@@ -103,7 +105,7 @@ def bring_up_vm(vmid, waitForIP=False):
     else:
         print("\nStart service on {}".format(name), file=sys.stderr)
         timeout=60
-        while True and timeout:
+        while timeout:
             try:
                 # start the vm
                 vm_service.start()
@@ -122,11 +124,11 @@ def bring_up_vm(vmid, waitForIP=False):
                     raise e
                         #raise Exception("Got another error I don't know about: {}".format(str(e)))
         if not timeout:
-            raise Exception("Was never able to start service on {}!".format(name))
+            raise TimeoutError("Was never able to start service on {}!".format(name))
 
         print("\nWait for {} to come up".format(name), file=sys.stderr)
         timeout=120
-        while True and timeout:
+        while timeout:
             if is_vm_up(vmid):
                 print("\t{} is up!".format(name), file=sys.stderr)
                 break
@@ -134,12 +136,12 @@ def bring_up_vm(vmid, waitForIP=False):
                 time.sleep(5)
                 timeout-=1
         if not timeout:
-            raise Exception("Started service on {}, but VM never came up!".format(name))
+            raise TimeoutError("Started service on {}, but VM never came up!".format(name))
 
     if waitForIP:
         print("\nWait until IP assigned and displaying for {}".format(name), file=sys.stderr)
-        timeout=10
-        while True and timeout:
+        timeout = 30
+        while timeout:
             try:
                 print("try to get vm ip", file=sys.stderr)
                 ip = get_vm_ip(vmid)
@@ -149,7 +151,7 @@ def bring_up_vm(vmid, waitForIP=False):
                 # not available yet
                 print("still no ip", file=sys.stderr)
                 timeout -= 1
-                time.sleep(5)
+                time.sleep(6)
         if not timeout:
             raise NoIpException("Started service on {} and the VM came up, but never got IP (might increase timeout)".format(name))
 
@@ -164,7 +166,7 @@ def bring_up_vm(vmid, waitForIP=False):
 
     :returns: (String) the unique Ovirt id generated for the new VM
 '''
-def create_vm(name, cluster, template, ram, cores):
+def create_vm(name, cluster, template, ram, cores, iptries=5):
 
     print("\nCreate a new VM called: {}\n\tOvirt cluster: {}\n\tTemplate VM  : {}\n\tRAM (bytes)  : {}\n\t# cores      : {}".format(name, cluster, template, ram, cores), file=sys.stderr)
 
@@ -197,18 +199,19 @@ def create_vm(name, cluster, template, ram, cores):
     # start vm and bring up until IP is displaying in Ovirt
     print("Bring up {}...".format(vmid), file=sys.stderr)
     # sometimes IP not coming up first time around.  restart and ty again
-    tries = 5
-    while True and tries:
+    triesleft = iptries
+    while triesleft:
         try:
             time.sleep(5)
             bring_up_vm(vmid, waitForIP=True)
             break
         except NoIpException:
             print("WARNING: Timed out waiting for IP on new VM... will restart and try again...", file=sys.stderr)
-            tries -= 1
+            triesleft -= 1
             stop_vm(vmid)
-    if not tries:
-        raise NoIpException("Never got Ip for {}/[id:{}],\neven after attempted restarts (dhcp issue?)".format(name, vmid))
+    if not triesleft:
+        raise RuntimeError("\n\nERROR: Never got Ip for {}/[id:{}],\n"
+            " even after {} restarts (dhcp issue?)\n".format(name, vmid, iptries))
 
     print("\nSuccessfully created VM {}, on {}!!".format(name, cluster), file=sys.stderr)
     #\n\tIP: {}\n\tCluster: {}\n\tTemplate {}".format(myvmname, new_ip, cluster, template))
@@ -318,54 +321,6 @@ def get_cluster_available_memory(name):
     return int(mem_found)
 
 '''
-    Generate n unique names currently not in use by any VMs in Ovirt
-    Use convention: (1) find some base name, then (2) name vms
-    <vm name>-0, <vm name>-1
-    (so if they're wanting this for a cluster can put in cluster like that)
-
-    :param n: number of unique names to generatecreate
-    :param cluster: @TODO (check on each cluster?  diff clusters with same VM name?)
-    :param user: Name of user (will put in String of VM names if supplied)
-    :returns Str basevmname: the name all the vms arelist of unique names unused by any VMs on the cluster
-'''
-def generate_unused_vm_names(n, cluster, user=None):
-
-    if n == 0:
-        return []
-
-    print("\nGenerate {} new vm names".format(str(n)), file=sys.stderr)
-
-    # get the basename for the vm names
-    basevmname = None
-    tries = 50
-    vmid = random.randint(1,200)
-    basename = 'ovirt-tool-auto'
-    if user:
-        basename = basename + '-{}'.format(user)
-    while True and tries:
-        basevmname = '{}-{}'.format(basename, str(vmid))
-        if get_matching_vms(basevmname):
-            tries -= 1
-            vmid += 1
-        else:
-            break
-    if not tries:
-        raise Exception("Need to delete some VMs to clear up resources:\n\tpython ovirttool.py --delete=" + myvmname)
-    print("\nBasename: {}".format(basevmname), file=sys.stderr)
-
-    # now base the others off that
-    names = []
-    for i in range(n):
-        vmname = '{}-vm{}'.format(basevmname, str(i))
-        if get_matching_vms(vmname):
-            raise Exception("Didn't find any matching VMs by basename {}, "
-                " but finding a matching vm with name {}!".format(basevmname, vmname))
-        print("\n\tVM name: {}".format(vmname), file=sys.stderr)
-        names.append(vmname)
-
-    return basevmname, names
-
-'''
     Given some identifier, such as an IP or the name of a VM,
     return list of VMs that match it.
     (This is equivalent to logging in to Ovirt, and typing
@@ -409,7 +364,7 @@ def get_vm_id(identifier):
     matches = get_matching_vms(identifier)
     if matches:
         if len(matches) > 1:
-            raise Exception("\nMore than one VM matched on identifier {}!  "
+            raise ValueError("\n\nERROR: More than one VM matched on identifier {}!  "
                 " I can not find a unique VM id for this VM.  "
                 "Be more specific".format(identifier))
         else:
@@ -436,18 +391,19 @@ def get_vm_ip(vmid):
     for device in devices:
         print("\tFound device: {}".format(device.name), file=sys.stderr)
         if device.name == 'eth0':
+            print("is eth0")
             ips = device.ips
             for ip in ips:
+                print("\tip " + ip.address)
                 # it will return mac address and ip address dont return mac address
-                try:
-                    socket.inet_aton(ip.address)
+                if ip_address(ip.address):
                     return ip.address
-                except Exception as e:
+                else:
                     print("\t(IP {} is probably a mac address; dont return this one".format(ip.address), file=sys.stderr)
 
     # never found!
     #return None
-    raise Exception("Never found IP for vm: {}".format(name))
+    raise NoIpException("Never found IP for vm: {}".format(name))
 
 '''
     Given the unique VM id,
@@ -462,7 +418,8 @@ def get_vm_name(vmid):
     vms_service = CONN.system_service().vms_service()
     vm_service = vms_service.vm_service(vmid)
     if not vm_service:
-        raise Exception("Couldn't retrieve vms service for vm of id: {}".format(vmid))
+        raise RuntimeError("\n\nERROR: Attempting to get vm name; "
+            " couldn't retrieve vms service for vm of id: {}\n".format(vmid))
     vm_obj = vm_service.get()
     return vm_obj.name
 
@@ -536,7 +493,8 @@ def remove_vm(identifier, releaseIP=True):
     vmid = get_vm_id(identifier)
     if not vmid:
         print("No VM found to remove, using identifier : {}".format(identifier), file=sys.stderr)
-        raise Exception("Could not remove vm of identifier: {}.  VM does not return from search!".format(identifier))
+        raise RuntimeError("\n\nERROR: Could not remove vm of identifier: {}; "
+            " VM does not return from search!\n".format(identifier))
     name = get_vm_name(vmid)
 
     vm_service = get_vm_service(vmid)
@@ -559,17 +517,16 @@ def remove_vm(identifier, releaseIP=True):
         # this is a vm that was just created and we tried to
         # remove right away
         timeout = 10
-        while True and timeout:
+        while timeout:
             try:
                 ip = get_vm_ip(vmid)
                 # dev check -it should be throwing exception if can't find
                 # if switched to returning None need to update logic
                 if ip is None:
-                    print("\nError!  get_vm_ip was raising exception when can't find ip"
-                        " now returning None.  Please sync code", file=sys.stderr)
-                    sys.exit(1)
+                    raise Exception("\n\nLOGIC ERROR:: get_vm_ip was raising exception when can't find ip"
+                        " now returning None.  Please sync code")
                 break
-            except:
+            except NoIpException:
                 time.sleep(5)
                 timeout -= 1
 
@@ -596,7 +553,7 @@ def remove_vm(identifier, releaseIP=True):
 
         print("\nStop VM {}".format(name), file=sys.stderr)
         timeout=60
-        while True and timeout:
+        while timeout:
             try:
                 vm_service.stop()
                 break
@@ -605,11 +562,11 @@ def remove_vm(identifier, releaseIP=True):
                 time.sleep(5)
                 print("still getting an exception...." + str(e), file=sys.stderr)
         if not timeout:
-            raise Exception("Couldn't stop VM {}".format(name))
+            raise TimeoutError("Couldn't stop VM {}".format(name))
 
         timeout=60
         print("\nWait for service to come down", file=sys.stderr)
-        while True and timeout:
+        while timeout:
             vm = vm_service.get()
             if vm.status == types.VmStatus.DOWN:
                 print("vm status: down!", file=sys.stderr)
@@ -618,11 +575,11 @@ def remove_vm(identifier, releaseIP=True):
                 timeout -= 1
                 time.sleep(5)
         if not timeout:
-            raise Exception("Stopped VM {}, but service never came donw".format(name))
+            raise TimeoutError("Stopped VM {}, but service never came donw".format(name))
 
     print("\nRemove VM {} from Ovirt".format(name), file=sys.stderr)
     timeout = 5
-    while True and timeout:
+    while timeout:
         try:
             vm_service.remove()
             break
@@ -633,26 +590,26 @@ def remove_vm(identifier, releaseIP=True):
             else:
                 raise SystemExit("unexepcted error when trying to remve vm, {}".format(str(e)))
     if not timeout:
-        raise Exception("Stopped VM {} and service came down, but could not remove from service".format(name))
+        raise TimeoutError("Stopped VM {} and service came down, but could not remove from service".format(name))
 
     print("\nWait for VM to be gone from vms service...", file=sys.stderr)
     timeout = 20
-    while True and timeout:
+    while timeout:
         try:
             match = get_vm_id(name)
             print("Vm still exist...", file=sys.stderr)
             # dev check: make sure that function didn't change from throwing exception
             # to returning None
             if not match:
-                raise Exception("Logic error: get_vm_id was throwing Exception on not being able to find"
-                    " vm of given identifier, now it's returning None.  Please sync code")
+                raise Exception("\n\nLOGIC ERROR IN CODE: get_vm_id was throwing Exception on not being able to find"
+                    " vm of given identifier, now it's returning None.  Please sync code\n")
             time.sleep(5)
             timeout -= 1
         except:
             print("VM {} no longer exists to vms".format(name), file=sys.stderr)
             break
     if not timeout:
-        raise Exception("Stopped VM {} and service came down and removed from service, "
+        raise TimeoutError("Stopped VM {} and service came down and removed from service, "
             " but still getting a matching id for this vm!".format(name))
 
     print("\n\nSuccessfully removed VM: {}".format(name), file=sys.stderr)
@@ -674,25 +631,27 @@ def remove_vms(vms, releaseIP=True):
 
     procs = []
     badvmidentifiers = []
+    sleepBetween = 5
+    sleepOffset = 0
     for vm in vms:
         if get_matching_vms(vm):
             proc = multiprocessing.Process(target=remove_vm, args=(vm,), kwargs={'releaseIP':releaseIP})
-            time.sleep(5)
+            time.sleep(sleepBetween)
+            sleepOffset += sleepBetween
             proc.start()
             procs.append(proc)
         else:
             badvmidentifiers.append(vm)
 
     # wait for the processes
-    process_wait(procs)
+    process_wait(procs, timeout=500+sleepOffset)
 
     if badvmidentifiers:
         vm_list = get_all_vms()
         valid_vms = "\n\t".join(vm_list)
-        err = "\n\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}".format(valid_vms)
-        err = err + "\n\nCould not find matches in Ovirt for following VMs: {}.  See list above for valid VMs\n".format(",".join(badvmidentifiers))
-        print(err, file=sys.stderr)
-        sys.exit(1)
+        raise ValueError("\n\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
+            "\n\nCould not find matches in Ovirt for following VMs: {}." \
+            "  See above list for valid VMs\n".format(valid_vms, ",".join(badvmidentifiers)))
 
 '''
     stop vm and wait for status to be down
@@ -716,7 +675,7 @@ def stop_vm(vmid, timeout=50):
     vm_service.stop()
 
     # Wait till the virtual machine is down:
-    while True and timeout:
+    while timeout:
         time.sleep(5)
         vm = vm_service.get()
         if vm.status == types.VmStatus.DOWN:
@@ -726,7 +685,7 @@ def stop_vm(vmid, timeout=50):
             timeout -= 1
 
     if not timeout:
-        raise Exception("Timed out waiting for VM to come down")
+        raise TimeoutError("\n\nERROR: Timed out waiting for VM to come down\n")
 
 '''
     Open connection to Ovirt engine.
@@ -792,7 +751,7 @@ def close_connection(conn):
     if conn:
         conn.close()
     else:
-        raise Exception("Trying to close a null connection")
+        raise RuntimeError("\n\nERROR: Trying to close a null connection\n")
 
 '''
     returns path on local machine executing this script,
@@ -839,7 +798,7 @@ def provision_vm(name, ram, cores, availableClusters):
             vmid = create_vm(name, orderedcluster, template, ram, cores)
 
             if not vmid:
-                raise Exception("Ovirt seems to have successfully created VM {}, but no id generated".format(name))
+                raise RuntimeError("\n\nERROR: Ovirt seems to have successfully created VM {}, but no id generated\n".format(name))
 
             # set jenkins password before returning
             # do here instead of during installation in case they don't want to install xcalar
@@ -861,9 +820,9 @@ def provision_vm(name, ram, cores, availableClusters):
                 #raise Exception("Failed for another reason!: {}".format(str(e)))
 
     # hit this problem in all of them
-    errMsg = '''Error!! There are not enough resources available to provision the next VM
-         of {} bytes RAM, {} cores
-        \nTried on clusters: {}'''.format(ram, cores, availableClusters)
+    errMsg = "\n\nERROR: There are not enough resources available " \
+        " to provision the next VM of {} bytes RAM, {} cores\n" \
+        " Tried on clusters: {}".format(ram, cores, availableClusters)
     print(errMsg, file=sys.stderr)
     sys.exit(1) # do a sys exit instead of raising exception because then this process will terminate
     # elses if its being called as a subprocess you're going to have to wait for it to time out
@@ -875,6 +834,7 @@ def provision_vm(name, ram, cores, availableClusters):
     Return a list of names of vms created in Ovirt
 
     :param n: (int) number of VMs to create
+    :param basename: name to base vm names on
     :param ovirtnode: which cluster in Ovirt to create VMs from
     :param ram: (int) memory (in GB) on each VM
     :param cores: (int) num cores on each VM
@@ -884,14 +844,38 @@ def provision_vm(name, ram, cores, availableClusters):
         (this is distinct from name; its id attr of Type:Vm Object)
 
 '''
-def provision_vms(n, ovirtnode, ram, cores, user=None, tryotherclusters=True):
+def provision_vms(n, basename, ovirtnode, ram, cores, user=None, tryotherclusters=True):
 
     if n == 0:
         return None
 
     if not ram or not cores:
-        raise Exception("Value error when calling provision_vms"
-            " (perhaps default values changed for the --ram or --cores options")
+        raise ValueError("\n\nERROR: No value for ram or cores args to provision_vms\n"
+            " (perhaps default values changed for the --ram or --cores options?)\n")
+
+    # check if any vms with the basename, if so they need to specify something different
+    '''
+        false negative cornercase!!!
+
+        If the basename you check is one of Ovirts search refining keywords
+        (i.e., a string you can type in the GUI's main search field to refine a search,
+        such as the string 'name')
+        then match will return NO results, even if there ARE vms by that name!
+
+        (This is because, this call essentially has the same effect as typing the arg passed in,
+        in to the GUI's main search field; it returns a types.Vm object for each 'row' you'd see
+        if you typed that value in the search field.
+        therefore, if the basename you're passing, begins wth one of Ovirt's search refining keywords,
+        the search will NOT return results because it's interpreting that value, as a search keyword!)
+    '''    
+    matches = get_matching_vms(basename)
+    print("matches: ")
+    print(matches)
+    if matches:
+        matches = [x.name for x in matches]
+        raise ValueError("\n\nERROR: The value you specified as the basename for requested VM(s), {},"
+            " is already in use by Ovirt, for the following VMs:\n\t{}\n"
+            "Please re-run and specify a different basename to --vmbasename option\n".format(basename, matches))
 
     print("\nProvision {} vms on ovirt node {}\n".format(n, ovirtnode), file=sys.stderr)
 
@@ -924,56 +908,57 @@ def provision_vms(n, ovirtnode, ram, cores, user=None, tryotherclusters=True):
         availableClusters = enough_memory(n, ram, availableClusters)
         print("\nClusters determined we can use: {}".format(str(availableClusters)), file=sys.stderr)
         if not availableClusters:
-            err = "\n\nError: There is not enough memory on cluster(s) {}, to provision the requested VMs".format(fullClusList)
-            err = err + "\nTry to free up memory on the cluster(s)."
+            errmsg = "\n\nError: There is not enough memory on cluster(s) {}, " \
+                "to provision the requested VMs\n" \
+                "Try to free up memory on the cluster(s).\n".format(fullClustList)
             if not tryotherclusters:
-                err = err + "\nYou can also run this tool with --tryotherclusters option, to make other clusters available to you during provisioning"
-            err = err + "\nTo ignore this error and try to provision anyway, re-run with --f option\n"
-            print(err, file=sys.stderr)
-            sys.exit(1)
+                errmsg = errmsg + "You can also run this tool with --tryotherclusters option, " \
+                    " to make other clusters available to you during provisioning\n"
+            errmsg = errmsg + "\nTo ignore this error and try to provision anyway, re-run with --force option\n"
+            raise RuntimeError(errmsg)
 
-    '''
-        get n new names for the vms
-        (doing outside for loop avoids naming collision
-        if we start processes
-        quickly and looks like a VM by a given ID doesn't exist
-        yet so assigned that name, but really its just that the VM
-        isn't up yet in the sibling process.)
-    '''
-    basename, vm_names = generate_unused_vm_names(n, ovirtnode, user=user)
     procs = []
+    vmnames = []
     sleepBetween = 20
-    for newvm in vm_names:
-        print("\nFork new process to create a new VM by name {}".format(newvm), file=sys.stderr)
-        proc = multiprocessing.Process(target=provision_vm, args=(newvm, ram, cores, availableClusters))
+    for i in range(n):
+        nextvmname = basename + "-vm{}".format(str(i))
+        vmnames.append(nextvmname)
+        print("\nFork new process to create a new VM by name {}".format(nextvmname), file=sys.stderr)
+        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
         #proc = multiprocessing.Process(target=create_vm, args=(newvm, ovirtnode, template, ram, cores)) # 'cluster' here refers to cluster the VM is on in Ovirt
         # it will fail if you try to create VMs at exact same time so sleep
         time.sleep(sleepBetween)
         proc.start()
         procs.append(proc)
 
+    # TODO: Deal with 'image locked' status because of network issue on node
+
     # wait for the processes
-    process_wait(procs, timeout=500+sleepBetween*len(vm_names))
+    process_wait(procs, timeout=600+sleepBetween*n)
 
     # get the list of the unique vm ids
     # a good check to make sure these VMs actually existing by these names now
     ids = []
-    for vm in vm_names:
+    for vm in vmnames:
         ids.append(get_vm_id(vm))
     #return vm_names
-    return basename, ids
+    return ids
 
 '''
-    @todo
+    Check if Xcalar service running on a node
+
+    :param node: (String) ip of node to check status of Xcalar service on
+
+    :returns: (boolean) True if Xcalar service running;
+        False if not runing
 '''
 def is_xcalar_running(node):
-
-    print("\nCheck if Xcalar is running", file=sys.stderr)
+    raise NotImplementedError("Have not yet implemented is_xcalar_running")
 
 '''
     Bring up Xcalar service on node
 
-    :param node: ip of node to start Xcalar service on
+    :param node: (String) ip of node to start Xcalar service on
 '''
 def start_xcalar(node):
 
@@ -984,7 +969,7 @@ def start_xcalar(node):
 '''
     Bring down Xcalar service on node
 
-    :paran node: ip of node to stop xcalar service on
+    :paran node: (String) ip of node to stop xcalar service on
 '''
 def stop_xcalar(node):
 
@@ -993,27 +978,9 @@ def stop_xcalar(node):
     run_ssh_cmds(node, cmds)
 
 '''
-    Copy necessary Xcalar license files on to a remote node
-    @node: IP of node to copy files on to
-'''
-def copy_lic_files(node, dest='/etc/xcalar'):
-
-    print("\nCopy Xcalar license files in to {}\n".format(node), file=sys.stderr)
-
-    '''
-         scp in the license files in to the VM
-    '''
-    files = [LICFILEPATH, PUBSFILEPATH]
-    for licfile in files:
-        print("dest: " + dest, file=sys.stderr)
-        print("node: " + node, file=sys.stderr)
-        print("lic file: " + licfile, file=sys.stderr)
-        scp_file(node, licfile, dest)
-
-'''
     Bring up xcalar service on a node and setup admin account
 
-    :param node: ip of node to setup admin account on
+    :param node: (String) ip of node to setup admin account on
 '''
 def setup_admin_account(node):
 
@@ -1032,10 +999,14 @@ def setup_admin_account(node):
     Copy in helper shell scripts used for instlalation
     start service if requested
 
-    :param vmname: name of VM (vm id) in Ovirt to install Xcalar on
-    :param licfilepath: path on local machine runnign this script, of Xcalar license file
-    :param pubsfilepath: path on local machine running this script, of pubs file
-    :param installerpath: path on Netstore, of installer to use
+    :param ip: (String)
+        IP of VM to install Xcalar on
+    :param licfilepath: (String)
+        path on local machine runnign this script, of Xcalar license file
+    :param pubsfilepath: (String)
+        path on local machine running this script, of pubs file
+    :param installerpath: (String)
+        path on Netstore, of installer to use
 
 '''
 def setup_xcalar(ip, licfilepath, pubsfilepath, installerpath):
@@ -1072,12 +1043,14 @@ def setup_xcalar(ip, licfilepath, pubsfilepath, installerpath):
     form in to a cluster unless specified otherwise
 
     :param vmids: list of unique vm ids in Ovirt of VMs to install xcalar on
-    :param licfilepath: path to License file on local machine executing this script
-    :param pubsfilepath: "" "" pubs file ""
-    :param createcluster: (optional) If supplied, will form the nodes in to cluster once Xcalar installed
+    :param licfilepath: (String)
+        path to License file on local machine executing this script
+    :param pubsfilepath: (String)
+        path to pubs file on local machine executing this script
+    :param createcluster: (optional, String)
+        If supplied, then once xcalar setup on the vms, will form them
+        in to a cluster by name of String passed in
         If not supplied will leave nodes as individual VMs
-
-    :returns None:
 
 '''
 def initialize_xcalar(vmids, licfilepath, pubsfilepath, installerpath, createcluster=None):
@@ -1101,7 +1074,7 @@ def initialize_xcalar(vmids, licfilepath, pubsfilepath, installerpath, createclu
         proc.start()
 
     # wait
-    process_wait(procs, timeout=500+sleepBetween*len(vmids))
+    process_wait(procs, timeout=1500+sleepBetween*len(vmids))
 
     # form the nodes in to a cluster if requested
     if createcluster and len(ips) > 1:
@@ -1133,14 +1106,20 @@ def initialize_xcalar(vmids, licfilepath, pubsfilepath, installerpath, createclu
     Given a list of node IPs, create a shared space for those
     nodes, and form the nodes in to a cluster.
 
-    :param nodeips: list of IPs of the nodes you want made in to a cluster
-    :param clustername: name you want the cluster to be
-        (will be dir name of shared storage space)
+    :param nodeips: (list of Strings)
+        list of IPs of the nodes you want made in to a cluster
+    :param clustername: (String)
+        name you want the cluster to be
+        ('cluster name' here meaning it will become dir name of shared storage space on netstore)
+
+    @TODO: 'start' boolean param that controls if you start xcalar after cluster configured
+        to pass in to child proc
 '''
-def create_cluster(nodeips, clustername, start=True):
+def create_cluster(nodeips, clustername):
 
     if not len(nodeips):
-        raise Exception("No nodes to make cluster on!")
+        raise ValueError("\n\nERROR: Empty list of node ips passed to create_cluster;"
+            " No nodes  make cluster on!\n")
 
     '''
         Create a shared storage space for the nodes
@@ -1153,6 +1132,7 @@ def create_cluster(nodeips, clustername, start=True):
     # and then bring up the xcalar service
     print("\nCreate cluster using nodes : {}".format(nodeips), file=sys.stderr)
     procs = []
+    sleepBetween = 15
     for ip in nodeips:
         print("\n\tFork cluster config for {}\n".format(ip), file=sys.stderr)
         '''
@@ -1160,17 +1140,12 @@ def create_cluster(nodeips, clustername, start=True):
         Will be node 0 (root cluster node), node1, etc., in order of list
         '''
         proc = multiprocessing.Process(target=configure_cluster_node, args=(ip, nodeips, sharedRemoteStoragePath))
-        time.sleep(15)
+        time.sleep(sleepBetween)
         procs.append(proc)
         proc.start()
 
     # wait for all the proceses to complte
-    process_wait(procs)
-
-    # helpful display string to put in summary
-    # this a temporary hack for end of script summary; should get this info live at end to display
-    global CLUSTER_SUMMARY
-    CLUSTER_SUMMARY = cluster_summary_str(nodeips[0], clustername, 'xdpadmin', 'Welcome1', nodeips)
+    process_wait(procs, timeout=400+sleepBetween*len(nodeips))
 
 '''
     Create a dir on netstore by the cluster name
@@ -1178,7 +1153,7 @@ def create_cluster(nodeips, clustername, start=True):
     Create a /config dir in the shared storage space and also
     set its owner to xcalar (this is where cfg data gets written to)
 
-    :param remotePath: path on netstore to use as cluster dir
+    :param remotePath: (String) path on netstore to use as cluster dir
 '''
 def create_cluster_dir(remotePath):
 
@@ -1199,8 +1174,8 @@ def create_cluster_dir(remotePath):
     by generating its default.cfg with a nodelist,
     and bringing up the node
 
-    :param node: ip of node
-    :param clusternodes: list of IPs of all the nodes in the cluster
+    :param node: (String) ip of node
+    :param clusternodes: (list of Strings) list of IPs of all the nodes in the cluster
         ORDER OF THIS LIST IS IMPORTANT.
         clusternodes[0] : root node (node 0)
         clusternodes[1] : node1
@@ -1223,13 +1198,13 @@ def configure_cluster_node(node, clusternodes, remoteClusterStoragePath):
     Generate template file for node
     (/etc/xcalar/default.cfg file, on the node)
 
-    :param node: ip of node to generate cfg file for
+    :param node: (String) ip of node to generate cfg file for
     :clusternodes: list of Strings: list of ips of nodes in the cluster
         ORDER IS IMPORTANT
         clusternodes[0] : root node (node 0)
         clusternodes[1] : node1
         ... etc  <that's how the shell script being called should work>
-    :param xcalarRoot: local path on the node to shared storage
+    :param xcalarRoot: (String) local path on the node to shared storage
         (val you want for Constants.XcalarRootCompletePath in the cg file)
 '''
 def generate_cluster_template_file(node, clusternodes, xcalarRoot):
@@ -1273,16 +1248,17 @@ def setup_cluster_storage(node, remotePath):
     localPath = CLUSTER_DIR_VM
     tries = 5
     print("Netstore not yet mounted on this vm", file=sys.stderr)
-    while True and tries:
+    while tries:
         try:
             mount_shared_cluster_storage(node, remotePath, localPath)
+            break
         except:
             print("Hit an issue when trying to mount netstore on vm... try again", file=sys.stderr)
             time.sleep(5)
             tries -= 1
     if not tries:
-        raise Exception("I was not able to mount netstore on node {}; "
-            " i kept hitting an exception".format(node))
+        raise RuntimeError("\n\nERROR: I was not able to mount netstore on node {}; "
+            " i kept hitting an exception\n".format(node))
 
     # regardless which path you went down... make sure it exists now on the VM!
     if path_exists_on_node(node, localPath):
@@ -1292,9 +1268,10 @@ def setup_cluster_storage(node, remotePath):
     Mount a directory on Netstore provisioned for shared cluster storage,
     on a cluster node.
 
-    :param node: IP of node to mount the storage space on
-    :param remotePath: Path on netstore, to remote shared storage space
-
+    :param node: (String)
+        IP of node to mount the storage space on
+    :param remotePath: (String)
+        Path on netstore, to remote shared storage space
 '''
 def mount_shared_cluster_storage(node, remotePath, localPath):
 
@@ -1313,15 +1290,15 @@ def mount_shared_cluster_storage(node, remotePath, localPath):
     Check if a path exists on a node
     by SSHing and trying to cd to that path
 
-    :param node: ip of node to check path on
-    :param path: path to check on the node
+    :param node: (String) ip of node to check path on
+    :param path: (String) path to check on the node
 '''
 def path_exists_on_node(node, path):
 
     tries=25
-    while True and tries:
+    while tries:
         try:
-            status = run_ssh_cmd(node, 'ls ' + path, timeout=10)
+            status, output = run_ssh_cmd(node, 'ls ' + path, timeout=10)
             #status = run_ssh_cmd(node, 'cd ' + path, timeout=10)
             if status:
                 print("Got non-0 status when trying to cd to {}..  doesn't exist?".format(path), file=sys.stderr)
@@ -1332,15 +1309,22 @@ def path_exists_on_node(node, path):
             tries -= 1
             time.sleep(5)
 
-    if not timeout:
-        print("Timed out trying to cd to netstore, I tried multiple times", file=sys.stderr)
-        sys.exit(1)
+    if not tries:
+        raise TimeoutError("Timed out trying to cd to netstore, I tried multiple times")
 
 '''
     get priority of clusters to try.
     Can pass an optional arg that will force a particular cluster
     to front of priority list.
     if that cluster is not valid will raise exception
+
+    :param prioritize: (optional String)
+        if given, should be a valid cluster name with template.
+        In the list returned, will prioritize this cluster by setting as first el in the list
+        (so that if caller of this method trying VM provisioning on clusters by iterating
+        through list will end up trying that one first. For use case, that user wants
+        to --tryotherclusters but would want to try on the default cluster or one they passed in
+        with --ovirtnode option first, others are just backup in case that one fails)
 '''
 def get_cluster_priority(prioritize=None):
 
@@ -1352,7 +1336,8 @@ def get_cluster_priority(prioritize=None):
         if prioritize in mapping:
             validClusters.append(prioritize)
         else:
-            raise Exception("Trying to prioritize {} but not a valid cluster".format(prioritize))
+            raise RuntimeError("\n\nERROR: Trying to prioritize {}, but it is not a valid cluster\n"
+                "(dev: Is it a new cluster; have you added entry in to get_template_mapping for it?)\n".format(prioritize))
     for orderedcluster in clusterPriority:
         if orderedcluster != prioritize and orderedcluster in mapping:
             validClusters.append(orderedcluster)
@@ -1390,8 +1375,8 @@ def get_template(ovirtnode):
         ## todo - there should be templates for all the possible ram/cores/etc configs
         return template_mapping[ovirtnode]
     else:
-        raise Exception("\n\nNo template found to use on ovirt node {}."
-            "\nValid nodes with templates: {}".format(ovirtnode, ",".join(template_mapping.keys())))
+        raise AttributeError("\n\nERROR: No template found to use on ovirt node {}."
+            "\nValid nodes with templates: {}\n".format(ovirtnode, ",".join(template_mapping.keys())))
 
 '''
         SYSTEM COMMANDS
@@ -1423,12 +1408,12 @@ def run_ssh_cmds(host, cmds):
         extraops = {}
         if len(cmd) > 1:
             extraops['timeout'] = cmd[1]
-        status = run_ssh_cmd(host, cmd[0], **extraops)
+        status, output = run_ssh_cmd(host, cmd[0], **extraops)
         if status:
             errorFound = True
 
     if errorFound:
-        raise Exception("Found error while executing one of the commands!!!")
+        raise RuntimeError("\n\nERROR: Encountered non-0 status code when executing one of the commands!!\n")
 
 def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, key_filename='', timeout=120, pkey=None):
     print("\n~ Will try to 'ssh {}@{}' .. ".format(user, host), file=sys.stderr)
@@ -1461,7 +1446,7 @@ def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, key_filename=''
         sys.exit(status)
     client.close()
     print("\tclosed client connection", file=sys.stderr)
-    return status
+    return status, stdout_text.decode("utf-8")
 
 '''
     run system command on local machine calling this function
@@ -1508,8 +1493,12 @@ def run_sh_script(node, path, args=[], timeout=120, tee=False):
 '''
     Given a list of multiprocessing:Process objects,
     wait until all the Process objects have completed.
+
+    :procs: list of multiprocessing.Process objects representing the processes to monitor
+    :timeout: how long (seconds) to wait for ALL processees
+        in procs to complete, before timing out
 '''
-def process_wait(procs, timeout=100):
+def process_wait(procs, timeout=500):
 
     numProcsStart = len(procs)
 
@@ -1518,21 +1507,19 @@ def process_wait(procs, timeout=100):
         print("\t\t:: Check processes... ({} processes remain)".format(len(procs)), file=sys.stderr)
         for i, proc in enumerate(procs):
             if proc.is_alive():
-                time.sleep(10)
+                time.sleep(1)
                 timeout -= 1
             else:
                 exitcode = proc.exitcode
                 if exitcode:
-                    print("Encountered a non-0 exit code, {} in a forked child process.".format(exitcode), file=sys.stderr)
-                    sys.exit(exitcode)
-                    #raise Exception("Non-0 exit code ")
+                    raise ChildProcessError("Encountered a non-0 exit code, {} in a forked child process.".format(exitcode))
                 del procs[i]
                 break
 
     if timeout:
         print("All processes completed with 0 exit code", file=sys.stderr)
     else:
-        raise Exception("Timed out waiting for processes to complete! {}/{} processes remain!".format(len(procs), numProcsStart))
+        raise TimeoutError("Timed out waiting for processes to complete! {}/{} processes remain!".format(len(procs), numProcsStart))
 
 '''
     User specifies memory size in GB.
@@ -1625,13 +1612,29 @@ def validateparams(args):
     licfilepath = args.licfile
     pubsfilepath = args.pubsfile
     installerpath = args.installer
+    basename = args.vmbasename
 
     if args.vms:
 
-        if args.vms > MAX_VMS_ALLOWED:
-            err = "Max num of VMs allowed to create: {}.  Pleasae re-run with --vms less than this".format(MAX_VMS_ALLOWED)
-            print(err, file=sys.stderr)
-            sys.exit(1)
+        if args.vms > MAX_VMS_ALLOWED or args.vms <= 0:
+            raise ValueError("\n\nERROR: --vms argument must be an integer between 1 and {}\n"
+                "(The ovirt tool will provision that number of new VMs for you)".format(MAX_VMS_ALLOWED))
+
+        # validate the basename they gave for the cluster
+        if not basename:
+            errmsg = ""
+            if args.vms == 1:
+                errmsg = "\n\nPlease supply a name for your new VM using --vmbasename=<name>\n"
+            else:
+                errmsg = "\n\nPlease supply a basename for your requested VMs using --vmbasename=<basename>\n" \
+                    "(The tool will name the new VMs as : <basename>-vm0, <basename>-vm1, .. etc\n"
+            if args.createcluster:
+                errmsg = errmsg + "The --vmbasename value will become the name of the created cluster, too.\n"
+            raise ValueError(errmsg)
+        else:
+            # validate the name they supplied is all lower case and contains no _ (because will be setting hostname of the VMs to the VM name)
+            if any(filter(str.isupper, args.vmbasename)) or '_' in args.vmbasename:
+                raise ValueError("\n\nERROR: --vmbasename value must be all lower case letters, and may not contain any _ chars\n")
 
         '''
             if they're trying to create a cluster,
@@ -1640,22 +1643,21 @@ def validateparams(args):
         '''
         if args.createcluster:
             if args.vms == 1:
-                err = "\nError!  You specified to create a cluster, but only want to provision one VM!  Is this what you wanted?\n"
-                print(err, file=sys.stderr)
-                sys.exit(1)
-            if not os.path.exists('/netstore'):
-                err = '''You are trying to create a cluster, but do not have netstore mounted locally
-                        at /netstore.  Please make netstore accessible on machine you're calling this script from'''
-                print(err, file=sys.stderr)
-                sys.exit(1)
+                raise ValueError("\n\nERROR:  You specified to create a cluster, but only want to provision one VM!  Is this what you wanted?\n")
 
         if args.noxcalar:
             if args.installer:
-                print("\nError: You have specified not to install xcalar with the --noxcalar option,\n"
-                    "but also provided an installation path with the --installer option. "
-                    "\n(Is this what you intended?)", file=sys.stderr)
-                sys.exit(1)
+                raise AttributeError("\n\nError: You have specified not to install xcalar with the --noxcalar option,\n"
+                    "but also provided an installation path with the --installer option.\n"
+                    "(Is this what you intended?)", file=sys.stderr)
         else:
+
+            # make sure netstore accessible (will get installer here)
+            if not os.path.exists('/netstore'):
+                raise NotADirectoryError("\n\nERROR: You are trying to create a cluster, "
+                    " but do not have netstore mounted locally at /netstore.\n"
+                    "  Please make netstore accessible on machine you're calling this script from\n")
+
             '''
                 license files for xcalar.
                 If they plan on installing xcalar on the new VMs,
@@ -1664,36 +1666,39 @@ def validateparams(args):
             '''
             print("\nMake sure license keys are present....", file=sys.stderr)
 
+            scriptcwd = os.path.dirname(os.path.realpath(__file__))
             if not licfilepath:
                 licfilepath = LICFILENAME
                 print("\tYou did not supply --licfile option... will look in cwd for Xcalar license file...", file=sys.stderr)
             if not os.path.exists(licfilepath):
-                err = '''Error: File {} does not exist!
-                    (Re-run with --licfile=<path to your licence file>,
-                    or, copy the file in to the directory you are running
-                    this script from '''.format(LICFILEPATH)
-                print(err, file=sys.stderr)
-                sys.exit(1)
+                raise FileNotFoundError("\n\nERROR: File {} does not exist!\n"
+                    " (Re-run with --licfile=<path to latest licence file>, or,\n"
+                    " copy the file in to the dir the tool is being run from\n"
+                    "Try this::\n\tcp $XLRDIR/src/data/XcalarLic.key {}\n".format(licfilepath, scriptcwd))
 
             if not pubsfilepath:
                 pubsfilepath = PUBSFILENAME
                 print("\tYou did not supply --pubsfile option... will look in cwd for pubs file...", file=sys.stderr)
             if not os.path.exists(pubsfilepath):
-                err = '''\nError: File {} does not exist!
-                    (Re-run with --pubsfile=<path to your licence file>,
-                    or, copy the file in to the directory you are running
-                    this script from'''.format(PUBSFILEPATH)
-                print(err, file=sys.stderr)
-                sys.exit(1)
+                raise FileNotFoundError("\n\nERROR: File {} does not exist!\n"
+                    " (Re-run with --pubsfile=<path to latest pubs file>, or,\n"
+                    " copy the file in to dir ths tool is being run from\n"
+                    "Try this::\n\tcp $XLRDIR/src/data/EcdsaPub.key {}\n".format(pubsfilepath, scriptcwd))
 
             if not installerpath:
                 installerpath = 'builds/Release/xcalar-latest-installer-prod' # path on Netstore
                 print("\tYou did not supply --installer option ... will use latest RC installer", file=sys.stderr)
             if not os.path.exists('/netstore/' + installerpath):
-                err = '''\n\nError: Could not find RPM installer at path {} on netstore
-                        (Did you specify the prod dir, instead of the installer itself?)'''.format(installerpath)
-                print(err, file=sys.stderr)
-                sys.exit(1)
+                errmsg = "\n\nERROR: Can not access path {} (is netstore mounted at /netstore/?)\n".format(installerpath)
+                if not args.installer:
+                    errmsg = errmsg + "\n(Since you did not supply the --installer option, " \
+                        " this tool defaulted to: \n{}.  Is this path unaccessible?)\n" \
+                        "For quick fix: re-run with argument --installer=<path to RPM installer>\n".format(installerpath)
+                else:
+                    errmsg = errmsg + "\nDid you specify the prod dir to --installer, " \
+                        " instead of the path to the RPM installer itself?\n" \
+                        "(Note - Path supplied to --installer arg should be relative to netstore.)\n".format(installerpath)
+                raise FileNotFoundError(errmsg)
     else:
 
         '''
@@ -1701,11 +1706,28 @@ def validateparams(args):
             make sure at least runing to remove VMs then, else nothing to do
         '''
         if not args.delete:
-            err = "Please re-run this script with arg --vms=<number of vms you want>"
-            print(err, file=sys.stderr)
-            sys.exit(1)
+            raise AttributeError("\n\nERROR: Please re-run this script with arg --vms=<number of vms you want>\n")
 
-    return int(args.ram), int(args.cores), args.ovirtnode, licfilepath, pubsfilepath, installerpath
+    return int(args.ram), int(args.cores), args.ovirtnode, licfilepath, pubsfilepath, installerpath, basename
+
+'''
+    Check if a String is in format of ip address
+    Does not ping or make sure valid, just checks format
+
+    :param string: String to check if its an ip address
+
+    :returns: True if ip address, False otherwise
+'''
+def ip_address(string):
+
+    try:
+        socket.inet_aton(string)
+        print("{} is in valid IP address format".format(string), file=sys.stderr)
+        return True
+    except Exception as e:
+        print("{} not showing as a valid IP address".format(string), file=sys.stderr)
+        return False
+
 
 if __name__ == "__main__":
 
@@ -1728,10 +1750,11 @@ if __name__ == "__main__":
     parser.add_argument("--pubsfile", type=str, help="Path to an EcdsaPub.key file on your local machine (If not supplied, will look for it in cwd)")
     parser.add_argument("--delete", type=str, help="Single VM or comma separated String of VMs you want to remove from Ovirt (could be, IP, VM name, etc).")
     parser.add_argument("--user", type=str, help="Your SSO username (no '@xcalar.com')")
+    parser.add_argument("--vmbasename", type=str, help="The base name to use for the VMs you provide (will create VMs named <basename>-0, <basename>-1, .., <basename>-n-1)")
 
     args = parser.parse_args()
 
-    ram, cores, ovirtnode, licfilepath, pubsfilepath, installerpath = validateparams(args)
+    ram, cores, ovirtnode, licfilepath, pubsfilepath, installerpath, basename = validateparams(args)
     FORCE = args.force
 
     #open connection to Ovirt server
@@ -1750,7 +1773,7 @@ if __name__ == "__main__":
     #  spin up number of vms requested
     vmids = []
     if args.vms:
-        basename, vmids = provision_vms(int(args.vms), ovirtnode, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        vmids = provision_vms(int(args.vms), basename, ovirtnode, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noxcalar:
             # if you supply a value to 'createcluster' arg of initialize_xcalar,
