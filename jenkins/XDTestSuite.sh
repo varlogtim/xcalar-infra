@@ -112,6 +112,9 @@ HTTP_RESPONSE=$(curl --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
 
 URL="http://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=getstatus"
 HTTP_BODY="Still running"
+
+ls -art /tmp | grep "chromium" | tail -n 1 | xargs -n1 -I@ tail -f @/chrome_debug.log &
+
 while [ "$HTTP_BODY" == "Still running" ]
 do
     echo "Test suite is still running"
