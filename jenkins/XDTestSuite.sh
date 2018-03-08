@@ -112,8 +112,8 @@ HTTP_RESPONSE=$(curl --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
 
 URL="http://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=getstatus"
 HTTP_BODY="Still running"
-sleep 5
-ls -art /tmp | grep "chromium" | tail -n 1 | xargs -n1 -I@ tail -f @/chrome_debug.log &
+
+ls -art /tmp | grep "chromium" | tail -n 1 | xargs -n1 -I@ tail -f /tmp/@/chrome_debug.log &
 
 while [ "$HTTP_BODY" == "Still running" ]
 do
