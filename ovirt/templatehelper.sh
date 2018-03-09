@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 ############
 #
 # ./templatehelper.sh node0ip node1ip ... nodeN-ip

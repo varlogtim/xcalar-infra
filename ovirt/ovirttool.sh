@@ -3,25 +3,36 @@
 
 # if they wanted help display that
 if [[ $@ == *"--help"* ]]; then
-  python ovirttool.py --help | sed -e 's/ovirttool.py/ovirttool.sh/g' >&2
+  python3 ovirttool.py --help | sed -e 's/ovirttool.py/ovirttool.sh/g' >&2
   exit 0
 fi
 
 # check if required modules installed on their machine
-python -c "import ovirtsdk4" >&2
+python3 -c "import ovirtsdk4" >&2
 rc=$?
 if [ $rc != 0 ]; then
   echo >&2
   echo "Please install the ovirtsdk4 module before running this tool." >&2
-  echo "To install: pip install ovirt-engine-sdk-python" >&2
+  echo "To install: pip3 install --user ovirt-engine-sdk-python" >&2
+  echo >&2
   exit $rc
 fi
-python -c "import paramiko" >&2
+python3 -c "import paramiko" >&2
 rc=$?
 if [ $rc != 0 ]; then
   echo >&2
   echo "You must install paramiko module before running this tool." >&2
-  echo "To install: pip install paramiko" >&2
+  echo "To install: pip3 install --user paramiko" >&2
+  echo >&2
+  exit $rc
+fi
+python3 -c "import requests" >&2
+rc=$?
+if [ $rc != 0 ]; then
+  echo >&2
+  echo "You must install requests module before running this tool." >&2
+  echo "To install: pip3 install --user requests" >&2
+  echo >&2
   exit $rc
 fi
 
@@ -50,8 +61,8 @@ echo "You can track progress here: $OVIRTLOGFILE"
 echo >&2
 
 cmds="--user=$uname $@"
-python ovirttool.py $cmds > $OVIRTLOGFILE 2>&1
-#python ovirttool.py $cmds 2> $OVIRTLOGFILE 1> out.txt
+python3 ovirttool.py $cmds > $OVIRTLOGFILE 2>&1
+#python3 ovirttool.py $cmds 2> $OVIRTLOGFILE 1> out.txt
 rc=$?
 if [ $rc != 0 ]; then
   cat $OVIRTLOGFILE >&2
@@ -60,7 +71,7 @@ if [ $rc != 0 ]; then
   echo "Please contact jolsen@xcalar.com and provide the log at $OVIRTLOGFILE" >&2
   exit $rc
 else
-  # display the summary for them,
+  # display the summary for them
 
   echo >&2
   echo "Your job has completed.  The full log is available here $OVIRTLOGFILE" >&2

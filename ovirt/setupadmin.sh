@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # set up admin account
 echo 'setup admin acct'
 ADMIN_USERNAME=${ADMIN_USERNAME:-xdpadmin}

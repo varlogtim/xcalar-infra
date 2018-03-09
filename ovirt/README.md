@@ -8,33 +8,43 @@ as well as which xcalar installation to use.
 
 Basic Examples:
 
-    ./ovirttool.sh --vms=4                   # create 4 VMs with latest RC build
-    ./ovirttool.sh --vms=4 --createcluster   # create 4 VMs and form into Xcalar cluster
-    ./ovirttool.sh --vms=4 --noxcalar        # create 4 VMs only; no xcalar install
+    ./ovirttool.sh --count=2 --vmbasename=vms                # create 2 VMs (vms-vm0 and vms-vm1) with latest BuildTrunk prod build, and form into a cluster
+    ./ovirttool.sh --count=2 --vmbasename=abc --nocluster    # create 2 VMs (abc-vm0 and abc-vm1) with latest BuildTrunk prod build, do not form into cluster
+    ./ovirttool.sh --count=2 --vmbasename=dec --noinstaller  # create 2 VMs (dec-vm0 and dec-vm1) only; no xcalar install
 
 -----------------------------------------------------
 
 Setup:
 
-(1) Required libraries (one time install)
+(1) Clone the xcalar-infra repository, if you do not already have it
 
-    pip install ovirt-engine-sdk-python
-    pip install paramiko
+    mkdir ~/xcalar-infra
+    git clone -o gerrit ssh://yourusername@gerrit.int.xcalar.com:29418/xcalar-infra xcalar-infra
 
-(2) Xcalar License Files
+(2) Install Required python libraries
 
-Copy the latest license files from the xcalar repo,
+    pip3 install --user ovirt-engine-sdk-python
+    pip3 install --user paramiko
+    pip3 install --user requests
+
+(3) Xcalar License File
+
+Copy the latest license file from the xcalar repo,
 in to the directory you will execute this script from
-(cmd below assumes you have $XLRDIR env variable set)
+(In the following example, make sure to substitute '~/xcalar/'
+for the dir your own xcalar repo is in, and ~/xcalar-infra/'
+for the dir your own xcalar-infra repo is in)
 
-    cp $XLRDIR/src/data/EcdsaPub.key .
-    cp $XLRDIR/src/data/XcalarLic.key .
+If you do not have a Xcalar repo, skip this step, and instead
+please contact jolsen@xcalar.com and cc: abakshi@xcalar.com,
+and we will provide you a license key.
 
-Alternatively, if you have the lic keys somewhere local on
-your machine, you can always specify their paths directly
+    cp ~/xcalar/src/data/XcalarLic.key ~/xcalar-infra/ovirt
+
+Note, that if you have the lic file somewhere local on
+your machine, you can always specify its path directly
 when you invoke the script:
 
-    --pubsfile=<filepath to EcdsaPub.key>
     --licfile=<filepath to XcalarLic.key>
 
 ----------------------------------------------------
@@ -47,34 +57,46 @@ Help Menu:
 
 More Examples:
 
-Create a 4 node cluster from VMs on node4-cluster, with the latest RC build
+Create 4 node Xcalar cluster using VMs with defaults (8 GB RAM, 4 cores,
+latestBuildTrunk prod build, and VMs created on node2-cluster in Ovirt)
+The VMs will be named myvms-vm0, myvms-vm1, myvms-vm2, and myvms-vm3.
 
-    ./ovirttool.sh --vms=4 --createcluster
+    ./ovirttool.sh --count=4 --vmbasename=myvms
 
-Create a 4 node cluster, but make VMs on node2-cluster (node4-cluster is default)
+Create a single VM called anewvm, with no Xcalar installation
 
-    ./ovirttool.sh --vms=3 --homenode=node2-cluster --createcluster
+    ./ovirttool.sh --count=1 --vmbasename=anewvm --noinstaller
 
-Create a 4 node cluster, with VMs having 8GB memory and 2 cores each
+Create a 2 node cluster with defaults, but make VMs on node2-cluster (feynman is default).
+The VMs are called vmname-vm0 and vmname-vm1, respectively.
 
-    ./ovirttool.sh --vms=4 --createcluster --ram=8 --cores=2
+    ./ovirttool.sh --count=2 --vmbasename=vmname --ovirtcluster=node2-cluster
+
+Create a 4 node cluster, with VMs having 16GB memory and 2 cores each
+
+    ./ovirttool.sh --count=4 --vmbasename=myvms --ram=16 --cores=2
+
+Create a 4 node cluster, but use latest RC debug installation.
+(the --installer arg to specify must be an URL you can curl, for an RPM installer
+on netstore)
+
+    ./ovrittool.sh --count=4 --vmbasename=myvms --installer=http://netstore/builds/Release/xcalar-latest-installer-debug
 
 Create a 4 node cluster, but use an installer from a BuildCustom job on Jenkins
-(the --installer arg to specify must be a path on Netstore to an RPM installer)
 
-    ./ovrittool.sh --vms=4 --createcluster --installer=builds/byJob/BuildCustom/10384/prod/xcalar-1.3.0-10384-installer
+    ./ovrittool.sh --count=4 --vmbasename=myvms --installer=http://netstore/builds/byJob/BuildCustom/10384/prod/xcalar-1.3.0-10384-installer
 
-Create just a single VM with the latest RC build
+Create just a single VM with the latest BuildTrunk prod build, called myvms
 
-    ./ovirttool.sh --vms=1
+    ./ovirttool.sh --count=1 --vmbasename=myvms
 
 Create 2 single VMs with latest RC build, and do not make them in to a cluster after install
 
-    ./ovirttool.sh --vms=2
+    ./ovirttool.sh --count=2 --vmbasename=myvms --nocluster
 
 Create 2 single VMs but don't install Xcalar on them
 
-    ./ovirttool.sh --vms=2 --noxcalar
+    ./ovirttool.sh --count=2 --vmbasename=myvms --no-installer
 
 To save time, you can supply your username when you call the script, to bypass script prompting you for this information
 
@@ -97,7 +119,7 @@ You can provision new VMs and delete existing ones, in the same run.
 
 Delete VM with IP 10.10.2.89, and then create a 2 node cluster
 
-    ./ovirttool.sh --vms=2 --createcluster --delete=10.10.2.89
+    ./ovirttool.sh --count=2 --vmbasename=myvms --delete=10.10.2.89
 
 ----------------------------------------------
 

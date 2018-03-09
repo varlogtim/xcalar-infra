@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
@@ -7,25 +7,25 @@ Tool to spin up VMs on Ovirt and create Xcalar clusters
 
 @examples
 
-    create single VM with all the defaults and Xcalar installed
+    create single VM called myvm with all the defaults and Xcalar installed (latest BuildTrunk prod build is default)
 
-        python ovirttool.py --vms=1
+        python ovirttool.py --count=1 --vmbasename=myvm
 
-    create two individual VMs with all defaults and no Xcalar installed
+    create two VMs (myvm-vm0 and myvm-vm1) with all defaults and no Xcalar installed
 
-        python overttool.py --vms=2 --noxcalar
+        python overttool.py --count=2 --vmbasename=myvm --noinstaller
 
-    create two individual VMs with all the defaults an Xcalar installed
+    create two VMs (myvm-vm0 and myvm-vm1) with all the defaults and Xcalar installed; form in to a cluster
 
-        python ovirttool.py --vms=2
+        python ovirttool.py --count=2 --vmbasename=myvm
 
-    create VMs with default configurations and Xcalar installed; form in to cluster
+    create two VMs (abc-vm0 and abc-vm1) with default configurations and Xcalar installed; dont form in to cluster
 
-        python ovirttool.py --vms=2 --createcluster
+        python ovirttool.py --count=2 --nocluster --vmbasename=abc
 
-    Create two node cluster with 32 GB ram and 8 cores, using a custom installer
+    Create two node cluster with 32 GB ram and 8 cores, using a custom installer.  The VMs are called myclus-vm0 and myclus-vm1 and cluster called myclus
 
-        python ovirttool.py --vms=2 --ram=32 --cores=8 --createcluster --installer=http://netstore/builds/byJob/BuildTrunk/lastSuccessful/debug/xcalar-1.3.1-1657-installer
+        python ovirttool.py --count=2 --vmbasename=myclus --ram=32 --cores=8 --installer=http://netstore/builds/byJob/BuildTrunk/lastSuccessful/debug/xcalar-1.3.1-1657-installer
 
 """
 
@@ -921,7 +921,9 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
     vmnames = []
     sleepBetween = 20
     for i in range(n):
-        nextvmname = basename + "-vm{}".format(str(i))
+        nextvmname = basename
+        if n > 1:
+            nextvmname = nextvmname + "-vm{}".format(str(i))
         vmnames.append(nextvmname)
         info("\nFork new process to create a new VM by name {}".format(nextvmname))
         proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
@@ -1480,7 +1482,7 @@ def run_sh_script(node, path, args=[], timeout=120, tee=False):
     if tee:
         filename = os.path.basename(path)
         shellCmd = shellCmd + ' | tee ' + filename + 'log.log'
-    cmds = [['chmod u+x ' + path + '; ' + shellCmd, timeout]]
+    cmds = [['chmod u+x ' + path], [shellCmd, timeout]]
     run_ssh_cmds(node, cmds)
 
 '''
@@ -1749,27 +1751,27 @@ def setup():
         cmds.insert(0, 'sudo rm ' + OVIRT_KEYFILE_DEST)
     for cmd in cmds:
         run_system_cmd(cmd)
- 
+
 def validateparams(args):
 
     licfilepath = args.licfile
     installer = args.installer
     basename = args.vmbasename
 
-    if args.vms:
-        if args.vms > MAX_VMS_ALLOWED or args.vms <= 0:
-            raise ValueError("\n\nERROR: --vms argument must be an integer between 1 and {}\n"
+    if args.count:
+        if args.count > MAX_VMS_ALLOWED or args.count <= 0:
+            raise ValueError("\n\nERROR: --count argument must be an integer between 1 and {}\n"
                 "(The ovirt tool will provision that number of new VMs for you)".format(MAX_VMS_ALLOWED))
 
         # validate the basename they gave for the cluster
         if not basename:
             errmsg = ""
-            if args.vms == 1:
+            if args.count == 1:
                 errmsg = "\n\nPlease supply a name for your new VM using --vmbasename=<name>\n"
             else:
                 errmsg = "\n\nPlease supply a basename for your requested VMs using --vmbasename=<basename>\n" \
                     "(The tool will name the new VMs as : <basename>-vm0, <basename>-vm1, .. etc\n"
-            if args.createcluster:
+            if not args.nocluster:
                 errmsg = errmsg + "The --vmbasename value will become the name of the created cluster, too.\n"
             raise ValueError(errmsg)
         else:
@@ -1782,17 +1784,9 @@ def validateparams(args):
             make sure they have access to /netstore because
             This script will try to access that mnt point locally
         '''
-        if args.createcluster:
-            if args.vms == 1:
-                raise ValueError("\n\nERROR:  You specified to create a cluster, but only want to provision one VM!  Is this what you wanted?\n")
-
-        if args.noxcalar:
-            if args.createcluster:
-                raise AttributeError("\n\nERROR: You have specified not to install xcalar with the --noxcalar option,\n"
-                    "but also provided option --createcluster to create a cluster of new VMs.\n"
-                    "(Is this what you intended?)\n")
+        if args.noinstaller:
             if args.installer:
-                raise AttributeError("\n\nERROR: You have specified not to install xcalar with the --noxcalar option,\n"
+                raise AttributeError("\n\nERROR: You have specified not to install xcalar with the --noinstaller option,\n"
                     "but also provided an installation path with the --installer option.\n"
                     "(Is this what you intended?)\n")
         else:
@@ -1807,7 +1801,7 @@ def validateparams(args):
                 make sure URL and for a path that exists on netstore
             '''
             installerheader = 'http://netstore/'
-            defaultinstallerpath = 'builds/Release/xcalar-latest-installer-prod'
+            defaultinstallerpath = 'builds/byJob/BuildTrunk/xcalar-latest-installer-prod'
             defaultinstallerurl = installerheader + defaultinstallerpath
             if not installer:
                 installer = defaultinstallerurl
@@ -1868,7 +1862,7 @@ def validateparams(args):
             make sure at least runing to remove VMs then, else nothing to do
         '''
         if not args.delete:
-            raise AttributeError("\n\nERROR: Please re-run this script with arg --vms=<number of vms you want>\n")
+            raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
 
     return int(args.ram), int(args.cores), args.ovirtcluster, licfilepath, installer, basename
 
@@ -1898,14 +1892,14 @@ if __name__ == "__main__":
     '''
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--vms", type=int, default=0, help="Number of VMs you'd like to create")
+    parser.add_argument("-c", "--count", type=int, default=0, help="Number of VMs you'd like to create")
     parser.add_argument("--vmbasename", type=str, help="Basename to use for naming the new VMs (will create VMs named <basename>-vm0, <basename>-vm1, .., <basename>-vm(n-1) )")
     parser.add_argument("--cores", type=int, default=4, help="Number of cores per VM.")
     parser.add_argument("--ram", type=int, default=8, help="RAM on VM(s) (in GB)")
-    parser.add_argument("--createcluster", action='store_true', help="Create a Xcalar cluster of the new VMs.")
+    parser.add_argument("--nocluster", action='store_true', help="Do not create a Xcalar cluster of the new VMs.")
     parser.add_argument("--installer", type=str, #default='builds/Release/xcalar-latest-installer-prod',
-        help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer on netstore which you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for latest prod RC build.)")
-    parser.add_argument("--noxcalar", action="store_true", default=False, help="Don't install Xcalar on provisioned VMs")
+        help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer on netstore which you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for latest BuildTrunk prod build.)")
+    parser.add_argument("--noinstaller", action="store_true", default=False, help="Don't install Xcalar on provisioned VMs")
     parser.add_argument("--ovirtcluster", type=str, default='feynman-dc', help="Which ovirt cluster to create the VM(s) on.  Defaults to feynman-dc")
     parser.add_argument("--tryotherclusters", action="store_true", default=False, help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
     parser.add_argument("--licfile", type=str, help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
@@ -1939,14 +1933,14 @@ if __name__ == "__main__":
     #  spin up number of vms requested
     vmids = []
     clustername = None
-    if args.vms:
-        vmids = provision_vms(int(args.vms), basename, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+    if args.count:
+        vmids = provision_vms(int(args.count), basename, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
-        if not args.noxcalar:
+        if not args.noinstaller:
             # if you supply a value to 'createcluster' arg of initialize_xcalar,
             # then once xcalar install compled on all nodes will form the vms in
             # to a cluster by that name
-            if args.createcluster:
+            if not args.nocluster and int(args.count) > 1:
                 clustername = basename
             initialize_xcalar(vmids, licfilepath, installer, createcluster=clustername)
 
