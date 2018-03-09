@@ -38,6 +38,7 @@ import logging
 import math
 import multiprocessing
 import os
+from os.path import expanduser
 import paramiko
 import re
 import requests
@@ -61,6 +62,10 @@ LOGIN_PWORD = "Welcome1"
 TMPDIR_LOCAL='/tmp/ovirt_tool' # tmp dir to create on local machine running python script, to hold pem cert for connecting to Ovirt
 TMPDIR_VM='/tmp/ovirt_tool' # tmp dir to create on VMs to hold helper shell scripts, lic files (dont put timestamp because forking processes during install processing)
 CLUSTER_DIR_VM='/mnt/xcalar' # if creating cluster of the VMs and need to mount netstore, will be local dir to create on VMs, to mount shared storage space to.
+
+OVIRT_KEYFILE_SRC = 'id_ovirt' # this a file to supply during ssh.  need to chmod it for scp but dont want it to show up in users git status, so this its loca nd will move it to chmod
+home = os.path.expanduser('~') # '~' gives issues with paramiko; expand to home dir, this swill work cross-platform
+OVIRT_KEYFILE_DEST = home + '/.ssh/id_ovirt'
 
 CONN=None
 LICFILENAME='XcalarLic.key'
@@ -905,7 +910,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
         if not availableClusters:
             errmsg = "\n\nError: There is not enough memory on cluster(s) {}, " \
                 "to provision the requested VMs\n" \
-                "Try to free up memory on the cluster(s).\n".format(fullClustList)
+                "Try to free up memory on the cluster(s).\n".format(fullClusList)
             if not tryotherclusters:
                 errmsg = errmsg + "You can also run this tool with --tryotherclusters option, " \
                     " to make other clusters available to you during provisioning\n"
@@ -1385,11 +1390,11 @@ def get_template(ovirtcluster):
     @localfilepath filepath of the file on the local machine
     @remotefilepath filepath where to put the file on the remote machine
 '''
-def scp_file(node, localfilepath, remotefilepath):
+def scp_file(node, localfilepath, remotefilepath, keyfile=OVIRT_KEYFILE_DEST):
 
     info("\nSCP: Copy file {} from host, to {}:{}".format(localfilepath, node, remotefilepath))
 
-    cmd = 'scp -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
+    cmd = 'scp -i ' + keyfile + ' -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
     run_system_cmd(cmd)
 
 def run_ssh_cmds(host, cmds):
@@ -1411,11 +1416,11 @@ def run_ssh_cmds(host, cmds):
     if errorFound:
         raise RuntimeError("\n\nERROR: Encountered non-0 status code when executing one of the commands!!\n")
 
-def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, key_filename='', timeout=120, pkey=None):
+def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, pkey=None):
     info("\nssh {}@{}".format(user, host))
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname=host, port=port, username=user)#, key_filename=key_filename, banner_timeout=10)
+    client.connect(hostname=host, port=port, username=user, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=10)
     info("connected...".format(host))
     chan = client.get_transport().open_session()
     chan.settimeout(timeout)
@@ -1444,9 +1449,11 @@ def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, key_filename=''
 '''
 def run_system_cmd(cmd):
 
+
     # subprocess.check_output always throws CalledProcessError for non-0 status
     try:
         #cmdout = subprocess.run(cmd, shell=True)
+        info(" $ {}".format(cmd))
         cmdout = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError as e:
         info("Stderr: {}\n\nGot error when running sys command {}:\n{}".format(str(e.stderr), cmd, str(e.output))) # str on output in case None
@@ -1711,6 +1718,38 @@ def extract_cluster_node_ips(ip):
 
     return nodeips
 
+'''
+    I know this is only doing one thing (the ssh key) but wanted to make
+    a script setup which might have more added to it.
+'''
+def setup():
+
+    '''
+    Ovirt SSH key:
+    not all users have their ssh pub key in the template the VMs being generated from.
+    therefore, have made a ssh key just for Ovirt which has root perms in the templates,
+    and will supply it when making ssh calls.
+    For scp the private key needs to have stricter permissions so need to chmod.
+    but dont want chmod to result in it showing up in users git status.
+    so transfer the private key to .ssh/ and chmod there.  the ssh calls will send
+    key in .ssh/
+    '''
+
+    # if this keyfile already exists and it's low permission,
+    # you're going to need to sudo to cp and change the permissions.
+    # but if you sudo it will set the user as root and then will fail
+    # to authenticate.  but if exists not sure if its acceptible perm
+    # level, so delete it and copy it back in fresh
+    # (todo - when make cleanup remove)
+    cmds = ['cp ' + OVIRT_KEYFILE_SRC + ' ' + OVIRT_KEYFILE_DEST,
+            'chmod 400 ' + OVIRT_KEYFILE_DEST]
+
+    if os.path.exists(OVIRT_KEYFILE_DEST):
+        info("Ovirt key file {} already exists, remove".format(OVIRT_KEYFILE_DEST))
+        cmds.insert(0, 'sudo rm ' + OVIRT_KEYFILE_DEST)
+    for cmd in cmds:
+        run_system_cmd(cmd)
+ 
 def validateparams(args):
 
     licfilepath = args.licfile
@@ -1878,6 +1917,9 @@ if __name__ == "__main__":
 
     ram, cores, ovirtcluster, licfilepath, installer, basename = validateparams(args)
     FORCE = args.force
+
+    # script setup
+    setup()
 
     #open connection to Ovirt server
     CONN = open_connection(user=args.user)
