@@ -1,44 +1,95 @@
 #!/bin/bash
 
 export PATH="$HOME/google-cloud-sdk/bin:/opt/xcalar/bin:$PATH"
+VmProvider=${VmProvider:-GCE}
 
-set +e
-sudo chown jenkins:jenkins /home/jenkins/.config
-bash /netstore/users/jenkins/slave/setup.sh
-set -e
+startCluster() {
+    local installer="$1"
+    local numInstances="$2"
+    local clusterName="$3"
 
-installer="$INSTALLER_PATH"
+    if [ "$VmProvider" = "GCE" ]; then
+        ret=`xcalar-infra/gce/gce-cluster.sh "$installer" "$numInstances" "$clusterName"`
 
-cluster="$CLUSTER"
+        if [ "$NOTPREEMPTIBLE" != "1" ]; then
+            ips=($(awk '/RUNNING/ {print $6":18552"}' <<< "$ret"))
+        else
+            ips=($(awk '/RUNNING/ {print $5":18552"}' <<< "$ret"))
+        fi
 
-# Create new GCE instance(s)
-ret=`xcalar-infra/gce/gce-cluster.sh $installer $NUM_INSTANCES $cluster`
+        return $?
+    elif [ "$VmProvider" = "Azure" ]; then
+        xcalar-infra/azure/azure-cluster.sh -i "$installer" -c "$numInstances" -n "$clusterName" -t "$INSTANCE_TYPE"
+        ret=$?
+        ips=`xcalar-infra/azure/azure-cluster-info.sh "$clusterName"`
+        return $?
+    fi
 
-if [ "$NOTPREEMPTIBLE" != "1" ]; then                                           
-    ips=($(awk '/RUNNING/ {print $6":18552"}' <<< "$ret"))                      
-else                                                                            
-    ips=($(awk '/RUNNING/ {print $5":18552"}' <<< "$ret"))                      
-fi   
+    return 1
+}
 
-echo "$ips"
+getNodes() {
+    cluster="$1"
+    shift
+    if [ "$VmProvider" = "GCE" ]; then
+        gcloud compute instances list | grep $cluster | cut -d \  -f 1
+        return $?
+    else
+        xcalar-infra/azure/azure-cluster-info.sh "$cluster"
+        return $?
+    fi
+
+    echo 2>&1 "Unknown VmProvider $VmProvider"
+}
+
+nodeSsh() {
+    cluster="$1"
+    node="$2"
+    shift 2
+    if [ "$VmProvider" = "GCE" ]; then
+        gcloud compute ssh --ssh-flag=-tt "$node" --zone us-central1-f -- "$@"
+        return $?
+    elif [ "$VmProvider" = "Azure" ]; then
+        xcalar-infra/azure/azure-cluster-ssh.sh -c "$cluster" -n "$node" -- "$@"
+        return $?
+    fi
+
+    echo 2>&1 "Unknown VmProvider $VmProvider"
+    return 1
+}
+
+clusterSsh() {
+    cluster="$1"
+    shift
+    if [ "$VmProvider" = "GCE" ]; then
+        xcalar-infra/gce/gce-cluster-ssh.sh "$cluster" "$@"
+        return $?
+    elif [ "$VmProvider" = "Azure" ]; then
+        xcalar-infra/azure/azure-cluster-ssh.sh -c "$cluster" -- "$@"
+        return $?
+    fi
+
+    echo "Unknown VmProvider $VmProvider"
+    return 1
+}
 
 stopXcalar() {
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo /opt/xcalar/bin/xcalarctl stop-supervisor"
+    clusterSsh $cluster "sudo /opt/xcalar/bin/xcalarctl stop-supervisor"
 }
 
 restartXcalar() {
     set +e
     stopXcalar
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo service xcalar start"
+    clusterSsh $cluster "sudo service xcalar start"
     for ii in $(seq 1 $NUM_INSTANCES ) ; do
-        host="${cluster}-${ii}"                                                                                                                                                                                                                                                                                                                                                                                               
-        gcloud compute ssh --ssh-flag=-tt $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started" 
+        host="${cluster}-${ii}"
+        nodeSsh "$cluster" "$host" "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started" 
         ret=$?
         numRetries=3600
         try=0
         while [ $ret -ne 0 -a "$try" -lt "$numRetries" ]; do
             sleep 1s
-            gcloud compute ssh --ssh-flag=-tt $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q "Usrnodes started"
+            nodeSsh "$cluster" "$host" "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q "Usrnodes started"
             ret=$?
             try=$(( $try + 1 ))
         done
@@ -53,19 +104,56 @@ restartXcalar() {
 }
 
 genSupport() {
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo /opt/xcalar/scripts/support-generate.sh"
+    clusterSsh $cluster "sudo /opt/xcalar/scripts/support-generate.sh"
 }
 
 startupDone() {
-    for node in `gcloud compute instances list | grep $cluster | cut -d \  -f 1`; do
-        gcloud compute ssh --ssh-flag=-tt $node -- "sudo journalctl -r" | grep -q "Startup finished";
-        ret=$?
-        if [ "$ret" != "0" ]; then
-            return $ret
-        fi
-    done
-    return 0
+    if [ "$VmProvider" = "GCE" ]; then
+        for node in `getNodes "$cluster"`; do
+            nodeSsh "$cluster" "$node" "sudo journalctl -r" | grep -q "Startup finished";
+            ret=$?
+            if [ "$ret" != "0" ]; then
+                return $ret
+            fi
+        done
+        return 0
+    elif [ "$VmProvider" = "Azure" ]; then
+        # azure-cluster.sh is synchronous. When it returns, either it has run to completion or failed
+        return 0
+    fi
+
+    echo "Unknown VmProvider $VmProvider"
+    return 1
 }
+
+set +e
+chown jenkins:jenkins /home/jenkins/.config
+
+if [ "$VmProvider" = "GCE" ]; then
+    bash /netstore/users/jenkins/slave/setup.sh
+elif [ "$VmProvider" = "Azure" ]; then
+    /usr/bin/az login --service-principal -u  5d35339e-4b1f-494e-840d-70aaa6910fd0  -p $(cat /netstore/infra/jenkins/jenkins-sp.txt) -t 7bbd3477-af8b-483b-bb48-92976a1f9dfb >/dev/null
+else
+    echo "Unknown VmProvider $VmProvider"
+    exit 1
+fi
+
+pip install -U awscli
+
+set -e
+
+installer="$INSTALLER_PATH"
+
+cluster="$CLUSTER"
+
+ips=""
+startCluster "$installer" "$NUM_INSTANCES" "$cluster"
+ret=$?
+if [ "$ret" != "0" ]; then
+    exit $ret
+fi
+
+echo "$ips"
 
 try=0
 while ! startupDone ; do
@@ -80,36 +168,31 @@ done
 
 stopXcalar
 
+clusterSsh $cluster -- "sudo yum install -y gcc-c++ wget texinfo screen emacs python-devel"
+
 # Install gdb-8.0
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo yum install -y gcc-c++ wget texinfo screen emacs python-devel"
 if [ "$InstallGdb8" = "true" ]; then
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "wget https://ftp.gnu.org/gnu/gdb/gdb-8.0.tar.gz"
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "tar -zxvf gdb-8.0.tar.gz"
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "cd gdb-8.0 && ./configure --with-python && make && sudo make install"
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo ln -s /usr/local/bin/gdb /usr/bin/gdb"
+    clusterSsh "$cluster" -- "sudo curl http://storage.googleapis.com/repo.xcalar.net/rpm-deps/xcalar-deps.repo -o /etc/yum.repos.d/xcalar-deps.repo"
+    clusterSsh "$cluster" -- "sudo yum install -y optgdb8"
+    clusterSsh "$cluster" -- "sudo ln -sfn /opt/gdb8/bin/gdb /usr/local/bin/gdb"
+    clusterSsh "$cluster" -- "sudo ln -sfn /opt/gdb8/bin/gdb /usr/bin/gdb"
 fi
 
-# Install GCS
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo pip install google-cloud-storage"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "mkdir -p $XdbLocalSerDesPath"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "chmod +w $XdbLocalSerDesPath"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo chown -R xcalar:xcalar $XdbLocalSerDesPath"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo umount /mnt/xcalar"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo mount -o noac /mnt/xcalar"
-if [ "$EnableXcMonitor" = "true" ]; then
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo sed -ie 's/XCE_MONITOR=0/XCE_MONITOR=1/' /etc/default/xcalar"
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo sed -ie 's/#XCE_MONITOR=1/XCE_MONITOR=1/' /etc/default/xcalar"
-else
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo sed -ie 's/XCE_MONITOR=1/XCE_MONITOR=0/' /etc/default/xcalar"
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster -- "sudo sed -ie 's/#XCE_MONITOR=0/XCE_MONITOR=0/' /etc/default/xcalar"
-fi
+# Set up SerDes
+clusterSsh $cluster -- "mkdir -p $XdbLocalSerDesPath"
+clusterSsh $cluster -- "chmod +w $XdbLocalSerDesPath"
+clusterSsh $cluster -- "sudo chown -R xcalar:xcalar $XdbLocalSerDesPath"
 
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo sed -ie 's/Constants.XcMonSlaveMasterTimeout=.*/Constants.XcMonSlaveMasterTimeout=$XcMonSlaveMasterTimeout/' /etc/xcalar/default.cfg"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo sed -ie 's/Constants.XcMonMasterSlaveTimeout=.*/Constants.XcMonMasterSlaveTimeout=$XcMonMasterSlaveTimeout/' /etc/xcalar/default.cfg"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster "echo \"$FuncTestParam\" | sudo tee -a /etc/xcalar/default.cfg"
+# Remount xcalar with noac for liblog stress
+#clusterSsh $cluster -- "sudo umount /mnt/xcalar"
+#clusterSsh $cluster -- "sudo mount -o noac /mnt/xcalar"
 
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster "echo \"vm.min_free_kbytes=$KernelMinFreeKbytes\" | sudo tee -a /etc/sysctl.conf"
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo sysctl -p"
+clusterSsh $cluster "sudo sed -ie 's/Constants.XcMonSlaveMasterTimeout=.*/Constants.XcMonSlaveMasterTimeout=$XcMonSlaveMasterTimeout/' /etc/xcalar/default.cfg"
+clusterSsh $cluster "sudo sed -ie 's/Constants.XcMonMasterSlaveTimeout=.*/Constants.XcMonMasterSlaveTimeout=$XcMonMasterSlaveTimeout/' /etc/xcalar/default.cfg"
+clusterSsh $cluster "echo \"$FuncTestParam\" | sudo tee -a /etc/xcalar/default.cfg"
+
+clusterSsh $cluster "echo \"vm.min_free_kbytes=$KernelMinFreeKbytes\" | sudo tee -a /etc/sysctl.conf"
+clusterSsh $cluster "sudo sysctl -p"
 
 restartXcalar
 ret=$?
@@ -118,4 +201,4 @@ if [ "$ret" != "0" ]; then
     exit $ret
 fi
 
-xcalar-infra/gce/gce-cluster-ssh.sh $cluster "echo \"XLRDIR=/opt/xcalar\" | sudo tee -a /etc/bashrc"
+clusterSsh $cluster "echo \"XLRDIR=/opt/xcalar\" | sudo tee -a /etc/bashrc"

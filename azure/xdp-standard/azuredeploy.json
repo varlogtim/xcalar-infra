@@ -21,10 +21,28 @@
         "description": "Administrator's username for the Xcalar cluster"
       }
     },
+    "authenticationType": {
+      "type": "string",
+      "defaultValue": "sshPublicKey",
+      "allowedValues": [
+        "password",
+        "sshPublicKey"
+      ],
+      "metadata": {
+        "description": "Authentication to use (password or sshkey)"
+      }
+    },
     "adminPassword": {
       "type": "securestring",
       "metadata": {
         "description": "Administrator's password for the Xcalar cluster"
+      }
+    },
+    "adminSSHPublicKey": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "VM Administrator's SSH Key"
       }
     },
     "adminEmail": {
@@ -107,7 +125,21 @@
     "vmExtensionName": "xcalarBootstrapExtension",
     "dataDiskSize": "[parameters('dataDiskSize')]",
     "nicName": "[concat(variables('clusterName'),'nic-')]",
-    "dataDiskName": "[concat(variables('clusterName'),'datadisk-')]"
+    "dataDiskName": "[concat(variables('clusterName'),'datadisk-')]",
+    "linuxConfiguration": {
+      "sshPublicKey": {
+        "disablePasswordAuthentication": "true",
+        "ssh": {
+          "publicKeys": [
+            {
+              "path": "[concat('/home/', parameters('adminUsername'), '/.ssh/authorized_keys')]",
+              "keyData": "[parameters('adminSSHPublicKey')]"
+            }
+          ]
+        }
+      },
+      "password": {}
+    }
   },
   "resources": [
     {
@@ -234,7 +266,8 @@
             "osProfile": {
                 "computername": "[concat(variables('vmName'), copyIndex())]",
                 "adminUsername": "[parameters('adminUsername')]",
-                "adminPassword": "[parameters('adminPassword')]"
+                "adminPassword": "[if(equals(parameters('authenticationType'), 'password'), parameters('adminPassword'), json('null'))]",
+                "linuxConfiguration": "[variables('linuxConfiguration')[parameters('authenticationType')]]"
             },
             "storageProfile": {
                 "imageReference": {
@@ -299,6 +332,18 @@
       "url": {
           "type":"string",
           "value":"[concat(variables('dnsLabelPrefix'),'.',parameters('zone'))]"
+      },
+      "dnsLabelPrefix": {
+          "type": "string",
+          "value": "[variables('dnsLabelPrefix')]"
+      },
+      "scaleNumber": {
+          "type": "int",
+          "value": "[parameters('scaleNumber')]"
+      },
+      "location": {
+          "type": "string",
+          "value": "[resourceGroup().location]"
       },
       "azuredns": {
           "type": "string",
