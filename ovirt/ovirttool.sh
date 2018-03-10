@@ -8,33 +8,19 @@ if [[ $@ == *"--help"* ]]; then
 fi
 
 # check if required modules installed on their machine
-python3 -c "import ovirtsdk4" >&2
-rc=$?
-if [ $rc != 0 ]; then
-  echo >&2
-  echo "Please install the ovirtsdk4 module before running this tool." >&2
-  echo "To install: pip3 install --user ovirt-engine-sdk-python" >&2
-  echo >&2
-  exit $rc
-fi
-python3 -c "import paramiko" >&2
-rc=$?
-if [ $rc != 0 ]; then
-  echo >&2
-  echo "You must install paramiko module before running this tool." >&2
-  echo "To install: pip3 install --user paramiko" >&2
-  echo >&2
-  exit $rc
-fi
-python3 -c "import requests" >&2
-rc=$?
-if [ $rc != 0 ]; then
-  echo >&2
-  echo "You must install requests module before running this tool." >&2
-  echo "To install: pip3 install --user requests" >&2
-  echo >&2
-  exit $rc
-fi
+check_module() {
+  if ! python3 -c "import $1"; then
+    echo >&2
+    echo "You need to install $1" >&2
+    echo "  pip3 install --user ${2:-$1}" >&2
+    echo >&2
+    exit 1
+  fi
+}
+
+check_module ovirtsdk4 ovirt-engine-sdk-python
+check_module paramiko
+check_module requests
 
 # if they didn't pass the --user arg, prompt for it
 echo >&2
