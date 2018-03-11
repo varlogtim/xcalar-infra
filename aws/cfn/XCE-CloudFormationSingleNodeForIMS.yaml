@@ -173,7 +173,7 @@ Resources:
                 6*)
                     yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
                     ;;
-                7*) 
+                7*)
                     yum-config-manager --enable rhel-server-rhscl-7-rpms
                     yum-config-manager --enable rhel-7-server-rpms
                     yum-config-manager --enable rhel-7-server-optional-rpms
@@ -320,11 +320,11 @@ Resources:
           CidrIp: !Ref 'CidrLocation'
 Outputs:
   URL:
-    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PublicDnsName',':8443']]
+    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PublicDnsName', ':8443']]
     Description: Address of newly created XD instance!
   UserName:
     Value: !Ref 'AdminUsername'
     Description: Default administrator username for XD
   SSH:
-    Value: !Join ['', ['ssh -i ~/.ssh/', !Ref 'KeyName','.pem ec2-user@', !GetAtt 'EC2Instance.PublicDnsName']]
+    Value: !Join ['', ['ssh -i ~/.ssh/', !Ref 'KeyName', '.pem ec2-user@', !GetAtt 'EC2Instance.PublicDnsName']]
     Description: SSH instructions

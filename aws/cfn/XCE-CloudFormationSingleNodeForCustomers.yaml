@@ -340,11 +340,11 @@ Resources:
           CidrIp: !Ref 'CidrLocation'
 Outputs:
   URL:
-    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PublicDnsName',':8443']]
+    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PublicDnsName', ':8443']]
     Description: Address of newly created XD instance!
   UserName:
     Value: !Ref 'AdminUsername'
     Description: Default administrator username for XD
   SSH:
-    Value: !Join ['', ['ssh -i ~/.ssh/', !Ref 'KeyName','.pem ec2-user@', !GetAtt 'EC2Instance.PublicDnsName']]
+    Value: !Join ['', ['ssh -i ~/.ssh/', !Ref 'KeyName', '.pem ec2-user@', !GetAtt 'EC2Instance.PublicDnsName']]
     Description: SSH instructions
