@@ -23,25 +23,31 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
+if ! command -v cfn-flip >/dev/null; then
+    echo >&2 "You need to have cfn-flip installed"
+    echo >&2 "  pip install -U cfn-flip"
+    exit 1
+fi
+
 . aws-sh-lib
 
 NOW=$(date +%Y%m%d%H%M)
-DEFAULT_TEMPLATE="file://./cfn/XCE-CloudFormationSingleNodeForCustomers.yaml"
+DEFAULT_TEMPLATE="file://${XLRINFRADIR}/aws/cfn/XCE-CloudFormationMultiNodeInternal.yaml"
 DEFAULT_SPOT_TEMPLATE="$(dirname $DEFAULT_TEMPLATE)/$(basename $DEFAULT_TEMPLATE .yaml)Spot.yaml"
 BUCKET=xcrepo
 COUNT=1
-INSTANCE_TYPE='i3.2xlarge'
+INSTANCE_TYPE='m5.2xlarge'
 NODEID=0
 BOOTSTRAP=aws-cfn-bootstrap.sh
 SUBNET=subnet-b9ed4ee0  # subnet-4e6e2d15
 ROLE="xcalar_field"
 #BOOTSTRAP_URL="${BOOTSTRAP_URL:-http://repo.xcalar.net/scripts/aws-asg-bootstrap-field-new.sh}"
-INSTALLER="${INSTALLER:-s3://xcrepo/builds/prod/xcalar-1.3.0-1548-installer}"
+INSTALLER="${INSTALLER:-s3://xcrepo/builds/prod/xcalar-1.3.1-1654-installer}"
 LOGNAME="${LOGNAME:-`id -un`}"
 STACK_NAME="$LOGNAME-cluster-$NOW"
 #BootstrapUrl	http://repo.xcalar.net/scripts/aws-asg-bootstrap-field.sh
 #InstallerUrl    "$(aws s3 presign s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer)"
-IMAGE=ami-f729da8f
+IMAGE=ami-ade86cd5
 SPOT=0
 LICENSE="license.txt"
 
@@ -165,7 +171,7 @@ if [ -z "$INSTALLER_URL" ]; then
     fi
 fi
 
-if [ -n "$BOOTSTRAP_URL" ] && [ -z "$BOOTSTRAP_URL" ]; then
+if [ -n "$BOOTSTRAP" ] && [ -z "$BOOTSTRAP_URL" ]; then
     if ! BOOTSTRAP_URL="$(upload_bysha1 ${BOOTSTRAP})"; then
         echo >&2 "Failed to upload $BOOTSTRAP"
     fi

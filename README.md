@@ -1,13 +1,28 @@
 # Xcalar-Infra
 
+
+## Setup instructions
+
+Clone xcalar-infra repo and set:
+
     git clone -o gerrit ssh://gerrit.int.xcalar.com:29418/xcalar/xcalar-infra.git $HOME
-    echo 'export XLRINFRA=$HOME/xcalar-infra' | tee -a $HOME/.bashrc
+    echo 'export XLRINFRADIR=$HOME/xcalar-infra' >> $HOME/.bashrc
+    echo 'export PATH=$XLRINFRADIR/bin:$PATH' >> $HOME/.bashrc
     source $HOME/.bashrc
-    cd $XLRINFRA
+
+Set up gerrit review:
+
+    cd $XLRINFRADIR
     git review -s
 
 
-## repo
+## Python virtualenv
+
+    cd $XLRINFRADIR
+    make
+    source .venv/bin/activate
+
+
 
 ### apt
 
@@ -32,5 +47,4 @@ If you're happy with the results, run the same command without the `-n`. BE VERY
 delete remote files so the directories match your local `$REPREPRO_BASE_DIR`.
 
     gsutil -m rsync -c -d -R $REPREPRO_BASE_DIR/ gs://repo.xcalar.net/apt/ubuntu/
-
 

@@ -30,7 +30,7 @@ Parameters:
     Description: ID of an existing Amazon Machine Image (AMI)
     Type: AWS::EC2::Image::Id
     ConstraintDescription: Must be the name of an existing AMI.
-    Default: ami-d54cd7b5
+    Default: ami-ade86cd5
   BootstrapUrl:
     Description: XCE Bootstrap Script
     Type: String
@@ -42,22 +42,27 @@ Parameters:
   InstanceType:
     Description: XCE EC2 instance type
     Type: String
-    Default: i3.2xlarge
+    Default: r4.2xlarge
     AllowedValues:
-      - c3.8xlarge
-      - c4.8xlarge
-      - r3.2xlarge
-      - r3.4xlarge
-      - r3.8xlarge
       - r4.2xlarge
       - r4.4xlarge
       - r4.8xlarge
       - r4.16xlarge
+      - i3.large
       - i3.xlarge
       - i3.2xlarge
       - i3.4xlarge
       - i3.8xlarge
       - i3.16xlarge
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.12xlarge
+      - m5.24xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
       - x1.16xlarge
       - x1.32xlarge
     ConstraintDescription: must be a valid EC2 instance type.
@@ -80,8 +85,8 @@ Parameters:
   SpotPrice:
     Description: SpotPrice of fleet
     Type: String
-    AllowedPattern: ^([01])\.\(d{1,4}A)
-    ConstraintDescription: Must be a valid url.
+    AllowedPattern: (\d{1})\.(\d{1,4})
+    Default: '0.00'
 Resources:
   PlacementGroup:
     Type: AWS::EC2::PlacementGroup
