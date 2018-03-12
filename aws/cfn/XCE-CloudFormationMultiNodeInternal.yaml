@@ -82,11 +82,6 @@ Parameters:
     Description: Size of root disk
     Type: Number
     Default: '50'
-  SpotPrice:
-    Description: SpotPrice of fleet
-    Type: String
-    AllowedPattern: (\d{1})\.(\d{1,4})
-    Default: '0.00'
 Resources:
   PlacementGroup:
     Type: AWS::EC2::PlacementGroup
@@ -131,21 +126,28 @@ Resources:
         - http-from-office
         - open-to-users-at-home
       KeyName: !Ref 'KeyName'
+      EbsOptimized: true
       UserData:
         Fn::Base64: !Sub |
             #!/bin/bash -x
+            set +e
+            set -o pipefail
             yum install -y epel-release
-            yum install -y awscli jq nfs-utils
+            yum install -y jq nfs-utils curl
             RELEASE_RPM=$(rpm -qf /etc/redhat-release)
             RELEASE=$(rpm -q --qf %{VERSION} $RELEASE_RPM)
             ELVERSION="$(echo $RELEASE | sed -e 's/Server//g')"
-            rpm -q aws-cfn-bootstrap || yum localinstall -y http://repo.xcalar.net/deps/aws-cfn-bootstrap-1.4-18.el$ELVERSION.noarch.rpm
+            if ! test -e /opt/aws/bin/cfn-init; then
+              yum install -y awscli
+              rpm -q aws-cfn-bootstrap || yum localinstall -y http://repo.xcalar.net/deps/aws-cfn-bootstrap-1.4-18.el$ELVERSION.noarch.rpm
+            fi
+            export PATH="$PATH:/opt/aws/bin"
             # Install the files and packages from the metadata
-            /opt/aws/bin/cfn-init -v          --stack ${AWS::StackName}         --resource InstanceGroup         --region ${AWS::Region}
-            curl -L "${BootstrapUrl}" > /usr/local/bin/aws-asg-bootstrap.sh
-            chmod +x /usr/local/bin/aws-asg-bootstrap.sh
-            /bin/bash -x /usr/local/bin/aws-asg-bootstrap.sh ${InstanceCount} "${InstallerUrl}" >> /var/log/aws-asg-bootstrap.log 2>&1 </dev/null &
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource InstanceGroup --region ${AWS::Region}
+            curl -fL "${BootstrapUrl}" -o /usr/local/bin/aws-asg-bootstrap.sh && \
+            chmod +x /usr/local/bin/aws-asg-bootstrap.sh && \
+            /bin/bash -x /usr/local/bin/aws-asg-bootstrap.sh ${InstanceCount} "${InstallerUrl}" 2>&1 | tee /var/log/aws-asg-bootstrap.log
             rc=$?
             # Signal the status from cfn-init
             /opt/aws/bin/cfn-signal -e $rc --stack ${AWS::StackName} --resource InstanceGroup --region ${AWS::Region}
-            exit 0
+            exit $rc

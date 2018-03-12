@@ -81,17 +81,29 @@ mount_xlrroot () {
     mount ${XLRROOT}
 }
 
+aws_config() {
+    mkdir -m 0700 -p ~/.aws
+    mkdir -p ~/.aws/cli
+    safe_curl -fL https://raw.githubusercontent.com/awslabs/awscli-aliases/master/alias -o ~/.aws/cli/aliases
+    aws configure set default.s3.signature_version s3v4
+    aws configure set default.s3.addressing_style path
+    aws configure set default.region $AWS_DEFAULT_REGION
+}
 
 mount_efs
 mount_xlrroot
-
+aws_config
 
 if [ -n "$INSTALLER_URL" ] && [ "$INSTALLER_URL" != "http://none" ]; then
     if [[ "$INSTALLER_URL" =~ ^http ]]; then
-        safe_curl "$INSTALLER_URL" > /var/tmp/xcalar-install.sh
-        bash -x /var/tmp/xcalar-install.sh --nostart
+        safe_curl -fL "$INSTALLER_URL" -o /var/tmp/xcalar-install.sh
+        bash -x /var/tmp/xcalar-install.sh --nostart --caddy --startonboot
     elif test -e "$INSTALLER_URL" ; then
-        bash -x "$INSTALLER_URL" --nostart
+        bash -x "$INSTALLER_URL" --nostart --caddy --startonboot
+    fi
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        exit $rc
     fi
 fi
 
@@ -109,4 +121,12 @@ done
  /opt/xcalar/scripts/genConfig.sh /etc/xcalar/template.cfg - "${IPS[@]}"
 ) | sed 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='${XLRROOT}'@g' | tee /etc/xcalar/default.cfg
 
-service xcalar start
+mkdir -p ${XLRROOT}/config
+chown -R xcalar:xcalar ${XLRROOT}/config /etc/xcalar
+
+if ! service xcalar start; then
+    echo >&2 "Failed to start cluster"
+fi
+
+jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"${AdminUsername:-xdpadmin}\", \"email\": \"${AdminEmail:-support@xcalar.com}\", \"password\": \"${AdminPassword:-Welcome1}\" }"
+safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set"  || true
