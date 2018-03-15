@@ -44,7 +44,7 @@ run: image stop clean
 
 strip-binaries: install
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) strip /opt/xcalar/bin/usrnode /opt/xcalar/bin/childnode \
-		/opt/xcalar/bin/clistener /opt/xcalar/bin/listener /opt/xcalar/bin/licenseCheck \
+		/opt/xcalar/bin/licenseCheck \
 		/opt/xcalar/bin/xccli /opt/xcalar/bin/xcMapRClient /opt/xcalar/bin/xcmgmtd /opt/xcalar/bin/xcmonitor
 
 install: run
