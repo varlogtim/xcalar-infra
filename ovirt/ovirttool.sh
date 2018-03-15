@@ -22,16 +22,25 @@ check_module ovirtsdk4 ovirt-engine-sdk-python
 check_module paramiko
 check_module requests
 
-# if they didn't pass the --user arg, prompt for it
+# cmd args to send to ovirttool.py
+cmds="$@"
+
+# if they didn't pass the --user arg,
+# prompt for it and add as cmd to pass
 echo >&2
 if [[ $@ != *"--user="* ]]; then
   read -p 'Username: ' uname
+  cmds="$cmds --user=$uname"
 fi
-# always prompt for password
-read -sp 'Password: ' password
-echo >&2
-echo >&2
-export OVIRT_PASSWORD=$password
+# prompt for password if no env variable
+# (this way can set it when running unit tests)
+password=${OVIRT_PASSWORD}
+if [ -z $password ]; then
+  read -sp 'Password: ' password
+  echo >&2
+  echo >&2
+  export OVIRT_PASSWORD=$password
+fi
 
 # will redirect stdout and stderr to a logfile
 # log dir is TMPDIR env var so user can direct logs where they want
@@ -43,10 +52,9 @@ export OVIRTLOGFILE=$TMPDIR/logfile.txt
 
 echo "Calling ovirttool!  This process could take up to 45 minutes, depending on xcalar installation and cluster size." >&2
 echo "A summary displaying info about your provisioned VMs/cluster will be displayed upon successful completion." >&2
-echo "You can track progress here: $OVIRTLOGFILE"
+echo "You can track progress here: $OVIRTLOGFILE" >&2
 echo >&2
 
-cmds="--user=$uname $@"
 python3 ovirttool.py $cmds > $OVIRTLOGFILE 2>&1
 #python3 ovirttool.py $cmds 2> $OVIRTLOGFILE 1> out.txt
 rc=$?
