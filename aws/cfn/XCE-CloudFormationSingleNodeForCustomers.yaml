@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: XCE AWS CloudFormation Template (Single Instance) v20180215-1
+Description: XCE AWS CloudFormation Template (Single Instance) v1-20180314
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -16,15 +16,13 @@ Parameters:
   InstallerUrl:
     Description: XCE Installer URL
     Type: String
-    MinLength: '8'
-    MaxLength: '256'
-    ConstraintDescription: 'Must be a valid url. The default is valid until March 15/2018.'
-    Default: https://xcrepo.s3.amazonaws.com/builds/cad778ee-cbb4f2f2/prod/xcalar-1.3.0-1548-installer?AWSAccessKeyId=AKIAJU4DLXF3P2I7WGCQ&Expires=1521291006&Signature=WJsuWi%2FGsx9lXaKs7BfXqY%2Fzeyc%3D
+    MinLength: '0'
+    MaxLength: '2048'
+    ConstraintDescription: 'Must be a valid url.'
   LicenseKey:
-    NoEcho: true
     Description: XCE License
     Type: String
-    MinLength: '60'
+    MinLength: '0'
     MaxLength: '1024'
   AdminUsername:
     Description: XD Administrator name used to log into the GUI
@@ -43,7 +41,7 @@ Parameters:
   InstanceType:
     Description: XCE EC2 instance type
     Type: String
-    Default: r4.4xlarge
+    Default: c5.18xlarge
     AllowedValues:
       - r4.2xlarge
       - r4.4xlarge
@@ -68,8 +66,16 @@ Parameters:
     AllowedValues:
       - RHEL7
       - EL7
-  CidrLocation:
-    Description: ' The IP address range to allow SSH/HTTPS access from'
+  SSHLocation:
+    Description: ' The IP address range to allow SSH access from'
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  HTTPLocation:
+    Description: ' The IP address range to allow HTTP access from'
     Type: String
     MinLength: '9'
     MaxLength: '18'
@@ -113,7 +119,8 @@ Metadata:
           default: Security configuration
         Parameters:
           - KeyName
-          - CidrLocation
+          - SSHLocation
+          - HTTPLocation
       - Label:
           default: Network configuration
         Parameters:
@@ -128,7 +135,9 @@ Metadata:
         default: 'Server size:'
       KeyName:
         default: 'Key pair:'
-      CidrLocation:
+      SSHLocation:
+        default: 'CIDR range:'
+      HTTPLocation:
         default: 'CIDR range:'
 Resources:
   EC2Instance:
@@ -204,8 +213,6 @@ Resources:
               chkconfig ntpd on
               service rsyslog restart
             else
-              firewall-cmd --add-service=ntp --permanent || true
-              firewall-cmd --reload || true
               systemctl enable --now ntpd
               systemctl restart rsyslog
             fi
@@ -222,7 +229,7 @@ Resources:
           # Needed for AutoScale
           cfn-init -v  --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
           mkdir -p /etc/xcalar
-          echo "${LicenseKey}" > /etc/xcalar/XcalarLic.key
+          test -n "${LicenseKey}" && echo "${LicenseKey}" > /etc/xcalar/XcalarLic.key
           safe_curl -f "${InstallerUrl}" -o installer.sh && \
           /bin/bash -x installer.sh --caddy --startonboot --nostart
           rc=$?
@@ -233,10 +240,14 @@ Resources:
           # The default XEN clock source is 1000x slower
           echo tsc > /sys/devices/system/cl*/cl*/current_clocksource
           echo 'echo tsc > /sys/devices/system/cl*/cl*/current_clocksource' >> /etc/rc.local
+          # Create the config file for single node
           (
           /opt/xcalar/scripts/genConfig.sh /etc/xcalar/template.cfg - localhost
           echo "Constants.SendSupportBundle=true"
           ) | tee /etc/xcalar/default.cfg
+          # Adjust the Caddyfile to listen to port 443 instead of 8443
+          sed -i 's/:8443/:443/g' /etc/xcalar/Caddyfile
+          setcap cap_net_bind_service=+ep /opt/xcalar/bin/caddy
           SWAPFILE="/swapfile"
           # Mount extra instance store
           case "${InstanceType}" in
@@ -253,7 +264,7 @@ Resources:
               parted $INSTANCESTOREDEV -s 'mklabel gpt mkpart ext2 1 -1'
               for ii in `seq 10`; do
                 sleep 2
-                mkfs.ext4 -m 0 -L $LABEL -F $INSTANCESTOREPART    && break
+                mkfs.ext4 -m 0 -F $INSTANCESTOREPART    && break
               done
               if [ -b $INSTANCESTOREPART ]; then
                 INSTANCESTORE=/ssd
@@ -309,7 +320,7 @@ Resources:
               jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"${AdminUsername}\", \"email\": \"${AdminEmail}\", \"password\": \"${AdminPassword}\" }"
               echo "Creating default admin user ${AdminUsername} (${AdminEmail})"
               # Don't fail the deploy if this curl doesn't work
-              safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set" || true
+              safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set"
           else
               echo "\$AdminUsername is not specified"
           fi
@@ -333,14 +344,14 @@ Resources:
         - IpProtocol: tcp
           FromPort: '22'
           ToPort: '22'
-          CidrIp: !Ref 'CidrLocation'
+          CidrIp: !Ref 'SSHLocation'
         - IpProtocol: tcp
-          FromPort: '8443'
-          ToPort: '8443'
-          CidrIp: !Ref 'CidrLocation'
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: !Ref 'HTTPLocation'
 Outputs:
   URL:
-    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PublicDnsName', ':8443']]
+    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PublicDnsName', ':443']]
     Description: Address of newly created XD instance!
   UserName:
     Value: !Ref 'AdminUsername'
