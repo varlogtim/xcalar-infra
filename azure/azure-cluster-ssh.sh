@@ -87,7 +87,7 @@ for idx in `seq 0 $((${#HOSTS[@]} - 1)) `; do
     if [ $res -ne 0 ]; then
         any_failure=1
         echo "## $hostn (ERROR: $res)"
-    else
+    elif [ "$HOST" = "all" ]; then
         echo "## $hostn"
     fi
     RES+=($res)

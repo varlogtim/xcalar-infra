@@ -6,9 +6,16 @@ export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$HOME/google-cloud-sdk/bin:$PATH"
 TAP="AllTests.tap"
 
+DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+
+if test -z "$XLRINFRADIR"; then
+    export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
+fi
+
 set +e
 sudo chown jenkins:jenkins /home/jenkins/.config
-bash /netstore/users/jenkins/slave/setup.sh
+source "$XLRINFRADIR/bin/clusterCmds.sh"
+initClusterCmds
 set -e
 
 # We need to build for xccli which is used by the systemTest
@@ -19,55 +26,23 @@ cmBuild qa
 installer=$INSTALLER_PATH
 cluster=$CLUSTER
 
-ret=`gcloud compute instances list | grep $cluster`
+if [ "$VmProvider" = "GCE" ]; then
+    ret=`gcloud compute instances list | grep $cluster`
 
-if [ "$NOTPREEMPTIBLE" != "1" ]; then                                           
-    ips=($(awk '/RUNNING/ {print $6":18552"}' <<< "$ret"))                      
-else                                                                            
-    ips=($(awk '/RUNNING/ {print $5":18552"}' <<< "$ret"))                      
-fi   
+    if [ "$NOTPREEMPTIBLE" != "1" ]; then
+        ips=($(awk '/RUNNING/ {print $6":18552"}' <<< "$ret"))
+    else
+        ips=($(awk '/RUNNING/ {print $5":18552"}' <<< "$ret"))
+    fi
+elif [ "$VmProvider" = "Azure" ]; then
+    ret=`getNodes "$cluster"`
+    ips=($(awk '{print $0":18552"}' <<< "$ret"))
+else
+    echo 2>&1 "Unknown VmProvider $VmProvider"
+    exit 1
+fi
 
-echo "$ips"
-
-stopXcalar() {
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo /opt/xcalar/bin/xcalarctl stop-supervisor"
-}
-
-restartXcalar() {
-    set +e
-    stopXcalar
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo service xcalar start"
-    for ii in $(seq 1 $NUM_INSTANCES ) ; do
-        host="${cluster}-${ii}"                                                                                                                                                                                                                                                                                                                                                                                               
-        gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started" 
-        ret=$?
-        numRetries=60
-        try=0
-        while [ $ret -ne 0 -a "$try" -lt "$numRetries" ]; do
-            sleep 1s
-            gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q "Usrnodes started"
-            ret=$?
-            try=$(( $try + 1 ))
-        done
-        if [ $ret -eq 0 ]; then
-            echo "All nodes ready"
-        else
-            echo "Error while waiting for node $ii to come up"
-            return 1
-        fi
-    done 
-    set -e
-}
-
-cloudXccli() {
-    cmd="gcloud compute ssh $cluster-1 -- \"/opt/xcalar/bin/xccli\""
-    for arg in "$@"; do
-        arg="${arg//\\/\\\\}"
-        arg="${arg//\"/\\\"}"
-        cmd="$cmd \"$arg\""
-    done
-    $cmd
-}
+echo "${ips[*]}"
 
 funcstatsd() {
     local name="${1//::/_}"
@@ -84,32 +59,15 @@ funcstatsd() {
     fi
 }
 
-genSupport() {
-    xcalar-infra/gce/gce-cluster-ssh.sh $cluster "sudo /opt/xcalar/scripts/support-generate.sh"
-}
-
-startupDone() {
-    for node in `gcloud compute instances list | grep $cluster | cut -d \  -f 1`; do
-        gcloud compute ssh $node -- "sudo journalctl -r" | grep -q "Startup finished";
-        ret=$?
-        if [ "$ret" != "0" ]; then
-            return $ret
-        fi
-    done
-    return 0
-}
+export http_proxy=
 
 sudo yum install -y nc
-cloudXccli -c "version"
-gitsha=`cloudXccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
+cloudXccli "$cluster" -c "version"
+gitsha=`cloudXccli "$cluster" -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
 # remove when bug 2670 fixed
 hosts=$( IFS=$','; echo "${ips[*]}" )
-
-
-source $XLRDIR/doc/env/xc_aliases
-xcEnvEnter
 
 echo "1..$NUM_ITERATIONS" | tee "$TAP"
 set +e
