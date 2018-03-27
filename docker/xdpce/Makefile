@@ -103,7 +103,14 @@ xccli:
 shell:
 	docker exec -ti $(CONTAINER_NAME) /bin/bash -l
 
-docker-image: run install strip-binaries install-license replace-hostname replace-port enforce-samplesize createuser disable-https restart commit save
+copyconfig:
+	mkdir -p ./configcopy
+	mkdir -p ./homecopy
+	docker cp $(CONTAINER_NAME):/etc/xcalar/. ./configcopy/
+	docker cp $(CONTAINER_NAME):/var/opt/xcalar/. ./homecopy/
+	docker cp $(CONTAINER_NAME):/etc/default/xcalar xcalar
+
+docker-image: run install strip-binaries install-license replace-hostname replace-port enforce-samplesize createuser disable-https restart copyconfig commit save
 
 run-xcalar: run install strip-binaries install-license replace-hostname replace-port createuser disable-https restart
 
