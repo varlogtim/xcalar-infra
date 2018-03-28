@@ -806,6 +806,11 @@ def provision_vm(name, ram, cores, availableClusters):
             info("Change password for user 'jenkins' on {} ({})".format(name, ip))
             run_ssh_cmd(ip, 'echo "jenkins:{}" | chpasswd'.format(JENKINS_USER_PASS))
 
+            # set the hostname now (in case they don't want to install Xcalar)
+            info("Set hostname of VM {} to {}".format(ip, name))
+            fqdn = "{}.int.xcalar.com".format(name)
+            run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
+
             return True
         #except ResourceException as err:
         except Exception as e:
@@ -1034,7 +1039,7 @@ def setup_xcalar(ip, licfilepath, installer):
         scp_file(ip, filedata[0], filedata[1])
 
     # install using bld requested
-    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, vmname, ip], timeout=1000)
+    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=1000)
 
 '''
     Install and setup Xcalar on a set of nodes.
@@ -1542,9 +1547,9 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
             "|\n| " + str(len(vmids)) + " VMs were created.\n" \
             "|\n| The VMs have the following specs:\n" \
             "|\tRAM (GB)     : " + str(ram) + "\n" \
-            "|\t#  Cores     : " + str(cores) + "\n"
+            "|\t#  Cores     : " + str(cores)
     if installer:
-        summary_header = summary_header + "|\tInstaller    : " + str(installer) + "\n"
+        summary_header = summary_header + "\n|\tInstaller    : " + str(installer)
     #summary_str = summary_str + "\n|\tOvirt cluster: {}".format(ovirt_cluster) # it might have gone to another cluster. need to check through sdk
 
     # get the ips from the ids
@@ -1556,12 +1561,15 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
     for i, vmid in enumerate(vmids):
         vmip = get_vm_ip(vmid)
         vmname = get_vm_name(vmid)
-        summary_str = summary_str + "\n| " + vmname + "\n" \
-                                    "|\tIP: " + vmip + "\n" + vm_ssh_creds
+        # if multiple vms put a separator line between them
+        if len(vmids) > 1 and i > 0:
+            summary_str = summary_str + "\n|      --------------------------------------"
+        summary_str = summary_str + "\n|\t Hostname: " + vmname + "\n" \
+                                    "|\t IP      : " + vmip + "\n" + vm_ssh_creds
         if installer:
-                summary_str = summary_str + "\n|\tAccess URL: https://{}:8443".format(vmip) + "\n" \
+                summary_str = summary_str + "\n|\n|\tAccess URL: https://{}:8443".format(vmip) + "\n" \
                 "|\tUsername (login page): " + LOGIN_UNAME + "\n" \
-                "|\tPassword (login page): " + LOGIN_PWORD + "\n"
+                "|\tPassword (login page): " + LOGIN_PWORD
 
     clussumm = ""
     if clustername:
@@ -1574,7 +1582,7 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
             raise ValueError("No '0' entry in cluster node data: {}".format(clusternodedata))
         node0ip = clusternodedata['0']
 
-        clussumm = "\n=================== CLUSTER INFO ====================\n" \
+        clussumm = "\n|\n=================== CLUSTER INFO ====================\n" \
             "|\n| Your VMs have been formed in to a cluster.\n" \
             "|\n| Cluster name: " + clustername  + "\n" \
             "| Access URL:\n|\thttps://" + node0ip + ":8443\n" \
@@ -1588,7 +1596,7 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
         clussumm = clussumm + "|\n ------------------------------------------\n"
 
 
-    summary_str = summary_str + clussumm + "|\n=====================================================" \
+    summary_str = summary_str + clussumm + "\n|\n=====================================================" \
                                         "\n-----------------------------------------------------\n"
 
     # print each of the vm ids to stdout

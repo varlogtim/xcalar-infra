@@ -29,14 +29,14 @@ cmds="$@"
 # prompt for it and add as cmd to pass
 echo >&2
 if [[ $@ != *"--user="* ]]; then
-  read -p 'Username: ' uname
+  read -p 'Your Xcalar LDAP username: ' uname
   cmds="$cmds --user=$uname"
 fi
 # prompt for password if no env variable
 # (this way can set it when running unit tests)
 password=${OVIRT_PASSWORD}
 if [ -z $password ]; then
-  read -sp 'Password: ' password
+  read -sp 'Your Xcalar LDAP Password: ' password
   echo >&2
   echo >&2
   export OVIRT_PASSWORD=$password
