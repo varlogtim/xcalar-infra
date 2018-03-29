@@ -103,6 +103,12 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
            genSupport
            echo "$CLUSTER Crashed"
            exit 1
+        elif [ $anyfailed -eq 1 ]
+            # cluster is up but got non zero return code. This means that
+            # the ssh connection is lost. In such cases, just drive on with the
+            # next test after restarting the cluster
+            restartXcalar
+            anyfailed=0
         fi
         time cloudXccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
         rc=${PIPESTATUS[0]}
