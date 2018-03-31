@@ -15,5 +15,5 @@ EXPOSE 443 5000 8000 8443 9090 8889 12124 18552
 #   Run!   #
 # -------- #
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["/docker-entrypoint.sh"]
 

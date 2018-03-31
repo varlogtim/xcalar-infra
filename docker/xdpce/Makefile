@@ -1,7 +1,9 @@
 .PHONY: image stop run logs logsf xccli shell
 all: image run
 
-CONTAINER_IMAGE ?= xdpce:latest
+BUILD_NUMBER ?= latest # Jenkins env variable
+#CONTAINER_IMAGE ?= xdpce:$(BUILD_NUMBER)
+CONTAINER_IMAGE ?= xdpce
 CONTAINER_NAME  ?= xdpce
 TZ ?= America/Los_Angeles
 INSTALLER_PATH ?= /netstore/qa/Downloads/ReleaseCandidates/xcalar-1.2.3-RC4/20171024-3c9a47f4/prod/xcalar-1.2.3-1296-installer
@@ -35,6 +37,7 @@ RUN_ARGS = $(CONTAINER_ARGS_COMMON)  $(CONTAINER_IMAGE)
 
 image:
 	docker build -t $(CONTAINER_IMAGE) .
+	docker tag $(CONTAINER_IMAGE) $(CONTAINER_IMAGE):$(BUILD_NUMBER)
 
 stop:
 	docker stop $(CONTAINER_NAME) 2>/dev/null || true
@@ -83,7 +86,7 @@ commit:
 	docker commit $(CONTAINER_NAME) $(CONTAINER_NAME)
 
 save:
-	docker save $(CONTAINER_NAME) | gzip > $(CONTAINER_NAME).tar.gz
+	docker save $(CONTAINER_IMAGE) | gzip > $(CONTAINER_NAME).tar.gz
 
 runWithCfg: image stop clean
 	docker run -d -t -v $(DEFAULT_CFG_PATH):/etc/xcalar/default.cfg $(INSTALLER_ARGS)
@@ -104,10 +107,9 @@ shell:
 	docker exec -ti $(CONTAINER_NAME) /bin/bash -l
 
 copyconfig:
-	mkdir -p ./configcopy
-	mkdir -p ./homecopy
-	docker cp $(CONTAINER_NAME):/etc/xcalar/. ./configcopy/
-	docker cp $(CONTAINER_NAME):/var/opt/xcalar/. ./homecopy/
+	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.ipython ./.ipython
+	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.jupyter ./.jupyter
+	docker cp $(CONTAINER_NAME):/var/opt/xcalar/jupyterNotebooks ./jupyterNotebooks
 	docker cp $(CONTAINER_NAME):/etc/default/xcalar xcalar
 
 docker-image: run install strip-binaries install-license replace-hostname replace-port enforce-samplesize createuser disable-https restart copyconfig commit save
