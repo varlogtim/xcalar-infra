@@ -16,8 +16,8 @@ make docker-image INSTALLER_PATH="$PATH_TO_XCALAR_INSTALLER"
 # along with these dirs which get generated install time in xcalar home,
 # that you will need if you map local volumes there (as it will overwrite
 # what is currently there)
-cp -R .ipython/ $FINALDEST
-cp -R .jupyter/ $FINALDEST
+cp -R .ipython $FINALDEST
+cp -R .jupyter $FINALDEST
 cp -R jupyterNotebooks $FINALDEST
 cp xcalar $FINALDEST
 cp xdpce.tar.gz $FINALDEST

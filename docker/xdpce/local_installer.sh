@@ -112,8 +112,8 @@ echo "Copy tar file.. to staging dir $STAGING_DIR (if over netstore could take s
 cp "$DIR/restar.tar.gz" .
 tar -xzf restar.tar.gz
 
-cp -R .ipython/ .jupyter/ jupyterNotebooks/ $LOCALXCEHOME # put these here in case of initial install, need them in xce home
-cp trial.key xem.cfg $XPEDATA # will mount these files individually from data dir
+cp -R .ipython .jupyter jupyterNotebooks "$LOCALXCEHOME" # put these here in case of initial install, need them in xce home
+cp trial.key xem.cfg "$XPEDATA" # will mount these files individually from data dir
 
     ###  LOAD THE PACKED IMAGES AND START THE NEW CONTAINERS ##
 
