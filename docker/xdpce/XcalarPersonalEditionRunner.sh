@@ -19,7 +19,6 @@ make docker-image INSTALLER_PATH="$PATH_TO_XCALAR_INSTALLER"
 cp -R .ipython $FINALDEST
 cp -R .jupyter $FINALDEST
 cp -R jupyterNotebooks $FINALDEST
-cp xcalar $FINALDEST
 cp xdpce.tar.gz $FINALDEST
 cp defaultAdmin.json $FINALDEST
 
@@ -33,10 +32,8 @@ cp grafana_graphite.tar.gz $FINALDEST
 tarfile=restar.tar.gz
 installerscript=local_installer.sh
 cd $FINALDEST
-cp "$XLRINFRADIR/docker/xdpce/trial.key" .
-cp "$XLRINFRADIR/docker/xdpce/xem.cfg" .
 cp "$XLRINFRADIR/docker/xdpce/$installerscript" .
-thingstotar="xdpce.tar.gz grafana_graphite.tar.gz trial.key xcalar xem.cfg defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks/"
+thingstotar="xdpce.tar.gz grafana_graphite.tar.gz defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks/"
 tar -czf $tarfile $thingstotar
 # run mkshar
 "$XLRINFRADIR/bin/mkshar.sh" "$tarfile" "$installerscript" > xpe_installer.sh

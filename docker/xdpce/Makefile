@@ -52,6 +52,7 @@ strip-binaries: install
 
 install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
+	docker cp xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
 
 enforce-samplesize: install-license
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) bash -c "echo Constants.MaxInteractiveDataSize=1073741824 >> /etc/xcalar/default.cfg"
@@ -110,7 +111,6 @@ copyconfig:
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.ipython ./.ipython
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.jupyter ./.jupyter
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/jupyterNotebooks ./jupyterNotebooks
-	docker cp $(CONTAINER_NAME):/etc/default/xcalar xcalar
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/config/defaultAdmin.json defaultAdmin.json
 
 docker-image: run install strip-binaries install-license replace-hostname replace-port enforce-samplesize createuser disable-https restart copyconfig commit save

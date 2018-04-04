@@ -54,7 +54,6 @@ debug() {
 # these should remain even after installation complete, as long as they want XPE)
 XPEDIR="$HOME/xcalar_personal_edition"
 XPEIMPORTS="$XPEDIR/imports" # dedicated dir where user can map datasets, etc. for access in Xcalar
-XPEDATA="$XPEDIR/data"
 LOCALLOGDIR="$XPEDIR/xceLogs" # will mount to /var/log/xcalar so logs persist through upgrades
 LOCALXCEHOME="$XPEDIR/xceHome" # will mount /var/opt/xcalar here so session data, etc. persissts through upgrde
 
@@ -89,14 +88,12 @@ fi
 
 # make the default user installation dirs
 mkdir -p "$XPEIMPORTS"
-mkdir -p "$XPEDATA"
 mkdir -p "$LOCALLOGDIR"
 mkdir -p "$LOCALXCEHOME"
 mkdir -p "$LOCALXCEHOME/config"
 
 cp -R .ipython .jupyter jupyterNotebooks "$LOCALXCEHOME" # put these here in case of initial install, need them in xce home
 cp defaultAdmin.json "$LOCALXCEHOME/config"
-cp trial.key xem.cfg "$XPEDATA" # will mount these files individually from data dir
 
     ###  LOAD THE PACKED IMAGES AND START THE NEW CONTAINERS ##
 
@@ -139,8 +136,6 @@ run_cmd="docker run -d -t --user xcalar --cap-add=ALL --cap-drop=MKNOD \
 -v /var/run/docker.sock:/var/run/docker.sock \
 -v $LOCALXCEHOME:/var/opt/xcalar \
 -v $LOCALLOGDIR:/var/log/xcalar \
--v $XPEDATA/trial.key:/etc/xcalar/XcalarLic.key \
--v $XPEDATA/xem.cfg:/etc/xcalar/default.cfg \
 -v $XPEIMPORTS:/mnt/imports2 \
 -p $XEM_PORT_NUMBER:15000 \
 --name $XCALAR_CONTAINER_NAME \
