@@ -1049,6 +1049,8 @@ def setup_xcalar(ip, licfilepath, installer):
     :param vmids: list of unique vm ids in Ovirt of VMs to install xcalar on
     :param licfilepath: (String)
         path to License file on local machine executing this script
+    :param installer (String)
+        curl'able URL to an RPM installer
     :param createcluster: (optional, String)
         If supplied, then once xcalar setup on the vms, will form them
         in to a cluster by name of String passed in
@@ -1787,11 +1789,6 @@ def validateparams(args):
             if any(filter(str.isupper, args.vmbasename)) or '_' in args.vmbasename:
                 raise ValueError("\n\nERROR: --vmbasename value must be all lower case letters, and may not contain any _ chars\n")
 
-        '''
-            if they're trying to create a cluster,
-            make sure they have access to /netstore because
-            This script will try to access that mnt point locally
-        '''
         if args.noinstaller:
             if args.installer:
                 raise AttributeError("\n\nERROR: You have specified not to install xcalar with the --noinstaller option,\n"
@@ -1799,52 +1796,22 @@ def validateparams(args):
                     "(Is this what you intended?)\n")
         else:
 
-            # make sure netstore accessible (will get installer here)
-            if not os.path.exists('/netstore'):
-                raise NotADirectoryError("\n\nERROR: You are trying to create a cluster, "
-                    " but do not have netstore mounted locally at /netstore.\n"
-                    "  Please make netstore accessible on machine you're calling this script from\n")
-
             ''' installer:
-                make sure URL and for a path that exists on netstore
+                make sure URL can curl
             '''
-            installerheader = 'http://netstore/'
-            defaultinstallerpath = 'builds/byJob/BuildTrunk/xcalar-latest-installer-prod'
-            defaultinstallerurl = installerheader + defaultinstallerpath
+            installerheader = 'http://'
+            defaultinstaller = installerheader + 'netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod'
             if not installer:
-                installer = defaultinstallerurl
+                installer = defaultinstaller
             if installer.startswith(installerheader):
                 # make sure they have given the regular RPM installer, not userinstaller
                 filename = os.path.basename(installer)
-                if 'gui' in filename or 'userinstaller' in filename or filename.endswith('.sh'):
+                if 'gui' in filename or 'userinstaller' in filename:
                     raise ValueError("\n\nERROR: Please supply the regular RPM installer, not the gui installer or userinstaller\n")
-
-                netstorepath = installer.split(installerheader)[1]
-                localmntpnt = '/netstore'
-                localpath = localmntpnt + '/' + netstorepath
-                if os.path.exists(localpath):
-                    # make sure an actual file
-                    if not os.path.isfile(localpath):
-                        raise ValueError("\n\nERROR: installer URL {} corresponds to path on netstore: {}\n"
-                            "This path exists on netstore, but it is not for a file!\n"
-                            "(You must supply the path to the installer itself; "
-                            "not the dir the installers reside in.)\n".format(installer, netstorepath))
-                else:
-                    err = "\n\nERROR: installer URL is {}\n" \
-                        "This should correspond to this path on netstore: {}\n" \
-                        "But, the local path {} does NOT exist, or is not accessible!\n" \
-                        "\t- Is netstore mounted at {} ?\n" \
-                        "\t- If so, is {} a valid path on netstore?\n".format(installer, netstorepath, localpath, localmntpnt, netstorepath)
-                    if not args.installer:
-                        # check in case the default ever becomes outdated
-                        err = err + "[Note: This installer URL is the tool's default installer URL." \
-                        "\nIt is being used because you did not supply the --installer arg.\n"\
-                        "Is {} still a valid installer on netstore?]\n".format(defaultinstallerpath)
-                    raise ValueError(err)
             else:
-                raise ValueError("\n\nERROR: --installer arg should be an URL for an RPM installer on netstore.\n"
+                raise ValueError("\n\nERROR: --installer arg should be an URL for an RPM installer, which you can curl.\n"
                     "(If you know the <path> to the installer on netstore, then the URL to supply would be: --installer=http://netstore/<path>\n"
-                    "Example: --installer={})\n".format(defaultinstallerurl))
+                    "Example: --installer={})\n".format(defaultinstaller))
 
             '''
                 license files for xcalar.
@@ -1906,7 +1873,7 @@ if __name__ == "__main__":
     parser.add_argument("--ram", type=int, default=8, help="RAM on VM(s) (in GB)")
     parser.add_argument("--nocluster", action='store_true', help="Do not create a Xcalar cluster of the new VMs.")
     parser.add_argument("--installer", type=str, #default='builds/Release/xcalar-latest-installer-prod',
-        help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer on netstore which you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for latest BuildTrunk prod build.)")
+        help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for latest BuildTrunk prod build.)")
     parser.add_argument("--noinstaller", action="store_true", default=False, help="Don't install Xcalar on provisioned VMs")
     parser.add_argument("--ovirtcluster", type=str, default='feynman-dc', help="Which ovirt cluster to create the VM(s) on.  Defaults to feynman-dc")
     parser.add_argument("--tryotherclusters", action="store_true", default=False, help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
