@@ -1164,11 +1164,7 @@ def create_cluster_dir(remotePath):
 
     # create a dir on netstore, name after root node
     # do it on netstore
-    cmds = ['sudo mkdir -p /netstore/' + remotePath,
-            'sudo chown ' + XUID + ':' + XUID + ' /netstore/' + remotePath]
-    #cmds = [['sudo mkdir -p /netstore/{}/config'.format(remotePath)],
-    #        ['sudo chown ' + XUID + ':' + XUID  + ' /netstore/' + remotePath],
-    #        ['sudo chown ' + XUID + ':' + XUID  + ' /netstore/' + remotePath + '/config']]
+    cmds = ['mkdir -p -m 0777 /netstore/' + remotePath]
     for cmd in cmds:
         run_system_cmd(cmd)
         #info("System command:: {}".format(cmd))
