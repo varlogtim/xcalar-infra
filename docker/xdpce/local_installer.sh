@@ -7,17 +7,9 @@
 #        (backs up and removes existing install directory and removes containers)
 #        bash <script path>/local_installer.sh uninstall
 #
-# script should exist in the same dir as restar.tar.gz tarball
-# (that tarball should contain the docker images, required install files,
-# and default Xcalar mappings for xlr config, etc.)
-#
-# - You can generate the restar.tar.gz tarball by running Jenkins job:
-#   XcalarPersonalEditionBuilder
-# (the most recent copy of this script, will be included in dir created by the job)
-#
 # EFFECT OF RUNNING THIS SCRIPT:
 #
-# When you run this script in a dir with the restar.tar.gz tarball,
+# When you run this script in dir with required files,
 # any previous xdpce and grafana containers will be destroyed.
 # it will create two docker containers (one for Grafana/graphite
 # one for XEM cluster), and load the saved images for Grafana and XCE cluster
@@ -59,7 +51,6 @@ debug() {
             ## SETUP ##
 
 # installer dirs created on the local machine
-# (not the staging/tmp dir where install work is done,
 # these should remain even after installation complete, as long as they want XPE)
 XPEDIR="$HOME/xcalar_personal_edition"
 XPEIMPORTS="$XPEDIR/imports" # dedicated dir where user can map datasets, etc. for access in Xcalar
@@ -94,25 +85,17 @@ if [ "$1" == uninstall ]; then
     exit 0
 fi
 
-    ## CREATE INSTALLER DIRS, and UNPACK TAR FILE W REQUIRED FILES INTO INSTALLER DIR ##
+    ## CREATE INSTALLER DIRS, move required files to final dest ##
 
 # make the default user installation dirs
 mkdir -p "$XPEIMPORTS"
 mkdir -p "$XPEDATA"
 mkdir -p "$LOCALLOGDIR"
 mkdir -p "$LOCALXCEHOME"
-
-# create tmp staging dir for extracting the installation contents
-# move the tarball there and extract it
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-STAGING_DIR=`mktemp -d 2>/dev/null || mktemp -d -t 'xpeinstaller'` # creates tmp dir on osx and linux
-cd $STAGING_DIR
-
-echo "Copy tar file.. to staging dir $STAGING_DIR (if over netstore could take some time...)" >&2
-cp "$DIR/restar.tar.gz" .
-tar -xzf restar.tar.gz
+mkdir -p "$LOCALXCEHOME/config"
 
 cp -R .ipython .jupyter jupyterNotebooks "$LOCALXCEHOME" # put these here in case of initial install, need them in xce home
+cp defaultAdmin.json "$LOCALXCEHOME/config"
 cp trial.key xem.cfg "$XPEDATA" # will mount these files individually from data dir
 
     ###  LOAD THE PACKED IMAGES AND START THE NEW CONTAINERS ##
@@ -170,16 +153,8 @@ $run_cmd
 wait
 # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
 docker exec -it --user xcalar $XCALAR_IMAGE /opt/xcalar/bin/xcalarctl start
-# get admin login
-debug "get admin credentials"
-docker exec -it --user xcalar $XCALAR_IMAGE mkdir -p /var/opt/xcalar/config/ && curl -4 -H "Content-Type: application/json" -X POST -d "{ \"defaultAdminEnabled\": true, \"username\": \"admin\", \"email\": \"admin@xyz.com\", \"password\": \"admin\" }" "http://127.0.0.1:12124/login/defaultAdmin/set"
 
     ## TODO: VALIDATE UPGRADE WAS SUCCESSFUL,
-    ## IF YES, QUERY USER IF THEY WANT TO RETAIN THE BACKUP YOU MADE
-    ##         DISCARD BACKUP IF THEY DON'T
+    ## IF YES, DISCARD BACKUP
     ## IF NO, SET BACK TO PREVIOUS STATE
 
-# go back to script dir and delete stging dir
-cd "$DIR"
-debug "remove staging dir: $STAGING_DIR"
-rm -r "$STAGING_DIR"

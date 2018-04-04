@@ -111,6 +111,7 @@ copyconfig:
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.jupyter ./.jupyter
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/jupyterNotebooks ./jupyterNotebooks
 	docker cp $(CONTAINER_NAME):/etc/default/xcalar xcalar
+	docker cp $(CONTAINER_NAME):/var/opt/xcalar/config/defaultAdmin.json defaultAdmin.json
 
 docker-image: run install strip-binaries install-license replace-hostname replace-port enforce-samplesize createuser disable-https restart copyconfig commit save
 
