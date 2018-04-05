@@ -74,11 +74,13 @@ _ssh $SSHUSER@$NODE "rm -rf $XCALAR_ROOT/*" < /dev/null || true
 echo "Installing perpetual license"
 _ssh $SSHUSER@$NODE "cp /netstore/users/jerene/XcalarLic.key /etc/xcalar"
 echo "Installing latest build"
-_ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --start"
+_ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --nostart"
 
 echo "Installing UI in this build"
-scp xcalar-gui.tar.gz $SSHUSER@$NODE:/var/www
-_ssh $SSHUSER@$NODE "cd /var/www; rm -rf xcalar-gui; tar -zxvf xcalar-gui.tar.gz;"
+scp xcalar-gui.tar.gz $SSHUSER@$NODE:/tmp
+_ssh $SSHUSER@$NODE "rm -rf /opt/xcalar/xcalar-gui && tar -zxvf /tmp/xcalar-gui.tar.gz -C /opt/xcalar; cd /opt/xcalar/xcalar-gui/services/expServer/; rm -rf node_modules/*; PATH=/opt/rh/devtoolset-2/root/usr/bin:/opt/xcalar/bin:$PATH npm install"
+echo "Starting up cluster"
+_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl start"
 # mv $GUI_FOLDER xcalar-gui
 date
 timeOut=50
@@ -139,4 +141,4 @@ fi
 
 _ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop-supervisor"
 _ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop"
-_ssh $SSHUSER@$NODE "sudo rm -rf /var/www/xcalar-gui.tar.gz"
+_ssh $SSHUSER@$NODE "sudo rm -rf /tmp/xcalar-gui.tar.gz"
