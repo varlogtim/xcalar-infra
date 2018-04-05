@@ -37,7 +37,6 @@ RUN_ARGS = $(CONTAINER_ARGS_COMMON)  $(CONTAINER_IMAGE)
 
 image:
 	docker build -t $(CONTAINER_IMAGE) .
-	docker tag $(CONTAINER_IMAGE) $(CONTAINER_IMAGE):$(BUILD_NUMBER)
 
 stop:
 	docker stop $(CONTAINER_NAME) 2>/dev/null || true
@@ -87,6 +86,7 @@ commit:
 	docker commit $(CONTAINER_NAME) $(CONTAINER_NAME)
 
 save:
+	docker tag $(CONTAINER_IMAGE):latest $(CONTAINER_IMAGE):$(BUILD_NUMBER)
 	docker save $(CONTAINER_IMAGE) | gzip > $(CONTAINER_NAME).tar.gz
 
 runWithCfg: image stop clean
