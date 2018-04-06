@@ -73,6 +73,8 @@ echo "Cleaning XLRROOT"
 _ssh $SSHUSER@$NODE "rm -rf $XCALAR_ROOT/*" < /dev/null || true
 echo "Installing perpetual license"
 _ssh $SSHUSER@$NODE "cp /netstore/users/jerene/XcalarLic.key /etc/xcalar"
+echo "Removing xcalar packages"
+_ssh $SSHUSER@$NODE "yum -y remove xcalar"
 echo "Installing latest build"
 _ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --nostart"
 
