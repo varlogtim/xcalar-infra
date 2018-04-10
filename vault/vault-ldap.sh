@@ -80,7 +80,7 @@ vault write auth/ldap/config \
     url='ldap://ldap.int.xcalar.com:389' \
     userattr='mail' \
     userdn='ou=People,dc=int,dc=xcalar,dc=com' \
-    groupdn='ou=Groups,dc=int,dc=xcalar,dc=com' \
+    groupdn='cn=xceUsers,ou=Groups,dc=int,dc=xcalar,dc=com' \
     upndomain='xcalar.com' \
     binddn='uid=bind,ou=Services,dc=int,dc=xcalar,dc=com' \
     bindpass='welcome1' \
@@ -88,5 +88,6 @@ vault write auth/ldap/config \
 
 
 
+#    groupdn='ou=Groups,dc=int,dc=xcalar,dc=com' \
 #    groupfilter='(&(objectClass=inetOrgPerson)(uid={{.Username}}))'
 #    groupfilter='(&(objectClass=inetOrgPerson)(mail={{.Username}}))'  \
