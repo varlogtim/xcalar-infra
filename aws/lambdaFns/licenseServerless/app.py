@@ -9,6 +9,9 @@ import sys
 import json
 import logging
 import requests
+import boto3
+from base64 import b64decode
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -120,21 +123,27 @@ def closeDb(error):
 
 # Helper functions
 
-# Still in work
-# def createKey(args):
-#     argsCmd = []
-#     for arg in args:
-#         if args[arg]:
-#             argsCmd.extend([arg, args[arg]])
-#     p = subprocess.Popen([createKeyCmd, "-k", privKey, argsCmd])
-#     cmdOutput = p.communicate()[0]
-#     if p.returncode !=0:
-#         raise Exception("%s returned %d" % (createKeyCmd, p.returncode))
-#     key = ""
-#     for line in cmdOutput.splitlines():
-#         key = line
-#         break
-#     return key
+def createKey(args):
+    argsCmd = []
+    for arg in args:
+        if args[arg]:
+            argsCmd.extend([arg, args[arg]])
+
+    encrypted_key = os.environ["private_key"]
+    decrypted_key = boto3.client('kms').decrypt(CiphertextBlob=b64decode(encrypted_key))['Plaintext']
+    os.environ["pKey"] = decrypted_key
+    argsCmd.extend(["-k", "pKey"])
+    argsCmd.insert(0, createKeyCmd)
+    p = subprocess.Popen(argsCmd, stdout=subprocess.PIPE)
+    cmdOutput = p.communicate()[0]
+    if p.returncode !=0:
+        raise Exception("%s returned %d" % (createKeyCmd, p.returncode))
+    key = ""
+    for line in cmdOutput.splitlines():
+        key = line
+        break
+    del os.environ["pKey"]
+    return key
 
 @app.route('/license/api/v1.0/keyinfo/<string:key>', methods=['GET'])
 @crossdomain(origin="*")
@@ -222,27 +231,30 @@ def listMarketplace():
     except:
         abort(404)
 
-# @app.route('/license/api/v1.0/secure/createlicense', methods=['POST'])
-# @crossdomain(origin="*", headers="Content-Type, Origin")
-# def createLicense():
-#     jsonInput = request.get_json();
-#     if "secret" not in jsonInput or jsonInput["secret"] != "xcalarS3cret":
-#         abort(404)
-#     args = {
-#         "-l": jsonInput.get("licversion")
-#         "-f": jsonInput.get("family")
-#         "-p": jsonInput.get("product")
-#         "-v": jsonInput.get("version")
-#         "-s": jsonInput.get("system")
-#         "-e": jsonInput.get("expiration")
-#         "-n": jsonInput.get("nodecount")
-#         "-u": jsonInput.get("usercount")
-#     }
-#     key = createKey(args)
-#     if not key:
-#         return jsonify({})
+@app.route('/license/api/v1.0/secure/genlicense', methods=['POST'])
+@crossdomain(origin="*", headers="Content-Type, Origin")
+def createLicense():
+    jsonInput = request.get_json();
+    if "token" not in jsonInput or not validateToken(jsonInput["token"]):
+        abort(404)
+    args = {
+        "-l": jsonInput.get("licversion"),
+        "-f": jsonInput.get("family"),
+        "-p": jsonInput.get("product"),
+        "-v": jsonInput.get("version"),
+        "-s": jsonInput.get("system"),
+        "-e": jsonInput.get("expiration"),
+        "-n": jsonInput.get("nodecount"),
+        "-u": jsonInput.get("usercount")
+    }
+    key = createKey(args)
+    if not key:
+        return jsonify({})
 
-#     return jsonify({'key': key})
+    return jsonify({'key': key})
+
+def validateToken(token):
+    return True
 
 @app.route('/license/api/v1.0/secure/addlicense', methods=['POST'])
 @crossdomain(origin="*", headers="Content-Type, Origin")
@@ -400,6 +412,7 @@ def getHtmlKeysByOrg(organizationName):
 
     output = sorted(keys, key=lambda k: datetime.strptime(k['expiration'], '%m/%d/%Y'), reverse=True)
     return render_template('_table_render.html', keys=output)
+
 @app.route('/license/api/v1.0/unusedkey', methods=['GET'])
 def getUnusedKey():
     try:
@@ -409,5 +422,6 @@ def getUnusedKey():
     except:
         abort(404)
     return jsonify(keys)
+
 if __name__ == '__main__':
     app.run(debug=False,host='0.0.0.0')
