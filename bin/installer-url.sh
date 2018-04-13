@@ -36,7 +36,7 @@ say () {
 }
 
 check_url () {
-    curl -Is "$1" | head -n 1 | grep -q '200 OK'
+    curl -r 0-7 -f -sL -o /dev/null -w '%{http_code}\n' "$1" | grep -q '^2'
 }
 
 if [ $# -eq 0 ]; then
@@ -100,7 +100,13 @@ if test -f "$INSTALLER"; then
                 say "Uploading $INSTALLER to $DEST_URL"
                 aws s3 cp --only-show-errors "$INSTALLER" "$DEST_URL"
             fi
-            aws s3 presign --expires-in $EXPIRY "$DEST_URL"
+            URL="$(aws s3 presign --expires-in $EXPIRY "$DEST_URL")"
+            if [ $? -eq 0 ] && check_url "$URL"; then
+                echo "$URL"
+            else
+                echo >&2 "Failed to verify $URL"
+                exit 1
+            fi
             ;;
         gs://*)
             if ! gsutil ls "$DEST_URL"; then

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: XCE AWS CloudFormation Template (Single Instance) v1-20180314
+Description: XCE AWS CloudFormation Template (Single Instance) v1-20180413
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -41,19 +41,22 @@ Parameters:
   InstanceType:
     Description: XCE EC2 instance type
     Type: String
-    Default: c5.18xlarge
+    Default: m5.2xlarge
     AllowedValues:
       - r4.2xlarge
       - r4.4xlarge
       - r4.8xlarge
       - r4.16xlarge
+      - c5.2xlarge
       - c5.4xlarge
       - c5.9xlarge
       - c5.18xlarge
+      - m5.xlarge
       - m5.2xlarge
       - m5.4xlarge
       - m5.12xlarge
       - m5.24xlarge
+      - i3.xlarge
       - i3.2xlarge
       - i3.4xlarge
       - i3.8xlarge
@@ -85,19 +88,19 @@ Parameters:
   RootSize:
     Description: Size of root disk
     Type: Number
-    Default: '200'
+    Default: '64'
   SwapSize:
     Description: 'Size of swap disk. NOTE: This should be at least 2x the amount of memory.'
     Type: Number
-    Default: '480'
+    Default: '64'
 Mappings:
   RegionMap:
     us-east-1:
-      RHEL7: ami-26ebbc5c
-      EL7: ami-401a153a
+      RHEL7: ami-6871a115
+      EL7: ami-00bab8ce796583b60
     us-west-2:
-      RHEL7: ami-223f945a
-      EL7: ami-ade86cd5
+      RHEL7: ami-28e07e50
+      EL7: ami-0a90baf2febfd32ac
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -136,9 +139,9 @@ Metadata:
       KeyName:
         default: 'Key pair:'
       SSHLocation:
-        default: 'CIDR range:'
+        default: 'SSH CIDR range:'
       HTTPLocation:
-        default: 'CIDR range:'
+        default: 'HTTP CIDR range:'
 Resources:
   EC2Instance:
     Type: AWS::EC2::Instance
