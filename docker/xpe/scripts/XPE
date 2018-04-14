@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+set -e
+
+export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin
+
+SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+NWJSBIN="$SCRIPT_DIR/../Resources/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
+NODEBIN="$SCRIPT_DIR/../Resources/Bin/node-v8.11.1-darwin-x64/bin/node"
+
+# set timestamp env to be used by various processes that will be called for writing log
+ts=$(date +%F_%T)
+export TIMESTAMP="$ts"
+echo "timestamp: $ts"
+
+# file to save server pid in so can kill it if needed
+SERVERPIDFILE=/tmp/XPE-${USER}.pid
+
+# check for presence of previous pid and kill if required
+if MYAPP_PID="$(cat $SERVERPIDFILE 2>/dev/null)"; then
+	kill -TERM "$MYAPP_PID" || true
+	rm -f "$SERVERPIDFILE"
+else
+	echo "there is no file"
+fi
+
+cd "$SCRIPT_DIR"
+userlatest=$(bash "$SCRIPT_DIR/../Resources/scripts/getimgid.sh" xdpce)
+thisbld=$(cat "$SCRIPT_DIR/../Resources/Data/.imgid")
+echo "userlatest: $userlatest"
+echo "thisbld : $thisbld"
+mustinstall=false
+if [[ "$userlatest" != $thisbld ]]; then
+	echo "not same"
+	mustinstall=true
+	"$NODEBIN" "../Resources/Data/Installer/server/xpeserver.js" > ../Logs/"$TIMESTAMP"_serverInstallLog 2>&1 &
+	SERVER_PID=$!
+	echo "server pid: $SERVER_PID"
+	trap "kill -TERM $SERVER_PID; rm $SERVERPIDFILE" EXIT
+
+	echo "$SERVER_PID" > "$SERVERPIDFILE"
+	"$NWJSBIN" "../Resources/Data/Installer/gui"
+fi
+
+if [ -e ".launch" ] || [ "$mustinstall" == false ]; then
+	echo "its same"
+	bash "../Resources/scripts/bringupcontainers.sh"
+	"$NWJSBIN" "../Resources/Data/xcalar-gui"
+	rm ".launch"
+fi

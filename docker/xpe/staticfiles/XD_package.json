@@ -1,0 +1,9 @@
+{
+  "name": "Xcalar Community Edition",
+  "main": "index.html",
+  "window":{
+    "min_width":800,
+    "min_height":600,
+    "icon":"favicon.ico"
+  }
+}
