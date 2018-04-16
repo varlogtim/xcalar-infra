@@ -104,6 +104,7 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
            echo "$CLUSTER Crashed"
            exit 1
         elif [ $anyfailed -eq 1 ]
+        then
             # cluster is up but got non zero return code. This means that
             # the ssh connection is lost. In such cases, just drive on with the
             # next test after restarting the cluster
