@@ -51,7 +51,7 @@ import urllib
 
 logging.basicConfig(level=logging.DEBUG, filename='example.log')
 
-MAX_VMS_ALLOWED=6
+MAX_VMS_ALLOWED=1024
 
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
