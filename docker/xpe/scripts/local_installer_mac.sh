@@ -38,6 +38,8 @@ LOCALLOGDIR="$XPEDIR/xceLogs" # will mount to /var/log/xcalar so logs persist th
 LOCALXCEHOME="$XPEDIR/xceHome" # will mount /var/opt/xcalar here so session data, etc. persissts through upgrde
 LOCALDATASETS="$XPEDIR/sampleDatasets"
 
+MAINHOSTMNT=/hostmnt
+
 XEM_PORT_NUMBER=15000 # should be port # in xemconfig
 # files that will be required for completing the installation process
 XDPCE_TARBALL=xdpce.tar.gz
@@ -141,7 +143,7 @@ create_xdpce() {
 	--memory-swappiness=10 -e IN_DOCKER=1 \
 	-e XLRDIR=/opt/xcalar -e container=docker \
 	-v /var/run/docker.sock:/var/run/docker.sock \
-	-v $HOME:/hostmnt:ro \
+	-v $HOME:$MAINHOSTMNT:ro \
 	-v $LOCALXCEHOME:/var/opt/xcalar \
 	-v $LOCALLOGDIR:/var/log/xcalar \
 	-p $XEM_PORT_NUMBER:15000 \
@@ -160,6 +162,14 @@ start_xcalar() {
 	# entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
 	echo "go in to the xdpce container and come out ok!"
 	cmd="docker exec --user xcalar $XCALAR_CONTAINER_NAME /opt/xcalar/bin/xcalarctl start"
+	echo "$cmd"
+	$cmd
+
+
+	# now set up the data target
+	echo "setup a default datatarget based on their home dir"
+	targetname="$HOME"
+	cmd="docker exec --user xcalar $XCALAR_CONTAINER_NAME /opt/xcalar/bin/python3.6 /tmp/setupTarget.py $targetname $MAINHOSTMNT"
 	echo "$cmd"
 	$cmd
 }
