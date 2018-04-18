@@ -51,7 +51,9 @@ strip-binaries: install
 
 install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
-	docker cp xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
+    ifneq ($(XPE),)
+		docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
+    endif
 
 enforce-samplesize: install-license
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) bash -c "echo Constants.MaxInteractiveDataSize=1073741824 >> /etc/xcalar/default.cfg"
@@ -86,7 +88,9 @@ commit:
 	docker commit $(CONTAINER_NAME) $(CONTAINER_NAME)
 
 save:
-	docker tag $(CONTAINER_IMAGE):latest $(CONTAINER_IMAGE):$(BUILD_NUMBER)
+    ifneq ($(XPE),)
+		docker tag $(CONTAINER_IMAGE):latest $(CONTAINER_IMAGE):$(BUILD_NUMBER)
+    endif
 	docker save $(CONTAINER_IMAGE) | gzip > $(CONTAINER_NAME).tar.gz
 
 runWithCfg: image stop clean
