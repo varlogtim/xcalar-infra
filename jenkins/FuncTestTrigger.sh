@@ -128,6 +128,7 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
 
     sudo $INSTALLER_PATH --noStart
 
+    sudo cp /netstore/users/blim/XcalarLic.key /etc/xcalar/XcalarLic.key
     sudo rm $XCE_CONFIG
     sudo -E $XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
     echo "$FuncParams" | sudo tee -a $XCE_CONFIG
