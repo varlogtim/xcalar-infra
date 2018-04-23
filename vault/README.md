@@ -147,6 +147,9 @@ Now you can call into the CLI:
 
 The cli will call your script, retrieve the temporary creds from Vault and log you in.
 
+## Who-am-i
+
+ $ vault read auth/token/lookup-self
 
 ## Login as a service or as a registered machine
 
@@ -249,9 +252,9 @@ Configure it:
 
     $ vault write pki/roles/int-xcalar-dot-com allowed_domains="int.xcalar.com" allow_subdomains="true" max_ttl="72h"
 
-Issue a cert:
+Request a cert:
 
-    $ vault write -format=json pki/issue/int-xcalar-dot-com common_name=tesla.int.xcalar.com alt_name="tesla" ip="10.10.4.2"
+    $ vault write xcalar_ca/issue/web_server common_name=myhost.int.xcalar.com alt_name="myhost" ip="10.10.4.4" | tee ssl.json
     {
     "request_id": "08faf5f0-7f18-5709-301d-7fc8ea812e94",
     "lease_id": "",
@@ -269,4 +272,3 @@ Issue a cert:
     },
     "warnings": null
     }
-
