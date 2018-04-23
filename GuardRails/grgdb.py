@@ -12,6 +12,15 @@ MAGIC_FREE  = 0xcd656727bedabb1e
 MAGIC_INUSE = 0x4ef9e433f005ba11
 MAGIC_GUARD = 0xfd44ba54deadbabe
 
+def checkGr():
+    try:
+        gdb.parse_and_eval("grArgs")
+    except gdb.error as e:
+        msg = "FATAL GUARDRAILS ERROR: Program not run under guardrails"
+        print(msg)
+        sys.stderr.write(msg + "\n")
+        raise
+
 class GRFindDelayList (gdb.Command):
     """
         Search Guard Rails delayed free list for a given address.
@@ -83,6 +92,7 @@ class GRFindDelayList (gdb.Command):
 
     def invoke(self, arg, from_tty):
         try:
+            checkGr()
             self.invokeHelper(arg, from_tty)
         except Exception as e:
             print(str(e))
@@ -133,8 +143,9 @@ class GRPrintAddrInfo (gdb.Command):
 
         hdrPtr = gdb.parse_and_eval('(ElmHdr *) ' + argv[0])
         hdr = hdrPtr.dereference()
-        maxAllocFrames = int(gdb.parse_and_eval('grArgs.maxTrackFrames'))
-        maxFreeFrames = int(gdb.parse_and_eval('grArgs.maxTrackFreeFrames'))
+        grArgs = gdb.parse_and_eval("grArgs")
+        maxAllocFrames = int(grArgs['maxTrackFrames'])
+        maxFreeFrames = int(grArgs['maxTrackFreeFrames'])
 
         if self.isValid(hdr['magic']):
             print("Address %s is a header" % argv[0])
@@ -164,6 +175,7 @@ class GRPrintAddrInfo (gdb.Command):
 
     def invoke(self, arg, from_tty):
         try:
+            checkGr()
             self.invokeHelper(arg, from_tty)
         except Exception as e:
             print(str(e))
@@ -219,6 +231,7 @@ class GRFindHeader(gdb.Command):
 
     def invoke(self, arg, from_tty):
         try:
+            checkGr()
             self.invokeHelper(arg, from_tty)
         except Exception as e:
             print(str(e))
@@ -263,6 +276,7 @@ class GRHeapMetaCorruption(gdb.Command):
 
     def invoke(self, arg, from_tty):
         try:
+            checkGr()
             self.invokeHelper(arg, from_tty)
         except Exception as e:
             print(str(e))
@@ -300,9 +314,75 @@ class GRPrintSegv(gdb.Command):
             print(str(e))
             traceback.print_exc()
 
+class GRDumpInFlight(gdb.Command):
+    """
+        Dump allocator metadata.
+
+        WARNING: This is mostly for dumping in-flight allocations to a file
+        for subsequent post-processing with grdump.py.  This is NOT recommended
+        for interactive debugging.
+
+        (gdb) gr-dump-in-flight
+
+        Example:
+        (gdb) gr-dump-in-flight
+    """
+
+    def __init__ (self):
+        super (GRDumpInFlight, self).__init__ ("gr-dump-in-flight", gdb.COMMAND_USER)
+
+    def getTraceCsv(self, trace, offset, maxFrames):
+        if not maxFrames:
+            print("Memory tracking not enabled; to enable rerun GuardRails with -t/-T options")
+            return
+
+        ret = ""
+        for i in range(offset, maxFrames + offset):
+            addrInt = int(trace[i])
+            if addrInt:
+                ret += "0x%x," % addrInt
+            else:
+                ret += ","
+
+        return ret
+
+    def invokeHelper(self, arg, from_tty):
+        argv = gdb.string_to_argv(arg)
+        if len(argv) != 0:
+            print("Malformed arguments; see help")
+            return
+
+        grArgs = gdb.parse_and_eval("grArgs")
+        numSlots = int(grArgs['numSlots'])
+        maxAllocFrames = int(grArgs['maxTrackFrames'])
+        maxFreeFrames = int(grArgs['maxTrackFreeFrames'])
+        memSlots = gdb.parse_and_eval("memSlots")
+
+        print("===== START TRACES =====")
+        for slotNum in range(0, numSlots):
+            memBins = memSlots[slotNum]['memBins']
+            numBins = int(gdb.parse_and_eval('sizeof(((MemSlot *)0x0)->memBins)/sizeof(((MemSlot *)0x0)->memBins)[0]'))
+            for binNum in range(0, numBins):
+                memBin = memBins[binNum]
+                hdr = memBin['headInUse']
+                while hdr != 0x0:
+                    csvTrace = self.getTraceCsv(hdr['allocBt'], 0, maxAllocFrames)
+                    elmSize = hdr['usrDataSize']
+                    print(str(elmSize) + "," + csvTrace)
+                    hdr = hdr['next']
+
+    def invoke(self, arg, from_tty):
+        try:
+            checkGr()
+            self.invokeHelper(arg, from_tty)
+        except Exception as e:
+            print(str(e))
+            traceback.print_exc()
+
 
 GRFindDelayList()
 GRPrintAddrInfo()
 GRFindHeader()
 GRHeapMetaCorruption()
 GRPrintSegv()
+GRDumpInFlight()

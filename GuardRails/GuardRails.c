@@ -150,6 +150,12 @@ addNewMemPool(const size_t poolSizeReq) {
         struct rlimit vaLimit;
         int ret = getrlimit(RLIMIT_AS, &vaLimit);
         GR_ASSERT_ALWAYS(ret == 0);
+        // Allow debug code to test intentional allocation failure above rlim
+        if (grArgs.abortOnOOM && (poolSizeReq < vaLimit.rlim_cur)) {
+            printf("Failed to mmap more memory\n");
+            onExitHelper(false);
+            GR_ASSERT_ALWAYS(false);
+        }
         return(-1);
     }
     GR_ASSERT_ALWAYS(((uint64_t)mapStart % PAGE_SIZE) == 0);
@@ -437,8 +443,14 @@ parseArgs(GRArgs *args) {
     argc++;
 
     args->numSlots = 1;
-    while ((c = getopt(argc, argv, "dm:p:s:t:T:v")) != -1) {
+    while ((c = getopt(argc, argv, "aAdm:p:s:t:T:v")) != -1) {
         switch (c) {
+            case 'a':
+                args->abortOnOOM = true;
+                break;
+            case 'A':
+                args->abortOnNull = true;
+                break;
             case 'd':
                 args->useDelay = true;
                 break;
@@ -548,12 +560,15 @@ memalignInt(size_t alignment, size_t usrSize) {
     const size_t allocSize = ELM_HDR_SZ + sizeof(void *) + usrSize +
         (alignment > 1 ? alignment : 0);
 
-    if (!isInit) {
+    if (unlikely(!isInit)) {
         initialize();
     }
 
     buf = getBuf(allocSize, &endBuf, usrSize);
-    if (!buf) {
+    if (unlikely(!buf)) {
+        if (grArgs.abortOnNull && (usrSize > 0)) {
+            GR_ASSERT_ALWAYS(0);
+        }
         return(NULL);
     }
 

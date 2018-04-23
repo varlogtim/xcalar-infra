@@ -76,6 +76,8 @@ typedef struct GRArgs {
     bool useDelay;
     bool verbose;
     bool poison;
+    bool abortOnOOM;
+    bool abortOnNull;
 } GRArgs;
 
 typedef struct ElmHdr {
