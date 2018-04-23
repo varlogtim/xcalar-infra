@@ -1,9 +1,7 @@
 .PHONY: clean all
 
 all:
-	$(XLRINFRADIR)/bin/fetchFileFromQaDataRepo.sh createKey.sha1 > createKey
+	$(XLRINFRADIR)/bin/fetchFileFromQaDataRepo.sh signKey.sha1 > signKey
 
 clean:
-	rm -f createKey
-
-
+	rm -f signKey

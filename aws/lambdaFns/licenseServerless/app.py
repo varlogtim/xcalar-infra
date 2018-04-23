@@ -79,7 +79,7 @@ app.config.from_object('config')
 privKey = os.environ["LAMBDA_TASK_ROOT"] + app.config["XCALAR_PRIVATE_KEY"]
 pubKey = os.environ["LAMBDA_TASK_ROOT"] + app.config["XCALAR_PUBLIC_KEY"]
 
-createKeyCmd = os.environ["LAMBDA_TASK_ROOT"] + "/createKey"
+createKeyCmd = os.environ["LAMBDA_TASK_ROOT"] + "/CreateKey.py"
 readKeyCmd = os.environ["LAMBDA_TASK_ROOT"] + "/readKey"
 
 rds_host = app.config["RDS_HOST"]
@@ -120,30 +120,6 @@ def closeDb(error):
 # def initDbCommand():
 #     initDb()
 #     print 'Database initialized.'
-
-# Helper functions
-
-def createKey(args):
-    argsCmd = []
-    for arg in args:
-        if args[arg]:
-            argsCmd.extend([arg, args[arg]])
-
-    encrypted_key = os.environ["private_key"]
-    decrypted_key = boto3.client('kms').decrypt(CiphertextBlob=b64decode(encrypted_key))['Plaintext']
-    os.environ["pKey"] = decrypted_key
-    argsCmd.extend(["-k", "pKey"])
-    argsCmd.insert(0, createKeyCmd)
-    p = subprocess.Popen(argsCmd, stdout=subprocess.PIPE)
-    cmdOutput = p.communicate()[0]
-    if p.returncode !=0:
-        raise Exception("%s returned %d" % (createKeyCmd, p.returncode))
-    key = ""
-    for line in cmdOutput.splitlines():
-        key = line
-        break
-    del os.environ["pKey"]
-    return key
 
 @app.route('/license/api/v1.0/keyinfo/<string:key>', methods=['GET'])
 @crossdomain(origin="*")
@@ -235,26 +211,46 @@ def listMarketplace():
 @crossdomain(origin="*", headers="Content-Type, Origin")
 def createLicense():
     jsonInput = request.get_json();
-    if "token" not in jsonInput or not validateToken(jsonInput["token"]):
+    if "secret" not in jsonInput or jsonInput["secret"] != "xcalarS3cret":
         abort(404)
-    args = {
-        "-l": jsonInput.get("licversion"),
-        "-f": jsonInput.get("family"),
-        "-p": jsonInput.get("product"),
-        "-v": jsonInput.get("version"),
-        "-s": jsonInput.get("system"),
-        "-e": jsonInput.get("expiration"),
-        "-n": jsonInput.get("nodecount"),
-        "-u": jsonInput.get("usercount")
-    }
-    key = createKey(args)
-    if not key:
-        return jsonify({})
+    del jsonInput["secret"]
 
-    return jsonify({'key': key})
+    args = ["python", createKeyCmd]
 
-def validateToken(token):
-    return True
+    encrypted_key = os.environ["private_key"]
+    decrypted_key = boto3.client('kms').decrypt(CiphertextBlob=b64decode(encrypted_key))['Plaintext']
+    os.environ["pKey"] = decrypted_key
+    args.extend(["--kv", "pKey"])
+
+    compress = False
+    for k, v in jsonInput.items():
+        hypen = '--' if len(k) > 1 else '-'
+        if k == "compress":
+            if str(v).lower() == "true":
+                args.append("-z")
+                compress = True
+        elif str(v).strip():
+            args.extend([hypen + k, v])
+
+    pr = subprocess.Popen(args,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE)
+
+    out, err = pr.communicate()
+
+    if pr.returncode != 0:
+        raise ValueError(err)
+
+    result = {}
+
+    if compress:
+        result["Compressed_Sig"] = out.strip().decode('utf-8')
+    else:
+        for line in out.strip().decode('utf-8').splitlines():
+            k, v = line.split('=', 1)
+            result[k] = v
+
+    return jsonify(**result)
 
 @app.route('/license/api/v1.0/secure/addlicense', methods=['POST'])
 @crossdomain(origin="*", headers="Content-Type, Origin")
