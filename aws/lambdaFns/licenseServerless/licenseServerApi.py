@@ -19,7 +19,7 @@ def listKeys(c, name, organization):
 def getUnusedKey(c):
     c.execute('SELECT organization.name, license_key from license inner join organization on license.org_id = organization.org_id WHERE license_id NOT IN (SELECT DISTINCT license_id FROM activation)')
     return c.fetchall()
-def insert(c, name, organization, key):
+def insert(c, name, organization, key, deploymentType, salesforceId):
     if organization is None:
         raise ValueError("organization is required")
 
@@ -41,7 +41,10 @@ def insert(c, name, organization, key):
             c.execute("INSERT INTO owner (name, org_id) VALUES (%(name)s, %(orgid)s)", {"name": name, "orgid": organizationId})
 
     # Insert key entry
-    c.execute("INSERT INTO license (license_key, org_id) VALUES (%(key)s, %(orgid)s)", {"key": key, "orgid": organizationId})
+    c.execute("INSERT INTO license (license_key, deployment_type, org_id) VALUES (%(key)s, %(deploymentType)s, %(orgid)s)", {"key": key, "deploymentType": deploymentType, "orgid": organizationId})
+
+    if salesforceId is not None:
+        c.execute("INSERT INTO salesforce (SF_account_id, org_id) VALUES (%(sfId)s, %(orgid)s)", { "sfId": salesforceId, "orgid": organizationId })
 
 
 def deleteName(c, name):

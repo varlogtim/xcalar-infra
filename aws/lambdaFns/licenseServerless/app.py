@@ -11,6 +11,7 @@ import logging
 import requests
 import boto3
 from base64 import b64decode
+from six import string_types
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -28,10 +29,10 @@ def crossdomain(origin=None, methods=None, headers=None,
     if methods is not None:
         methods = ', '.join(sorted(x.upper() for x in methods))
 
-    if headers is not None and not isinstance(headers, basestring):
+    if headers is not None and not isinstance(headers, string_types):
         headers = ', '.join(x.upper() for x in headers)
 
-    if not isinstance(origin, basestring):
+    if not isinstance(origin, string_types):
         origin = ', '.join(origin)
 
     if isinstance(max_age, timedelta):
@@ -110,6 +111,10 @@ def closeDb(error):
         logger.info("Closing RDS connection...")
         g.rds_db.close()
 
+def auditTrail(userId, action, message):
+    with getDb().cursor() as cursor:
+        cursor.execute("INSERT INTO audit (`userId`, `action`, `message`) VALUES (%(userId)s, %(action)s, %(message)s)", {"userId": userId, "action": action, "message": message })
+
 # def initDb():
 #     db = getDb()
 #     with app.open_resource(dbUpgrade, mode='r') as f:
@@ -177,47 +182,61 @@ def listActivation():
     try:
         return listTable("activation", request.get_json())
     except:
-        abort(404)
+        abort(500)
 
 @app.route('/license/api/v1.0/secure/listowner', methods=['POST'])
 def listOwner():
     try:
         return listTable("owner", request.get_json())
     except:
-        abort(404)
+        abort(500)
 
 @app.route('/license/api/v1.0/secure/listlicense', methods=['POST'])
 def listLicense():
     try:
         return listTable("license", request.get_json())
     except:
-        abort(404)
+        abort(500)
 
 @app.route('/license/api/v1.0/secure/listorganization', methods=['POST'])
 def listOrganization():
     try:
         return listTable("organization", request.get_json())
     except:
-        abort(404)
+        abort(500)
 
 @app.route('/license/api/v1.0/secure/listmarketplace', methods=['POST'])
 def listMarketplace():
     try:
         return listTable("marketplace", request.get_json())
     except:
-        abort(404)
+        abort(500)
 
 @app.route('/license/api/v1.0/secure/genlicense', methods=['POST'])
 @crossdomain(origin="*", headers="Content-Type, Origin")
 def createLicense():
+    userId = "nobody"
     jsonInput = request.get_json();
     if "secret" not in jsonInput or jsonInput["secret"] != "xcalarS3cret":
-        abort(404)
+        abort(403)
     del jsonInput["secret"]
+
+    if "userId" not in jsonInput:
+        abort(403)
+
+    userId = jsonInput["userId"]
+    del jsonInput["userId"]
+
+    auditTrail(userId, "createLicense", json.dumps(jsonInput))
 
     args = ["python", createKeyCmd]
 
-    encrypted_key = os.environ["private_key"]
+    if jsonInput["licenseType"] == "Production":
+        encrypted_key = os.environ["private_key_prod_0"]
+    else:
+        encrypted_key = os.environ["private_key_dev"]
+    del jsonInput["licenseType"]
+
     decrypted_key = boto3.client('kms').decrypt(CiphertextBlob=b64decode(encrypted_key))['Plaintext']
     os.environ["pKey"] = decrypted_key
     args.extend(["--kv", "pKey"])
@@ -230,7 +249,7 @@ def createLicense():
                 args.append("-z")
                 compress = True
         elif str(v).strip():
-            args.extend([hypen + k, v])
+            args.extend([hypen + k, str(v)])
 
     pr = subprocess.Popen(args,
                         stdout=subprocess.PIPE,
@@ -256,20 +275,32 @@ def createLicense():
 @crossdomain(origin="*", headers="Content-Type, Origin")
 def insertLicense():
     jsonInput = request.get_json();
+    userId = "nobody"
     if "secret" not in jsonInput or jsonInput["secret"] != "xcalarS3cret":
-        abort(404)
+        abort(403)
+
+
+    if "userId" not in jsonInput:
+        abort(403)
+
+    userId = jsonInput["userId"]
+
+    auditTrail(userId, "issueLicense", json.dumps(jsonInput))
+
 
     name = jsonInput.get("name", None)
 
     try:
         organization = jsonInput["organization"]
         key = jsonInput["key"]
+        deploymentType = jsonInput["deploymentType"]
+        salesforceId = jsonInput.get("salesforceId", None)
     except:
         abort(404)
 
     try:
         with getDb().cursor() as cursor:
-            licenseServerApi.insert(cursor, name, organization, key)
+            licenseServerApi.insert(cursor, name, organization, key, deploymentType, salesforceId)
     except:
         abort(404)
 
