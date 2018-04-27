@@ -18,11 +18,19 @@ SERVERPIDFILE=/tmp/XPE-${USER}.pid
 
 # check for presence of previous pid and kill if required
 if MYAPP_PID="$(cat $SERVERPIDFILE 2>/dev/null)"; then
-	kill -TERM "$MYAPP_PID" || true
-	rm -f "$SERVERPIDFILE"
+    kill -TERM "$MYAPP_PID" || true
+    rm -f "$SERVERPIDFILE"
 else
-	echo "there is no file"
+    echo "there is no file"
 fi
+
+# waits for the express server to come up
+function waitForServer() {
+    until curl http://127.0.0.1:8388
+    do
+        echo "server not up yet!"
+    done
+}
 
 cd "$SCRIPT_DIR"
 userlatest=$(bash "$SCRIPT_DIR/../Resources/scripts/getimgid.sh" xdpce)
@@ -31,20 +39,20 @@ echo "userlatest: $userlatest"
 echo "thisbld : $thisbld"
 mustinstall=false
 if [[ "$userlatest" != $thisbld ]]; then
-	echo "not same"
-	mustinstall=true
-	"$NODEBIN" "../Resources/Data/Installer/server/xpeserver.js" > ../Logs/"$TIMESTAMP"_serverInstallLog 2>&1 &
-	SERVER_PID=$!
-	echo "server pid: $SERVER_PID"
-	trap "kill -TERM $SERVER_PID; rm $SERVERPIDFILE" EXIT
-
-	echo "$SERVER_PID" > "$SERVERPIDFILE"
-	"$NWJSBIN" "../Resources/Data/Installer/gui"
+    echo "not same"
+    mustinstall=true
+    "$NODEBIN" "../Resources/Data/Installer/xpeInstallerServer/xpeServer.js" > ../Logs/"$TIMESTAMP"_serverInstallLog 2>&1 &
+    SERVER_PID=$!
+    echo "server pid: $SERVER_PID"
+    trap "kill -TERM $SERVER_PID; rm $SERVERPIDFILE" EXIT
+    echo "$SERVER_PID" > "$SERVERPIDFILE"
+    waitForServer
+    "$NWJSBIN" "../Resources/Data/Installer/gui"
 fi
 
 if [ -e ".launch" ] || [ "$mustinstall" == false ]; then
-	echo "its same"
-	bash "../Resources/scripts/bringupcontainers.sh"
-	"$NWJSBIN" "../Resources/Data/xcalar-gui"
-	rm ".launch"
+    echo "its same"
+    bash "../Resources/scripts/bringupcontainers.sh"
+    "$NWJSBIN" "../Resources/Data/xcalar-gui"
+    rm ".launch"
 fi
