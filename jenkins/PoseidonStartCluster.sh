@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export PATH="$HOME/google-cloud-sdk/bin:/opt/xcalar/bin:$PATH"
+export PATH="$PATH:$HOME/google-cloud-sdk/bin"
 
 DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
 
