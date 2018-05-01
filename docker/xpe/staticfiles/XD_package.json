@@ -2,8 +2,9 @@
   "name": "Xcalar Community Edition",
   "main": "index.html",
   "window":{
-    "min_width":800,
-    "min_height":600,
-    "icon":"favicon.ico"
-  }
+    "min_width": 1024,
+    "min_height": 768,
+    "fullscreen": true
+  },
+  "chromium-args": "--allow-running-insecure-content --ignore-certificate-errors"
 }
