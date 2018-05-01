@@ -36,6 +36,9 @@ mkdir -p "$APPNAME/Contents/Logs"
 # app essential metadata
 cp "$XPEINFRA/staticfiles/Info.plist" "$APPNAME/Contents"
 
+# add icon; must be in Resources
+cp /netstore/users/jolsen/AppIcon.icns "$APPNAME/Contents/Resources"
+
 # add full installer
 cd "$APPNAME/Contents/Resources/Data"
 bash -x "$XPEINFRA/scripts/createGui.sh" true # after running, 'Installer' dir created

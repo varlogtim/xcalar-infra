@@ -4,9 +4,21 @@ set -e
 
 export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin
 
+trap cleanup EXIT
+trap 'exit' 1 2 3 4 5 6
+
+# get top level app dir abs path
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-NWJSBIN="$SCRIPT_DIR/../Resources/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
-NODEBIN="$SCRIPT_DIR/../Resources/Bin/node-v8.11.1-darwin-x64/bin/node"
+cd "$SCRIPT_DIR/../.."
+APP_DIR=$(pwd)
+
+NWJSBIN="$APP_DIR/Contents/Resources/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
+NODEBIN="$APP_DIR/Contents/Resources/Bin/node-v8.11.1-darwin-x64/bin/node"
+APPLOGDIR="$APP_DIR/Contents/Logs"
+INSTALLSERVER="$APP_DIR/Contents/Resources/Data/Installer/xpeInstallerServer/xpeServer.js"
+INSTALLERROOT="$APP_DIR/Contents/Resources/Data/Installer/gui"
+LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
+XDROOT="$APP_DIR/Contents/Resources/Data/xcalar-gui"
 
 # set timestamp env to be used by various processes that will be called for writing log
 ts=$(date +%F_%T)
@@ -20,8 +32,6 @@ SERVERPIDFILE=/tmp/XPE-${USER}.pid
 if MYAPP_PID="$(cat $SERVERPIDFILE 2>/dev/null)"; then
     kill -TERM "$MYAPP_PID" || true
     rm -f "$SERVERPIDFILE"
-else
-    echo "there is no file"
 fi
 
 # waits for the express server to come up
@@ -32,27 +42,38 @@ function waitForServer() {
     done
 }
 
-cd "$SCRIPT_DIR"
-userlatest=$(bash "$SCRIPT_DIR/../Resources/scripts/getimgid.sh" xdpce)
-thisbld=$(cat "$SCRIPT_DIR/../Resources/Data/.imgid")
+# restart app if install completed;
+# (nwjs installer window close will signal main event loop end
+# and kill icon from mac dock -
+# restarting to bring up xd instead of calling it sequentially
+# from same bash script process will get icon to re-appear)
+function cleanup {
+    if [[ "$SERVER_PID" ]]; then
+        kill -TERM $SERVER_PID
+        rm $SERVERPIDFILE
+    fi
+    if [[ -e "$LAUNCHFILEPATH" ]]; then
+        rm "$LAUNCHFILEPATH"
+        open -a "$APP_DIR" &
+    fi
+}
+
+userlatest=$(bash "$APP_DIR/Contents/Resources/scripts/getimgid.sh" xdpce)
+thisbld=$(cat "$APP_DIR/Contents/Resources/Data/.imgid")
 echo "userlatest: $userlatest"
 echo "thisbld : $thisbld"
 mustinstall=false
 if [[ "$userlatest" != $thisbld ]]; then
-    echo "not same"
     mustinstall=true
-    "$NODEBIN" "../Resources/Data/Installer/xpeInstallerServer/xpeServer.js" > ../Logs/"$TIMESTAMP"_serverInstallLog 2>&1 &
+    "$NODEBIN" "$INSTALLSERVER" > "$APPLOGDIR"/"$TIMESTAMP"_serverInstallLog 2>&1 &
     SERVER_PID=$!
     echo "server pid: $SERVER_PID"
-    trap "kill -TERM $SERVER_PID; rm $SERVERPIDFILE" EXIT
     echo "$SERVER_PID" > "$SERVERPIDFILE"
     waitForServer
-    "$NWJSBIN" "../Resources/Data/Installer/gui"
+    "$NWJSBIN" "$INSTALLERROOT"
+    exit 0
 fi
 
-if [ -e ".launch" ] || [ "$mustinstall" == false ]; then
-    echo "its same"
-    bash "../Resources/scripts/bringupcontainers.sh"
-    "$NWJSBIN" "../Resources/Data/xcalar-gui"
-    rm ".launch"
-fi
+bash "$APP_DIR/Contents/Resources/scripts/bringupcontainers.sh"
+"$NWJSBIN" "$XDROOT"
+exit 0
