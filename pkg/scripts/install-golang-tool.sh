@@ -11,7 +11,7 @@ mkdir -p ${GOPATH}/{bin,src}
 
 go get -u -v "${URL##https://}"
 
-FPM_COMMON=(-n ${NAME} --license ${LICENSE} -v ${VERSION} --iteration ${ITERATION} --url "${URL}" --description "${DESC}" -f ${GOPATH}/bin/${NAME}=/usr/bin/${NAME})
+FPM_COMMON=(-n "${NAME}" --license "${LICENSE}" -v "${VERSION}" --iteration "${ITERATION}" --url "${URL}" --description "${DESC}" -f "${GOPATH}/bin/${NAME}=/usr/bin/${NAME}")
 
 ls -al ${GOPATH}/bin
 
