@@ -69,8 +69,10 @@ typedef struct GRArgs {
     size_t maxTrackFreeFrames;
     size_t numSlots;
     size_t maxMemPct;
+    uint8_t poisonVal;
     bool useDelay;
     bool verbose;
+    bool poison;
 } GRArgs;
 
 typedef struct ElmHdr {

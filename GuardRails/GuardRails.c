@@ -343,6 +343,10 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
     ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
 
+    if (grArgs.poison) {
+        memset((uint8_t *)hdr + sizeof(*hdr), grArgs.poisonVal, reqSize - sizeof(*hdr));
+    }
+
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_FREE);
     // First invalid byte address after buffer
     *end = (void *)hdr + binSize;
@@ -434,7 +438,7 @@ parseArgs(GRArgs *args) {
     argc++;
 
     args->numSlots = 1;
-    while ((c = getopt(argc, argv, "dm:s:t:T:v")) != -1) {
+    while ((c = getopt(argc, argv, "dm:p:s:t:T:v")) != -1) {
         switch (c) {
             case 'd':
                 args->useDelay = true;
@@ -442,6 +446,11 @@ parseArgs(GRArgs *args) {
             case 'm':
                 args->maxMemPct = atoi(optarg);
                 GR_ASSERT_ALWAYS(args->maxMemPct <= 100);
+                break;
+            case 'p':
+                GR_ASSERT_ALWAYS(atoi(optarg) >= 0 && atoi(optarg) < 256);
+                args->poisonVal = (uint8_t) atoi(optarg);
+                args->poison = true;
                 break;
             case 's':
                 args->numSlots = atoi(optarg);
