@@ -29,7 +29,7 @@ CONTAINER_ARGS_COMMON = --cap-add=ALL --cap-drop=MKNOD \
                  -e container=docker \
                  -v /var/run/docker.sock:/var/run/docker.sock \
                  --name $(CONTAINER_NAME) \
-                 -p 8839:8839 -p 12124:12124
+                 -p 8818:8818
 
 INSTALLER_ARGS = $(CONTAINER_ARGS_COMMON) -v $(INSTALLER_PATH):/tmp/xcalarInstaller $(CONTAINER_IMAGE)
 RUN_ARGS = $(CONTAINER_ARGS_COMMON)  $(CONTAINER_IMAGE)
@@ -63,13 +63,14 @@ replace-hostname: install-license
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) sed -i 's/Node.0.IpAddr=.*/Node.0.IpAddr=127.0.0.1/' /etc/xcalar/default.cfg
 
 replace-port: install-license
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) sed -i 's/8443/8839/' /etc/xcalar/Caddyfile
+	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) sed -i 's/8443/8818/' /etc/xcalar/Caddyfile
 
 install-license: strip-binaries
 	docker cp XcalarLic.key $(CONTAINER_NAME):/etc/xcalar/XcalarLic.key
 
 createuser: install-license
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) mkdir -p /var/opt/xcalar/config/ && curl -4 -H "Content-Type: application/json" -X POST -d "{ \"defaultAdminEnabled\": true, \"username\": \"admin\", \"email\": \"admin@xyz.com\", \"password\": \"admin\" }" "http://127.0.0.1:12124/login/defaultAdmin/set"
+	docker cp $(XLRINFRADIR)/docker/xpe/staticfiles/defaultAdmin.json $(CONTAINER_NAME):/var/opt/xcalar/config/defaultAdmin.json
+	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 600 /var/opt/xcalar/config/defaultAdmin.json
 
 stop-xcalar:
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl stop-supervisor

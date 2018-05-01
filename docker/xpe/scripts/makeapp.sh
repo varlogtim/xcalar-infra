@@ -49,7 +49,7 @@ cp -r xcalar-gui "$APPNAME/Contents/Resources/Data/"
 cd "$APPNAME/Contents/Resources/Bin"
 curl http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip -O
 unzip -aq nwjs-sdk-v0.29.3-osx-x64.zip
-rm -r nwjs-sdk-v0.29.3-osx-x64.zip
+rm nwjs-sdk-v0.29.3-osx-x64.zip
 curl http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz | tar zxf -
 cd "$cwd"
 

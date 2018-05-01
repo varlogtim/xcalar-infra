@@ -148,7 +148,7 @@ create_xdpce() {
 	-v $LOCALLOGDIR:/var/log/xcalar \
 	-p $XEM_PORT_NUMBER:15000 \
 	--name $XCALAR_CONTAINER_NAME \
-	-p 8839:8839 \
+	-p 8818:8818 \
 	--link $GRAFANA_IMAGE:graphite $MNTARGS $XCALAR_IMAGE bash"
 	debug "Docker run cmd: $run_cmd"
 	echo "$run_cmd"
