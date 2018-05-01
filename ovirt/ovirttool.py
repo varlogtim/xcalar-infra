@@ -1335,7 +1335,7 @@ def path_exists_on_node(node, path):
 def get_cluster_priority(prioritize=None):
 
     # try the clusters in this order
-    clusterPriority = ['feynman-dc', 'node3-cluster', 'node2-cluster', 'node4-cluster', 'node1-cluster']
+    clusterPriority = ['einstein-cluster2', 'feynman-dc', 'node3-cluster', 'node2-cluster', 'node4-cluster', 'node1-cluster']
     validClusters = []
     mapping = get_template_mapping() # get the official template mapping
     if prioritize:
@@ -1352,7 +1352,7 @@ def get_cluster_priority(prioritize=None):
 def get_template_mapping():
 
     return {
-        #'node1-cluster': {'Blank'},
+        'einstein-cluster2': 'ovirt-cli-tool-einstein-template',
         'feynman-dc'   : 'el7-template-1',
         'node2-cluster': 'ovirt-cli-tool-node2-template',
         'node3-cluster': 'ovirt-cli-tool-node3-template',
@@ -1871,7 +1871,7 @@ if __name__ == "__main__":
     parser.add_argument("--installer", type=str, #default='builds/Release/xcalar-latest-installer-prod',
         help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for latest BuildTrunk prod build.)")
     parser.add_argument("--noinstaller", action="store_true", default=False, help="Don't install Xcalar on provisioned VMs")
-    parser.add_argument("--ovirtcluster", type=str, default='feynman-dc', help="Which ovirt cluster to create the VM(s) on.  Defaults to feynman-dc")
+    parser.add_argument("--ovirtcluster", type=str, default='einstein-cluster2', help="Which ovirt cluster to create the VM(s) on.  Defaults to einstein-cluster2")
     parser.add_argument("--tryotherclusters", action="store_true", default=False, help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
     parser.add_argument("--licfile", type=str, help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
     parser.add_argument("--delete", type=str, help="Single VM or comma separated String of VMs you want to remove from Ovirt (could be, IP, VM name, etc).")
