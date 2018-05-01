@@ -343,10 +343,6 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
     ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
 
-    if (grArgs.poison) {
-        memset((uint8_t *)hdr + sizeof(*hdr), grArgs.poisonVal, reqSize - sizeof(*hdr));
-    }
-
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_FREE);
     // First invalid byte address after buffer
     *end = (void *)hdr + binSize;
@@ -588,6 +584,11 @@ memalignInt(size_t alignment, size_t usrSize) {
     // Pointer to the start of the metadata one word before the user memory
     *(void **)(usrData - sizeof(void *)) = buf;
     hdr->usrData = usrData;
+
+    if (grArgs.poison) {
+        memset(usrData, grArgs.poisonVal, usrSize);
+    }
+
     return(usrData);
 }
 
