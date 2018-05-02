@@ -1,7 +1,5 @@
 #!/bin/bash
 
-export PATH="$PATH:$HOME/google-cloud-sdk/bin"
-
 DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
 
 if test -z "$XLRINFRADIR"; then

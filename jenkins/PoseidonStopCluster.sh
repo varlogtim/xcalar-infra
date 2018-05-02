@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export XLRDIR=`pwd`
-export PATH="$XLRDIR/bin:$HOME/google-cloud-sdk/bin:$PATH"
+export PATH="$XLRDIR/bin:$PATH"
 
 DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
 

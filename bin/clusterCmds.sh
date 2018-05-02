@@ -12,7 +12,7 @@ initClusterCmds() {
     if [ "$VmProvider" = "GCE" ]; then
         bash /netstore/users/jenkins/slave/setup.sh
     elif [ "$VmProvider" = "Azure" ]; then
-        /usr/bin/az login --service-principal -u  5d35339e-4b1f-494e-840d-70aaa6910fd0  -p $(cat /netstore/infra/jenkins/jenkins-sp.txt) -t 7bbd3477-af8b-483b-bb48-92976a1f9dfb >/dev/null
+        /usr/bin/az login --service-principal -u http://Xcalar/Jenkins/SP -p /netstore/infra/jenkins/jenkins-sp.pem --tenant 7bbd3477-af8b-483b-bb48-92976a1f9dfb
     else
         echo "Unknown VmProvider $VmProvider"
         exit 1
