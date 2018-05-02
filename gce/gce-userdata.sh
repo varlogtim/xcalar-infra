@@ -239,12 +239,8 @@ fi
 safe_curl "$(get_metadata_value attributes/installer)" > $WORKDIR/xcalar-installer
 get_metadata_value attributes/config > $WORKDIR/config
 $sh_c 'mkdir -p /etc/xcalar'
-if [ $COUNT -gt 1 ]; then
-    sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' $WORKDIR/config > $WORKDIR/config-nfs
-    $sh_c "cp $WORKDIR/config-nfs /etc/xcalar/default.cfg"
-else
-    $sh_c "cp $WORKDIR/config /etc/xcalar/default.cfg"
-fi
+sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' $WORKDIR/config > $WORKDIR/config-nfs
+$sh_c "cp $WORKDIR/config-nfs /etc/xcalar/default.cfg"
 
 set +e
 set -x
@@ -255,4 +251,8 @@ cat /etc/default/xcalar.default | tee -a /etc/default/xcalar
 $sh_c 'service rsyslog restart'
 $sh_c 'service apache2 restart'
 cd ~xcalar || cd /var/tmp
+
+echo "$(get_metadata_value attributes/license)" > /etc/xcalar/temp
+echo "$(get_metadata_value attributes/license)" | base64 -d | gunzip > /etc/xcalar/XcalarLic.key
+
 $sh_c 'su -c "/opt/xcalar/bin/xcalarctl start" - xcalar'

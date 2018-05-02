@@ -417,7 +417,7 @@ chown xcalar:xcalar $XCE_XDBSERDESPATH && \
 echo Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH
 ) | tee "$XCE_CONFIG"
 
-echo "$LICENSE" > "${XCE_LICENSEDIR}/XcalarLic.key"
+echo "$LICENSE" | base64 -d | gunzip > "${XCE_LICENSEDIR}/XcalarLic.key"
 
 # Make Xcalar config dir writable by xcalar user for config changes via XD
 chown -R xcalar:xcalar /etc/xcalar

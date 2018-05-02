@@ -212,7 +212,7 @@ gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
     --network=${NETWORK} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size ${DISK_SIZE}GB \
-    --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL,ldapConfig=$LDAP_CONFIG" \
+    --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL,ldapConfig=$LDAP_CONFIG,license=$XCE_LICENSE" \
     --tags=http-server,https-server ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
 if [ "$res" -ne 0 ]; then

@@ -39,6 +39,11 @@ TMPDIR="${TMPDIR:-/tmp}/$LOGNAME/azure-cluster/$$"
 mkdir -p "$TMPDIR" || die "Failed to create $TMPDIR"
 trap "rm -rf $TMPDIR" EXIT
 
+if [ ! -e ~/.ssh/id_azure ]; then
+    cp /netstore/infra/azure/id_azure ~/.ssh/
+    chmod 0400 ~/.ssh/id_azure
+fi
+
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER" > "$TMPDIR/hosts.txt"
 ii=1
 while read hostname; do
@@ -51,7 +56,7 @@ while read hostname; do
     echo "  StrictHostKeyChecking no"
     echo "  UserKnownHostsFile /dev/null"
     echo "  LogLevel ERROR"
-    echo "  IdentityFile /netstore/infra/azure/id_azure"
+    echo "  IdentityFile ~/.ssh/id_azure"
     ii=$(( $ii + 1 ))
 done < "$TMPDIR/hosts.txt" > "$TMPDIR/ssh_config"
 

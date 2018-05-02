@@ -7,12 +7,14 @@ if test -z "$XLRINFRADIR"; then
 fi
 
 export VmProvider=${VmProvider:-GCE}
+devLicense=`cat $XLRDIR/src/data/XcalarLic.key | gzip | base64 -w0`
+export XCE_LICENSE="${XCE_LICENSE:-$devLicense}"
 
 initClusterCmds() {
     if [ "$VmProvider" = "GCE" ]; then
         bash /netstore/users/jenkins/slave/setup.sh
     elif [ "$VmProvider" = "Azure" ]; then
-        /usr/bin/az login --service-principal -u http://Xcalar/Jenkins/SP -p /netstore/infra/jenkins/jenkins-sp.pem --tenant 7bbd3477-af8b-483b-bb48-92976a1f9dfb
+        az login --service-principal -u http://Xcalar/Jenkins/SP -p /netstore/infra/jenkins/jenkins-sp.pem --tenant 7bbd3477-af8b-483b-bb48-92976a1f9dfb
     else
         echo "Unknown VmProvider $VmProvider"
         exit 1
@@ -38,7 +40,7 @@ startCluster() {
 
         return $ret
     elif [ "$VmProvider" = "Azure" ]; then
-        $XLRINFRADIR/azure/azure-cluster.sh -i "$installer" -c "$numInstances" -n "$clusterName" -t "$INSTANCE_TYPE"
+        $XLRINFRADIR/azure/azure-cluster.sh -i "$installer" -c "$numInstances" -n "$clusterName" -t "$INSTANCE_TYPE" -k "$XCE_LICENSE"
         local ret=$?
         local rawOutput=`$XLRINFRADIR/azure/azure-cluster-info.sh "$clusterName"`
         ips=($(awk '{print $0":18552"}' <<< "$rawOutput"))

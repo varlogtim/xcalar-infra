@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export XLRDIR=`pwd`
-export PATH="$XLRDIR/bin:$PATH"
+export PATH="$PATH:$XLRDIR/bin"
 
 DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
 
