@@ -18,7 +18,13 @@ TEMPLATE="$XLRINFRADIR/azure/xdp-standard/azuredeploy.json"
 LICENSE=""
 
 BUCKET="${BUCKET:-xcrepo}"
-BOOTSTRAP="${BOOTSTRAP:-$XLRINFRADIR/azure/bootstrap/ampBootstrap.sh}"
+CUSTOM_SCRIPT_NAME_RAW="devBootstrap.sh"
+CUSTOM_SCRIPT_NAME="devBootstrapWithPayload.sh"
+
+( cd $XLRINFRADIR/azure/xdp-standard; make payload.tar.gz )
+( cat $XLRINFRADIR/azure/bootstrap/$CUSTOM_SCRIPT_NAME_RAW; cat $XLRINFRADIR/azure/xdp-standard/payload.tar.gz ) > $CUSTOM_SCRIPT_NAME
+
+BOOTSTRAP="${BOOTSTRAP:-$CUSTOM_SCRIPT_NAME}"
 BOOTSTRAP_SHA=`sha1sum "$BOOTSTRAP" | awk '{print $1}'`
 S3_BOOTSTRAP_KEY="bysha1/$BOOTSTRAP_SHA/`basename $BOOTSTRAP`"
 S3_BOOTSTRAP="s3://$BUCKET/$S3_BOOTSTRAP_KEY"
@@ -82,6 +88,7 @@ fi
 DEPLOY="$CLUSTER-deploy"
 EMAIL="`id -un`@xcalar.com"
 az group deployment create --resource-group "$CLUSTER" --name "$DEPLOY" --template-file "$TEMPLATE" --parameters "`jq -r '.parameters + { dnsLabelPrefix: {value:"'$CLUSTER'"},\
+                                      customScriptName: {value:"'$CUSTOM_SCRIPT_NAME'"},\
                                       installerUrl: {value:"'$INSTALLER_URL'"},\
                                       bootstrapUrl: {value:"'$BOOTSTRAP_URL'"},\
                                       licenseKey: {value:"'$LICENSE'"},\
@@ -90,3 +97,4 @@ az group deployment create --resource-group "$CLUSTER" --name "$DEPLOY" --templa
                                       vmSize: {value:"'$INSTANCE_TYPE'"}
                                     }|tojson' $PARAMETERS_DEFAULTS`"
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"
+rm "$CUSTOM_SCRIPT_NAME"

@@ -98,6 +98,10 @@
       "metadata": {
         "description": "Installer Url"
       }
+    },
+    "customScriptName": {
+      "type": "string",
+      "defaultValue": "ampBootstrap.sh"
     }
   },
   "variables": {
@@ -116,16 +120,15 @@
     "subnet1Prefix": "10.0.0.0/24",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "scriptsUri": "http://pub.xcalar.net/azure/dev",
-    "customScriptName": "ampBootstrap.sh",
     "customScriptFilePath": "[parameters('bootstrapUrl')]",
-    "customScriptCommandToExecute": "/bin/bash -x ampBootstrap.sh ",
+    "customScriptCommandToExecute": "[concat('/bin/bash -x ', parameters('customScriptName'))]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.4",
     "vmExtensionName": "xcalarBootstrapExtension",
     "dataDiskSize": "[parameters('dataDiskSize')]",
-    "nicName": "[concat(variables('clusterName'),'nic-')]",
-    "dataDiskName": "[concat(variables('clusterName'),'datadisk-')]",
+    "nicName": "[concat(variables('appName'),'nic-')]",
+    "dataDiskName": "[concat(variables('appName'),'datadisk-')]",
     "linuxConfiguration": {
       "sshPublicKey": {
         "disablePasswordAuthentication": "true",
