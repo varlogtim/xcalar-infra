@@ -224,6 +224,23 @@ def create_vm(name, cluster, template, ram, cores, iptries=5):
 
     return vmid
 
+def setup_hostname(ip, name):
+
+    info("Set hostname of VM {} to {}".format(ip, name))
+    fqdn = "{}.int.xcalar.com".format(name)
+    run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
+    run_ssh_cmd(ip, 'systemctl restart network')
+
+def puppet_setup(ip, puppet_role, puppet_cluster):
+
+    info("Setup puppt to run on {} as role {}".format(ip, puppet_role))
+    cmds = [
+        ['echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role)],
+        ['echo "cluster={}" > /etc/facter/facts.d/cluster.txt'.format(puppet_cluster)],
+        ['/opt/puppetlabs/bin/puppet agent -t -v', 200, [0, 2]],
+    ]
+    run_ssh_cmds(ip, cmds)
+
 '''
     Given a list of names of clusters to try and provision n VMs on,
     with ram bytes memory on each,
@@ -788,7 +805,7 @@ def get_pem_cert():
     :param availableClusters: (list of Strings of names of clusters)
         if fail to make on one of the clusters, try on the others
 '''
-def provision_vm(name, ram, cores, availableClusters):
+def provision_vm(name, puppet_role, puppet_cluster, ram, cores, availableClusters):
 
     info("\nTry to provision VM {} on one of the following clusters: {}".format(name, availableClusters))
 
@@ -807,9 +824,9 @@ def provision_vm(name, ram, cores, availableClusters):
             run_ssh_cmd(ip, 'echo "jenkins:{}" | chpasswd'.format(JENKINS_USER_PASS))
 
             # set the hostname now (in case they don't want to install Xcalar)
-            info("Set hostname of VM {} to {}".format(ip, name))
-            fqdn = "{}.int.xcalar.com".format(name)
-            run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
+            setup_hostname(ip, name)
+            # setup puppet only after hostname is set
+            puppet_setup(ip, puppet_role, puppet_cluster)
 
             return True
         #except ResourceException as err:
@@ -849,7 +866,7 @@ def provision_vm(name, ram, cores, availableClusters):
         (this is distinct from name; its id attr of Type:Vm Object)
 
 '''
-def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclusters=True):
+def provision_vms(n, basename, ovirtcluster, puppet_role, puppet_cluster, ram, cores, user=None, tryotherclusters=True):
 
     if n == 0:
         return None
@@ -931,7 +948,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
             nextvmname = nextvmname + "-vm{}".format(str(i))
         vmnames.append(nextvmname)
         info("\nFork new process to create a new VM by name {}".format(nextvmname))
-        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
+        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, puppet_role, puppet_cluster, ram, cores, availableClusters))
         #proc = multiprocessing.Process(target=create_vm, args=(newvm, ovirtcluster, template, ram, cores)) # 'cluster' here refers to cluster the VM is on in Ovirt
         # it will fail if you try to create VMs at exact same time so sleep
         proc.start()
@@ -941,7 +958,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
     # TODO: Deal with 'image locked' status because of network issue on node
 
     # wait for the processes
-    process_wait(procs, timeout=600+sleepBetween*n)
+    process_wait(procs, timeout=600+sleepBetween*n, valid_exit_codes=[0, 2]) # 0 and 2 both valid exit code for puppet which will get set up
 
     # get the list of the unique vm ids
     # a good check to make sure these VMs actually existing by these names now
@@ -1413,15 +1430,14 @@ def run_ssh_cmds(host, cmds):
         status = None
         extraops = {}
         if len(cmd) > 1:
-            extraops['timeout'] = cmd[1]
+            if cmd[1]:
+                extraops['timeout'] = cmd[1]
+            if len(cmd) > 2:
+                extraops['valid_exit_codes'] = cmd[2]
         status, output = run_ssh_cmd(host, cmd[0], **extraops)
-        if status:
-            errorFound = True
 
-    if errorFound:
-        raise RuntimeError("\n\nERROR: Encountered non-0 status code when executing one of the commands!!\n")
-
-def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, pkey=None):
+def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
+    # get list of valid codes
     info("\nssh {}@{}".format(user, host))
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -1438,8 +1454,8 @@ def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_K
     info("stdout:\n\t{}".format(stdout_text))
     status = int(chan.recv_exit_status())
     info("status: {}".format(status))
-    if status:
-        info("stdout text:\n{}\n\nI encountered a non-0 exit status when running SSH cmd {} on host {}!  (See above stdout)".format(stdout_text, command, host))
+    if status not in valid_exit_codes:
+        info("stdout text:\n{}\n\nEncountered invalid exit status running SSH cmd {} on host {}!  (See above stdout)  Valid codes: {}".format(stdout_text, command, host, ', '.join(str(x) for x in valid_exit_codes)))
         sys.exit(status)
     client.close()
     return status, stdout_text.decode("utf-8")
@@ -1495,8 +1511,9 @@ def run_sh_script(node, path, args=[], timeout=120, tee=False):
     :procs: list of multiprocessing.Process objects representing the processes to monitor
     :timeout: how long (seconds) to wait for ALL processees
         in procs to complete, before timing out
+    :valid_exit_codes: valid exit codes to come back from the process; list of ints
 '''
-def process_wait(procs, timeout=500):
+def process_wait(procs, timeout=500, valid_exit_codes=[0]):
 
     numProcsStart = len(procs)
 
@@ -1509,8 +1526,8 @@ def process_wait(procs, timeout=500):
                 timeout -= 1
             else:
                 exitcode = proc.exitcode
-                if exitcode:
-                    raise ChildProcessError("Encountered a non-0 exit code, {} in a forked child process.".format(exitcode))
+                if exitcode not in valid_exit_codes:
+                    raise ChildProcessError("Encountered invalid exit code, {} in a forked child process.  Valid exit codes for these processes: {}".format(exitcode, ', '.join(str(x) for x in valid_exit_codes)))
                 del procs[i]
                 break
 
@@ -1874,6 +1891,8 @@ if __name__ == "__main__":
     parser.add_argument("--ovirtcluster", type=str, default='einstein-cluster2', help="Which ovirt cluster to create the VM(s) on.  Defaults to einstein-cluster2")
     parser.add_argument("--tryotherclusters", action="store_true", default=False, help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
     parser.add_argument("--licfile", type=str, help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
+    parser.add_argument("--puppet_role", type=str, default="jenkins_slave", help="Role the VM should have (Defaults to jenkins_slave)")
+    parser.add_argument("--puppet_cluster", type=str, default="ovirt", help="Role the VM should have (Defaults to jenkins_slave)")
     parser.add_argument("--delete", type=str, help="Single VM or comma separated String of VMs you want to remove from Ovirt (could be, IP, VM name, etc).")
     parser.add_argument("--user", type=str, help="Your SSO username (no '@xcalar.com')")
     parser.add_argument("-f", "--force", action="store_true", default=False, help="Force certain operations such as provisioning, delete, when script would fail normally")
@@ -1905,7 +1924,7 @@ if __name__ == "__main__":
     vmids = []
     clustername = None
     if args.count:
-        vmids = provision_vms(int(args.count), basename, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        vmids = provision_vms(int(args.count), basename, ovirtcluster, args.puppet_role, args.puppet_cluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
             # if you supply a value to 'createcluster' arg of initialize_xcalar,
