@@ -278,8 +278,7 @@ window.TestSuiteManager = (function(TestSuiteManager) {
         });
         output = encodeURIComponent(output);
 
-        var url = protocol + "://" + server +
-                    "/action?name=setstatus&res=" + output;
+        var url = server + "/action?name=setstatus&res=" + output;
         if (gInternal) {
             $.ajax({
                 "type"    : "GET",
@@ -307,8 +306,7 @@ window.TestSuiteManager = (function(TestSuiteManager) {
         // http://host:port/action?name=print&res=res
         output = encodeURIComponent(res);
 
-        var url = protocol + "://" + server +
-                    "/action?name=print&res=" + output;
+        var url = server + "/action?name=print&res=" + output;
 
         if (gInternal) {
             $.ajax({
