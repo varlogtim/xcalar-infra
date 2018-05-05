@@ -10,6 +10,7 @@ import json
 import logging
 import requests
 import boto3
+import zlib
 from base64 import b64decode
 from six import string_types
 
@@ -142,6 +143,15 @@ def fetchInfo(key):
     return jsonify(keyInfo)
 
 def getKeyInfo(key):
+    try:
+        licenseText = zlib.decompress(b64decode(key), 16+zlib.MAX_WBITS)
+        keyProps = { key:value for (key, value) in [ element.split("=") for element in licenseText.split("\n") if len(element.split("=")) > 1 ] }
+        del keyProps["signature"]
+        keyProps["key"] = key
+        return keyProps
+    except:
+        pass
+
     p = subprocess.Popen([readKeyCmd, "-k", pubKey, "-l", key], stdout=subprocess.PIPE)
     cmdOutput = p.communicate()[0]
     if p.returncode != 0:
@@ -248,6 +258,9 @@ def createLicense():
             if str(v).lower() == "true":
                 args.append("-z")
                 compress = True
+        elif k == "jdbc":
+            if str(v).lower() == "true":
+                args.append("--jdbc")
         elif str(v).strip():
             args.extend([hypen + k, str(v)])
 

@@ -18,6 +18,9 @@ def main(options):
 
     expirationDate = datetime.date.today() + expirationDelta
 
+    jdbcEnabled = "false"
+    if options.jdbcEnabled:
+        jdbcEnabled = "true"
 
     license_fields = { 'Iteration': options.license_version,
                        'LicensedTo': options.licensee,
@@ -27,8 +30,13 @@ def main(options):
                        'Platform': options.system,
                        'ExpirationDate': expirationDate.strftime("%Y-%b-%d"),
                        'NodeCount': options.nodecount,
-                       'UserCount': options.usercount
+                       'UserCount': options.usercount,
+                       'OnExpiry': options.onexpiry,
+                       'JdbcEnabled': jdbcEnabled
                    }
+
+    if options.maxInteractiveDataSize is not None:
+        license_fields["MaxInteractiveDataSize"] = options.maxInteractiveDataSize
 
     if (options.sigKeys):
         for key in options.sigKeys.split(','):
@@ -118,10 +126,7 @@ def main(options):
     if pr.returncode != 0:
         raise ValueError(err)
 
-    if options.compress:
-        print("{}".format(out.strip().decode('utf-8')))
-    else:
-        print ("{}".format(out.strip().decode('utf-8')))
+    print ("{}".format(out.strip().decode('utf-8')))
 
 
 if __name__ == "__main__":
@@ -137,21 +142,16 @@ if __name__ == "__main__":
 
     parser.add_option("-l", "--licversion", dest='license_version', default='2.0',
                        help="the version of the license format, example: 2.0 ")
-    parser.add_option("-f", "--family", dest='family', default='Xcalar',
-                      type="choice", choices=['Xcalar', 'ALL_FAMILIES'],
-                      help="the Xcalar product family code, example: Xcalar")
-
-    parser.add_option("-p", "--product", dest='product', default='Xdp',
-                      type="choice", choices=['Xdp', 'Xcalar-PE', 'ALL_PRODUCTS'],
-                      help="the Xcalar product code, example: Xdp")
-    parser.add_option("-e", "--edition", dest='edition', default='standard',
-                      type="choice", choices=['free', 'standard', 'enterprise', 'premium'],
-                      help="the Xcalar product edition, example: enterprise")
-
+    parser.add_option("-f", "--family", dest='family', default='Xcalar Data Platform',
+                      type="choice", choices=['Xcalar Data Platform', 'Xcalar Design', 'ALL_FAMILIES'],
+                      help="the Xcalar product family code, example: Xcalar Data Platform")
+    parser.add_option("-p", "--product", dest='product', default='Xcalar Data Platform',
+                      type="choice", choices=['Xcalar Data Platform', 'Xcalar Design CE', 'Xcalar Design EE', 'ALL_PRODUCTS'],
+                      help="the Xcalar product code, example: Xcalar Data Platform")
     parser.add_option("-v", "--prodversion", dest='version', default='1.4.0',
                       help="the Xcalar product version, example 1.4.0")
     parser.add_option("-s", "--system", dest='system', default='LINUX_X64',
-                      type="choice", choices=['LINUX_X64', 'ALL_PLATFORMS'],
+                      type="choice", choices=['LINUX_X64', 'MAC_OS', 'ALL_PLATFORMS'],
                       help="the product platform/system code, example: LINUX_X64")
     parser.add_option("-x", "--expiration", dest='expiration', default='30',
                       help="the term of the license -- days to expiration, example: 365")
@@ -159,21 +159,19 @@ if __name__ == "__main__":
                       help="the maximum number of nodes in the cluster, example: 16")
     parser.add_option("-u", "--usercount", dest='usercount', default='8',
                       help="the maximum number of concurrent users, example: 8")
-    parser.add_option("--xue", "--xcalarudfenable", dest='xcudfenable', default='false',
-                      type="choice", choices=['true', 'false'],
-                      help="Enable/disable xcalar udfs")
-    parser.add_option("--xm", "--xcalarmodeling", dest='xcmodeling', default='false',
-                      type="choice", choices=['true', 'false'],
-                      help="Enable/disable xcalar modeling mode")
-    parser.add_option("--xape", "--xcalarawspluginenable", dest='xcawsenable', default='false',
-                      type="choice", choices=['true', 'false'],
-                      help="Enable/disable the xcalar AWS plugin")
     parser.add_option('-z', '--compress', action='store_true', dest='compress',
                       help="Compress and base64 encode the license")
     parser.add_option('--sigKeys', dest='sigKeys',
                       help="Comma separated list of license keys used to sign the license")
     parser.add_option('--licensee', dest='licensee', default="Xcalar, Inc",
                       help="Who the license is for")
+    parser.add_option("--onexpiry", dest="onexpiry", default="Warn",
+                      type="choice", choices=["Warn", "Disable"],
+                      help="When license expires, do we warn the user, or outright disable the product")
+    parser.add_option("--jdbc", action="store_true", dest="jdbcEnabled",
+                      help="Enable JDBC?")
+    parser.add_option("--maxInteractiveDataSize", dest="maxInteractiveDataSize", type="string",
+                      help="Optional. Maximum size of dataset that can be loaded in modeling mode")
 
     (options, args) = parser.parse_args()
 
