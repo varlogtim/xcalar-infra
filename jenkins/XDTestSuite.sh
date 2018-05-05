@@ -102,10 +102,10 @@ while true; do
         exit 1
     fi
 done
-set -x
+
 echo "Starting test driver"
 python assets/test/testSuitePython/server.py -t $NODE > /tmp/xdtestsuite-server.log 2>&1 &
-sleep 10
+sleep 5
 
 TEST_DRIVER_HOST=$(hostname)
 TEST_DRIVER_PORT="5909"
