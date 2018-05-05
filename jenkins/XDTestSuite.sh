@@ -111,10 +111,10 @@ TEST_DRIVER_HOST=$(hostname)
 TEST_DRIVER_PORT="5909"
 
 echo "Running test suites in pseudo terminal"
-URL="http://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=start&mode=$MODE&timeDilation=3&host=$NODE&server=$TEST_DRIVER_HOST&port=$TEST_DRIVER_PORT&users=$NUM_USERS"
+URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=start&mode=$MODE&timeDilation=3&host=$NODE&server=$TEST_DRIVER_HOST&port=$TEST_DRIVER_PORT&users=$NUM_USERS"
 HTTP_RESPONSE=$(curl --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
 
-URL="http://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=getstatus"
+URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=getstatus"
 HTTP_BODY="Still running"
 
 ls -art /tmp | grep "chromium" | tail -n 1 | xargs -n1 -I@ tail -f /tmp/@/chrome_debug.log &
@@ -131,7 +131,7 @@ done
 echo "Test suite finishes"
 echo "$HTTP_BODY"
 echo "Closing test driver"
-URL="http://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=close"
+URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=close"
 HTTP_RESPONSE=$(curl --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
 if [[ "$HTTP_BODY" == *"status:fail"* ]]; then
   echo "TEST SUITE FAILED"
