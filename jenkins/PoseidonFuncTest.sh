@@ -1,68 +1,23 @@
 #!/bin/bash
 
-export PATH="$HOME/google-cloud-sdk/bin:$PATH"
+DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+
+if test -z "$XLRINFRADIR"; then
+    export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
+fi
 
 set +e
 sudo chown jenkins:jenkins /home/jenkins/.config
-bash /netstore/users/jenkins/slave/setup.sh
+source "$XLRINFRADIR/bin/clusterCmds.sh"
+initClusterCmds
 set -e
 
 TestsToRun=($TestCases)
 TAP="AllTests.tap"
 
-if [ "$NOTPREEMPTIBLE" != "1" ]; then                                           
-    ips=($(awk '/RUNNING/ {print $6}' <<< "$ret"))                      
-else                                                                            
-    ips=($(awk '/RUNNING/ {print $5}' <<< "$ret"))                      
-fi
-
 TMPDIR="${TMPDIR:-/tmp/`id -un`}/$JOB_NAME/functests"
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
-
-cloudXccli() {
-    cmd="gcloud compute ssh $CLUSTER-1 -- \"/opt/xcalar/bin/xccli\""
-    for arg in "$@"; do
-        arg="${arg//\\/\\\\}"
-        arg="${arg//\"/\\\"}"
-        cmd="$cmd \"$arg\""
-    done
-    $cmd
-}
-
-stopXcalar() {
-    xcalar-infra/gce/gce-cluster-ssh.sh $CLUSTER "sudo /opt/xcalar/bin/xcalarctl stop-supervisor"
-}
-
-restartXcalar() {
-    set +e
-    stopXcalar
-    xcalar-infra/gce/gce-cluster-ssh.sh $CLUSTER "sudo service xcalar start"
-    for ii in $(seq 1 $NUM_INSTANCES ) ; do
-        host="${CLUSTER}-${ii}"                                                                                                                                                                                                                                                                                                                                                                                               
-        gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started" 
-        ret=$?
-        numRetries=60
-        try=0
-        while [ $ret -ne 0 -a "$try" -lt "$numRetries" ]; do
-            sleep 1s
-            gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q "Usrnodes started"
-            ret=$?
-            try=$(( $try + 1 ))
-        done
-        if [ $ret -eq 0 ]; then
-            echo "All nodes ready"
-        else
-            echo "Error while waiting for node $ii to come up"
-            return 1
-        fi
-    done 
-    set -e
-}
-
-genSupport() {
-    xcalar-infra/gce/gce-cluster-ssh.sh $CLUSTER "sudo /opt/xcalar/scripts/support-generate.sh"
-}
 
 funcstatsd() {
     local name="${1//::/_}"
@@ -80,6 +35,8 @@ funcstatsd() {
 }
 
 sudo yum install -y nc
+
+sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
 gitsha=`cloudXccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"

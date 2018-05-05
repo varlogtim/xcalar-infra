@@ -38,6 +38,8 @@ done
 
 stopXcalar
 
+clusterSsh $cluster -- "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
+
 clusterSsh $cluster -- "sudo yum install -y gcc-c++ wget texinfo screen emacs python-devel"
 
 # Install gdb-8.0

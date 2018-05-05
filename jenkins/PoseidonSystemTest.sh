@@ -61,6 +61,8 @@ funcstatsd() {
 
 export http_proxy=
 
+sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
+
 sudo yum install -y nc
 cloudXccli "$cluster" -c "version"
 gitsha=`cloudXccli "$cluster" -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
