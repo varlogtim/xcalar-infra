@@ -112,7 +112,7 @@ TEST_DRIVER_PORT="5909"
 
 echo "Running test suites in pseudo terminal"
 URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=start&mode=$MODE&timeDilation=3&host=$NODE&server=$TEST_DRIVER_HOST&port=$TEST_DRIVER_PORT&users=$NUM_USERS"
-HTTP_RESPONSE=$(curl --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
+HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
 
 URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=getstatus"
 HTTP_BODY="Still running"
@@ -124,7 +124,7 @@ do
     echo "Test suite is still running"
     sleep 5
     # store the whole response with the status at the and
-    HTTP_RESPONSE=$(curl --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
+    HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
     # extract the body
     HTTP_BODY=$(echo $HTTP_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
 done
@@ -132,7 +132,7 @@ echo "Test suite finishes"
 echo "$HTTP_BODY"
 echo "Closing test driver"
 URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=close"
-HTTP_RESPONSE=$(curl --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
+HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
 if [[ "$HTTP_BODY" == *"status:fail"* ]]; then
   echo "TEST SUITE FAILED"
   exit 1
