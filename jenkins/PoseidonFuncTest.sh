@@ -38,10 +38,10 @@ sudo yum install -y nc
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
-gitsha=`cloudXccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
+gitsha=`cloudXccli "$CLUSTER" -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
-AllTests="$(cloudXccli -c 'functests list' | tail -n+2)"
+AllTests="$(cloudXccli "$CLUSTER" -c 'functests list' | tail -n+2)"
 NumTests="${#TestsToRun[@]}"
 hostname=`hostname -f`
 
@@ -56,7 +56,7 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
         logfile="$TMPDIR/${hostname//./_}_${Test//::/_}_$ii.log"
 
         echo "Running $Test on $CLUSTER ..."
-        if cloudXccli -c version 2>&1 | grep 'Error'; then
+        if cloudXccli "$CLUSTER" -c version 2>&1 | grep 'Error'; then
            genSupport
            echo "$CLUSTER Crashed"
            exit 1
@@ -68,7 +68,7 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
             restartXcalar
             anyfailed=0
         fi
-        time cloudXccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
+        time cloudXccli "$CLUSTER" -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
         rc=${PIPESTATUS[0]}
         if [ $rc -ne 0 ]; then
             funcstatsd "$Test" "FAIL" "$gitsha"

@@ -7,8 +7,13 @@ if test -z "$XLRINFRADIR"; then
 fi
 
 export VmProvider=${VmProvider:-GCE}
-devLicense=`cat $XLRDIR/src/data/XcalarLic.key | gzip | base64 -w0`
-export XCE_LICENSE="${XCE_LICENSE:-$devLicense}"
+if [ "$IS_RC" = "true" ]; then
+    prodLicense=`cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0`
+    export XCE_LICENSE="${XCE_LICENSE:-$prodLicense}"
+else
+    devLicense=`cat $XLRDIR/src/data/XcalarLic.key | gzip | base64 -w0`
+    export XCE_LICENSE="${XCE_LICENSE:-$devLicense}"
+fi
 
 initClusterCmds() {
     if [ "$VmProvider" = "GCE" ]; then
