@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# if host has no xdpce docker container,
+# or xdpce:latest is not image version
+# included in the app, opens an installer
+# and restarts app upon install completion.
+# else opens XD linked to xdpce:latest
+#
+# bash XPE forceinstall   // forces installer to open
+
 set -e
 
 export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin
@@ -62,18 +70,16 @@ userlatest=$(bash "$APP_DIR/Contents/Resources/scripts/getimgid.sh" xdpce)
 thisbld=$(cat "$APP_DIR/Contents/Resources/Data/.imgid")
 echo "userlatest: $userlatest"
 echo "thisbld : $thisbld"
-mustinstall=false
-if [[ "$userlatest" != $thisbld ]]; then
-    mustinstall=true
+if [ "$userlatest" != $thisbld ] || [ "$1" == forceinstall ]; then
     "$NODEBIN" "$INSTALLSERVER" > "$APPLOGDIR"/"$TIMESTAMP"_serverInstallLog 2>&1 &
     SERVER_PID=$!
     echo "server pid: $SERVER_PID"
     echo "$SERVER_PID" > "$SERVERPIDFILE"
     waitForServer
     "$NWJSBIN" "$INSTALLERROOT"
-    exit 0
+    exit $?
 fi
 
 bash "$APP_DIR/Contents/Resources/scripts/bringupcontainers.sh"
 "$NWJSBIN" "$XDROOT"
-exit 0
+exit $?
