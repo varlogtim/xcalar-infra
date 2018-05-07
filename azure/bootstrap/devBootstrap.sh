@@ -186,7 +186,7 @@ mount_device () {
     mount $MOUNT
 }
 
-extract "$MYPATH" | tee "payload.tar.gz"
+# extract "$MYPATH" | tee "payload.tar.gz"
 
 setenforce Permissive
 sed -i -e 's/^SELINUX=enforcing.*$/SELINUX=permissive/g' /etc/selinux/config

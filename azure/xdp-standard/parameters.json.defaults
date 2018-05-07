@@ -20,9 +20,6 @@
         "scaleNumber": {
             "value": 1
         },
-        "dataDiskSize": {
-            "value": 127
-        },
         "licenseKey": {
             "value": "YOUR-LICENSE-KEY"
         }

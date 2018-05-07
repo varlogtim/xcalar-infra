@@ -14,17 +14,13 @@ COUNT=1
 INSTANCE_TYPE="Standard_E8s_v3"
 CLUSTER="`id -un`-xcalar"
 LOCATION="westus2"
-TEMPLATE="$XLRINFRADIR/azure/xdp-standard/azuredeploy.json"
+TEMPLATE="$XLRINFRADIR/azure/xdp-standard/devTemplate.json"
 LICENSE=""
 
 BUCKET="${BUCKET:-xcrepo}"
-CUSTOM_SCRIPT_NAME_RAW="devBootstrap.sh"
-CUSTOM_SCRIPT_NAME="devBootstrapWithPayload.sh"
+CUSTOM_SCRIPT_NAME="devBootstrap.sh"
 
-( cd $XLRINFRADIR/azure/xdp-standard; make payload.tar.gz )
-( cat $XLRINFRADIR/azure/bootstrap/$CUSTOM_SCRIPT_NAME_RAW; cat $XLRINFRADIR/azure/xdp-standard/payload.tar.gz ) > $CUSTOM_SCRIPT_NAME
-
-BOOTSTRAP="${BOOTSTRAP:-$CUSTOM_SCRIPT_NAME}"
+BOOTSTRAP="${BOOTSTRAP:-$XLRINFRADIR/azure/bootstrap/$CUSTOM_SCRIPT_NAME}"
 BOOTSTRAP_SHA=`sha1sum "$BOOTSTRAP" | awk '{print $1}'`
 S3_BOOTSTRAP_KEY="bysha1/$BOOTSTRAP_SHA/`basename $BOOTSTRAP`"
 S3_BOOTSTRAP="s3://$BUCKET/$S3_BOOTSTRAP_KEY"
@@ -87,14 +83,16 @@ fi
 
 DEPLOY="$CLUSTER-deploy"
 EMAIL="`id -un`@xcalar.com"
-az group deployment create --resource-group "$CLUSTER" --name "$DEPLOY" --template-file "$TEMPLATE" --parameters "`jq -r '.parameters + { dnsLabelPrefix: {value:"'$CLUSTER'"},\
+az group deployment create --resource-group "$CLUSTER" --name "$DEPLOY" --template-file "$TEMPLATE" --parameters "`jq -r '.parameters + { domainNameLabel: {value:"'$CLUSTER'"},\
                                       customScriptName: {value:"'$CUSTOM_SCRIPT_NAME'"},\
                                       installerUrl: {value:"'$INSTALLER_URL'"},\
                                       bootstrapUrl: {value:"'$BOOTSTRAP_URL'"},\
                                       licenseKey: {value:"'$LICENSE'"},\
                                       adminEmail: {value:"'$EMAIL'"},\
                                       scaleNumber: {value:'$COUNT'},\
+                                      appName: {value:"'$CLUSTER'"},\
+                                      appUsername: {value:"admin"},\
+                                      appPassword: {value:"Welcome1"},\
                                       vmSize: {value:"'$INSTANCE_TYPE'"}
                                     }|tojson' $PARAMETERS_DEFAULTS`"
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"
-rm "$CUSTOM_SCRIPT_NAME"

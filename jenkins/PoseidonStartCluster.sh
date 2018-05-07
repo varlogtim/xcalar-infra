@@ -51,9 +51,9 @@ if [ "$InstallGdb8" = "true" ]; then
 fi
 
 # Set up SerDes
-clusterSsh $cluster -- "mkdir -p $XdbLocalSerDesPath"
-clusterSsh $cluster -- "chmod +w $XdbLocalSerDesPath"
-clusterSsh $cluster -- "sudo chown -R xcalar:xcalar $XdbLocalSerDesPath"
+#clusterSsh $cluster -- "mkdir -p $XdbLocalSerDesPath"
+#clusterSsh $cluster -- "chmod +w $XdbLocalSerDesPath"
+#clusterSsh $cluster -- "sudo chown -R xcalar:xcalar $XdbLocalSerDesPath"
 
 # Remount xcalar with noac for liblog stress
 #clusterSsh $cluster -- "sudo umount /mnt/xcalar"
