@@ -239,6 +239,17 @@ def createLicense():
 
     auditTrail(userId, "createLicense", json.dumps(jsonInput))
 
+    if "product" not in jsonInput:
+        abort(400)
+    product = jsonInput["product"]
+
+    if "family" not in jsonInput:
+        if product == "Xcalar Design CE" or product == "Xcalar Design EE":
+            family = "Xcalar Design"
+        else:
+            family = "Xcalar Data Platform"
+        jsonInput["family"] = family
+
     args = ["python", createKeyCmd]
 
     if jsonInput["licenseType"] == "Production":
