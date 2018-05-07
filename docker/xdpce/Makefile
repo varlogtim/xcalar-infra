@@ -53,7 +53,6 @@ install: run
     ifneq ($(XPE),)
 		docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
 		docker cp $(XLRDIR)/src/data/XcalarLic.key $(CONTAINER_NAME):/etc/xcalar/XcalarLic.key
-		docker cp $(XLRINFRADIR)/docker/xpe/scripts/setupTarget.py $(CONTAINER_NAME):/tmp
     endif
 
 enforce-samplesize: install-license
