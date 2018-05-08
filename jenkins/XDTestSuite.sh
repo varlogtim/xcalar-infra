@@ -1,146 +1,173 @@
 #!/bin/bash
-# This is a sample Jenkins script that utilizes the end-to-end test framework.
-# Sample Jenkins params:
-#     - BACK_GIT_BRANCH: master
-#     - GIT_REPOSITORY: ssh://gerrit.int.xcalar.com:29418/xcalar/xcalar-infra.git
-#     - NODE: 10.10.4.110
-#     - NUM_USERS: 1
-#     - MODE: ten
-#     - SSHUSER: root
-ps -ef | grep "server.p[y]" | awk '{print $2}' | xargs kill -9 || true
-_ssh () {
-    ssh -t -T -oUserKnownHostsFile=/dev/null -oLogLevel=ERROR -oStrictHostKeyChecking=no "$@"
-}
 
-PREV_ROOT=$(_ssh $SSHUSER@$NODE "grep -o 'Constants.XcalarRootCompletePath=[^,]*' /etc/xcalar/default.cfg | cut -d '=' -f 2")
-XCALAR_ROOT=${PREV_ROOT:-/var/opt/xcalar}
-XCCLI=$(_ssh $SSHUSER@$NODE "echo \${XLRDIR:-/opt/xcalar}/bin/xccli")
-LATEST_INSTALLER=`ls /netstore/builds/byJob/BuildTrunk/$INSTALLERNUMBER/debug/*$INSTALLERNUMBER*-installer`
-if [ -e "$LATEST_INSTALLER" ]; then
-    echo "Using BuildTrunk Debug build number $INSTALLERNUMBER"
+trap '(xclean; kill $(jobs -p)) || true' SIGINT SIGTERM EXIT
+
+export XLRINFRADIR="${XLRINFRADIR:-$XLRDIR/xcalar-infra}"
+export XLRGUIDIR="${XLRGUIDIR:-$XLRDIR/xcalar-gui}"
+export XCE_LICENSEDIR=$XLRDIR/src/data
+export XCE_LICENSEFILE=${XCE_LICENSEDIR}/XcalarLic.key
+NUM_USERS=${NUM_USERS:-$(shuf -i 2-3 -n 1)}
+TEST_DRIVER_PORT="5909"
+
+echo "Installing required packages"
+if grep -q Ubuntu /etc/os-release; then
+    sudo apt-get install -y libnss3-dev chromium-browser
+    sudo apt-get install -y libxss1 libappindicator1 libindicator7 libgconf-2-4
+    sudo apt-get install -y Xvfb
+    if [ ! -f /usr/bin/chromedriver ]; then
+        echo "Wget chrome driver"
+        wget http://chromedriver.storage.googleapis.com/2.24/chromedriver_linux64.zip
+        unzip chromedriver_linux64.zip
+        chmod +x chromedriver
+        sudo mv chromedriver /usr/bin/
+    else
+        pwd
+        echo "Chrome driver already installed"
+    fi
 else
-    echo "Using BuildTrunk latest Debug build"
-    LATEST_INSTALLER="/netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-debug"
+    sudo curl -ssL http://repo.xcalar.net/rpm-deps/google-chrome.repo | sudo tee /etc/yum.repos.d/google-chrome.repo
+    curl -sSO https://dl.google.com/linux/linux_signing_key.pub
+    sudo rpm --import linux_signing_key.pub
+    rm linux_signing_key.pub
+    sudo yum install -y google-chrome-stable
+    sudo yum localinstall -y /netstore/infra/packages/chromedriver-2.34-2.el7.x86_64.rpm
+    sudo yum install -y Xvfb
 fi
 
-echo "Installer location: $LATEST_INSTALLER"
+pip install pyvirtualdisplay selenium
 
-echo "Building $GUI_PRODUCT"
-export XLRDIR=`pwd` #Not used
-export XLRGUIDIR=`pwd` #Not used
-make installer product=$GUI_PRODUCT
+if [ "$AUTO_DETECT_XCE" = "true" ]; then
+    foundVersion="false"
+    echo "Detecting version of XCE to use"
+    cd $XLRDIR
+    versionSig=`md5sum src/include/libapis/LibApisCommon.h | cut -d\  -f 1`
+    if grep -q "$versionSig" "$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"; then
+        echo "Current version of XCE is compatible"
+        foundVersion="true"
+    else
+        echo "Current version of XCE is not compatible. Trying..."
+        gitshas=`git log --format=%H src/include/libapis/LibApisCommon.h`
+        for gitsha in $gitshas; do
+            git checkout "$gitsha" src/include/libapis/LibApisCommon.h
+            versionSig=`md5sum src/include/libapis/LibApisCommon.h | cut -d\  -f 1`
+            echo "$gitsha: VersionSig = $versionSig"
+            if grep -q "$versionSig" "$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"; then
+                echo "$gitsha is a match"
+                git checkout HEAD src/include/libapis/LibApisCommon.h
+                git checkout "$gitsha"
+                foundVersion="true"
+            fi
+        done
+    fi
+
+    if [ "$foundVersion" = "false" ]; then
+        echo "Could not find a compatible version of XCE to use"
+        exit 1
+    fi
+fi
+
+echo "Building XCE"
+cd $XLRDIR
+set +e
+source doc/env/xc_aliases
+xclean
+set -e
+cmBuild clean
+cmBuild config prod
+cmBuild
+
+echo "Building XD"
+cd $XLRGUIDIR
+make debug PRODUCT="$GUI_PRODUCT"
 
 if [ "$GUI_PRODUCT" = "XI" ]; then
     GUI_FOLDER=xcalar-insight
-    echo "Tarring up xcalar-insight"
+    echo "Using xcalar-insight"
 else
     GUI_FOLDER=xcalar-gui
-    echo "Tarring up xcalar-design(xcalar-gui)"
-fi
-tar -zcvf xcalar-gui.tar.gz $GUI_FOLDER
-
-#NUM_USERS=$(shuf -i 2-3 -n 1)
-NUM_USERS=1
-
-echo "Installing required packages"
-if ! grep -q Ubuntu /etc/os-release; then
-  echo "This only works on ubuntu"
-  exit 1
-fi
-sudo apt-get install -y libnss3-dev chromium-browser
-
-if [ ! -f /usr/bin/chromedriver ]; then
-    echo "Wget chrome driver"
-    wget http://chromedriver.storage.googleapis.com/2.24/chromedriver_linux64.zip
-    unzip chromedriver_linux64.zip
-    chmod +x chromedriver
-    sudo mv chromedriver /usr/bin/
-else
-    pwd
-    echo "Chrome driver already installed"
+    echo "Using xcalar-gui"
 fi
 
-sudo apt-get install -y libxss1 libappindicator1 libindicator7
-sudo apt-get install -y python-pip
-sudo pip install pyvirtualdisplay selenium
-sudo apt-get install -y Xvfb
+echo "Starting usrnodes"
+cd $XLRDIR
+export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/bin/usrnode/test-config.cfg}"
+launcher.sh 1 daemon
 
-echo "Stop usrnode remotely"
-_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop-supervisor" < /dev/null || true
-echo "Cleaning buffer cache file"
-_ssh $SSHUSER@$NODE "rm -rf /dev/shm/*" < /dev/null || true
-echo "Cleaning XLRROOT"
-_ssh $SSHUSER@$NODE "rm -rf $XCALAR_ROOT/*" < /dev/null || true
-echo "Installing perpetual license"
-_ssh $SSHUSER@$NODE "cp /netstore/users/jerene/XcalarLic.key /etc/xcalar"
-echo "Removing xcalar packages"
-_ssh $SSHUSER@$NODE "yum -y remove xcalar"
-echo "Installing latest build"
-_ssh $SSHUSER@$NODE "$LATEST_INSTALLER --stop --nostart"
-
-echo "Installing UI in this build"
-scp xcalar-gui.tar.gz $SSHUSER@$NODE:/tmp
-_ssh $SSHUSER@$NODE "rm -rf /opt/xcalar/xcalar-gui && tar -zxvf /tmp/xcalar-gui.tar.gz -C /opt/xcalar; cd /opt/xcalar/xcalar-gui/services/expServer/; rm -rf node_modules/*; PATH=/opt/rh/devtoolset-2/root/usr/bin:/opt/xcalar/bin:$PATH npm install"
-echo "Starting up cluster"
-_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl start"
-# mv $GUI_FOLDER xcalar-gui
-date
-timeOut=50
-counter=0
-set +e
-while true; do
-
-    _ssh $SSHUSER@$NODE "$XCCLI -c \"version\"" | grep "Backend Version"
-
-    if [ $? -eq 0 ]; then
-        break
-    fi
-    sleep 5s
-    counter=$(($counter + 5))
-    if [ $counter -gt $timeOut ]; then
-        echo "usrnode time out"
-        exit 1
-    fi
-done
-
-echo "Starting test driver"
-python assets/test/testSuitePython/server.py -t $NODE > /tmp/xdtestsuite-server.log 2>&1 &
+echo "Starting Caddy"
+TmpCaddy=`mktemp /tmp/Caddy.conf.XXXXX`
+TmpCaddyLogs=`mktemp /tmp/CaddyLogs.XXXXX`
+cp $XLRDIR/conf/Caddyfile "$TmpCaddy"
+sed -i -e 's!/var/www/xcalar-gui!'$XLRGUIDIR'/'$GUI_FOLDER'!g' "$TmpCaddy"
+echo "Caddy logs at $TmpCaddyLogs"
+caddy -conf "$TmpCaddy" >"$TmpCaddyLogs" 2>&1 &
+caddyPid=$!
+echo "Caddy pid $caddyPid"
 sleep 5
 
-TEST_DRIVER_HOST=$(hostname)
-TEST_DRIVER_PORT="5909"
+echo "Starting test driver"
+TmpServerLogs=`mktemp /tmp/serverLogs.XXXXX`
+echo "server.py logs available at $TmpServerLogs"
+python $XLRGUIDIR/assets/test/testSuitePython/server.py -t localhost >"$TmpServerLogs" 2>&1 &
+serverPid=$!
+echo "Server.py pid $serverPid"
+sleep 5
+
+#THIS IS HOW YOU RUN IT: localhost:8888/unitTest.html?createWorkbook=y&user=test
 
 echo "Running test suites in pseudo terminal"
-URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=start&mode=$MODE&timeDilation=3&host=$NODE&server=$TEST_DRIVER_HOST&port=$TEST_DRIVER_PORT&users=$NUM_USERS"
-HTTP_RESPONSE=$(curl -k -sS --write-out "HTTPSTATUS:%{http_code}" -X GET "$URL")
+URL="https://localhost:$TEST_DRIVER_PORT/action?name=start&mode=$MODE&host=localhost&server=localhost&port=$TEST_DRIVER_PORT&users=$NUM_USERS"
+HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
+sleep 5
 
-URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=getstatus"
+numTries=3
+chromeLogsFound="false"
+for ii in `seq 1 $numTries`; do
+    chromeLogs="`ls -lat /tmp | grep "chromium" | head -n1 | awk '{print $9}'`"
+    if [ -f "/tmp/$chromeLogs/chrome_debug.log" ]; then
+        chromeLogsFound="true"
+        break
+    fi
+    sleep 5
+done
+
+if [ "$chromeLogsFound" = "false" ]; then
+    echo "Could not find chrome logs"
+    exit 1
+fi
+
+echo "chromeLogs at /tmp/$chromeLogs"
+tail -f "/tmp/$chromeLogs/chrome_debug.log" &
+tailPid=$!
+
+URL="https://localhost:$TEST_DRIVER_PORT/action?name=getstatus"
 HTTP_BODY="Still running"
-
-ls -art /tmp | grep "chromium" | tail -n 1 | xargs -n1 -I@ tail -f /tmp/@/chrome_debug.log &
-
 while [ "$HTTP_BODY" == "Still running" ]
 do
     echo "Test suite is still running"
     sleep 5
     # store the whole response with the status at the and
-    HTTP_RESPONSE=$(curl -k -sS --write-out "HTTPSTATUS:%{http_code}" -X GET "$URL")
+    HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
     # extract the body
     HTTP_BODY=$(echo $HTTP_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
 done
 echo "Test suite finishes"
 echo "$HTTP_BODY"
 echo "Closing test driver"
-URL="https://$TEST_DRIVER_HOST:$TEST_DRIVER_PORT/action?name=close"
-HTTP_RESPONSE=$(curl -k -sS --write-out "HTTPSTATUS:%{http_code}" -X GET "$URL")
+URL="https://localhost:$TEST_DRIVER_PORT/action?name=close"
+HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
+
+kill $serverPid || true
+kill $caddyPid || true
+kill $tailPid || true
+
 if [[ "$HTTP_BODY" == *"status:fail"* ]]; then
   echo "TEST SUITE FAILED"
   exit 1
 else
   echo "TEST SUITE PASS"
+  echo "Removing logs"
+  rm "$TmpServerLogs"
+  rm "$TmpCaddyLogs"
+  rm "$TmpCaddy"
   exit 0
 fi
-
-_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop-supervisor"
-_ssh $SSHUSER@$NODE "/opt/xcalar/bin/xcalarctl stop"
-_ssh $SSHUSER@$NODE "sudo rm -rf /tmp/xcalar-gui.tar.gz"
