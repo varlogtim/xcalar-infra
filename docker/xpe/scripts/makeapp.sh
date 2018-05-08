@@ -48,11 +48,16 @@ cp installertarball.tar.gz "$APPNAME/Contents/Resources/Data/Installer" # has fi
 # add xcalar-gui (config.js and package.json for nwjs should already be present)
 cp -r xcalar-gui "$APPNAME/Contents/Resources/Data/"
 
-# add nwjs mac binary on netstore, unzip it in dest then remove the zip
+# setup nwjs
 cd "$APPNAME/Contents/Resources/Bin"
 curl http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip -O
 unzip -aq nwjs-sdk-v0.29.3-osx-x64.zip
 rm nwjs-sdk-v0.29.3-osx-x64.zip
+# must change app metadata to get customized nwjs menus to display app name
+# http://docs.nwjs.io/en/latest/For%20Users/Advanced/Customize%20Menubar/ <- see MacOS section
+find nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar-Community Edition"/g'
+
+# nodejs in to Bin directory
 curl http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz | tar zxf -
 cd "$cwd"
 
