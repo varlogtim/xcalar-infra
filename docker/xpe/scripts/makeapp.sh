@@ -67,7 +67,7 @@ cp "$XPEINFRA/scripts/getimgid.sh" "$APPNAME/Contents/Resources/scripts"
 # file to indicate which img is associated with this installer bundle
 # so host program will know weather to open installer of main app at launch
 # this should have been made by Jenkins job and in cwd
-bash "$XPEINFRA/scripts/getimgid.sh" xdpce > .imgid
+bash "$XPEINFRA/scripts/getimgid.sh" xdpce:latest > .imgid
 cp .imgid "$APPNAME/Contents/Resources/Data"
 
 # executable app entrypoint
