@@ -29,7 +29,7 @@ LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
 XDROOT="$APP_DIR/Contents/Resources/Data/xcalar-gui"
 
 # set timestamp env to be used by various processes that will be called for writing log
-ts=$(date +%F_%T)
+ts=$(date +%FT%T%z)
 export TIMESTAMP="$ts"
 echo "timestamp: $ts"
 
@@ -66,10 +66,16 @@ function cleanup {
     fi
 }
 
-userlatest=$(bash "$APP_DIR/Contents/Resources/scripts/getimgid.sh" xdpce:latest)
-thisbld=$(cat "$APP_DIR/Contents/Resources/Data/.imgid")
+if ! thisbld=$(cat "$APP_DIR/Contents/Resources/Data/.imgid"); then
+    echo Missing app file Contents/Resources/Data/.imgid >&2
+    exit 1
+fi
+if ! userlatest=$(bash "$APP_DIR/Contents/Resources/scripts/getimgid.sh" xdpce:latest); then
+    echo "Welcome to Xcalar for Docker!  This is your first install..."
+fi
 echo "userlatest: $userlatest"
 echo "thisbld : $thisbld"
+
 if [ "$userlatest" != $thisbld ] || [ "$1" == forceinstall ]; then
     "$NODEBIN" "$INSTALLSERVER" > "$APPLOGDIR"/"$TIMESTAMP"_serverInstallLog 2>&1 &
     SERVER_PID=$!

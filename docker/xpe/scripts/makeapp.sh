@@ -17,7 +17,7 @@
 set -e
 
 if [ -z "$XLRINFRADIR" ]; then
-    echo "XLRINFRADIR should be set to run this script!"
+    echo "XLRINFRADIR should be set to run this script!" >&2
     exit 1
 fi
 
@@ -67,8 +67,12 @@ cp "$XPEINFRA/scripts/getimgid.sh" "$APPNAME/Contents/Resources/scripts"
 # file to indicate which img is associated with this installer bundle
 # so host program will know weather to open installer of main app at launch
 # this should have been made by Jenkins job and in cwd
-bash "$XPEINFRA/scripts/getimgid.sh" xdpce:latest > .imgid
-cp .imgid "$APPNAME/Contents/Resources/Data"
+if ! imgsha=$(bash "$XPEINFRA/scripts/getimgid.sh" xdpce:latest); then
+    echo "No xdpce:latest!!" >&2
+    exit 1
+else
+    echo "$imgsha" > "$APPNAME/Contents/Resources/Data/.imgid"
+fi
 
 # executable app entrypoint
 cp "$XPEINFRA/scripts/XPE" "$APPNAME/Contents/MacOS"
