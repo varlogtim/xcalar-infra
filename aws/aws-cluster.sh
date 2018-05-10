@@ -31,23 +31,25 @@ fi
 
 . aws-sh-lib
 
+declare -a PARAMS
+
 NOW=$(date +%Y%m%d%H%M)
-DEFAULT_TEMPLATE="file://${XLRINFRADIR}/aws/cfn/XCE-CloudFormationMultiNodeInternal.yaml"
+DEFAULT_TEMPLATE="${XLRINFRADIR}/aws/cfn/XCE-CloudFormationMultiNodeInternal.yaml"
 DEFAULT_SPOT_TEMPLATE="$(dirname $DEFAULT_TEMPLATE)/$(basename $DEFAULT_TEMPLATE .yaml)Spot.yaml"
 BUCKET=xcrepo
 COUNT=3
-INSTANCE_TYPE='r4.2xlarge'
 NODEID=0
-BOOTSTRAP=aws-cfn-bootstrap.sh
+BOOTSTRAP= #aws-cfn-bootstrap.sh
 SUBNET=subnet-b9ed4ee0  # subnet-4e6e2d15
 ROLE="xcalar_field"
+KEY_NAME=xcalar-us-west-2
 #BOOTSTRAP_URL="${BOOTSTRAP_URL:-http://repo.xcalar.net/scripts/aws-asg-bootstrap-field-new.sh}"
-INSTALLER="${INSTALLER:-s3://xcrepo/builds/prod/xcalar-1.3.1-1654-installer}"
+#INSTALLER="${INSTALLER:-s3://xcrepo/builds/prod/xcalar-1.3.2-1758-installer}"
 LOGNAME="${LOGNAME:-`id -un`}"
 STACK_NAME="$LOGNAME-cluster-$NOW"
 #BootstrapUrl	http://repo.xcalar.net/scripts/aws-asg-bootstrap-field.sh
 #InstallerUrl    "$(aws s3 presign s3://xcrepo/builds/c94df876-5ab9a93c/prod/xcalar-1.2.2-1236-installer)"
-IMAGE=ami-ade86cd5
+IMAGE=$(aws_latest_official_image "EL7")
 SPOT=0
 LICENSE="license.txt"
 
@@ -102,6 +104,10 @@ parameter_keys() {
   fi
 }
 
+template_default() {
+    cfn-flip "$TEMPLATE" | jq -r ".Parameters.$1.Default"
+}
+
 is_param() {
     test -z "$VALID_PARAMS" && VALID_PARAMS=$(parameter_keys "$TEMPLATE")
     grep -q "$1" <<< "$VALID_PARAMS"
@@ -136,6 +142,75 @@ if [ -z "$TEMPLATE" ]; then
     fi
 fi
 
+shift $((OPTIND-1))
+
+if [ -n "$INSTALLER" ] && [ -z "$INSTALLER_URL" ]; then
+    if [ "$INSTALLER" = "none" ]; then
+        INSTALLER_URL="http://none"
+    elif [[ "$INSTALLER" =~ ^s3:// ]]; then
+        if ! INSTALLER_URL="$(aws s3 presign "$INSTALLER")"; then
+            echo >&2 "Unable to sign the s3 uri: $INSTALLER"
+        fi
+    elif [[ "$INSTALLER" =~ ^gs:// ]]; then
+        INSTALLER_URL="http://${INSTALLER#gs://}"
+    elif [[ "$INSTALLER" =~ ^http[s]?:// ]]; then
+        INSTALLER_URL="$INSTALLER"
+    elif test -e "$INSTALLER"; then
+        if ! INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d s3 "$INSTALLER")"; then
+            echo >&2 "Failed to upload or generate a url for $INSTALLER"
+            exit 1
+        fi
+    fi
+fi
+
+if [ -n "$BOOTSTRAP" ]; then
+    if ! BOOTSTRAP_URL="$(upload_bysha1 ${BOOTSTRAP})"; then
+        echo >&2 "Failed to upload $BOOTSTRAP"
+    fi
+fi
+
+if [ -z "$INSTALLER_URL" ]; then
+    INSTALLER_URL="$(template_default InstallerUrl)"
+fi
+
+for URL in "$INSTALLER_URL"; do
+    if test -z "$URL" || ! check_url "$URL"; then
+        echo >&2 "Failed to access the installer url: $URL"
+        exit 1
+    fi
+done
+
+if test -e "$LICENSE"; then
+  LICENSE="$(cat $LICENSE)" || { echo >&2 "Failed to read license file"; exit 1; }
+fi
+
+VALID_PARAMS=$(parameter_keys $TEMPLATE)
+
+
+PARMS=(\
+#InstallerUrl   "${INSTALLER_URL}"
+InstanceCount	"${COUNT}"
+KeyName	        "${KEY_NAME}"
+Subnet	        $SUBNET
+AdminUsername   xdpadmin
+AdminPassword   Welcome1
+AdminEmail      "$(git config user.email || echo test@xcalar.com)"
+LicenseKey      "$LICENSE"
+VpcId	        vpc-22f26347)
+
+test -n "$BOOTSTRAP_URL" && PARAMS+=(BootstrapUrl "${BOOTSTRAP_URL}")
+test -n "$IMAGE" && PARAMS+=(ImageId $IMAGE)
+test -n "$INSTANCE_TYPE" && PARAMS+=(InstanceType "$INSTANCE_TYPE")
+
+if grep -q SpotPrice <<< "$VALID_PARAMS" && [ "$SPOT" != 0 ]; then
+    ZONE=$(aws_subnet_to_zone $SUBNET)
+    SPOTPRICE=$(aws_spot_price $INSTANCE_TYPE $ZONE | head -1 | awk '{print $(NF-1)}')
+    BIDPRICE="$(echo "$SPOTPRICE * $SPOT" | bc)"
+    BIDPRICE="$(printf '%1.4f' $BIDPRICE)"
+    PARMS+=(SpotPrice $BIDPRICE)
+    echo >&2 "$INSTANCE_TYPE: SpotPrice: $SPOTPRICE , MaxBid: $BIDPRICE, Zone: $ZONE"
+fi
+
 case "$TEMPLATE" in
     http://*) ;;
     https://*) ;;
@@ -149,75 +224,6 @@ case "$TEMPLATE" in
     fi
     ;;
 esac
-
-shift $((OPTIND-1))
-
-if [ -z "$INSTALLER_URL" ]; then
-    if [ "$INSTALLER" = "none" ]; then
-        INSTALLER_URL="http://none"
-    elif [[ "$INSTALLER" =~ ^s3:// ]]; then
-        if ! INSTALLER_URL="$(aws s3 presign "$INSTALLER")"; then
-            echo >&2 "Unable to sign the s3 uri: $INSTALLER"
-        fi
-    elif [[ "$INSTALLER" =~ ^gs:// ]]; then
-        INSTALLER_URL="http://${INSTALLER#gs://}"
-    elif [[ "$INSTALLER" =~ ^http[s]?:// ]]; then
-        INSTALLER_URL="$INSTALLER"
-    else
-        if ! INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d s3 "$INSTALLER")"; then
-            echo >&2 "Failed to upload or generate a url for $INSTALLER"
-            exit 1
-        fi
-    fi
-fi
-
-if [ -n "$BOOTSTRAP" ] && [ -z "$BOOTSTRAP_URL" ]; then
-    if ! BOOTSTRAP_URL="$(upload_bysha1 ${BOOTSTRAP})"; then
-        echo >&2 "Failed to upload $BOOTSTRAP"
-    fi
-fi
-
-if [ -z "$INSTALLER_URL" ]; then
-    echo >&2 "Bad installer url or unable to open provided url"
-    exit 1
-fi
-
-for URL in "$INSTALLER_URL" "$BOOTSTRAP_URL"; do
-    if test -n "$URL" && ! check_url "$URL"; then
-        echo >&2 "Failed to access the installer url: $URL"
-        exit 1
-    fi
-done
-
-if test -e "$LICENSE"; then
-  LICENSE="$(cat $LICENSE)" || { echo >&2 "Failed to read license file"; exit 1; }
-fi
-
-VALID_PARAMS=$(parameter_keys $TEMPLATE)
-
-PARMS=(\
-BootstrapUrl	"${BOOTSTRAP_URL}"
-InstallerUrl    "${INSTALLER_URL}"
-InstanceCount	${COUNT}
-InstanceType	${INSTANCE_TYPE}
-KeyName	        xcalar-us-west-2
-CidrLocation   0.0.0.0/0
-Subnet	        $SUBNET
-ImageId         $IMAGE
-AdminUsername   xdpadmin
-AdminPassword   Welcome1
-AdminEmail      "$(git config user.email || test@xcalar.com)"
-LicenseKey      "$LICENSE"
-VpcId	        vpc-22f26347)
-
-if grep -q SpotPrice <<< "$VALID_PARAMS" && [ "$SPOT" != 0 ]; then
-    ZONE=$(aws_subnet_to_zone $SUBNET)
-    SPOTPRICE=$(aws_spot_price $INSTANCE_TYPE $ZONE | head -1 | awk '{print $(NF-1)}')
-    BIDPRICE="$(echo "$SPOTPRICE * $SPOT" | bc)"
-    BIDPRICE="$(printf '%1.4f' $BIDPRICE)"
-    PARMS+=(SpotPrice $BIDPRICE)
-    echo >&2 "$INSTANCE_TYPE: SpotPrice: $SPOTPRICE , MaxBid: $BIDPRICE, Zone: $ZONE"
-fi
 
 ARGS=()
 for ii in $(seq 0 2 $(( ${#PARMS[@]} - 1)) ); do
@@ -238,6 +244,7 @@ aws cloudformation create-stack \
         --template-body ${TEMPLATE} \
         --timeout-in-minutes 30 \
         --on-failure DELETE \
+        --capabilities CAPABILITY_IAM \
         --tags \
             Key=Name,Value=${STACK_NAME} \
             Key=Owner,Value=${LOGNAME} \

@@ -68,7 +68,7 @@ fi
 if [ -n "$EC2TAG_FSID" ]; then
     XC_NFSHOST="${XC_AZ}.${EC2TAG_FSID}.efs.${XC_REGION}.amazonaws.com"
 else
-    XC_NFSHOST="${EC2TAG_NFSHOST:-nfs.xcalar.org}"
+    XC_NFSHOST="${EC2TAG_NFSHOST:-nfs.aws.xcalar.com}"
 fi
 
 XC_NFSIP="$(nslookup $XC_NFSHOST | awk '/Address:/{print $2}' | tail -1)"
@@ -107,4 +107,5 @@ if [ -n "$EC2TAG_URL" ]; then
     chmod +x /tmp/xcalar-installer.sh
     mkdir -p /etc/xcalar
     aws --region us-west-2 ec2 describe-instances --filter Name=tag:Cluster,Values=$EC2TAG_CLUSTER --query 'Reservations[].Instances[].[PrivateIpAddress,Tags[?Key==`Name`].Value[]]' --output text | sed '$!N;s/\n/ /' | grep -v '^None' | xargs -n1 -I {} printf "%s  #cloud_init\n" "{}" | tee -a /etc/hosts
+fi
 

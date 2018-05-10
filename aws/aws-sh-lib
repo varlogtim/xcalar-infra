@@ -4,13 +4,12 @@ AWS_AMI_OWNER_REDHAT=309956199498
 AWS_AMI_OWNER_CANONICAL=099720109477
 AWS_AMI_MARKETPLACE=679593333241
 AWS_AMI_FILTERS=('Name=state,Values=available' 'Name=architecture,Values=x86_64' 'Name=virtualization-type,Values=hvm' 'Name=root-device-type,Values=ebs') #'Name=ena-support,Values=true')
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-west-2}"
 
 aws_sh_setup () {
-    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-west-2}"
     export TMPDIR="${TMPDIR:-/tmp/$(id -u)}/$(basename $0 .sh)/$$"
     rm -rf "$TMPDIR"
     mkdir -p "$TMPDIR"
-
 }
 
 aws_metadata () {
@@ -26,7 +25,12 @@ aws_dynamic() {
 #aws_list_instances_names () { aws ec2 describe-instances | jq -r '.Reservations[].Instances[] | "\(if .Tags and ([.Tags[] | select( .Key == "Name" )] != []) then .Tags[] | select( .Key == "Name" ) | .Value else "-" end)"'; }
 
 aws_format_images () {
-    jq -r ".Images[]|[.CreationDate,.ImageId,$(jq_value_or .SriovNetSupport '-'),$(jq_value_or .EnaSupport '-'),.Name, $JQ_TAG_NAME]|@sh" | sed 's/.000Z//g' | sort -rn
+    jq -r ".Images[]|[.CreationDate,.ImageId,$(jq_value_or .SriovNetSupport '-'),$(jq_value_or .EnaSupport '-'),.Name, $JQ_TAG_NAME]|@tsv" | sed 's/.000Z//g' | sort -rn
+}
+
+aws_latest_official_image() {
+    local search="${1:-EL7}"
+    aws_list_images | aws_format_images | grep $search | grep -i official | head -1 | awk '{print $2}'
 }
 
 aws_list_images () { aws ec2 describe-images --output=json --owners "${1:-self}" --filters "Name=name,Values=${2:-*}" "${AWS_AMI_FILTERS[@]}"; }
@@ -285,4 +289,21 @@ aws_cname_mappings()  {
     if zone_id=$(aws_zoneid_to_dns | grep "$1" | awk '{print $1}') && [ -n "$zone_id" ]; then
         aws route53 list-resource-record-sets --hosted-zone-id $zone_id | jq -r '.[][] | select(.Type == "CNAME")|[.ResourceRecords[0].Value,.Name]|@tsv'
     fi
+}
+
+aws_cfn_url() {
+    local url
+    url="$(urlencode "$1")"
+    echo "https://${AWS_DEFAULT_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_DEFAULT_REGION}#/stacks/create/review?filter=active&templateURL=${url}&stackName=${USER}-cfn-$(date +%Y%m%d%H%M%S)&param_AdminEmail=${USER}%40xcalar.com&param_AdminUsername=xdpadmin"
+}
+
+aws_cfn_vault_consul() {
+    local template="https://aws-quickstart.s3.amazonaws.com/quickstart-hashicorp-vault/templates/quickstart-hashicorp-vault-master.template"
+    local cfnurl="https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?filter=active&templateURL=https%3A%2F%2Faws-quickstart.s3.amazonaws.com%2Fquickstart-hashicorp-vault%2Ftemplates%2Fquickstart-hashicorp-vault-master.template&stackName=Vault&param_AccessCIDR=0.0.0.0%2F0&param_AvailabilityZones%5B%5D=us-west-2a&param_AvailabilityZones%5B%5D=us-west-2b&param_AvailabilityZones%5B%5D=us-west-2c&param_ConsulClientNodes=3&param_ConsulInstanceType=t2.medium&param_ConsulServerNodes=3&param_EmailAddress=abakshi%40xcalar.com&param_KeyPairName=xcalar-us-west-2&param_PrivateSubnet1CIDR=10.100.0.0%2F19&param_PrivateSubnet2CIDR=10.100.32.0%2F19&param_PrivateSubnet3CIDR=10.100.64.0%2F19&param_PublicSubnet1CIDR=10.100.128.0%2F20&param_PublicSubnet2CIDR=10.100.144.0%2F20&param_PublicSubnet3CIDR=10.100.160.0%2F20&param_QSS3BucketName=quickstart-reference&param_QSS3KeyPrefix=hashicorp%2Fvault%2Flatest%2F&param_VaultInstanceType=m4.large&param_VPCCIDR=10.100.0.0%2F16"
+    echo "$cfnurl"
+}
+
+aws_cfn_vault_consul_prod() {
+    local template="https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?filter=active&templateURL=https%3A%2F%2Faws-quickstart.s3.amazonaws.com%2Fquickstart-hashicorp-vault%2Ftemplates%2Fquickstart-hashicorp-vault-master.template&stackName=vault&param_AccessCIDR=0.0.0.0%2F0&param_AvailabilityZones%5B%5D=us-west-2c&param_AvailabilityZones%5B%5D=us-west-2b&param_AvailabilityZones%5B%5D=us-west-2a&param_ConsulClientNodes=3&param_ConsulInstanceType=t2.medium&param_ConsulServerNodes=3&param_EmailAddress=abakshi%40xcalar.com&param_KeyPairName=xcalar-prod-us-west-2&param_PrivateSubnet1CIDR=10.100.0.0%2F19&param_PrivateSubnet2CIDR=10.100.32.0%2F19&param_PrivateSubnet3CIDR=10.100.64.0%2F19&param_PublicSubnet1CIDR=10.100.128.0%2F20&param_PublicSubnet2CIDR=10.100.144.0%2F20&param_PublicSubnet3CIDR=10.100.160.0%2F20&param_QSS3BucketName=quickstart-reference&param_QSS3KeyPrefix=hashicorp%2Fvault%2Flatest%2F&param_VaultInstanceType=m4.large&param_VPCCIDR=10.100.0.0%2F16"
+    echo "$template"
 }

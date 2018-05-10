@@ -14,3 +14,4 @@ troposphere
 yamllint
 pre-commit
 pylint
+cfn-lint

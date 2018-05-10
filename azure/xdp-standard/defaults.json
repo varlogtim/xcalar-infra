@@ -1,0 +1,57 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "installerUrl": {
+            "value": "https://s3.us-west-2.amazonaws.com/xcrepo/builds/prod/xcalar-1.3.2-1758-installer?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAJU4DLXF3P2I7WGCQ%2F20180515%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20180515T014826Z&X-Amz-Expires=604799&X-Amz-SignedHeaders=host&X-Amz-Signature=f20684044821952412c086e04354828a7ec5e7a4361514d642c97f78d02afce8"
+        },
+        "location": {
+            "value": "westus2"
+        },
+        "appName": {
+            "value": "xdp-standard"
+        },
+        "licenseKey": {
+            "value": "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
+        },
+        "scaleNumber": {
+            "value": 1
+        },
+        "appUsername": {
+            "value": "xdpadmin"
+        },
+        "appPassword": {
+            "value": "Welcome1"
+        },
+        "authenticationType": {
+            "value": "sshPublicKey"
+        },
+        "adminUsername": {
+            "value": "azureuser"
+        },
+        "adminSSHPublicKey": {
+            "value": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b"
+        },
+        "vmDiskType": {
+            "value": "Premium_LRS"
+        },
+        "publicIpAddressNewOrExisting": {
+            "value": "new"
+        },
+        "vmSize": {
+            "value": "Standard_E8s_v3"
+        },
+        "storageAccountNewOrExisting": {
+            "value": "existing"
+        },
+        "storageAccountRG": {
+            "value": "xcalarroot-rg"
+        },
+        "storageAccountName": {
+            "value": "xcalarroot"
+        },
+        "storageAccountType": {
+            "value": "Standard_LRS"
+        }
+    }
+}

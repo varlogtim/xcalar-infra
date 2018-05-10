@@ -80,13 +80,16 @@ vault write auth/ldap/config \
     url='ldap://ldap.int.xcalar.com:389' \
     userattr='mail' \
     userdn='ou=People,dc=int,dc=xcalar,dc=com' \
-    groupdn='cn=xceUsers,ou=Groups,dc=int,dc=xcalar,dc=com' \
-    upndomain='xcalar.com' \
+    groupdn='ou=Groups,dc=int,dc=xcalar,dc=com' \
     binddn='uid=bind,ou=Services,dc=int,dc=xcalar,dc=com' \
     bindpass='welcome1' \
     certificate=@ldap_ca_cert.pem insecure_tls=false starttls=true
 
 
+
+    #groupattr='cn' \
+    #groupfilter='(uniqueMember={{.UserDN}})'  \
+    #upndomain='xcalar.com' \
 
 #    groupdn='ou=Groups,dc=int,dc=xcalar,dc=com' \
 #    groupfilter='(&(objectClass=inetOrgPerson)(uid={{.Username}}))'

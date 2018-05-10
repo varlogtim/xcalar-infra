@@ -7,6 +7,7 @@
 
 AZURE_PUBLIC_ACCOUNT=${AZURE_PUBLIC_ACCOUNT:-xcrepo}
 AZURE_PUBLIC_CONTAINER=${AZURE_PUBLIC_CONTAINER:-public}
+AZURE_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b azureuser@xdp-standard"
 NO_CACHE='no-cache, no-store, must-revalidate, max-age=0, no-transform'
 AZ_CACHEDIR="$HOME/.cache/azure"
 HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
@@ -14,6 +15,8 @@ AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
 HOSTED_ZONEID="Z2S03H582J2UUD" ## .xcalar.io
 TODAY=$(date +%Y%m%d)
 NOW="${TODAY}$(date +%H%M)"
+TEMAPLTE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
+DEFAULTS=$XLRINFRADIR/azure/xdp-standard/defaults.json
 
 mkdir -p "$AZ_CACHEDIR" &&
 
@@ -98,24 +101,20 @@ az_rg_vms()  {
 # For all vms in group $1 perform action $2
 # eg, az_rg_vms_do abakshi-50-rg deallocate
 az_rg_vms_do()  {
-    local action=$1 vmid  ids  pids=() rg
-    shift
-    if [ -z "$1" ]; then
+    local action=$1 rg="$2" ids=()
+    if [ -z "$rg" ]; then
         error "Must specify at least one resource group"
         return 1
     fi
-    for rg; do
-        ids+=($(az_rg_vms $rg))
-    done
+    shift 2
+    ids+=($(az_rg_vms $rg))
     if [ "${#ids[@]}" -eq 0 ]; then
-        return
+        return 0
     fi
-    for vmid in ${ids[*]}; do
-        az vm $action --ids $vmid &
-        pids+=($!)
-    done
-    echo >&2 "Waiting for ${ids[*]} to $action"
-    wait ${pids[*]}
+    if ! az vm $action "$@" --ids "${ids[@]}"; then
+        say "Failed to $action the vms in $rg"
+        return 1
+    fi
 }
 
 az_rg_vms_stop_start_all()  {
@@ -190,6 +189,12 @@ az_rg_dns_or_ip()  {
         return 0
     fi
     return 1
+}
+
+az_ssh() {
+    local host="$1"
+    shift
+    ssh -A -oStrictHostKeyChecking=no -oLogLevel=ERROR -oUserKnownHostsFile=/dev/null -i ~/.ssh/id_azure "$@" azureuser@${host}
 }
 
 az_rg_ssh()  {
@@ -401,3 +406,97 @@ az_sp_find_homepage() {
 az_sp_list() {
     az ad sp list -ojson --query '[].{Id: objectId, SPN: servicePrincipalNames[0]}' -otable
 }
+
+az_deploy_usage() {
+
+    local -a params=($(jq -r '.parameters|keys|join("\n")' < $TEMAPLTE  | tr '\t' '\n')) str=()
+    local ii
+    for ii in "${params[@]}"; do
+        str+=("[${ii}=]")
+    done
+
+    cat << EOF
+    az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer-url url] [--dnslabel dns]
+              [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
+              [-n|--name name] [--dnslabel dns] ${str[*]}
+EOF
+    return 0
+}
+
+
+az_deploy() {
+    local uid=$((RANDOM%511)) template_file ii cmd location=westus2
+    local -a args=()
+    local email=$(git config user.email) retry ip_address
+    local name group count=1 size=Standard_E8s_v3 template_arg storageAccount_arg
+    local template_uri="https://${AZURE_PUBLIC_ACCOUNT}.blob.core.windows.net/${AZURE_PUBLIC_CONTAINER}/xdp-standard-platform/v3/mainTemplate.json"
+    local installer_url dnslabel
+    while [ $# -gt 0 ]; do
+        cmd="$1"
+        case "$cmd" in
+            -h|--help) az_deploy_usage; return 1;;
+            --location=) location="${1##*=}"; shift 1;;
+            --group=|--resource-group=) group="${1##*=}"; shift 1;;
+            --template-file=) template_file="${1##*=}"; shift 1;;
+            --template-uri=) template_uri="${1##*=}"; shift 1;;
+            --count=) count="${1##*=}"; shift 1;;
+            --dnslabel=) dnslabel="${1##*=}"; shift 1;;
+            --size=) size="${1##*=}"; shift 1;;
+            --name=) name="${1##*=}"; shift 1;;
+            --installer-url=) installer_url="${1##*=}"; args+=(installerUrl="${1##*=}"); shift 1;;
+            -l|--location) location="$2"; shift 2;;
+            -g|--group|--resource-group) group="$2"; shift 2;;
+            -n|--name) name="$2"; shift 2;;
+            --template-file) template_file="$2"; shift 2;;
+            --template-uri) template_uri="$2"; shift 2;;
+            --count) count="$2"; shift 2;;
+            --dnslabel) dnslabel="$2"; shift 2;;
+            --size) size="$2"; shift 2;;
+            -i|--installer-url) installer_url="$2"; args+=(installerUrl="$2"); shift 2;;
+            --) shift; break;;
+            -*) echo >&2 "Unknown arg: $cmd"; az_deploy_usage; return 1;;
+            *) break;;
+        esac
+    done
+    test -n "$name" || name="xdp-${USER}-${uid}"
+    test -n "$dnslabel" || dnslabel="${name}"
+    test -n "$group" || group="${name}-rg"
+
+    if [ "$(az group exists -g "$group" -otsv)" = false ]; then
+        az group create -g "$group" -l $location
+    fi
+    if [ -n "$template_file" ]; then
+        template_arg="--template-file $template_file"
+    else
+        template_arg="--template-uri $template_uri"
+    fi
+    if [ "$location" = westus2 ]; then
+        storageAccount_arg="storageAccountNewOrExisting=existing storageAccountRG=xcalarroot-rg storageAccountName=xcalarroot"
+    else
+        storageAccount_arg="storageAccountNewOrExisting=new"
+    fi
+    local TMP="$(mktemp /tmp/az_deploy-XXXXXX.json)"
+
+    az group deployment create --name deploy-$(date +%Y%m%d%H%M) -g $group $template_arg \
+        --parameters @$XLRINFRADIR/azure/xdp-standard/defaults.json "appName=${name}" \
+        "adminEmail=$email" domainNameLabel=${dnslabel} "${args[@]}" \
+        vmSize=$size scaleNumber=$count -ojson "$@" | tee "$TMP"
+    az_rg_scheduled_shutdown $group 2300
+}
+
+# Call this function with the resourceGroup name and optionally
+# a time in 24h (default 2200 = 10pm PST). This will deploy
+# shutdown rules to all vms in the resourcegroups.
+az_rg_scheduled_shutdown() {
+    local group="$1" time="${2:-2200}"
+    if [ -z "$group" ]; then
+        echo >&2 "Need to specify resource group"
+        return 1
+    fi
+    local -a vms=($(az vm list -g "$group" --query '[].id' -otsv))
+    local count="${#vms[@]}"
+    local vm0="${vms[0]}"
+    vm0="${vm0##*/}"
+    az group deployment create -n scheduledShutdown-$(date +%Y%m%d%H%M%S) -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json --parameters vmName="${vm0%[0-9]*}" time=${time} timeZoneId='Pacific Standard Time' scaleNumber=$count -ojson --no-wait
+}
+

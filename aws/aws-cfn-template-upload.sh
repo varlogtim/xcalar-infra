@@ -3,7 +3,7 @@
 set -eu
 
 S3BUCKET=${S3BUCKET:-xcrepo}
-S3REGION=${S3BUCKET:-us-west-2}
+S3REGION=${S3REGION:-us-west-2}
 S3PATH=${S3PATH:-aws/cfn/}
 
 aws_s3_upload_template() {

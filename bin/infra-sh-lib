@@ -37,6 +37,10 @@ error () {
     fi
 }
 
+resource() {
+    . $XLRINFRADIR/.env
+}
+
 please_use_puppet () {
     error "$1. Please enroll in puppet: http://wiki.int.xcalar.com/mediawiki/index.php/Puppet"
 }
@@ -189,4 +193,22 @@ ip_cidr() {
     ip -o -f inet addr show | awk '/scope global/ {print $4}' | head -1
 }
 
+urlencode() {
+    (
+    set +x
+    local string="${1}"
+    local strlen=${#string}
+    local encoded=""
+    local pos c o
 
+    for (( pos=0 ; pos<strlen ; pos++ )); do
+        c=${string:$pos:1}
+        case "$c" in
+            [-_.~a-zA-Z0-9] ) o="${c}" ;;
+            * )               printf -v o '%%%02x' "'$c"
+        esac
+        encoded+="${o}"
+    done
+    echo "${encoded}"
+    )
+}

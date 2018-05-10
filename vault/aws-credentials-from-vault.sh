@@ -27,13 +27,13 @@ AWSPATH="aws-xcalar/sts/xcalar-test-poweruser"
 
 while [ $# -gt 0 ]; do
     cmd="$1"
-    shift
     case "$cmd" in
-        -f|--file) FILE="$1";shift;;
-        --path) AWSPATH="$1"; shift;;
-        --export) EXPORT=1;;
-        --) break;;
+        -f|--file) FILE="$2";shift 2;;
+        --path) AWSPATH="$2"; shift 2;;
+        --export) EXPORT=1; shift;;
+        --) shift; break;;
         -*) echo >&2 "ERROR: Unknown argument $cmd"; exit 1;;
+        *) break;;
     esac
 done
 
@@ -48,8 +48,8 @@ else
     FILE="$(mktemp /tmp/vault.XXXXXX)"
     trap "rm -f $FILE" EXIT
     case "$AWSPATH" in
-        aws/sts/*) vault write -format=json "$AWSPATH" > "$FILE";;
-        aws/creds/*) vault read -format=json $AWSPATH > "$FILE";;
+        aws/sts/*) vault write -format=json "$AWSPATH" "$@" > "$FILE";;
+        aws/creds/*) vault read -format=json $AWSPATH "$@" > "$FILE";;
         *) echo >&2 "ERROR: Unknown type of path $AWSPATH"; exit 2;;
     esac
 fi

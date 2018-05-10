@@ -25,7 +25,7 @@ LICENSE="$(cat license.key)"
 INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d s3 "$INSTALLER_URL")"
 
 http_code="$(curl -sI -X GET -o /dev/null -w '%{http_code}\n' "$INSTALLER_URL")"
-if [ "$http_code" != 200 ]; then
+if ! [[ "$http_code" =~ ^20 ]]; then
     echo >&2 "ERROR($http_code): Failed to download url: $INSTALLER_URL"
     exit 1
 fi
