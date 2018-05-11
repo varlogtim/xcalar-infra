@@ -54,6 +54,9 @@ static volatile size_t racySlotRr = 0;
 static MemPool memPools[MAX_MEM_POOLS];
 MemSlot memSlots[MAX_SLOTS];
 
+// For efficient comparison
+static uint8_t slopValArr[PAGE_SIZE];
+
 // Histogram of the -actual- size requested, which differs from what the
 // allocator provides due to adjustments needed for the guard page, mprotect
 // and alignment.
@@ -500,6 +503,7 @@ initialize(void) {
 
         ret = pthread_mutex_lock(&gMutex);
         GR_ASSERT_ALWAYS(ret == 0);
+        memset(slopValArr, MAGIC_SLOP, sizeof(slopValArr));
         ret = addNewMemPool(initSize);
         GR_ASSERT_ALWAYS(ret == 0);
         ret = pthread_mutex_unlock(&gMutex);
@@ -531,6 +535,12 @@ initialize(void) {
     GR_ASSERT_ALWAYS(ret == 0);
 }
 
+static inline size_t
+calcMisalign(void *usrData, size_t usrSize) {
+    size_t lastPageSize = ((uint64_t) usrData + usrSize) % PAGE_SIZE;
+    return (lastPageSize ? PAGE_SIZE - lastPageSize : 0);
+}
+
 static void *
 memalignInt(size_t alignment, size_t usrSize) {
     void *buf;
@@ -538,7 +548,7 @@ memalignInt(size_t alignment, size_t usrSize) {
     void *usrData;
     ElmHdr *hdr;
     int ret;
-    uint64_t misalignment;
+    uint64_t misalignment = 0;
     // Add space to the request to satisfy header needs, header pointer and
     // alignment request
     const size_t allocSize = ELM_HDR_SZ + sizeof(void *) + usrSize +
@@ -573,14 +583,20 @@ memalignInt(size_t alignment, size_t usrSize) {
     GR_ASSERT_ALWAYS(usrData > buf);
     if (alignment > 1) {
         // TODO: due to alignment there can be a few extra bytes between the
-        // end of the user data and the guard page.  Should set them to known
-        // values to check on free.
+        // end of the user data and the guard page.
         misalignment = (((uint64_t)usrData) % alignment);
         if (misalignment > 0) {
             usrData -= misalignment;
             GR_ASSERT_ALWAYS(((uint64_t)usrData % alignment) == 0);
+            // Due to the SSE alignment requirements, in some cases (eg odd size
+            // allocations or odd size alignments) there can [0, 15] bytes of slop at
+            // the end of the buffer.  This will be missed by the guard page but at
+            // least we can try to detect it with magic bytes
+            memset(usrData + usrSize, MAGIC_SLOP, misalignment);
         }
     }
+    GR_ASSERT_ALWAYS(calcMisalign(usrData, usrSize) == misalignment);
+
     // Pointer to the start of the metadata one word before the user memory
     *(void **)(usrData - sizeof(void *)) = buf;
     hdr->usrData = usrData;
@@ -651,6 +667,14 @@ free(void *ptr) {
 
     hdr = *(ElmHdr **)(ptr - sizeof(void *));
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_INUSE);
+
+    size_t misalignment = calcMisalign(hdr->usrData, hdr->usrDataSize);
+    if (misalignment > 0) {
+        void *slop = hdr->usrData + hdr->usrDataSize;
+        // If we have odd sized allocations, it's possible for some small
+        // overruns to not reach the guard page, so detect that here.
+        GR_ASSERT_ALWAYS(memcmp(slop, slopValArr, misalignment) == 0);
+    }
 
     if (grArgs.maxTrackFreeFrames > 0) {
         void *freeOff = (uint8_t *)hdr->allocBt + sizeof(hdr->allocBt[0]) *

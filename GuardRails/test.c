@@ -58,8 +58,9 @@ main() {
                 // printf("%d:%d: %6d\n", i, j, randSize);
                 bufs[j] = malloc(randSize);
                 memset(bufs[j], 0x5a, randSize);
-#if 0
                 char *ptr  = (char *)bufs[j] + randSize;
+                (void)ptr;
+#if 0
                 *(ptr++) = 1;
                 *(ptr++) = 1;
                 *(ptr++) = 1;
@@ -69,13 +70,16 @@ main() {
                 *(ptr++) = 1;
                 *(ptr++) = 1;
 #endif
+                free(bufs[j]);
                 totalMem += randSize;
             }
+#if 0
             // sleep(5);
             for (j = 0; j < JMAX; j++) {
                 free(bufs[j]);
                 bufs[j] = NULL;
             }
+#endif
         }
         printf("enter to continue\n");
         //getchar();

@@ -64,6 +64,8 @@
 #define MAGIC_FREE  0xcd656727bedabb1eULL
 #define MAGIC_GUARD 0xfd44ba54deadbabeULL
 
+#define MAGIC_SLOP 0xb6
+
 typedef struct GRArgs {
     size_t maxTrackFrames;
     size_t maxTrackFreeFrames;
