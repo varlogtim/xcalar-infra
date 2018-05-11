@@ -94,8 +94,8 @@ export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/bin/usrnode/test-config.cfg}"
 launcher.sh 1 daemon
 
 echo "Starting Caddy"
-TmpCaddy=`mktemp /tmp/Caddy.conf.XXXXX`
-TmpCaddyLogs=`mktemp /tmp/CaddyLogs.XXXXX`
+TmpCaddy=`mktemp Caddy.conf.XXXXX`
+TmpCaddyLogs=`mktemp CaddyLogs.XXXXX.log`
 cp $XLRDIR/conf/Caddyfile "$TmpCaddy"
 sed -i -e 's!/var/www/xcalar-gui!'$XLRGUIDIR'/'$GUI_FOLDER'!g' "$TmpCaddy"
 echo "Caddy logs at $TmpCaddyLogs"
@@ -105,7 +105,7 @@ echo "Caddy pid $caddyPid"
 sleep 5
 
 echo "Starting test driver"
-TmpServerLogs=`mktemp /tmp/serverLogs.XXXXX`
+TmpServerLogs=`mktemp serverLogs.XXXXX.log`
 echo "server.py logs available at $TmpServerLogs"
 python $XLRGUIDIR/assets/test/testSuitePython/server.py -t localhost >"$TmpServerLogs" 2>&1 &
 serverPid=$!
@@ -160,14 +160,14 @@ kill $serverPid || true
 kill $caddyPid || true
 kill $tailPid || true
 
+# Archive chromeLogs
+cp /tmp/$chromeLogs/chrome_debug.log .
+rm -r "/tmp/$chromeLogs"
+
 if [[ "$HTTP_BODY" == *"status:fail"* ]]; then
   echo "TEST SUITE FAILED"
   exit 1
 else
   echo "TEST SUITE PASS"
-  echo "Removing logs"
-  rm "$TmpServerLogs"
-  rm "$TmpCaddyLogs"
-  rm "$TmpCaddy"
   exit 0
 fi
