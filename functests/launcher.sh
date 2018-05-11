@@ -54,16 +54,19 @@ echo $pid > /var/run/xcalar/xcmgmtd.pid
 
 NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
+# copy the license file from the xcalar repo
+cp `pwd`/src/data/XcalarLic.key /etc/xcalar/
+
 for ii in $(seq 0 $(( $NumNodes - 1 ))); do
     monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
     # memAllocator = 1(jemalloc) and memAllocator = 2(guardrails)
     if [ $1 -eq 1 ]; then
-        MALLOC_CONF=tcache:false,junk:true /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+        MALLOC_CONF=tcache:false,junk:true /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
     elif [ $1 -eq 2 ]; then
         grlibpath="`pwd`/xcalar-infra/GuardRails/libguardrails.so.0.0"
-        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" > $monitorLog 2>&1 &
+        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
     else
-        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG > $monitorLog 2>&1 &
+        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
     fi
     pid=$!
     echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
