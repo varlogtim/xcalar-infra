@@ -13,6 +13,7 @@ import csv
 import subprocess as sp
 import re
 import sys
+import os
 
 argParser = argparse.ArgumentParser()
 
@@ -31,6 +32,9 @@ class grDump(object):
     def __init__(self):
         self.data = []
         self.leaks = []
+        self.myDir = os.path.dirname(os.path.realpath(__file__))
+        with open(self.myDir + '/blist.txt', 'r') as fh:
+            self.blist = fh.read().splitlines()
 
     def loadData(self):
         with open(args.fin) as fh:
@@ -94,29 +98,43 @@ class grDump(object):
             self.leaks.sort(key=lambda x: x['totBytes'], reverse=True)
 
         context = 0
+        outStr = ""
         for leak in self.leaks:
-            print "================================ Context {:>6,d} / {:,d} ================================"\
+            leakStr = "================================ Context {:>6,d} / {:,d} ================================\n"\
                     .format(context, numContexts)
-            print "Leaked {:,d} bytes across {:,d} allocations of {:,d} bytes each:"\
+            leakStr += "Leaked {:,d} bytes across {:,d} allocations of {:,d} bytes each:\n"\
                     .format(leak['totBytes'], leak['count'], leak['elmBytes'])
             leakNum = 0
 
             if args.binary:
                 syms = self.resolveSyms(' '.join(leak['backtrace']))
+                skipLeak = False
                 for sym in syms.split('\n'):
                     if not sym:
                         continue
                     shortSym = re.sub(r'\(.*?\)', r'', sym)
-                    print "#{: <2} {}".format(leakNum, shortSym)
+
+                    for b in self.blist:
+                        if re.search(b, shortSym):
+                            skipLeak = True
+
+                    leakStr += "#{: <2} {}\n".format(leakNum, shortSym)
                     leakNum += 1
+
+                if skipLeak:
+                    continue
+                else:
+                    outStr += leakStr
             else:
                 for addr in leak['backtrace']:
-                    print "#{: <2} {} (No symbols, see -b option)".format(leakNum, addr)
+                    outStr += "#{: <2} {} (No symbols, see -b option)\n".format(leakNum, addr)
                     leakNum += 1
 
             context += 1
             if context >= args.top:
                 break
+
+        print outStr
 
 dumper = grDump()
 
