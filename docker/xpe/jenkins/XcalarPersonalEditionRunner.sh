@@ -9,7 +9,7 @@ export GRAFANADIR="${GRAFANADIR:-$XLRINFRADIR/../graphite-grafana}"
 
 XPEDIR="$XLRINFRADIR/docker/xpe"
 
-echo "current build number: $BUILD_NUMBER"
+echo "current build number: $BUILD_NUMBER" >&2
 FINALDEST="$BUILD_DIRECTORY/$BUILD_NUMBER"
 mkdir -p $FINALDEST
 
@@ -40,7 +40,7 @@ cp grafana_graphite.tar.gz $FINALDEST
 
 # tar what's needed for the local install
 cd $FINALDEST
-curl http://netstore/users/jolsen/xpeassets/sampleDatasets.tar.gz -o sampleDatasets.tar.gz
+curl -f -L http://repo.xcalar.net/deps/sampleDatasets.tar.gz -O
 TARFILE=installertarball.tar.gz
 TARCONTENTS="xdpce.tar.gz grafana_graphite.tar.gz defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks/ sampleDatasets.tar.gz"
 tar -czf "$TARFILE" $TARCONTENTS
@@ -52,7 +52,7 @@ cp "$XPEDIR/scripts/$ubuntuinstaller" .
 chmod u+x xpe_installer_ubuntu.sh
 
 # make the mac app (mac)
-echo "making mac app..."
+echo "making mac app..." >&2
 bash -x "$XPEDIR/scripts/makeapp.sh"
 
 # stop the docker containers created and remove them so not left over on jenkins slave after Job completes
