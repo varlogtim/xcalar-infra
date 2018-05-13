@@ -535,12 +535,6 @@ initialize(void) {
     GR_ASSERT_ALWAYS(ret == 0);
 }
 
-static inline size_t
-calcMisalign(void *usrData, size_t usrSize) {
-    size_t lastPageSize = ((uint64_t) usrData + usrSize) % PAGE_SIZE;
-    return (lastPageSize ? PAGE_SIZE - lastPageSize : 0);
-}
-
 static void *
 memalignInt(size_t alignment, size_t usrSize) {
     void *buf;
@@ -591,15 +585,18 @@ memalignInt(size_t alignment, size_t usrSize) {
             // Due to the SSE alignment requirements, in some cases (eg odd size
             // allocations or odd size alignments) there can [0, 15] bytes of slop at
             // the end of the buffer.  This will be missed by the guard page but at
-            // least we can try to detect it with magic bytes
-            memset(usrData + usrSize, MAGIC_SLOP, misalignment);
+            // least we can try to detect it with magic bytes.
+            // ALSO alignment requests can be > PAGE_SIZE, which will leave an
+            // even larger gap.
+            // XXX: Could just store the slop instead...
+            memset(usrData + usrSize, MAGIC_SLOP, MIN(misalignment, MAX_SLOP));
         }
     }
-    GR_ASSERT_ALWAYS(calcMisalign(usrData, usrSize) == misalignment);
 
     // Pointer to the start of the metadata one word before the user memory
     *(void **)(usrData - sizeof(void *)) = buf;
     hdr->usrData = usrData;
+    hdr->misalignment = misalignment;
 
     if (grArgs.poison) {
         memset(usrData, grArgs.poisonVal, usrSize);
@@ -668,12 +665,11 @@ free(void *ptr) {
     hdr = *(ElmHdr **)(ptr - sizeof(void *));
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_INUSE);
 
-    size_t misalignment = calcMisalign(hdr->usrData, hdr->usrDataSize);
-    if (misalignment > 0) {
+    if (hdr->misalignment > 0) {
         void *slop = hdr->usrData + hdr->usrDataSize;
         // If we have odd sized allocations, it's possible for some small
         // overruns to not reach the guard page, so detect that here.
-        GR_ASSERT_ALWAYS(memcmp(slop, slopValArr, misalignment) == 0);
+        GR_ASSERT_ALWAYS(memcmp(slop, slopValArr, MIN(hdr->misalignment, MAX_SLOP)) == 0);
     }
 
     if (grArgs.maxTrackFreeFrames > 0) {

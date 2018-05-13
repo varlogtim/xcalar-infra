@@ -60,8 +60,10 @@ main() {
                 memset(bufs[j], 0x5a, randSize);
                 char *ptr  = (char *)bufs[j] + randSize;
                 (void)ptr;
+                // if (randSize % 16 == 0) {
+                    *(ptr++) = 1;
+                // }
 #if 0
-                *(ptr++) = 1;
                 *(ptr++) = 1;
                 *(ptr++) = 1;
                 *(ptr++) = 1;

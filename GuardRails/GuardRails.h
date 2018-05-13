@@ -65,6 +65,7 @@
 #define MAGIC_GUARD 0xfd44ba54deadbabeULL
 
 #define MAGIC_SLOP 0xb6
+#define MAX_SLOP 32
 
 typedef struct GRArgs {
     size_t maxTrackFrames;
@@ -85,6 +86,7 @@ typedef struct ElmHdr {
     void *usrData;
     // Allocation size requested by user
     size_t usrDataSize;
+    size_t misalignment;
     struct ElmHdr *next;
     struct ElmHdr *prev;
     void *allocBt[0];
