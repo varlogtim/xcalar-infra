@@ -33,7 +33,9 @@ XCALAR_CONTAINER_NAME=xdpce
 GRAFANA_CONTAINER_NAME=grafana_graphite
 # installer dirs created on the local machine
 # these should remain even after installation complete, as long as they want XPE)
-XPEDIR="$HOME/xcalar_personal_edition_data"
+XPEDIR="$HOME/.local/lib/xcalarDesign" # hidden app data such as xcehome
+APPDATA=$HOME/Library/Application\ Support/Xcalar\ Design # unhidden app data
+#XPEDIR="$HOME/Library/Application Support/Xcalar Design"
 LOCALLOGDIR="$XPEDIR/xceLogs" # will mount to /var/log/xcalar so logs persist through upgrades
 LOCALXCEHOME="$XPEDIR/xceHome" # will mount /var/opt/xcalar here so session data, etc. persissts through upgrde
 LOCALDATASETS="$XPEDIR/sampleDatasets"
@@ -46,25 +48,37 @@ XEM_PORT_NUMBER=15000 # should be port # in xemconfig
 XDPCE_TARBALL=xdpce.tar.gz
 GRAFANA_TARBALL=grafana_graphite.tar.gz
 
-hello() {
-    echo "hello"
-}
-
-clear_containers() {
+# clear current container
+# if user has changed its name; won't be removing that
+# remove the latest images.
+cmd_clear_containers() {
     debug "Remove old docker containers..."
     docker rm -f $XCALAR_CONTAINER_NAME $GRAFANA_CONTAINER_NAME >/dev/null 2>&1 || true
-    docker rmi -f $XCALAR_IMAGE $GRAFANA_IMAGE || true
 }
 
-setup () {
+cmd_cleanly_delete_image() {
 
-    cwd=$(pwd)
+    if [[ -z "$1" ]]; then
+        echo "No image ID supplied to cleanly_delete_image. you must supply an image ID to remove!" >&2
+        exit 1
+    fi
+
+    # remove any containers (running or not) hosting this image
+    docker ps -a -q --filter ancestor="$1" --format="{{.ID}}" | xargs -I {} docker rm -f {}
+    # now remove the image itself
+    docker rmi -f "$1"
+
+}
+
+cmd_setup () {
+
+    local cwd=$(pwd)
 
     debug "Create install dirs and unpack tar file for install"
 
     ## CREATE INSTALLER DIRS, move required files to final dest ##
     if [ -e "$STAGING_DIR" ]; then
-        echo "staging dir exists already $STAGING_DIR"
+        echo "staging dir exists already $STAGING_DIR" >&2
         rm -r "$STAGING_DIR"
     fi
     mkdir -p "$STAGING_DIR"
@@ -90,12 +104,30 @@ setup () {
     tar xzf sampleDatasets.tar.gz --strip-components=1 -C "$LOCALDATASETS/"
     rm sampleDatasets.tar.gz
 
+    # add symlink of the sample datasets in to Application Support folder
+    # so it is not a hidden dir and can be viewed by  user easily
+    mkdir -p "$APPDATA"
+    cd "$APPDATA"
+    symlinkName=sampleDatasets
+    if [[ -e "$symlinkName" ]]; then
+        rm "$symlinkName"
+    fi
+    ln -s "$LOCALDATASETS" "$symlinkName"
+
     cd "$cwd"
 }
 
-load_packed_images() {
+cmd_start_wait_docker() {
+    open -a Docker.app
+    until docker version >/dev/null 2>&1; do
+        echo "docker daemon not avaiable yet" >&2
+        sleep 1
+    done
+}
 
-    cwd=$(pwd)
+cmd_load_packed_images() {
+
+    local cwd=$(pwd)
 
         ###  LOAD THE PACKED IMAGES AND START THE NEW CONTAINERS ##
 
@@ -117,7 +149,7 @@ load_packed_images() {
 
 }
 
-create_grafana() {
+cmd_create_grafana() {
 
     debug "Create grafana container"
 
@@ -133,46 +165,121 @@ create_grafana() {
     $GRAFANA_IMAGE
 }
 
-create_xdpce() {
+# create xdpce container
+#    1st arg: image to use (Defaults to xdpce:latest)
+#   2nd arg: ram (int in gb)
+#    3rd arg: num cores
+cmd_create_xdpce() {
 
     debug "create xcalar container"
 
-    local ram="$1"g;
-    local cores="$2";
+    local container_image=xdpce:latest
+    if [[ ! -z "$1" ]]; then
+        container_image="$1"
+    fi
+    local extraArgs=""
+    if [[ ! -z "$2" ]]; then
+        extraArgs="$extraArgs --memory=${2}g"
+    fi
+    if [[ ! -z "$3" ]]; then
+        extraArgs="$extraArgs --cpus=${3}"
+    fi
+    # if there is grafana container hook it to it as additional arg
+    if docker container inspect "$GRAFANA_CONTAINER_NAME"; then
+        extraArgs="$extraArgs --link $GRAFANA_IMAGE:graphite"
+    fi
+
     # create the xdpce container
     docker run -d -t --user xcalar --cap-add=ALL --cap-drop=MKNOD \
     --restart unless-stopped \
-    --memory=$ram \
-    --cpus=$cores \
     --security-opt seccomp:unconfined --ulimit core=0:0 \
     --ulimit nofile=64960 --ulimit nproc=140960:140960 \
     --ulimit memlock=-1:-1 --ulimit stack=-1:-1 --shm-size=10g \
     --memory-swappiness=10 -e IN_DOCKER=1 \
     -e XLRDIR=/opt/xcalar -e container=docker \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -v $HOME:$MAINHOSTMNT:ro \
-    -v $LOCALXCEHOME:/var/opt/xcalar \
-    -v $LOCALLOGDIR:/var/log/xcalar \
+    -v "$HOME":"$MAINHOSTMNT":ro \
+    -v "$LOCALXCEHOME":/var/opt/xcalar \
+    -v "$LOCALLOGDIR":/var/log/xcalar \
     -p $XEM_PORT_NUMBER:15000 \
-    --name $XCALAR_CONTAINER_NAME \
+    --name "$XCALAR_CONTAINER_NAME" \
     -p 8818:8818 \
-    --link $GRAFANA_IMAGE:graphite $MNTARGS $XCALAR_IMAGE bash
+    $extraArgs $MNTARGS "$container_image" bash
 }
 
-start_xcalar() {
-
+cmd_start_xcalar() {
     debug "Start xcalar service inside the docker"
-
     # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
-    local cmd="docker exec --user xcalar $XCALAR_CONTAINER_NAME /opt/xcalar/bin/xcalarctl start"
-    $cmd
+    docker exec --user xcalar "$XCALAR_CONTAINER_NAME" /opt/xcalar/bin/xcalarctl start
 }
 
-cleanup() {
+cmd_stop_xcalar() {
+    debug "Stop xcalar service inside the docker"
+    # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
+    docker exec --user xcalar "$XCALAR_CONTAINER_NAME" /opt/xcalar/bin/xcalarctl stop
+}
+
+# revert_xdpce <img id> to revert to
+cmd_revert_xdpce() {
+
+    local revert_img_id="$1" # new img id or sha
+    if [[ -z "${revert_img_id// }" ]]; then  # checks only whitespace chars
+        echo "you must supply a value to revert image id!" >&2
+        exit 1
+    fi
+
+    # check if xdpce container exists in expected name
+    if docker container inspect "$XCALAR_CONTAINER_NAME"; then
+        # get SHA of image hosted by current xdpce container, if any
+        local curr_img_sha=$(docker container inspect --format='{{.Image}}' "$XCALAR_CONTAINER_NAME")
+
+        # compares sha to check if already hosting the requested img
+        local revert_img_sha=$(docker image inspect --format='{{.Id}}' "$revert_img_id")
+
+        if [[ "$curr_img_sha" == $revert_img_sha ]]; then
+            echo "$revert_img_id already hosted by $XCALAR_CONTAINER_NAME - revert is unecessary!" >&2
+            exit 0
+        fi
+
+        # delete the container
+        docker rm -f "$XCALAR_CONTAINER_NAME"
+    else
+        echo "there is NOT a $XCALAR_CONTAINER_NAME container" >&2
+    fi
+
+    # now call to create the new container
+    cmd_create_xdpce "$revert_img_id"
+}
+
+# nuke all the xdpce containers and images; optional $1 removes local xpe dir
+cmd_nuke() {
+    debug "Remove all the xdpce containers"
+    docker ps -a | awk '{ print $1,$2 }' | grep -w "$XCALAR_CONTAINER_NAME" | awk '{print $1 }' | xargs -I {} docker rm -f {} || true
+
+    debug "remove all the xdpce images"
+    docker images | awk '$1 ~ /^'$XCALAR_IMAGE'$/ { print $3}' | xargs -I {} docker rmi -f {} || true # not working w " " in the grep
+
+    # grafana
+    docker ps -a | awk '{ print $1,$2 }' | grep -w "$GRAFANA_CONTAINER_NAME" | awk '{print $1 }' | xargs -I {} docker rm -f {} || true
+    docker images | awk '$1 ~ /^'$GRAFANA_IMAGE'$/ { print $3}' | xargs -I {} docker rmi -f {} || true
+
+    if [ ! -z "$1" ]; then
+        if [ -d "$XPEDIR" ]; then
+            rm -r "$XPEDIR"
+        fi
+        if [ -d "$APPDATA" ]; then
+            rm -r "$APPDATA"
+        fi
+    fi
+}
+
+cmd_cleanup() {
 
     debug "Cleanup and remove staging dir"
 
     rm -r "$STAGING_DIR"
 }
 
-"$@"
+command="$1"
+shift
+cmd_${command} "$@"
