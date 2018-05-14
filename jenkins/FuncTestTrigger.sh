@@ -121,6 +121,7 @@ if [ "$CURRENT_ITERATION" = "0" ]; then
     sleep 60
 
     sudo find /var/opt/xcalar -type f -not -path "/var/opt/xcalar/support/*" -delete
+    sudo rm -rf /var/opt/xcalar/kvs/
     sudo find . -name "core.childnode.*" -type f -delete
     set -e
 
