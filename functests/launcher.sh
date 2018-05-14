@@ -23,8 +23,6 @@ export XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
 XCE_USER="${XCE_USER:-root}"
 export XLRDIR="${XLRDIR:-/opt/xcalar}"
 export XLRGUIDIR="${XLRGUIDIR:-/opt/xcalar/xcalar-gui}"
-export XCE_PUBSIGNKEYFILE="${XCE_PUBSIGNKEYFILE:-/etc/xcalar/EcdsaPub.key}"
-
 LIBHDFS3_CONF="${LIBHDFS3_CONF:-/etc/xcalar/hdfs-client.xml}"
 PATH="$XLRDIR/bin:$PATH"
 XCE_LICENSEDIR="${XCE_LICENSEDIR:-/etc/xcalar}"
@@ -58,7 +56,6 @@ NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
 # copy the license file from the xcalar repo
 cp `pwd`/src/data/XcalarLic.key /etc/xcalar/
-cp `pwd`/src/data/EcdsaPub.key /etc/xcalar/
 
 for ii in $(seq 0 $(( $NumNodes - 1 ))); do
     monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
