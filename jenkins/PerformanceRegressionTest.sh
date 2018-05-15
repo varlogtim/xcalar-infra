@@ -1,6 +1,15 @@
 #!/bin/bash -x
 
+source doc/env/xc_aliases
+
 trap '(xclean; kill $(jobs -p)) || true' SIGINT SIGTERM EXIT
+
+# Clean up
+sudo pkill -9 usrnode || true
+sudo pkill -9 childnode || true
+sudo pkill -9 xcmonitor || true
+sudo pkill -9 xcmgmtd || true
+xclean
 
 # build
 cmBuild clean

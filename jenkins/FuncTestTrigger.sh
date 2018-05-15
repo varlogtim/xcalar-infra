@@ -269,3 +269,8 @@ for Test in "${TestsToRun[@]}"; do
 
     ii=$(( $ii + 1 ))
 done
+
+if [ "$(($CURRENT_ITERATION + 1))" = "$NUMBER_ITERATIONS" ]; then
+    # Kill previous instances of xcalar processes
+    sudo /opt/xcalar/bin/xcalarctl stop-supervisor || true
+fi
