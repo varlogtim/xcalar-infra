@@ -6,32 +6,46 @@
 # and restarts app upon install completion.
 # else opens XD linked to xdpce:latest
 #
-# bash XPE forceinstall   // forces installer to open
+# cmd param can force particular tool:
+#
+# bash XPE install    // forces installer to open
+# bash XPE uninstall  // forces uninstaller to open
+# bash XPE revert     // forces revert tool to open
+# bash XPE xd         // forces xd to open
 
 set -e
 
 export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin
+
+########## SETUP #############
 
 trap cleanup EXIT
 trap 'exit' 1 2 3 4 5 6
 
 # get top level app dir abs path
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cwd=$(pwd)
 cd "$SCRIPT_DIR/../.."
 APP_DIR=$(pwd)
+cd "$cwd"
 
 NWJSBIN="$APP_DIR/Contents/Resources/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
 NODEBIN="$APP_DIR/Contents/Resources/Bin/node-v8.11.1-darwin-x64/bin/node"
 APPLOGDIR="$APP_DIR/Contents/Logs"
-INSTALLSERVER="$APP_DIR/Contents/Resources/Data/Installer/xpeInstallerServer/xpeServer.js"
-INSTALLERROOT="$APP_DIR/Contents/Resources/Data/Installer/gui"
+
+INSTALLSERVER="$APP_DIR/Contents/Resources/guis/xpeGuis/xpeServer/xpeServer.js"
+
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
-XDROOT="$APP_DIR/Contents/Resources/Data/xcalar-gui"
+
+XDROOT="$APP_DIR/Contents/Resources/guis/xcalar-gui"
+INSTALLROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Installer"
+UNINSTALLROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Uninstaller"
+REVERTROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Reverter"
 
 # set timestamp env to be used by various processes that will be called for writing log
 ts=$(date +%FT%T%z)
 export TIMESTAMP="$ts"
-echo "timestamp: $ts"
+echo "timestamp: $ts" >&2
 
 # file to save server pid in so can kill it if needed
 SERVERPIDFILE=/tmp/XPE-${USER}.pid
@@ -42,50 +56,103 @@ if MYAPP_PID="$(cat $SERVERPIDFILE 2>/dev/null)"; then
     rm -f "$SERVERPIDFILE"
 fi
 
-# waits for the express server to come up
+# waits for the XPE express server to come up
 function waitForServer() {
     until curl http://127.0.0.1:8388
     do
-        echo "server not up yet!"
+        echo "server not up yet!" >&2
     done
 }
 
-# restart app if install completed;
-# (nwjs installer window close will signal main event loop end
-# and kill icon from mac dock -
-# restarting to bring up xd instead of calling it sequentially
-# from same bash script process will get icon to re-appear)
+# nwjs window closing signals main event loop end;
+# this kills app icon from mac dock (even if bash script still running)
+# but window might need to shut because a sep action should begin
+# (EX: install complete user selected to launch XD, user selected uninstall
+# from the nwjs menu that displays in XD)
+# in these cases, before curr nwjs window closes, a file created with
+# requested next action (install, revert, uninstall, launch)
+# restarting app and starting that new nwjs process instead of calling
+# sequentially from this same bash script process will get icon to re-appear
 function cleanup {
     if [[ "$SERVER_PID" ]]; then
         kill -TERM $SERVER_PID
         rm $SERVERPIDFILE
     fi
+
     if [[ -e "$LAUNCHFILEPATH" ]]; then
-        rm "$LAUNCHFILEPATH"
         open -a "$APP_DIR" &
     fi
 }
 
+########## START RUNNING APP  ##########
+
+# start XPE express server
+
+"$NODEBIN" "$INSTALLSERVER" > "$APPLOGDIR"/"$TIMESTAMP"_serverInstallLog 2>&1 &
+SERVER_PID=$!
+echo "server pid: $SERVER_PID" >&2
+echo "$SERVER_PID" > "$SERVERPIDFILE" >&2
+waitForServer
+
+# app action:
+# open installer/uninstaller/revert tool/XD based on order of precedence:
+#    1. cmdline param (install/uninstall/revert/xd)
+#    2. launchFile content (insatll/uninstall/revert/xd)
+#    3. in absence of either:
+#        (a) if latest xdpce container is not version packaged --> install
+#        (b) else --> xd
+
+launchInstaller() {
+    "$NWJSBIN" "$INSTALLROOT"
+}
+launchUninstaller() {
+    "$NWJSBIN" "$UNINSTALLROOT"
+}
+launchReverter() {
+    "$NWJSBIN" "$REVERTROOT"
+}
+launchXD() {
+    bash "$APP_DIR/Contents/Resources/scripts/bringupcontainers.sh"
+    "$NWJSBIN" "$XDROOT"
+}
+
 if ! thisbld=$(cat "$APP_DIR/Contents/Resources/Data/.imgid"); then
-    echo Missing app file Contents/Resources/Data/.imgid >&2
-    exit 1
+  echo Missing app file Contents/Resources/Data/.imgid >&2
+  exit 1
 fi
 if ! userlatest=$(bash "$APP_DIR/Contents/Resources/scripts/getimgid.sh" xdpce:latest); then
-    echo "Welcome to Xcalar for Docker!  This is your first install..."
+    echo "Welcome to Xcalar for Docker!  This is your first install..." >&2
 fi
-echo "userlatest: $userlatest"
-echo "thisbld : $thisbld"
+echo "userlatest: $userlatest" >&2
+echo "thisbld : $thisbld" >&2
 
-if [ "$userlatest" != $thisbld ] || [ "$1" == forceinstall ]; then
-    "$NODEBIN" "$INSTALLSERVER" > "$APPLOGDIR"/"$TIMESTAMP"_serverInstallLog 2>&1 &
-    SERVER_PID=$!
-    echo "server pid: $SERVER_PID"
-    echo "$SERVER_PID" > "$SERVERPIDFILE"
-    waitForServer
-    "$NWJSBIN" "$INSTALLERROOT"
-    exit $?
+if [ "$1" ]; then
+    if [ "$1" == install ]; then
+        launchInstaller
+    elif [ "$1" == uninstall ]; then
+        launchUninstaller
+    elif [ "$1" == revert ]; then
+        launchReverter
+    elif [ "$1" == xd ]; then
+        launchXD
+    fi
+elif [ -e "$LAUNCHFILEPATH" ]; then
+    appaction=$(cat "$LAUNCHFILEPATH")
+    rm "$LAUNCHFILEPATH"
+    if [ "$appaction" == install ]; then
+        launchInstaller
+    elif [ "$appaction" == uninstall ]; then
+        launchUninstaller
+    elif [ "$appaction" == revert ]; then
+        launchReverter
+    else
+        launchXD
+    fi
+else
+    if [ "$userlatest" != "$thisbld" ]; then
+        launchInstaller
+    else
+        launchXD
+    fi
 fi
-
-bash "$APP_DIR/Contents/Resources/scripts/bringupcontainers.sh"
-"$NWJSBIN" "$XDROOT"
 exit $?
