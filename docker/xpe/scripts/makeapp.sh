@@ -20,33 +20,45 @@ if [ -z "$XLRINFRADIR" ]; then
     echo "XLRINFRADIR should be set to run this script!" >&2
     exit 1
 fi
+if [ -z "$XLRGUIDIR" ]; then
+    echo "XLRGUIDIR should be set to run this script!" >&2
+    exit 1
+fi
 
 cwd=$(pwd)
 
 APPNAME="XPE.app"
 
-XPEINFRA="$XLRINFRADIR/docker/xpe"
+XPEINFRAROOT="$XLRINFRADIR/docker/xpe"
 
 mkdir -p "$APPNAME/Contents/MacOS"
 mkdir -p "$APPNAME/Contents/Resources/Bin"
 mkdir -p "$APPNAME/Contents/Resources/scripts"
+mkdir -p "$APPNAME/Contents/Resources/guis"
 mkdir -p "$APPNAME/Contents/Resources/Data"
 mkdir -p "$APPNAME/Contents/Logs"
 
 # app essential metadata
-cp "$XPEINFRA/staticfiles/Info.plist" "$APPNAME/Contents"
+cp "$XPEINFRAROOT/staticfiles/Info.plist" "$APPNAME/Contents"
 
 # add icon; must be in Resources
-cp /netstore/users/jolsen/AppIcon.icns "$APPNAME/Contents/Resources"
+# if xcalar-gui not built, build it and get icon from there
+if [ ! -d "$XLRGUIDIR/xcalar-gui" ]; then
+    cd "$XLRGUIDIR"
+    make dev
+    cd "$cwd"
+fi
+cp "$XLRGUIDIR/xcalar-gui/assets/images/appIcons/AppIcon.icns" "$APPNAME/Contents/Resources"
 
 # add full installer
-cd "$APPNAME/Contents/Resources/Data"
-bash -x "$XPEINFRA/scripts/createGui.sh" true # after running, 'Installer' dir created
+cd "$APPNAME/Contents/Resources/guis"
+bash -x "$XPEINFRAROOT/scripts/createGui.sh" true # after running, 'xpeGuis' dir created
 cd "$cwd"
-cp installertarball.tar.gz "$APPNAME/Contents/Resources/Data/Installer" # has files needed by local_installer_mac.sh
+cp installertarball.tar.gz "$APPNAME/Contents/Resources/guis/xpeGuis/xpeServer" # has files needed by local_installer_mac.sh
 
 # add xcalar-gui (config.js and package.json for nwjs should already be present)
-cp -r xcalar-gui "$APPNAME/Contents/Resources/Data/"
+#cp -r xcalar-gui "$APPNAME/Contents/Resources/guis"
+tar xzf /netstore/users/jolsen/xcalar-gui.tar.gz -C "$APPNAME/Contents/Resources/guis" ### AMIT:: This a temporary hack for my testing
 
 # setup nwjs
 cd "$APPNAME/Contents/Resources/Bin"
@@ -55,19 +67,19 @@ unzip -aq nwjs-sdk-v0.29.3-osx-x64.zip
 rm nwjs-sdk-v0.29.3-osx-x64.zip
 # must change app metadata to get customized nwjs menus to display app name
 # http://docs.nwjs.io/en/latest/For%20Users/Advanced/Customize%20Menubar/ <- see MacOS section
-find nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar-Community Edition"/g'
+find nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar Design"/g'
 
 # nodejs in to Bin directory
 curl http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz | tar zxf -
 cd "$cwd"
 
 # helper scripts
-cp "$XPEINFRA/scripts/bringupcontainers.sh" "$APPNAME/Contents/Resources/scripts"
-cp "$XPEINFRA/scripts/getimgid.sh" "$APPNAME/Contents/Resources/scripts"
+cp "$XPEINFRAROOT/scripts/bringupcontainers.sh" "$APPNAME/Contents/Resources/scripts"
+cp "$XPEINFRAROOT/scripts/getimgid.sh" "$APPNAME/Contents/Resources/scripts"
 # file to indicate which img is associated with this installer bundle
 # so host program will know weather to open installer of main app at launch
 # this should have been made by Jenkins job and in cwd
-if ! imgsha=$(bash "$XPEINFRA/scripts/getimgid.sh" xdpce:latest); then
+if ! imgsha=$(bash "$XPEINFRAROOT/scripts/getimgid.sh" xdpce:latest); then
     echo "No xdpce:latest!!" >&2
     exit 1
 else
@@ -75,7 +87,7 @@ else
 fi
 
 # executable app entrypoint
-cp "$XPEINFRA/scripts/XPE" "$APPNAME/Contents/MacOS"
+cp "$XPEINFRAROOT/scripts/XPE" "$APPNAME/Contents/MacOS"
 chmod 777 "$APPNAME/Contents/MacOS/XPE"
 
 # zip app
