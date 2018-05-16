@@ -237,7 +237,7 @@ def puppet_setup(ip, puppet_role, puppet_cluster):
     cmds = [
         ['echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role)],
         ['echo "cluster={}" > /etc/facter/facts.d/cluster.txt'.format(puppet_cluster)],
-        ['/opt/puppetlabs/bin/puppet agent -t -v', 200, [0, 2]],
+        ['/opt/puppetlabs/bin/puppet agent -t -v', 2700, [0, 2]],
     ]
     run_ssh_cmds(ip, cmds)
 
