@@ -162,8 +162,9 @@ kill $caddyPid || true
 kill $tailPid || true
 
 # Archive chromeLogs
+sleep 5
 cp /tmp/$chromeLogs/chrome_debug.log .
-rm -rf "/tmp/$chromeLogs"
+rm -rf "/tmp/$chromeLogs" || true
 
 if [[ "$HTTP_BODY" == *"status:fail"* ]]; then
   echo "TEST SUITE FAILED"
