@@ -56,6 +56,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
                 git checkout HEAD src/include/libapis/LibApisCommon.h
                 git checkout "$gitsha"
                 foundVersion="true"
+                break
             fi
         done
     fi
@@ -162,7 +163,7 @@ kill $tailPid || true
 
 # Archive chromeLogs
 cp /tmp/$chromeLogs/chrome_debug.log .
-rm -r "/tmp/$chromeLogs"
+rm -rf "/tmp/$chromeLogs"
 
 if [[ "$HTTP_BODY" == *"status:fail"* ]]; then
   echo "TEST SUITE FAILED"
