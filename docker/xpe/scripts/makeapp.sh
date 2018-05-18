@@ -27,7 +27,10 @@ fi
 
 cwd=$(pwd)
 
-APPNAME="XPE.app"
+APPBASENAME="Xcalar Design"
+APPNAME="${APPBASENAME}.app"
+DMGNAME="${APPBASENAME}.dmg"
+EXECUTABLENAME="Xcalar Design"
 
 XPEINFRAROOT="$XLRINFRADIR/docker/xpe"
 
@@ -87,8 +90,8 @@ else
 fi
 
 # executable app entrypoint
-cp "$XPEINFRAROOT/scripts/XPE" "$APPNAME/Contents/MacOS"
-chmod 777 "$APPNAME/Contents/MacOS/XPE"
+cp "$XPEINFRAROOT/scripts/$EXECUTABLENAME" "$APPNAME/Contents/MacOS"
+chmod 777 "$APPNAME/Contents/MacOS/$EXECUTABLENAME"
 
 # zip app
 tar -zcf "$APPNAME.tar.gz" "$APPNAME"
