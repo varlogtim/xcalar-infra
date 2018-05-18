@@ -230,6 +230,7 @@ def setup_hostname(ip, name):
     fqdn = "{}.int.xcalar.com".format(name)
     run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
     run_ssh_cmd(ip, 'systemctl restart network')
+    run_ssh_cmd(ip, 'systemctl restart autofs')
 
 def puppet_setup(ip, puppet_role, puppet_cluster):
 
@@ -958,7 +959,7 @@ def provision_vms(n, basename, ovirtcluster, puppet_role, puppet_cluster, ram, c
     # TODO: Deal with 'image locked' status because of network issue on node
 
     # wait for the processes
-    process_wait(procs, timeout=600+sleepBetween*n, valid_exit_codes=[0, 2]) # 0 and 2 both valid exit code for puppet which will get set up
+    process_wait(procs, timeout=4000+sleepBetween*n, valid_exit_codes=[0, 2]) # 0 and 2 both valid exit code for puppet which will get set up
 
     # get the list of the unique vm ids
     # a good check to make sure these VMs actually existing by these names now
@@ -1118,7 +1119,7 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
         time.sleep(sleepBetween)
 
     # wait for all the processes to complete successfully
-    process_wait(procs, timeout=400+sleepBetween*len(ips))
+    process_wait(procs, timeout=600+sleepBetween*len(ips))
 
 '''
         FOR CLUSTER SETUP
@@ -1167,7 +1168,7 @@ def create_cluster(nodeips, clustername):
         time.sleep(sleepBetween)
 
     # wait for all the proceses to complte
-    process_wait(procs, timeout=400+sleepBetween*len(nodeips))
+    process_wait(procs, timeout=600+sleepBetween*len(nodeips))
 
 '''
     Create a dir on netstore by the cluster name
@@ -1302,9 +1303,10 @@ def mount_shared_cluster_storage(node, remotePath, localPath):
     '''
 
     cmds = [
+        ['systemctl restart autofs'],
         ['mkdir -p ' + localPath],
-        ['mount -t nfs  ' + NETSTORE_IP + ':/mnt/public/netstore/' + remotePath + ' ' + localPath],
-        ['chown ' + XUID + ':' + XUID + ' ' + localPath, 60]
+        ['chown xcalar:xcalar' + ' ' + localPath, 60],
+        ['mount -o bind /netstore/' + remotePath + ' ' + localPath]
     ]
 
     run_ssh_cmds(node, cmds)
@@ -1322,10 +1324,6 @@ def path_exists_on_node(node, path):
     while tries:
         try:
             status, output = run_ssh_cmd(node, 'ls ' + path, timeout=10)
-            #status = run_ssh_cmd(node, 'cd ' + path, timeout=10)
-            if status:
-                info("Got non-0 status when trying to cd to {}..  doesn't exist?".format(path))
-                return False
             return True
         except Exception as e:
             info("Hit an exception trying to ls to {} (netstore) on {}... Will try again in case automount issue...".format(path, node))
@@ -1333,7 +1331,8 @@ def path_exists_on_node(node, path):
             time.sleep(5)
 
     if not tries:
-        raise TimeoutError("Timed out trying to cd to netstore, I tried multiple times")
+        info("Error each time tries 'ls {}'; assuming not mounted and returning False".format(path))
+        return False
 
 '''
     get priority of clusters to try.
@@ -1416,7 +1415,8 @@ def scp_file(node, localfilepath, remotefilepath, keyfile=OVIRT_KEYFILE_DEST):
 
     info("\nSCP: Copy file {} from host, to {}:{}".format(localfilepath, node, remotefilepath))
 
-    cmd = 'scp -i ' + keyfile + ' -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
+    # do not need -i keyfile if puppet is set up
+    cmd = 'scp -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
     run_system_cmd(cmd)
 
 def run_ssh_cmds(host, cmds):
@@ -1456,7 +1456,7 @@ def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_K
     info("status: {}".format(status))
     if status not in valid_exit_codes:
         info("stdout text:\n{}\n\nEncountered invalid exit status running SSH cmd {} on host {}!  (See above stdout)  Valid codes: {}".format(stdout_text, command, host, ', '.join(str(x) for x in valid_exit_codes)))
-        sys.exit(status)
+        raise RuntimeError("error in ssh cmd")
     client.close()
     return status, stdout_text.decode("utf-8")
 
@@ -1513,7 +1513,7 @@ def run_sh_script(node, path, args=[], timeout=120, tee=False):
         in procs to complete, before timing out
     :valid_exit_codes: valid exit codes to come back from the process; list of ints
 '''
-def process_wait(procs, timeout=500, valid_exit_codes=[0]):
+def process_wait(procs, timeout=600, valid_exit_codes=[0]):
 
     numProcsStart = len(procs)
 
