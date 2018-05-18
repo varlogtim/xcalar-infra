@@ -105,71 +105,18 @@ caddyPid=$!
 echo "Caddy pid $caddyPid"
 sleep 5
 
+cd $XLRGUIDIR/assets/dev/unitTest
+# Please don't ask me why I have to independently install this package.
+# This is the only way I've found to make it work.
+npm install node-bin-setup
+npm install
+
 echo "Starting test driver"
-TmpServerLogs=`mktemp serverLogs.XXXXX.log`
-echo "server.py logs available at $TmpServerLogs"
-python $XLRGUIDIR/assets/test/testSuitePython/server.py -t localhost >"$TmpServerLogs" 2>&1 &
-serverPid=$!
-echo "Server.py pid $serverPid"
-sleep 5
-
-#THIS IS HOW YOU RUN IT: localhost:8888/unitTest.html?createWorkbook=y&user=test
-
-echo "Running test suites in pseudo terminal"
-URL="https://localhost:$TEST_DRIVER_PORT/action?name=start&mode=$MODE&host=localhost&server=localhost&port=$TEST_DRIVER_PORT&users=$NUM_USERS"
-HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
-sleep 5
-
-numTries=3
-chromeLogsFound="false"
-for ii in `seq 1 $numTries`; do
-    chromeLogs="`ls -lat /tmp | grep "chromium" | head -n1 | awk '{print $9}'`"
-    if [ -f "/tmp/$chromeLogs/chrome_debug.log" ]; then
-        chromeLogsFound="true"
-        break
-    fi
-    sleep 5
-done
-
-if [ "$chromeLogsFound" = "false" ]; then
-    echo "Could not find chrome logs"
-    exit 1
-fi
-
-echo "chromeLogs at /tmp/$chromeLogs"
-tail -f "/tmp/$chromeLogs/chrome_debug.log" &
-tailPid=$!
-
-URL="https://localhost:$TEST_DRIVER_PORT/action?name=getstatus"
-HTTP_BODY="Still running"
-while [ "$HTTP_BODY" == "Still running" ]
-do
-    echo "Test suite is still running"
-    sleep 5
-    # store the whole response with the status at the and
-    HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
-    # extract the body
-    HTTP_BODY=$(echo $HTTP_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
-done
-echo "Test suite finishes"
-echo "$HTTP_BODY"
-echo "Closing test driver"
-URL="https://localhost:$TEST_DRIVER_PORT/action?name=close"
-HTTP_RESPONSE=$(curl -k --silent --write-out "HTTPSTATUS:%{http_code}" -X GET $URL)
+npm test -- testSuite https://localhost:8443
+exitCode=$?
 
 kill $serverPid || true
 kill $caddyPid || true
 kill $tailPid || true
 
-# Archive chromeLogs
-sleep 5
-cp /tmp/$chromeLogs/chrome_debug.log .
-rm -rf "/tmp/$chromeLogs" || true
-
-if [[ "$HTTP_BODY" == *"status:fail"* ]]; then
-  echo "TEST SUITE FAILED"
-  exit 1
-else
-  echo "TEST SUITE PASS"
-  exit 0
-fi
+exit $exitCode
