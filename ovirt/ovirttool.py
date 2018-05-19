@@ -58,6 +58,7 @@ XUID = '1001' # xcalar group uid. hacky fix later
 JENKINS_USER_PASS = "jenkins" # password to set for user 'jenkins' on provisioned VMs
 LOGIN_UNAME = "xdpadmin"
 LOGIN_PWORD = "Welcome1"
+LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
 
 TMPDIR_LOCAL='/tmp/ovirt_tool' # tmp dir to create on local machine running python script, to hold pem cert for connecting to Ovirt
 TMPDIR_VM='/tmp/ovirt_tool' # tmp dir to create on VMs to hold helper shell scripts, lic files (dont put timestamp because forking processes during install processing)
@@ -231,6 +232,13 @@ def setup_hostname(ip, name):
     run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
     run_ssh_cmd(ip, 'systemctl restart network')
     run_ssh_cmd(ip, 'systemctl restart autofs')
+
+def reboot_node(ip):
+
+    try:
+        run_ssh_cmd(ip, 'reboot -h')
+    except Exception as e:
+        info("expect to hit exception after the reboot")
 
 def puppet_setup(ip, puppet_role, puppet_cluster):
 
@@ -674,6 +682,17 @@ def remove_vms(vms, releaseIP=True):
         raise ValueError("\n\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
             "\n\nCould not find matches in Ovirt for following VMs: {}." \
             "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
+
+def reboot_nodes(vmids):
+
+    info("Reboot nodes in parallel")
+
+    procs = []
+    for vmid in vmids:
+        ip = get_vm_ip(vmid)
+        proc = multiprocessing.Process(target=reboot_node, args=(ip,))
+        proc.start()
+        procs.append(proc)
 
 '''
     stop vm and wait for status to be down
@@ -1586,6 +1605,9 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
                 "|\tUsername (login page): " + LOGIN_UNAME + "\n" \
                 "|\tPassword (login page): " + LOGIN_PWORD
 
+    if installer:
+        summary_str = summary_str + "\n| License key: \n|\n" + LICENSE_KEY
+
     clussumm = ""
     if clustername:
 
@@ -1938,6 +1960,9 @@ if __name__ == "__main__":
             display a useful summary to user which has IP, VM names, etc.
         '''
         display_summary(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername) #, removed=deletevms)
+
+        # reboot all of the nodes in parallel
+        reboot_nodes(vmids)
 
     # close connection
     close_connection(CONN)
