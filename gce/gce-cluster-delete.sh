@@ -59,6 +59,7 @@ fi
 
 DISKS=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-swap-[0-9]+/{print $1}'))
 DISKS+=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-data-[0-9]+/{print $1}'))
+DISKS+=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-serdes-[0-9]+/{print $1}'))
 if [ "${#DISKS[@]}" -gt 0 ]; then
     say "** Deleting disks. Please ignore any errors **"
     gcloud compute disks delete -q "${DISKS[@]}"

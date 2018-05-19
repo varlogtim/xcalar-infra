@@ -35,6 +35,7 @@ say () {
 cleanup () {
     gcloud compute instances delete -q "${INSTANCES[@]}" || true
     gcloud compute disks delete -q "${SWAP_DISKS[@]}" || true
+    gcloud compute disks delete -q "${SERDES_DISKS[@]}" || true
 }
 
 die () {
@@ -85,6 +86,8 @@ INSTANCE_TYPE=${INSTANCE_TYPE:-n1-highmem-8}
 IMAGE="${IMAGE:-ubuntu-1404-lts-1485895114}"
 INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
 SWAP_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-swap-{1..$COUNT}))
+SERDES_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-serdes-{1..$COUNT}))
+XCE_XDBSERDESPATH="/xcalarSwap"
 DATA_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-data-{1..$COUNT}))
 DATA_SIZE="${DATA_SIZE:-0}"
 
@@ -163,6 +166,7 @@ CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
 (echo "Constants.BufferCacheLazyMemLocking=true";
  echo "Constants.XcMonSlaveMasterTimeout=180";
  echo "Constants.XcMonMasterSlaveTimeout=240";
+ echo "Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH";
  $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}") > $CONFIG
 
 ARGS=()
@@ -203,6 +207,11 @@ res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
 fi
+gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SERDES_DISKS[@]}"
+res=$?
+if [ $res -ne 0 ]; then
+    die $res "Failed to create disks"
+fi
 if [ $DATA_SIZE -gt 0 ]; then
     gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
 fi
@@ -222,6 +231,8 @@ gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 for ii in `seq 1 $COUNT`; do
     instance=${CLUSTER}-${ii}
     swap=${CLUSTER}-swap-${ii}
+    serdes=${CLUSTER}-serdes-${ii}
+    gcloud compute instances attach-disk $instance --disk=$serdes && \
     gcloud compute instances attach-disk $instance --disk=$swap && \
     if [ $DATA_SIZE -gt 0 ]; then
         gcloud compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
@@ -232,13 +243,20 @@ for ii in `seq 1 $COUNT`; do
     fi
 done
 for ii in `seq 1 $COUNT`; do
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdb >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null" && \
+    # Mount SerDes SSD
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XCE_XDBSERDESPATH && echo /dev/sdb $XCE_XDBSERDESPATH   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XCE_XDBSERDESPATH || sudo mkfs.ext4 -F /dev/sdb >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XCE_XDBSERDESPATH"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo chmod o+w $XCE_XDBSERDESPATH"
+
+    # Mount swap SSD
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdc >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdc >/dev/null" && \
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null" && \
     if [ $DATA_SIZE -gt 0 ]; then
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XC_DEMO_DATASET_DIR || sudo mkfs.ext4 -F /dev/sdc >/dev/null" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && echo /dev/sdd $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
+        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XC_DEMO_DATASET_DIR || sudo mkfs.ext4 -F /dev/sdd >/dev/null" && \
         gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XC_DEMO_DATASET_DIR" && \
         gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
     fi
