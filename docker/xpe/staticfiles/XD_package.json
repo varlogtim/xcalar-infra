@@ -3,8 +3,7 @@
   "main": "index.html",
   "window":{
     "min_width": 1024,
-    "min_height": 768,
-    "fullscreen": true
+    "min_height": 768
   },
   "chromium-args": "--allow-running-insecure-content --ignore-certificate-errors"
 }
