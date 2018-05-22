@@ -29,8 +29,9 @@ INSTALLROOT="$GUIROOT/Installer"
 UNINSTALLROOT="$GUIROOT/Uninstaller"
 REVERTROOT="$GUIROOT/Reverter"
 SERVERROOT="$GUIROOT/xpeServer"
+DOCKERSTARTERROOT="$GUIROOT/DockerStarter"
 
-mkdir -p "$INSTALLROOT" "$UNINSTALLROOT" "$REVERTROOT" "$SERVERROOT" "$CSSROOT" "$JSROOT" "$ASSETSROOT"
+mkdir -p "$INSTALLROOT" "$UNINSTALLROOT" "$REVERTROOT" "$DOCKERSTARTERROOT" "$SERVERROOT" "$CSSROOT" "$JSROOT" "$ASSETSROOT"
 
 cd "$XLRGUIDIR"
 if [ ! -d xcalar-gui ]; then
@@ -49,6 +50,7 @@ cp "$XLRGUIDIR/xcalar-gui/assets/js/xpe/xpeNwjs.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/xpe/xpeInstallClient.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/xpe/xpeUninstallClient.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/xpe/xpeRevertClient.js" "$JSROOT"
+cp "$XLRGUIDIR/xcalar-gui/assets/js/xpe/xpeDockerStarter.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/httpStatus.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/promiseHelper.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/shared/util/xcHelper.js" "$JSROOT"
@@ -61,17 +63,16 @@ cp -r "$XLRGUIDIR/xcalar-gui/services/xpeServer/." "$SERVERROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/httpStatus.js" "$SERVERROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/promiseHelper.js" "$SERVERROOT"
 
+# main html content for the guis
+
 cp "$XLRGUIDIR/xcalar-gui/xpe/xpeInstaller.html" "$INSTALLROOT"
 cp "$XPEINFRAROOT/staticfiles/INSTALLER_package.json" "$INSTALLROOT/package.json"
-
-###  PLACEHOLDER FOR UNINSTALLER, REVERT ##
-
 cp "$XLRGUIDIR/xcalar-gui/xpe/xpeUninstaller.html" "$UNINSTALLROOT"
-cp "$XLRGUIDIR/xcalar-gui/xpe/xpeRevertTool.html" "$REVERTROOT"
 cp "$XPEINFRAROOT/staticfiles/UNINSTALLER_package.json" "$UNINSTALLROOT/package.json"
+cp "$XLRGUIDIR/xcalar-gui/xpe/xpeRevertTool.html" "$REVERTROOT"
 cp "$XPEINFRAROOT/staticfiles/REVERTER_package.json" "$REVERTROOT/package.json"
-
-## END PLACEHOLDER FOR UNINTALLER, REVERT
+cp "$XLRGUIDIR/xcalar-gui/xpe/xpeDockerStarter.html" "$DOCKERSTARTERROOT"
+cp "$XPEINFRAROOT/staticfiles/DOCKERSTARTER_package.json" "$DOCKERSTARTERROOT/package.json"
 
 ## symlink to root dirs for each of the guis to conform to imports in style.css
 
@@ -86,6 +87,7 @@ addSymLinks() {
 addSymLinks "$INSTALLROOT"
 addSymLinks "$UNINSTALLROOT"
 addSymLinks "$REVERTROOT"
+addSymLinks "$DOCKERSTARTERROOT"
 
 # run npm install on the installer server
 cd "$SERVERROOT"

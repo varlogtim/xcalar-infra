@@ -1,0 +1,12 @@
+{
+  "name": "Xcalar Design",
+  "main": "xpeDockerStarter.html",
+  "window": {
+    "toolbar": false,
+    "frame": false,
+    "width": 320,
+    "height": 200,
+    "position": "center",
+    "resizable": false
+  }
+}

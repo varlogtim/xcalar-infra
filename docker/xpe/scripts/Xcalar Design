@@ -25,23 +25,27 @@ trap 'exit' 1 2 3 4 5 6
 # get top level app dir abs path
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 APP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+RESOURCE_DIR="$APP_DIR/Contents/Resources"
 
-NWJSBIN="$APP_DIR/Contents/Resources/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
-NODEBIN="$APP_DIR/Contents/Resources/Bin/node-v8.11.1-darwin-x64/bin/node"
+NWJSBIN="$RESOURCE_DIR/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
+NODEBIN="$RESOURCE_DIR/Bin/node-v8.11.1-darwin-x64/bin/node"
 APPLOGDIR="$APP_DIR/Contents/Logs"
 
-INSTALLSERVER="$APP_DIR/Contents/Resources/guis/xpeGuis/xpeServer/xpeServer.js"
+INSTALLSERVER="$RESOURCE_DIR/guis/xpeGuis/xpeServer/xpeServer.js"
 
-BASHHELPER="$APP_DIR/Contents/Resources/guis/xpeGuis/xpeServer/local_installer_mac.sh"
+BASHHELPER="$RESOURCE_DIR/guis/xpeGuis/xpeServer/local_installer_mac.sh"
 
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
 INSTALLEDFILE="$APP_DIR/Contents/MacOS/.installed"
 GRAFANAMARK="$APP_DIR/Contents/MacOS/.grafana"
 
-XDROOT="$APP_DIR/Contents/Resources/guis/xcalar-gui"
-INSTALLROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Installer"
-UNINSTALLROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Uninstaller"
-REVERTROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Reverter"
+XDROOT="$RESOURCE_DIR/guis/xcalar-gui"
+INSTALLROOT="$RESOURCE_DIR/guis/xpeGuis/Installer"
+UNINSTALLROOT="$RESOURCE_DIR/guis/xpeGuis/Uninstaller"
+REVERTROOT="$RESOURCE_DIR/guis/xpeGuis/Reverter"
+DOCKERSTARTERROOT="$RESOURCE_DIR/guis/xpeGuis/DockerStarter"
+
+LAUNCHED=false
 
 # set timestamp env to be used by various processes that will be called for writing log
 ts=$(date +%FT%T%z)
@@ -64,11 +68,19 @@ if MYAPP_PID="$(cat $SERVERPIDFILE 2>/dev/null)"; then
 fi
 
 # waits for the XPE express server to come up
-function waitForServer() {
-    until curl http://127.0.0.1:8388
-    do
+waitForServer() {
+    local timeout=10
+    local pauseTime=1
+    until curl http://127.0.0.1:8388 >/dev/null 2>&1 || [ "$timeout" -eq "0" ]; do
         echo "server not up yet!" >&2
+        sleep "$pauseTime"
+        timeout=$(($timeout - $pauseTime))
     done
+
+    if ! curl http://127.0.0.1:8388 >/dev/null 2>&1; then
+        echo "Timed out waiting for server to come up!" >&2
+        exit 1
+    fi
 }
 
 # nwjs window closing signals main event loop end;
@@ -80,7 +92,7 @@ function waitForServer() {
 # requested next action (install, revert, uninstall, launch)
 # restarting app and starting that new nwjs process instead of calling
 # sequentially from this same bash script process will get icon to re-appear
-function cleanup {
+cleanup() {
     if [[ "$SERVER_PID" ]]; then
         kill -TERM $SERVER_PID
         rm $SERVERPIDFILE
@@ -91,8 +103,6 @@ function cleanup {
     fi
 }
 
-########## START RUNNING APP  ##########
-
 # start XPE express server
 
 "$NODEBIN" "$INSTALLSERVER" > "$APPLOGDIR"/"$TIMESTAMP"_serverInstallLog 2>&1 &
@@ -101,12 +111,22 @@ echo "server pid: $SERVER_PID" >&2
 echo "$SERVER_PID" > "$SERVERPIDFILE" >&2
 waitForServer
 
+########## CHECK FOR ENTRYPOINT DEPENDENCIES ######
+
+if ! docker version >/dev/null 2>&1; then
+    "$NWJSBIN" "$DOCKERSTARTERROOT"
+    exit $?
+fi
+
+########## LAUNCH APP GUI  ##########
+
 # app action:
 # open installer/uninstaller/revert tool/XD based on order of precedence:
 #    1. cmdline param (install/uninstall/revert/xd)
 #    2. launchFile content (insatll/uninstall/revert/xd)
 #    3. in absence of either:
-#        (a) if latest xdpce container is not version packaged --> install
+#        (a) if no install mark set in app (blank file that gets set
+#             after install) --> install
 #        (b) else --> xd
 
 launchInstaller() {
@@ -123,35 +143,41 @@ launchXD() {
     "$NWJSBIN" "$XDROOT"
 }
 
-if [ "$1" ]; then
-    if [ "$1" == install ]; then
-        launchInstaller
-    elif [ "$1" == uninstall ]; then
-        launchUninstaller
-    elif [ "$1" == revert ]; then
-        launchReverter
-    elif [ "$1" == xd ]; then
-        launchXD
-    else
-        echo "invalid force arg $1" >&2
-        exit 1
-    fi
+# launches a requested GUI (install/uninstall/revert/xd)
+launchGUI() {
+    LAUNCHED=true
+    case "$1" in
+        install)
+            launchInstaller
+            ;;
+        uninstall)
+            launchUninstaller
+            ;;
+        revert)
+            launchReverter
+            ;;
+        xd)
+            launchXD
+            ;;
+        *)
+            echo "can't launch based on argument: ($1)" >&2
+            LAUNCHED=false
+            ;;
+    esac
+}
+
+if [ "$1" ]; then # cmd param passed to bash script
+    launchGUI "$1"
 elif [ -e "$LAUNCHFILEPATH" ]; then
     appaction=$(cat "$LAUNCHFILEPATH")
     rm "$LAUNCHFILEPATH"
-    if [ "$appaction" == install ]; then
-        launchInstaller
-    elif [ "$appaction" == uninstall ]; then
-        launchUninstaller
-    elif [ "$appaction" == revert ]; then
-        launchReverter
-    elif [ "$appaction" == xd ]; then
-        launchXD
-    else
-        echo "invalid value for launchfile $LAUNCHFILEPATH: $appaction" >&2
-        exit 1
-    fi
-else
+    launchGUI "$appaction"
+fi
+
+# need this as sep. if, in case 'restart' was set in the launch file
+# (when you want to restart not to launch a diff GUI, but
+# just to restart and run like regular app run)
+if [ "$LAUNCHED" = false ]; then
     if [ ! -f "$INSTALLEDFILE" ]; then
         launchInstaller
     else

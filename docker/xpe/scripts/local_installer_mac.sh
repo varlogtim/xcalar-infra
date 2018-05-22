@@ -300,21 +300,38 @@ cmd_revert_xdpce() {
     cmd_create_xdpce "$revert_img_id"
 }
 
+cmd_remove_containers() {
+    if [ -z "$1" ]; then
+        echo "You must supply a container to remove" >&2
+        exit 1
+    fi
+    local containerId="$1"
+    docker ps -a | awk '{ print $1,$2 }' | grep -w "$containerId" | awk '{print $1 }' | xargs -I {} docker rm -f {} || true
+}
+
+cmd_remove_images() {
+    if [ -z "$1" ]; then
+        echo "You must supply an image to remove" >&2
+        exit 1
+    fi
+    local imageId="$1"
+    docker images | awk '$1 ~ /^'$imageId'$/ { print $3}' | xargs -I {} docker rmi -f {} || true # not working w " " in the grep
+}
+
 # nuke all the xdpce containers and images; optional $1 removes local xpe dir
 cmd_nuke() {
     cmd_ensure_docker_up
 
-    debug "Remove all the xdpce containers"
-    docker ps -a | awk '{ print $1,$2 }' | grep -w "$XCALAR_CONTAINER_NAME" | awk '{print $1 }' | xargs -I {} docker rm -f {} || true
+    debug "Remove all the xdpce containers and images"
+    cmd_remove_containers "$XCALAR_CONTAINER_NAME"
+    cmd_remove_images "$XCALAR_IMAGE"
 
-    debug "remove all the xdpce images"
-    docker images | awk '$1 ~ /^'$XCALAR_IMAGE'$/ { print $3}' | xargs -I {} docker rmi -f {} || true # not working w " " in the grep
-
-    # grafana
-    docker ps -a | awk '{ print $1,$2 }' | grep -w "$GRAFANA_CONTAINER_NAME" | awk '{print $1 }' | xargs -I {} docker rm -f {} || true
-    docker images | awk '$1 ~ /^'$GRAFANA_IMAGE'$/ { print $3}' | xargs -I {} docker rmi -f {} || true
+    debug "Remove all grafana containers and images"
+    cmd_remove_containers "$GRAFANA_CONTAINER_NAME"
+    cmd_remove_images "$GRAFANA_IMAGE"
 
     if [ ! -z "$1" ]; then
+        debug "Remove all app data (specified full uninstall)"
         if [ -d "$APPDATA" ]; then
             rm -r "$APPDATA"
         fi
