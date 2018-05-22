@@ -87,6 +87,10 @@ cmd_setup () {
     cp "$SCRIPT_DIR/installertarball.tar.gz" "$STAGING_DIR"
     tar xzf installertarball.tar.gz
 
+    if [ -e ".caddyport" ]; then
+        CADDY_PORT=$(cat .caddyport)
+    fi
+
     mkdir -p "$LOCALXCEHOME/config"
     mkdir -p "$LOCALLOGDIR"
     mkdir -p "$LOCALDATASETS"
@@ -192,7 +196,7 @@ cmd_create_xdpce() {
     -v "$LOCALLOGDIR":/var/log/xcalar \
     -p $XEM_PORT_NUMBER:15000 \
     --name "$XCALAR_CONTAINER_NAME" \
-    -p 8818:8818 \
+    -p 8818:"${CADDY_PORT:-443}" \
     $extraArgs $MNTARGS "$container_image" bash
 }
 

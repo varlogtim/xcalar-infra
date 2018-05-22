@@ -6,12 +6,14 @@ SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export XLRINFRADIR="${XLRNFRADIR:-$(readlink -f $SCRIPTDIR/../../..)}"
 export XLRGUIDIR="${XLRGUIDIR:-$XLRINFRADIR/../xcalar-gui}"
 export GRAFANADIR="${GRAFANADIR:-$XLRINFRADIR/../graphite-grafana}"
+export CADDY_PORT="${CADDYPORT:-443}"
 
 XPEDIR="$XLRINFRADIR/docker/xpe"
 
 echo "current build number: $BUILD_NUMBER" >&2
 FINALDEST="$BUILD_DIRECTORY/$BUILD_NUMBER"
 mkdir -p $FINALDEST
+
 
 # build the xdpce container first. go to dir in xcalar where it lives
 cd "$XLRINFRADIR/docker/xdpce"
@@ -38,11 +40,14 @@ make grafanatar
 # it will have saved an image of the grafana container
 cp grafana_graphite.tar.gz $FINALDEST
 
+# set caddy port as a text file, so host side will know which Caddyport to use
+echo "$CADDY_PORT" > "$FINALDEST/.caddyport"
+
 # tar what's needed for the local install
 cd $FINALDEST
 curl -f -L http://repo.xcalar.net/deps/sampleDatasets.tar.gz -O
 TARFILE=installertarball.tar.gz
-TARCONTENTS="xdpce.tar.gz grafana_graphite.tar.gz defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks/ sampleDatasets.tar.gz"
+TARCONTENTS="xdpce.tar.gz grafana_graphite.tar.gz defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks/ sampleDatasets.tar.gz .caddyport"
 tar -czf "$TARFILE" $TARCONTENTS
 
 # run mkshar (ubuntu)
