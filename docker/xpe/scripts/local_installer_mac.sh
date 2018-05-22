@@ -27,13 +27,14 @@ debug() {
 
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 STAGING_DIR="/tmp/xpestaging"
+IMGID_FILE="$SCRIPT_DIR/../../../Data/.imgid"
 XCALAR_IMAGE=xdpce
 GRAFANA_IMAGE=grafana_graphite
 XCALAR_CONTAINER_NAME=xdpce
 GRAFANA_CONTAINER_NAME=grafana_graphite
 # installer dirs created on the local machine
 # these should remain even after installation complete, as long as they want XPE)
-APPDATA=$HOME/Library/Application\ Support/Xcalar\ Design
+APPDATA="$HOME/Library/Application Support/Xcalar Design"
 XPEDATA="$APPDATA/.sessions" # want data in here hidden in mac Finder
 LOCALLOGDIR="$XPEDATA/Xcalar Logs" # will mount to /var/log/xcalar so logs persist through upgrades
 LOCALXCEHOME="$XPEDATA/Xcalar Home" # will mount /var/opt/xcalar here so session data, etc. persissts through upgrde
@@ -51,6 +52,7 @@ GRAFANA_TARBALL=grafana_graphite.tar.gz
 # if user has changed its name; won't be removing that
 # remove the latest images.
 cmd_clear_containers() {
+    cmd_ensure_docker_up
     debug "Remove old docker containers..."
     docker rm -f $XCALAR_CONTAINER_NAME $GRAFANA_CONTAINER_NAME >/dev/null 2>&1 || true
 }
@@ -61,6 +63,8 @@ cmd_cleanly_delete_image() {
         echo "No image ID supplied to cleanly_delete_image. you must supply an image ID to remove!" >&2
         exit 1
     fi
+
+    cmd_ensure_docker_up
 
     # remove any containers (running or not) hosting this image
     docker ps -a -q --filter ancestor="$1" --format="{{.ID}}" | xargs -I {} docker rm -f {}
@@ -110,15 +114,8 @@ cmd_setup () {
     cd "$cwd"
 }
 
-cmd_start_wait_docker() {
-    open -a Docker.app
-    until docker version >/dev/null 2>&1; do
-        echo "docker daemon not avaiable yet" >&2
-        sleep 1
-    done
-}
-
 cmd_load_packed_images() {
+    cmd_ensure_docker_up
 
     local cwd=$(pwd)
 
@@ -143,6 +140,7 @@ cmd_load_packed_images() {
 }
 
 cmd_create_grafana() {
+    cmd_ensure_docker_up
 
     debug "Create grafana container"
 
@@ -163,6 +161,7 @@ cmd_create_grafana() {
 #   2nd arg: ram (int in gb)
 #    3rd arg: num cores
 cmd_create_xdpce() {
+    cmd_ensure_docker_up
 
     debug "create xcalar container"
 
@@ -201,19 +200,50 @@ cmd_create_xdpce() {
 }
 
 cmd_start_xcalar() {
+    cmd_ensure_docker_up
+
     debug "Start xcalar service inside the docker"
     # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
     docker exec --user xcalar "$XCALAR_CONTAINER_NAME" /opt/xcalar/bin/xcalarctl start
 }
 
 cmd_stop_xcalar() {
+    cmd_ensure_docker_up
+
     debug "Stop xcalar service inside the docker"
     # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
     docker exec --user xcalar "$XCALAR_CONTAINER_NAME" /opt/xcalar/bin/xcalarctl stop
 }
 
+cmd_verify_install() {
+    echo "to-do"
+    cmd_ensure_docker_up
+    local appImgSha
+    if [ ! -f "$IMGID_FILE" ]; then
+        echo "Can not find image sha file to compare against for verification!" >&2
+        exit 1
+    else
+        appImgSha=$(cat "$IMGID_FILE")
+    fi
+    local userlatest
+    if ! userlatest=$(docker image inspect xdpce:latest -f '{{ .Id }}'); then
+       echo "No image sha found for latest xdpce!  Install was not successful!" >&2
+       exit 1
+    fi
+    if [ "$userlatest" != "$appImgSha" ]; then
+       echo "Latest image of Xcalar is not image associated with this app" >&2
+       exit 1
+    fi
+}
+
+cmd_cleanup() {
+    debug "Cleanup and remove staging dir"
+    rm -r "$STAGING_DIR"
+}
+
 # revert_xdpce <img id> to revert to
 cmd_revert_xdpce() {
+    cmd_ensure_docker_up
 
     local revert_img_id="$1" # new img id or sha
     if [[ -z "${revert_img_id// }" ]]; then  # checks only whitespace chars
@@ -246,6 +276,8 @@ cmd_revert_xdpce() {
 
 # nuke all the xdpce containers and images; optional $1 removes local xpe dir
 cmd_nuke() {
+    cmd_ensure_docker_up
+
     debug "Remove all the xdpce containers"
     docker ps -a | awk '{ print $1,$2 }' | grep -w "$XCALAR_CONTAINER_NAME" | awk '{print $1 }' | xargs -I {} docker rm -f {} || true
 
@@ -263,11 +295,56 @@ cmd_nuke() {
     fi
 }
 
-cmd_cleanup() {
+# DOCKER UTILS # ##TODO: move in to own util file;
+# and the installer functions above in their own file?
 
-    debug "Cleanup and remove staging dir"
+cmd_ensure_docker_up() {
+    if ! docker version >/dev/null 2>&1; then
+        cmd_start_wait_docker
+    fi
+}
 
-    rm -r "$STAGING_DIR"
+# starts docker and waits to come up, unless env variable
+# NODOCKERSTART is set
+cmd_start_wait_docker() {
+    local timeout=120 # timeout after which consider can't bring up docker
+    local remainingTime=$timeout
+    local pauseTime=1
+    if [ ! -z "$NODOCKERSTART" ]; then
+        exit 1
+    fi
+    open -a Docker.app
+    until docker version >/dev/null 2>&1 || [ "$remainingTime" -eq "0" ]; do
+        debug "docker daemon not avaiable yet $remainingTime"
+        sleep "$pauseTime"
+        remainingTime=$(($remainingTime - $pauseTime))
+    done
+
+    if ! docker version >/dev/null 2>&1; then
+        # timed out waiting for daemon to come up
+        echo "Timed out after waiting $timeout seconds for Docker daemon to come up!" >&2
+        exit 1
+    fi
+}
+
+cmd_check_docker() {
+    local installedCheck
+    if ! installedCheck=$(docker version 2>&1); then
+        echo "not installed $installedCheck"
+        if [[ $installedCheck = *"command not found"* ]]; then
+            echo "it is not installed"
+            exit 1
+        else
+            # docker is installed; daemon is not available
+            exit 2
+        fi
+    fi
+}
+
+cmd_bring_up_containers() {
+    cmd_ensure_docker_up
+    docker start xdpce
+    docker start grafana_graphite || true
 }
 
 command="$1"

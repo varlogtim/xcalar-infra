@@ -76,13 +76,10 @@ find nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/*.lproj/InfoPlist.stri
 curl http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz | tar zxf -
 cd "$cwd"
 
-# helper scripts
-cp "$XPEINFRAROOT/scripts/bringupcontainers.sh" "$APPNAME/Contents/Resources/scripts"
-cp "$XPEINFRAROOT/scripts/getimgid.sh" "$APPNAME/Contents/Resources/scripts"
 # file to indicate which img is associated with this installer bundle
 # so host program will know weather to open installer of main app at launch
 # this should have been made by Jenkins job and in cwd
-if ! imgsha=$(bash "$XPEINFRAROOT/scripts/getimgid.sh" xdpce:latest); then
+if ! imgsha=$(docker image inspect xdpce:latest -f '{{ .Id }}' 2>/dev/null); then
     echo "No xdpce:latest!!" >&2
     exit 1
 else

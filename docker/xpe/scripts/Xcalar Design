@@ -32,6 +32,8 @@ APPLOGDIR="$APP_DIR/Contents/Logs"
 
 INSTALLSERVER="$APP_DIR/Contents/Resources/guis/xpeGuis/xpeServer/xpeServer.js"
 
+BASHHELPER="$APP_DIR/Contents/Resources/guis/xpeGuis/xpeServer/local_installer_mac.sh"
+
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
 INSTALLEDFILE="$APP_DIR/Contents/MacOS/.installed"
 
@@ -110,7 +112,7 @@ launchReverter() {
     "$NWJSBIN" "$REVERTROOT"
 }
 launchXD() {
-    bash "$APP_DIR/Contents/Resources/scripts/bringupcontainers.sh"
+    bash "$BASHHELPER" bring_up_containers
     "$NWJSBIN" "$XDROOT"
 }
 
