@@ -89,8 +89,22 @@ else
     echo "Using xcalar-gui"
 fi
 
-echo "Starting usrnodes"
 cd $XLRDIR
+TmpSqlDfLogs=`mktemp SqlDf.XXXXX.log`
+echo "Starting SQLDF"
+cp /netstore/builds/byJob/BuildSqldf/42/archive.tar .
+mkdir -p src/sqldf/sbt/target
+tar -xvf archive.tar
+if grep -q Ubuntu /etc/os-release; then
+    dpkg-deb -R ub14/xcalar-sqldf_0.2-42_all.deb .
+    cp opt/xcalar/lib/xcalar-sqldf.jar src/sqldf/sbt/target/xcalar-sqldf.jar
+else
+    tar -zxvf el7/xcalar-sqldf-0.2-42.el7.tar.gz
+    cp tmp/xcalardev-install-sqldf.sh/xcalar-sqldf-0.2/rootfs/opt/xcalar/lib/xcalar-sqldf.jar src/sqldf/sbt/target/xcalar-sqldf.jar
+fi
+java -jar src/sqldf/sbt/target/xcalar-sqldf.jar >"$TmpSqlDfLogs" 2>&1 &
+
+echo "Starting usrnodes"
 export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/bin/usrnode/test-config.cfg}"
 launcher.sh 1 daemon
 
