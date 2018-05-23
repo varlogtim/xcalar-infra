@@ -24,10 +24,7 @@ trap 'exit' 1 2 3 4 5 6
 
 # get top level app dir abs path
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cwd=$(pwd)
-cd "$SCRIPT_DIR/../.."
-APP_DIR=$(pwd)
-cd "$cwd"
+APPDIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 NWJSBIN="$APP_DIR/Contents/Resources/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
 NODEBIN="$APP_DIR/Contents/Resources/Bin/node-v8.11.1-darwin-x64/bin/node"
@@ -36,6 +33,7 @@ APPLOGDIR="$APP_DIR/Contents/Logs"
 INSTALLSERVER="$APP_DIR/Contents/Resources/guis/xpeGuis/xpeServer/xpeServer.js"
 
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
+INSTALLEDFILE="$APP_DIR/Contents/MacOS/.installed"
 
 XDROOT="$APP_DIR/Contents/Resources/guis/xcalar-gui"
 INSTALLROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Installer"
@@ -116,16 +114,6 @@ launchXD() {
     "$NWJSBIN" "$XDROOT"
 }
 
-if ! thisbld=$(cat "$APP_DIR/Contents/Resources/Data/.imgid"); then
-  echo Missing app file Contents/Resources/Data/.imgid >&2
-  exit 1
-fi
-if ! userlatest=$(bash "$APP_DIR/Contents/Resources/scripts/getimgid.sh" xdpce:latest); then
-    echo "Welcome to Xcalar for Docker!  This is your first install..." >&2
-fi
-echo "userlatest: $userlatest" >&2
-echo "thisbld : $thisbld" >&2
-
 if [ "$1" ]; then
     if [ "$1" == install ]; then
         launchInstaller
@@ -149,7 +137,7 @@ elif [ -e "$LAUNCHFILEPATH" ]; then
         launchXD
     fi
 else
-    if [ "$userlatest" != "$thisbld" ]; then
+    if [ ! -f "$INSTALLEDFILE" ]; then
         launchInstaller
     else
         launchXD
