@@ -33,12 +33,11 @@ XCALAR_CONTAINER_NAME=xdpce
 GRAFANA_CONTAINER_NAME=grafana_graphite
 # installer dirs created on the local machine
 # these should remain even after installation complete, as long as they want XPE)
-XPEDIR="$HOME/.local/lib/xcalarDesign" # hidden app data such as xcehome
-APPDATA=$HOME/Library/Application\ Support/Xcalar\ Design # unhidden app data
-#XPEDIR="$HOME/Library/Application Support/Xcalar Design"
-LOCALLOGDIR="$XPEDIR/xceLogs" # will mount to /var/log/xcalar so logs persist through upgrades
-LOCALXCEHOME="$XPEDIR/xceHome" # will mount /var/opt/xcalar here so session data, etc. persissts through upgrde
-LOCALDATASETS="$XPEDIR/sampleDatasets"
+APPDATA=$HOME/Library/Application\ Support/Xcalar\ Design
+XPEDATA="$APPDATA/.sessions" # want data in here hidden in mac Finder
+LOCALLOGDIR="$XPEDATA/Xcalar Logs" # will mount to /var/log/xcalar so logs persist through upgrades
+LOCALXCEHOME="$XPEDATA/Xcalar Home" # will mount /var/opt/xcalar here so session data, etc. persissts through upgrde
+LOCALDATASETS="$APPDATA/sampleDatasets"
 
 # this should match defaults given in xcalar/src/bin/pyClient/local/xcalar/compute/local/target/__init__.py
 MAINHOSTMNT=/hostmnt
@@ -96,23 +95,13 @@ cmd_setup () {
     cp defaultAdmin.json "$LOCALXCEHOME/config"
     # untar the datasets and copy those in
     # do this from the staging dir.
-    # because tarred dir and dirname in XPEDIR are same
-    # and don't want to overwrite the dir in XPEDIR if it's there,
+    # because tarred dir and dirname in APPDATA are same
+    # and don't want to overwrite the dir in APPDATA if it's there,
     # in case we've taken out sample datasets in a new build.
     # instead extract in staging area then copy all the contents over.
     # this way they get new datasets, updated existing ones, and keep their old ones
     tar xzf sampleDatasets.tar.gz --strip-components=1 -C "$LOCALDATASETS/"
     rm sampleDatasets.tar.gz
-
-    # add symlink of the sample datasets in to Application Support folder
-    # so it is not a hidden dir and can be viewed by  user easily
-    mkdir -p "$APPDATA"
-    cd "$APPDATA"
-    symlinkName=sampleDatasets
-    if [[ -e "$symlinkName" ]]; then
-        rm "$symlinkName"
-    fi
-    ln -s "$LOCALDATASETS" "$symlinkName"
 
     cd "$cwd"
 }
@@ -264,9 +253,6 @@ cmd_nuke() {
     docker images | awk '$1 ~ /^'$GRAFANA_IMAGE'$/ { print $3}' | xargs -I {} docker rmi -f {} || true
 
     if [ ! -z "$1" ]; then
-        if [ -d "$XPEDIR" ]; then
-            rm -r "$XPEDIR"
-        fi
         if [ -d "$APPDATA" ]; then
             rm -r "$APPDATA"
         fi
