@@ -9,6 +9,26 @@ export XCE_LICENSEFILE=${XCE_LICENSEDIR}/XcalarLic.key
 NUM_USERS=${NUM_USERS:-$(shuf -i 2-3 -n 1)}
 TEST_DRIVER_PORT="5909"
 
+if [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
+    cd $XLRGUIDIR
+    git diff --name-only HEAD^1 > out
+    echo `cat out`
+    diffTargetFile=`cat out | grep -E "ts/components/sql/|ts/thrift/XcalarApi.js|ts/shared/api/xiApi.ts|ts/XcalarThrift.js"`
+
+    rm -rf out
+
+    if [ -n "$diffTargetFile" ] || [ "$RUN_ANYWAY" = "true" ]
+    then
+        echo "Change detected"
+    else
+        echo "No target file changed"
+        exit 0
+    fi
+
+    # Make symbolic link
+    sudo ln -sfn $WORKSPACE/xcalar-gui/xcalar-gui /var/www/xcalar-gui
+fi
+
 echo "Installing required packages"
 if grep -q Ubuntu /etc/os-release; then
     sudo apt-get install -y libnss3-dev chromium-browser
@@ -126,8 +146,14 @@ npm install node-bin-setup
 npm install
 
 echo "Starting test driver"
-npm test -- testSuite https://localhost:8443
-exitCode=$?
+if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
+    npm test -- sqlTest https://localhost:8443
+    exitCode=$?
+    sudo unlink /var/www/xcalar-gui
+else
+    npm test -- testSuite https://localhost:8443
+    exitCode=$?
+fi
 
 kill $serverPid || true
 kill $caddyPid || true
