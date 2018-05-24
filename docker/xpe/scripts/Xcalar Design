@@ -24,7 +24,7 @@ trap 'exit' 1 2 3 4 5 6
 
 # get top level app dir abs path
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-APPDIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+APP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 NWJSBIN="$APP_DIR/Contents/Resources/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs"
 NODEBIN="$APP_DIR/Contents/Resources/Bin/node-v8.11.1-darwin-x64/bin/node"
