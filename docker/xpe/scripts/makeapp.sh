@@ -73,6 +73,10 @@ rm nwjs-sdk-v0.29.3-osx-x64.zip
 # must change app metadata to get customized nwjs menus to display app name
 # http://docs.nwjs.io/en/latest/For%20Users/Advanced/Customize%20Menubar/ <- see MacOS section
 find nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar Design"/g'
+# replace nwjs default icon with app icon (hack for now, not getting icon attr to work)
+# nwjs icon will dispaly on refresh/quit prompts, even when running Xcalar Design app
+cp "$XLRGUIDIR/xcalar-gui/assets/images/appIcons/AppIcon.icns" nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/app.icns
+cp "$XLRGUIDIR/xcalar-gui/assets/images/appIcons/AppIcon.icns" nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/document.icns
 
 # nodejs in to Bin directory
 curl http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz | tar zxf -
