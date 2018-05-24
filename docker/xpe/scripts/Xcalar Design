@@ -125,6 +125,9 @@ if [ "$1" ]; then
         launchReverter
     elif [ "$1" == xd ]; then
         launchXD
+    else
+        echo "invalid force arg $1" >&2
+        exit 1
     fi
 elif [ -e "$LAUNCHFILEPATH" ]; then
     appaction=$(cat "$LAUNCHFILEPATH")
@@ -135,8 +138,11 @@ elif [ -e "$LAUNCHFILEPATH" ]; then
         launchUninstaller
     elif [ "$appaction" == revert ]; then
         launchReverter
-    else
+    elif [ "$appaction" == xd ]; then
         launchXD
+    else
+        echo "invalid value for launchfile $LAUNCHFILEPATH: $appaction" >&2
+        exit 1
     fi
 else
     if [ ! -f "$INSTALLEDFILE" ]; then
