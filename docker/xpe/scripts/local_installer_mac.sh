@@ -37,7 +37,10 @@ GRAFANA_CONTAINER_NAME=grafana_graphite
 APPDATA="$HOME/Library/Application Support/Xcalar Design"
 XPEDATA="$APPDATA/.sessions" # want data in here hidden in mac Finder
 LOCALLOGDIR="$XPEDATA/Xcalar Logs" # will mount to /var/log/xcalar so logs persist through upgrades
-LOCALXCEHOME="$XPEDATA/Xcalar Home" # will mount /var/opt/xcalar here so session data, etc. persissts through upgrde
+LOCALXCEHOME="$XPEDATA/Xcalar Home" # will mount to XCALAR_ROOT so session data, etc. persissts through upgrde
+XCALAR_ROOT="/var/opt/xcalar"
+LIC_FILENAME=XcalarLic.key # name of file of uncompressed license
+XCALAR_LIC_REL="xpeinstalledlic" # dir rel to XCALAR_ROOT where lic file will go
 LOCALDATASETS="$APPDATA/sampleDatasets"
 
 # this should match defaults given in xcalar/src/bin/pyClient/local/xcalar/compute/local/target/__init__.py
@@ -81,7 +84,7 @@ cmd_setup () {
 
     ## CREATE INSTALLER DIRS, move required files to final dest ##
     if [ -e "$STAGING_DIR" ]; then
-        echo "staging dir exists already $STAGING_DIR" >&2
+        debug "staging dir exists already $STAGING_DIR"
         rm -r "$STAGING_DIR"
     fi
     mkdir -p "$STAGING_DIR"
@@ -96,6 +99,7 @@ cmd_setup () {
     fi
 
     mkdir -p "$LOCALXCEHOME/config"
+    mkdir -p "$LOCALXCEHOME/$XCALAR_LIC_REL"
     mkdir -p "$LOCALLOGDIR"
     mkdir -p "$LOCALDATASETS"
 
@@ -181,6 +185,12 @@ cmd_create_xdpce() {
         extraArgs="$extraArgs --link $GRAFANA_IMAGE:graphite"
     fi
 
+    # create license file and add env var to let Xcalar know where it is
+    if [[ ! -z "$4" ]]; then
+        echo "$4" > "$LOCALXCEHOME/$XCALAR_LIC_REL/$LIC_FILENAME"
+        extraArgs="$extraArgs -e XCE_LICENSEFILE=$XCALAR_ROOT/$XCALAR_LIC_REL/$LIC_FILENAME"
+    fi
+
     # create the xdpce container
     docker run -d -t --user xcalar --cap-add=ALL --cap-drop=MKNOD \
     --restart unless-stopped \
@@ -191,7 +201,7 @@ cmd_create_xdpce() {
     -e XLRDIR=/opt/xcalar -e container=docker \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$HOME":"$MAINHOSTMNT":ro \
-    -v "$LOCALXCEHOME":/var/opt/xcalar \
+    -v "$LOCALXCEHOME":"$XCALAR_ROOT" \
     -v "$LOCALLOGDIR":/var/log/xcalar \
     -p $XEM_PORT_NUMBER:15000 \
     --name "$XCALAR_CONTAINER_NAME" \
@@ -216,7 +226,6 @@ cmd_stop_xcalar() {
 }
 
 cmd_verify_install() {
-    echo "to-do"
     cmd_ensure_docker_up
     local appImgSha
     if [ ! -f "$IMGID_FILE" ]; then
@@ -260,14 +269,14 @@ cmd_revert_xdpce() {
         local revert_img_sha=$(docker image inspect --format='{{.Id}}' "$revert_img_id")
 
         if [[ "$curr_img_sha" == $revert_img_sha ]]; then
-            echo "$revert_img_id already hosted by $XCALAR_CONTAINER_NAME - revert is unecessary!" >&2
+            debug "$revert_img_id already hosted by $XCALAR_CONTAINER_NAME - revert is unecessary!"
             exit 0
         fi
 
         # delete the container
         docker rm -f "$XCALAR_CONTAINER_NAME"
     else
-        echo "there is NOT a $XCALAR_CONTAINER_NAME container" >&2
+        debug "there is NOT a $XCALAR_CONTAINER_NAME container"
     fi
 
     # now call to create the new container
@@ -330,9 +339,7 @@ cmd_start_wait_docker() {
 cmd_check_docker() {
     local installedCheck
     if ! installedCheck=$(docker version 2>&1); then
-        echo "not installed $installedCheck"
         if [[ $installedCheck = *"command not found"* ]]; then
-            echo "it is not installed"
             exit 1
         else
             # docker is installed; daemon is not available
