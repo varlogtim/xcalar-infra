@@ -217,33 +217,33 @@ Resources:
         IpProtocol: tcp
         FromPort: '80'
         ToPort: '80'
-  InstanceProfile:
-    Type: 'AWS::IAM::InstanceProfile'
-    Properties:
-      Roles:
-      - !Ref 'Role'
-  Role:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: 'ec2.amazonaws.com'
-          Action: 'sts:AssumeRole'
-      Path: /
-      Policies:
-      - PolicyName: Ec2Describe
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - 'ec2:DescribeInstances'
-            - 'ec2:DescribeTags'
-            - 'autoscaling:DescribeAutoScalingGroups'
-            Resource: '*'
+#  InstanceProfile:
+#    Type: 'AWS::IAM::InstanceProfile'
+#    Properties:
+#      Roles:
+#      - !Ref 'Role'
+#  Role:
+#    Type: 'AWS::IAM::Role'
+#    Properties:
+#      AssumeRolePolicyDocument:
+#        Version: '2012-10-17'
+#        Statement:
+#        - Effect: Allow
+#          Principal:
+#            Service: 'ec2.amazonaws.com'
+#          Action: 'sts:AssumeRole'
+#      Path: /
+#      Policies:
+#      - PolicyName: Ec2Describe
+#        PolicyDocument:
+#          Version: '2012-10-17'
+#          Statement:
+#          - Effect: Allow
+#            Action:
+#            - 'ec2:DescribeInstances'
+#            - 'ec2:DescribeTags'
+#            - 'autoscaling:DescribeAutoScalingGroups'
+#            Resource: '*'
   PlacementGroup:
     Type: AWS::EC2::PlacementGroup
     Properties:
