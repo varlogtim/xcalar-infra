@@ -1703,6 +1703,57 @@ def convert_mem_size(sizeGB):
     return int(converted)
 
 '''
+    Given an IP of a machine with Xcalar,
+    get protocol and port used by Caddy from the Caddyfile
+
+    @returns list:
+        [ https|http, <port>]
+'''
+def get_caddy_config_info(ip):
+
+    caddyInfo = []
+
+    caddyfilePath = "/etc/xcalar/Caddyfile"
+    # should be a main line in Caddyfile of format http|https://0.0.0.0<:port>
+    grepCmd = "grep -oP '(http|https)://0\.0\.0\.0:(\d+)' " + caddyfilePath
+
+    # first make sure that line exists (helpful to check for this line not being there
+    # in case the next grep commands return no output)
+    status, stdout, stderr = run_ssh_cmd(ip, grepCmd)
+    if not stdout:
+        raise ValueError("\nCould not get main proxy line from Caddyfile {} on {}" \
+            "\n(Used grep cmd: {} - Does it need to be updated?)".format(caddyfilePath, ip, grepCmd))
+
+    # determine if http or https by piping in to another grep
+    # (doing 2 greps so don't catch http as subset of https)
+    status, stdout, stderr = run_ssh_cmd(ip, grepCmd + " | grep -oP '(http:|https:)' | grep -oP '(\w+)'")
+    if not stdout:
+        raise ValueError("\nCouldn't determine http vs. https from Caddyfile")
+    protocol = stdout.strip()
+
+    # now get the port
+    status, stdout, stderr = run_ssh_cmd(ip, grepCmd + " | grep -oP ':(\d+)' | grep -oP '(\d+)'")
+    if not stdout:
+        raise ValueError("\nCouldn't determine port from Caddyfile")
+    port = stdout.strip()
+
+    caddyInfo = [protocol, port]
+    return caddyInfo
+
+'''
+    Given an IP of a node with xcalar installed,
+    display a correct access URL for that machine based on its Caddy configuration
+'''
+def get_access_url(ip):
+    caddyInfo = get_caddy_config_info(ip)
+    caddyProtocol = caddyInfo[0]
+    caddyPort = caddyInfo[1]
+    # if port is default, don't display it
+    if (caddyPort == "443" and caddyProtocol == "https") or (caddyPort == "80" and caddyProtocol == "http"):
+        return "{}://{}".format(caddyProtocol, ip)
+    return "{}://{}:{}".format(caddyProtocol, ip, caddyPort)
+
+'''
     display a summary of work done
     (putting in own function right now so can deal with where to direct output... in here only
     once logging set up ill change
@@ -1733,13 +1784,15 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
             summary_str = summary_str + "\n|      --------------------------------------"
         summary_str = summary_str + "\n|\t Hostname: " + vmname + "\n" \
                                     "|\t IP      : " + vmip + "\n" + vm_ssh_creds
+
         if installer:
-                summary_str = summary_str + "\n|\n|\tAccess URL: https://{}:8443".format(vmip) + "\n" \
+            accessUrl = get_access_url(vmip)
+            summary_str = summary_str + "\n|\n|\tAccess URL: " + accessUrl + "\n" \
                 "|\tUsername (login page): " + LOGIN_UNAME + "\n" \
                 "|\tPassword (login page): " + LOGIN_PWORD
 
     if installer:
-        summary_str = summary_str + "\n| License key: \n|\n" + LICENSE_KEY
+        summary_str = summary_str + "\n|\n| License key * (see note): \n|\n" + LICENSE_KEY
 
     clussumm = ""
     if clustername:
@@ -1751,11 +1804,12 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
         if not '0' in clusternodedata:
             raise ValueError("No '0' entry in cluster node data: {}".format(clusternodedata))
         node0ip = clusternodedata['0']
+        accessUrl = get_access_url(node0ip)
 
         clussumm = "\n|\n=================== CLUSTER INFO ====================\n" \
             "|\n| Your VMs have been formed in to a cluster.\n" \
             "|\n| Cluster name: " + clustername  + "\n" \
-            "| Access URL:\n|\thttps://" + node0ip + ":8443\n" \
+            "| Access URL:\n|\t" + accessUrl + "\n" \
             "|\tLogin page Credentials: " + LOGIN_UNAME + " \ " + LOGIN_PWORD + "\n" \
             "|\n ------------------------------------------\n"
         for nodenum in clusternodedata.keys():
@@ -1763,12 +1817,12 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
             ip = clusternodedata[nodenum]
             vmname = get_vm_name(get_vm_id(ip))
             clussumm = clussumm + "|\n| Cluster Node" + nodenum + " is vm " + vmname + " [ip: " + ip + "]\n"
-        clussumm = clussumm + "|\n ------------------------------------------\n"
-
+        clussumm = clussumm + "|\n ------------------------------------------"
 
     summary_str = summary_str + clussumm + "\n|\n=====================================================" \
-                                        "\n-----------------------------------------------------\n"
-
+                                        "\n|\n|                  Notes              \n" \
+                                        "|\n| * LICENSE KEY: This is a dev key and will not work on RC builds\n" \
+                                        "|\n====================================================="
     # print each of the vm ids to stdout
     info("\n")
     for ip in vmips:
@@ -2109,4 +2163,3 @@ if __name__ == "__main__":
 
     # close connection
     close_connection(CONN)
-
