@@ -40,6 +40,8 @@ fi
 cp "$XLRGUIDIR/xcalar-gui/assets/stylesheets/css/xpe.css" "$CSSROOT"
 curl http://repo.xcalar.net/deps/bootstrap.css -o "$CSSROOT/bootstrap.css"
 curl http://repo.xcalar.net/deps/googlefonts.css -o "$CSSROOT/googlefonts.css"
+# need for Source Code Pro font to work
+cp -r "$XLRGUIDIR/3rd/fonts/sourcecodepro" "$CSSROOT"
 cp "$XLRGUIDIR/xcalar-gui/3rd/bower_components/jquery/dist/jquery.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/3rd/jquery-ui.js" "$JSROOT"
 cp "$XLRGUIDIR/xcalar-gui/assets/js/xpe/xpeCommon.js" "$JSROOT"
