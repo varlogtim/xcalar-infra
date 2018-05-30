@@ -36,6 +36,7 @@ BASHHELPER="$APP_DIR/Contents/Resources/guis/xpeGuis/xpeServer/local_installer_m
 
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
 INSTALLEDFILE="$APP_DIR/Contents/MacOS/.installed"
+GRAFANAMARK="$APP_DIR/Contents/MacOS/.grafana"
 
 XDROOT="$APP_DIR/Contents/Resources/guis/xcalar-gui"
 INSTALLROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Installer"
@@ -46,6 +47,12 @@ REVERTROOT="$APP_DIR/Contents/Resources/guis/xpeGuis/Reverter"
 ts=$(date +%FT%T%z)
 export TIMESTAMP="$ts"
 echo "timestamp: $ts" >&2
+
+# if grafana was set to be included at build time, set env variable
+# so server and js can easily check
+if [ -e "$GRAFANAMARK" ]; then
+    export INSTALL_GRAFANA=true
+fi
 
 # file to save server pid in so can kill it if needed
 SERVERPIDFILE=/tmp/XPE-${USER}.pid

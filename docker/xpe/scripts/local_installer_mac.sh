@@ -57,7 +57,11 @@ GRAFANA_TARBALL=grafana_graphite.tar.gz
 cmd_clear_containers() {
     cmd_ensure_docker_up
     debug "Remove old docker containers..."
-    docker rm -f $XCALAR_CONTAINER_NAME $GRAFANA_CONTAINER_NAME >/dev/null 2>&1 || true
+    docker rm -f $XCALAR_CONTAINER_NAME >/dev/null 2>&1 || true
+    # only remove grafana container if you're going to install it
+    if [ ! -z "$INSTALL_GRAFANA" ]; then
+        docker rm -f "$GRAFANA_CONTAINER_NAME" >/dev/null 2>&1 || true
+    fi
 }
 
 cmd_cleanly_delete_image() {
@@ -137,7 +141,16 @@ cmd_load_packed_images() {
     # and rename it to an unnamed image (keeping the xdpce:<old buld> as well)
     debug "load the packed images"
     gzip -dc "$XDPCE_TARBALL" | docker load -q
-    gzip -dc "$GRAFANA_TARBALL" | docker load -q
+    # if grafana supposed to be installed, make sure grafana tarball is here
+    # else fail early
+    if [ ! -z "$INSTALL_GRAFANA" ]; then
+        if [ -e "$GRAFANA_TARBALL" ]; then
+            gzip -dc "$GRAFANA_TARBALL" | docker load -q
+        else
+            echo "This build marked for Grafana install, but no Grafana image tar was included!" >&2
+            exit 1
+        fi
+    fi
 
     cd "$cwd"
 
@@ -181,8 +194,12 @@ cmd_create_xdpce() {
         extraArgs="$extraArgs --cpus=${3}"
     fi
     # if there is grafana container hook it to it as additional arg
-    if docker container inspect "$GRAFANA_CONTAINER_NAME"; then
-        extraArgs="$extraArgs --link $GRAFANA_IMAGE:graphite"
+    # only do if set to install, in case they've an old grafana container
+    # but this install is not including grafana
+    if [ ! -z "$INSTALL_GRAFANA" ]; then
+        if docker container inspect "$GRAFANA_CONTAINER_NAME" >/dev/null 2>&1; then
+            extraArgs="$extraArgs --link $GRAFANA_IMAGE:graphite"
+        fi
     fi
 
     # create license file and add env var to let Xcalar know where it is

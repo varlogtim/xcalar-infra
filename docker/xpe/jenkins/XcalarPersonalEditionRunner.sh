@@ -14,8 +14,22 @@ echo "current build number: $BUILD_NUMBER" >&2
 FINALDEST="$BUILD_DIRECTORY/$BUILD_NUMBER"
 mkdir -p $FINALDEST
 
+# contents of tarfile that will be packaged with the app and used by the installer
+# (all additional files required for an install on the host)
+# script generates these during build process; everythign needs to end up in FINALDEST
+TARCONTENTS="xdpce.tar.gz defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks/ sampleDatasets.tar.gz .caddyport"
 
-# build the xdpce container first. go to dir in xcalar where it lives
+# build the grafana-graphite container if requested.
+# (BUILD_GRAFANA is a boolean arg in the Jenkins job)
+if [ ! -z "$BUILD_GRAFANA" ]; then
+    cd $GRAFANADIR
+    make grafanatar
+    # it will have saved an image of the grafana container
+    cp grafana_graphite.tar.gz $FINALDEST
+    TARCONTENTS="$TARCONTENTS grafana_graphite.tar.gz"
+fi
+
+# build xdpce container
 cd "$XLRINFRADIR/docker/xdpce"
 make docker-image INSTALLER_PATH="$PATH_TO_XCALAR_INSTALLER"
 # running make will save an image of the container (xdpce.tar.gz)
@@ -34,12 +48,6 @@ cp "$XPEDIR/staticfiles/XD_package.json" "xcalar-gui/package.json"
 cp -R xcalar-gui/ $FINALDEST
 cp xdpce.tar.gz $FINALDEST
 
-# build the grafana-graphite container.
-cd $GRAFANADIR
-make grafanatar
-# it will have saved an image of the grafana container
-cp grafana_graphite.tar.gz $FINALDEST
-
 # set caddy port as a text file, so host side will know which Caddyport to use
 echo "$CADDY_PORT" > "$FINALDEST/.caddyport"
 
@@ -47,7 +55,6 @@ echo "$CADDY_PORT" > "$FINALDEST/.caddyport"
 cd $FINALDEST
 curl -f -L http://repo.xcalar.net/deps/sampleDatasets.tar.gz -O
 TARFILE=installertarball.tar.gz
-TARCONTENTS="xdpce.tar.gz grafana_graphite.tar.gz defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks/ sampleDatasets.tar.gz .caddyport"
 tar -czf "$TARFILE" $TARCONTENTS
 
 # run mkshar (ubuntu)

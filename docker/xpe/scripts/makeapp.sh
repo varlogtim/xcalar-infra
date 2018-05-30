@@ -90,5 +90,10 @@ fi
 cp "$XPEINFRAROOT/scripts/$EXECUTABLENAME" "$APPNAME/Contents/MacOS"
 chmod 777 "$APPNAME/Contents/MacOS/$EXECUTABLENAME"
 
+# if supposed to build grafana, add a mark for this for host-side install
+if [ ! -z "$BUILD_GRAFANA" ]; then
+    touch "$APPNAME/Contents/MacOS/.grafana"
+fi
+
 # zip app
 tar -zcf "$APPNAME.tar.gz" "$APPNAME"
