@@ -16,6 +16,8 @@
 
 set -e
 
+export BUILD_GRAFANA="${BUILD_GRAFANA:-true}"
+
 if [ -z "$XLRINFRADIR" ]; then
     echo "XLRINFRADIR should be set to run this script!" >&2
     exit 1
@@ -91,7 +93,7 @@ cp "$XPEINFRAROOT/scripts/$EXECUTABLENAME" "$APPNAME/Contents/MacOS"
 chmod 777 "$APPNAME/Contents/MacOS/$EXECUTABLENAME"
 
 # if supposed to build grafana, add a mark for this for host-side install
-if [ ! -z "$BUILD_GRAFANA" ]; then
+if [ "$BUILD_GRAFANA" = true ]; then
     touch "$APPNAME/Contents/MacOS/.grafana"
 fi
 

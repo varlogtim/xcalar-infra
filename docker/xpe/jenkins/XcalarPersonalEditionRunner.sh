@@ -7,6 +7,7 @@ export XLRINFRADIR="${XLRNFRADIR:-$(readlink -f $SCRIPTDIR/../../..)}"
 export XLRGUIDIR="${XLRGUIDIR:-$XLRINFRADIR/../xcalar-gui}"
 export GRAFANADIR="${GRAFANADIR:-$XLRINFRADIR/../graphite-grafana}"
 export CADDY_PORT="${CADDYPORT:-443}"
+export BUILD_GRAFANA="${BUILD_GRAFANA:-true}"
 
 XPEDIR="$XLRINFRADIR/docker/xpe"
 
@@ -21,7 +22,7 @@ TARCONTENTS="xdpce.tar.gz defaultAdmin.json .ipython/ .jupyter/ jupyterNotebooks
 
 # build the grafana-graphite container if requested.
 # (BUILD_GRAFANA is a boolean arg in the Jenkins job)
-if [ ! -z "$BUILD_GRAFANA" ]; then
+if [ "$BUILD_GRAFANA" = true ]; then
     cd $GRAFANADIR
     make grafanatar
     # it will have saved an image of the grafana container
