@@ -272,5 +272,13 @@ done
 
 if [ "$(($CURRENT_ITERATION + 1))" = "$NUMBER_ITERATIONS" ]; then
     # Kill previous instances of xcalar processes
-    sudo /opt/xcalar/bin/xcalarctl stop-supervisor || true
+    # not using xcalarctl here as that will create a support
+    # bundle with the core files and that is inconvenient to
+    # unzip/untar to look at large core files that the tests
+    # generate with miniDump off
+    sudo pkill -9 usrnode
+    sudo pkill -9 childnode
+    sudo pkill -9 xcmonitor
+    sudo pkill -9 xcmgmtd
+    sleep 60
 fi
