@@ -38,6 +38,7 @@ BASHHELPER="$RESOURCE_DIR/guis/xpeGuis/xpeServer/local_installer_mac.sh"
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
 INSTALLEDFILE="$APP_DIR/Contents/MacOS/.installed"
 GRAFANAMARK="$APP_DIR/Contents/MacOS/.grafana"
+DEVBLDMARK="$APP_DIR/Contents/MacOS/.dev"
 
 XDROOT="$RESOURCE_DIR/guis/xcalar-gui"
 INSTALLROOT="$RESOURCE_DIR/guis/xpeGuis/Installer"
@@ -52,10 +53,30 @@ ts=$(date +%FT%T%z)
 export TIMESTAMP="$ts"
 echo "timestamp: $ts" >&2
 
-# if grafana was set to be included at build time, set env variable
-# so server and js can easily check
-if [ -e "$GRAFANAMARK" ]; then
+# if app should build a Grafana container during install, set INSTALL_GRAFANA var
+# for the api server to detect
+
+# customer scenario:
+# set INSTALL_GRAFANA if .grafana config file present (gets set at bld time)
+if [ -z "$INSTALL_GRAFANA" ] && [ -e "$GRAFANAMARK" ]; then
     export INSTALL_GRAFANA=true
+elif [ -n "$INSTALL_GRAFANA" ] && [ "$INSTALL_GRAFANA" != true ]; then
+    # debug scenario:
+    # env var was pre-set as true/false to overwrite config file behavior
+    # only keep 'true' - unset for rest (the js that that relies on this env variable
+    # does not care what it's value is, only if it exists;
+    # it considers the env var existing as 'true' scenario and it not existing as 'false' scenario)
+    unset INSTALL_GRAFANA
+fi
+
+# if app is a dev bld (will display GUIs diff for dev vs. non-dev blds), set XPE_IS_DEV env var
+# for GUI code to pick up on
+
+# (same logic here for customer vs. dev scenario)
+if [ -z "$XPE_IS_DEV" ] && [ -e "$DEVBLDMARK" ]; then
+    export XPE_IS_DEV=true
+elif [ -n "$XPE_IS_DEV" ] && [ "$XPE_IS_DEV" != true ]; then
+    unset XPE_IS_DEV
 fi
 
 # file to save server pid in so can kill it if needed

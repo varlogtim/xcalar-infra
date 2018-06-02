@@ -8,6 +8,7 @@ export XLRGUIDIR="${XLRGUIDIR:-$XLRINFRADIR/../xcalar-gui}"
 export GRAFANADIR="${GRAFANADIR:-$XLRINFRADIR/../graphite-grafana}"
 export CADDY_PORT="${CADDYPORT:-443}"
 export BUILD_GRAFANA="${BUILD_GRAFANA:-true}"
+export DEV_BUILD="${DEV_BUILD:-true}"
 
 XPEDIR="$XLRINFRADIR/docker/xpe"
 

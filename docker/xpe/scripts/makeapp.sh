@@ -17,6 +17,7 @@
 set -e
 
 export BUILD_GRAFANA="${BUILD_GRAFANA:-true}"
+export DEV_BUILD="${DEV_BUILD:-true}"
 
 if [ -z "$XLRINFRADIR" ]; then
     echo "XLRINFRADIR should be set to run this script!" >&2
@@ -97,8 +98,12 @@ cp "$XPEINFRAROOT/scripts/$EXECUTABLENAME" "$APPNAME/Contents/MacOS"
 chmod 777 "$APPNAME/Contents/MacOS/$EXECUTABLENAME"
 
 # if supposed to build grafana, add a mark for this for host-side install
-if [ "$BUILD_GRAFANA" = true ]; then
+if $BUILD_GRAFANA; then
     touch "$APPNAME/Contents/MacOS/.grafana"
+fi
+# if a dev build (will expose right click feature in GUIs), add a mark for this for host-side install
+if $DEV_BUILD; then
+    touch "$APPNAME/Contents/MacOS/.dev"
 fi
 
 # zip app
