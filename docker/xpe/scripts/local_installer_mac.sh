@@ -182,10 +182,7 @@ cmd_create_xdpce() {
 
     debug "create xcalar container"
 
-    local container_image=xdpce:latest
-    if [[ ! -z "$1" ]]; then
-        container_image="$1"
-    fi
+    local container_image="${1:-xdpce:latest}"
     local extraArgs=""
     if [[ ! -z "$2" ]]; then
         extraArgs="$extraArgs --memory=${2}g"
@@ -246,7 +243,7 @@ cmd_verify_install() {
     cmd_ensure_docker_up
     local appImgSha
     if [ ! -f "$IMGID_FILE" ]; then
-        echo "Can not find image sha file to compare against for verification!" >&2
+        echo "Can not find image sha file to compare against for verification! (Looking at: $IMGID_FILE)" >&2
         exit 1
     else
         appImgSha=$(cat "$IMGID_FILE")
@@ -338,47 +335,54 @@ cmd_nuke() {
     fi
 }
 
+docker_up() {
+    docker version >/dev/null 2>&1
+}
+
+docker_installed() {
+    command -v docker >/dev/null 2>&1
+}
+
 # DOCKER UTILS # ##TODO: move in to own util file;
 # and the installer functions above in their own file?
 
+# optional arg 1: if true, do not start Docker daemon, just wait for it to come up
+# optional arg 2: seconds to wait before timing out waiting for Docker to come up
 cmd_ensure_docker_up() {
-    if ! docker version >/dev/null 2>&1; then
-        cmd_start_wait_docker
+    local dontStartDocker="${1:-false}"
+    if ! docker_up; then
+        if [ "$dontStartDocker" != true ]; then
+            cmd_docker_start
+        fi
+        cmd_docker_wait "$2"
     fi
 }
 
 # starts docker and waits to come up, unless env variable
 # NODOCKERSTART is set
-cmd_start_wait_docker() {
-    local timeout=120 # timeout after which consider can't bring up docker
-    local remainingTime=$timeout
-    local pauseTime=1
+cmd_docker_start() {
     if [ ! -z "$NODOCKERSTART" ]; then
-        exit 1
-    fi
-    open -a Docker.app
-    until docker version >/dev/null 2>&1 || [ "$remainingTime" -eq "0" ]; do
-        debug "docker daemon not avaiable yet $remainingTime"
-        sleep "$pauseTime"
-        remainingTime=$(($remainingTime - $pauseTime))
-    done
-
-    if ! docker version >/dev/null 2>&1; then
-        # timed out waiting for daemon to come up
-        echo "Timed out after waiting $timeout seconds for Docker daemon to come up!" >&2
-        exit 1
+        echo "Will not start Docker - NODOCKERSTART env variable detected" >&2
+    else
+        open -a Docker.app
     fi
 }
 
-cmd_check_docker() {
-    local installedCheck
-    if ! installedCheck=$(docker version 2>&1); then
-        if [[ $installedCheck = *"command not found"* ]]; then
-            exit 1
-        else
-            # docker is installed; daemon is not available
-            exit 2
-        fi
+# optional arg: number of seconds to wait before timing out waiting for Docker to come up
+cmd_docker_wait() {
+    local timeout="${1:-120}"
+    local remainingTime=$timeout
+    local pauseTime=1
+    until docker_up || [ "$remainingTime" -eq "0" ]; do
+        debug "docker daemon not avaiable yet $remainingTime"
+        sleep "$pauseTime"
+        remainingTime=$((remainingTime - pauseTime))
+    done
+
+    if ! docker_up; then
+        # timed out waiting for daemon to come up
+        echo "Timed out after waiting $timeout seconds for Docker daemon to come up!" >&2
+        exit 1
     fi
 }
 
