@@ -74,6 +74,7 @@ def crossdomain(origin=None, methods=None, headers=None,
 app = Flask(__name__)
 
 app.config.from_object('config')
+
 #app.config.from_envvar('XC_LICENSE_SERVER_SETTINGS')
 
 # licenseKeyDb = app.config["LICENSE_KEY_DB"]
@@ -127,7 +128,7 @@ def auditTrail(userId, action, message):
 #     initDb()
 #     print 'Database initialized.'
 
-@app.route('/license/api/v1.0/keyinfo/<string:key>', methods=['GET'])
+@app.route('/license/api/v1.0/keyinfo/<path:key>', methods=['GET'])
 @crossdomain(origin="*")
 def fetchInfo(key):
     keyInfo = getKeyInfo(key=key)
@@ -435,7 +436,7 @@ def getDeployments(organizationName):
             retVals.append(dictionary)
         return jsonify(retVals)
 
-@app.route('/license/api/v1.0/activations/<string:key>', methods=['GET'])
+@app.route('/license/api/v1.0/activations/<path:key>', methods=['GET'])
 def activations(key):
     with getDb().cursor() as cursor:
         actives = []
