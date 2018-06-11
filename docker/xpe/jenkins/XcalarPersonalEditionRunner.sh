@@ -82,5 +82,8 @@ docker rmi -f grafana_graphite:"$BUILD_NUMBER" || true
 rm -r $TARCONTENTS
 rm "$TARFILE"
 
+# symlink to this bld
+cd "$BUILD_DIRECTORY" && ln -sfn "$BUILD_NUMBER" lastSuccessful
+
 # printing to stdout for other scripts to call
 echo $FINALDEST
