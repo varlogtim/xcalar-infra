@@ -28,10 +28,10 @@ debug() {
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 STAGING_DIR="/tmp/xpestaging"
 IMGID_FILE="$SCRIPT_DIR/../../../Data/.imgid"
-XCALAR_IMAGE=xdpce
-GRAFANA_IMAGE=grafana_graphite
-XCALAR_CONTAINER_NAME=xdpce
-GRAFANA_CONTAINER_NAME=grafana_graphite
+XCALAR_IMAGE_REPO=xdpce
+GRAFANA_IMAGE_REPO=grafana_graphite
+XCALAR_CONTAINER=xdpce
+GRAFANA_CONTAINER=grafana_graphite
 # installer dirs created on the local machine
 # these should remain even after installation complete, as long as they want XPE)
 APPDATA="$HOME/Library/Application Support/Xcalar Design"
@@ -58,10 +58,10 @@ GRAFANA_TARBALL=grafana_graphite.tar.gz
 cmd_clear_containers() {
     cmd_ensure_docker_up
     debug "Remove old docker containers..."
-    docker rm -f $XCALAR_CONTAINER_NAME >/dev/null 2>&1 || true
+    docker rm -fv $XCALAR_CONTAINER >/dev/null 2>&1 || true
     # only remove grafana container if you're going to install it
     if [ ! -z "$INSTALL_GRAFANA" ]; then
-        docker rm -f "$GRAFANA_CONTAINER_NAME" >/dev/null 2>&1 || true
+        docker rm -fv "$GRAFANA_CONTAINER" >/dev/null 2>&1 || true
     fi
 }
 
@@ -75,7 +75,7 @@ cmd_cleanly_delete_image() {
     cmd_ensure_docker_up
 
     # remove any containers (running or not) hosting this image
-    docker ps -a -q --filter ancestor="$1" --format="{{.ID}}" | xargs -I {} docker rm -f {}
+    docker ps -a -q --filter ancestor="$1" --format="{{.ID}}" | xargs -I {} docker rm -fv {}
     # now remove the image itself
     docker rmi -f "$1"
 
@@ -170,8 +170,8 @@ cmd_create_grafana() {
     -p 8125:8125/udp \
     -p 8126:8126 \
     -p 2003:2003  \
-    --name $GRAFANA_CONTAINER_NAME \
-    $GRAFANA_IMAGE
+    --name "$GRAFANA_CONTAINER" \
+    "$GRAFANA_IMAGE_REPO:latest"
 }
 
 # create xdpce container
@@ -183,7 +183,7 @@ cmd_create_xdpce() {
 
     debug "create xcalar container"
 
-    local container_image="${1:-xdpce:latest}"
+    local container_image="${1:-$XCALAR_IMAGE_REPO:latest}"
     local extraArgs=""
     if [[ ! -z "$2" ]]; then
         extraArgs="$extraArgs --memory=${2}g"
@@ -195,8 +195,9 @@ cmd_create_xdpce() {
     # only do if set to install, in case they've an old grafana container
     # but this install is not including grafana
     if [ ! -z "$INSTALL_GRAFANA" ]; then
-        if docker container inspect "$GRAFANA_CONTAINER_NAME" >/dev/null 2>&1; then
-            extraArgs="$extraArgs --link $GRAFANA_IMAGE:graphite"
+        if docker container inspect "$GRAFANA_CONTAINER" >/dev/null 2>&1; then
+            # the link to Grafana breaks if you specify the container name as --link instead of this
+            extraArgs="$extraArgs --link $GRAFANA_IMAGE_REPO:graphite"
         fi
     fi
 
@@ -220,7 +221,7 @@ cmd_create_xdpce() {
     -v "$LOCALXCEHOME":"$XCALAR_ROOT" \
     -v "$LOCALLOGDIR":/var/log/xcalar \
     -p $XEM_PORT_NUMBER:15000 \
-    --name "$XCALAR_CONTAINER_NAME" \
+    --name "$XCALAR_CONTAINER" \
     -p 8818:"${CADDY_PORT:-443}" \
     $extraArgs $MNTARGS "$container_image" bash
 }
@@ -230,7 +231,7 @@ cmd_start_xcalar() {
 
     debug "Start xcalar service inside the docker"
     # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
-    docker exec --user xcalar "$XCALAR_CONTAINER_NAME" /opt/xcalar/bin/xcalarctl start
+    docker exec --user xcalar "$XCALAR_CONTAINER" /opt/xcalar/bin/xcalarctl start
 }
 
 cmd_stop_xcalar() {
@@ -238,7 +239,7 @@ cmd_stop_xcalar() {
 
     debug "Stop xcalar service inside the docker"
     # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
-    docker exec --user xcalar "$XCALAR_CONTAINER_NAME" /opt/xcalar/bin/xcalarctl stop
+    docker exec --user xcalar "$XCALAR_CONTAINER" /opt/xcalar/bin/xcalarctl stop
 }
 
 cmd_verify_install() {
@@ -251,8 +252,8 @@ cmd_verify_install() {
         appImgSha=$(cat "$IMGID_FILE")
     fi
     local userlatest
-    if ! userlatest=$(docker image inspect xdpce:latest -f '{{ .Id }}'); then
-       echo "No image sha found for latest xdpce!  Install was not successful!" >&2
+    if ! userlatest=$(docker image inspect "$XCALAR_IMAGE_REPO":latest -f '{{ .Id }}'); then
+       echo "No image sha found for latest $XCALAR_IMAGE_REPO:latest!  Install was not successful!" >&2
        exit 1
     fi
     if [ "$userlatest" != "$appImgSha" ]; then
@@ -277,22 +278,22 @@ cmd_revert_xdpce() {
     fi
 
     # check if xdpce container exists in expected name
-    if docker container inspect "$XCALAR_CONTAINER_NAME"; then
+    if docker container inspect "$XCALAR_CONTAINER"; then
         # get SHA of image hosted by current xdpce container, if any
-        local curr_img_sha=$(docker container inspect --format='{{.Image}}' "$XCALAR_CONTAINER_NAME")
+        local curr_img_sha=$(docker container inspect --format='{{.Image}}' "$XCALAR_CONTAINER")
 
         # compares sha to check if already hosting the requested img
         local revert_img_sha=$(docker image inspect --format='{{.Id}}' "$revert_img_id")
 
         if [[ "$curr_img_sha" == $revert_img_sha ]]; then
-            debug "$revert_img_id already hosted by $XCALAR_CONTAINER_NAME - revert is unecessary!"
+            debug "$revert_img_id already hosted by $XCALAR_CONTAINER - revert is unecessary!"
             exit 0
         fi
 
         # delete the container
-        docker rm -f "$XCALAR_CONTAINER_NAME"
+        docker rm -fv "$XCALAR_CONTAINER"
     else
-        debug "there is NOT a $XCALAR_CONTAINER_NAME container"
+        debug "there is NOT a $XCALAR_CONTAINER container"
     fi
 
     # now call to create the new container
@@ -305,7 +306,7 @@ cmd_remove_containers() {
         exit 1
     fi
     local containerId="$1"
-    docker ps -a | awk '{ print $1,$2 }' | grep -w "$containerId" | awk '{print $1 }' | xargs -I {} docker rm -f {} || true
+    docker ps -a | awk '{ print $1,$2 }' | grep -w "$containerId" | awk '{print $1 }' | xargs -I {} docker rm -fv {} || true
 }
 
 cmd_remove_images() {
@@ -322,12 +323,12 @@ cmd_nuke() {
     cmd_ensure_docker_up
 
     debug "Remove all the xdpce containers and images"
-    cmd_remove_containers "$XCALAR_CONTAINER_NAME"
-    cmd_remove_images "$XCALAR_IMAGE"
+    cmd_remove_containers "$XCALAR_CONTAINER"
+    cmd_remove_images "$XCALAR_IMAGE_REPO"
 
     debug "Remove all grafana containers and images"
-    cmd_remove_containers "$GRAFANA_CONTAINER_NAME"
-    cmd_remove_images "$GRAFANA_IMAGE"
+    cmd_remove_containers "$GRAFANA_CONTAINER"
+    cmd_remove_images "$GRAFANA_IMAGE_REPO"
 
     if [ ! -z "$1" ]; then
         debug "Remove all app data (specified full uninstall)"
@@ -390,8 +391,8 @@ cmd_docker_wait() {
 
 cmd_bring_up_containers() {
     cmd_ensure_docker_up
-    docker start xdpce
-    docker start grafana_graphite || true
+    docker start "$XCALAR_CONTAINER"
+    docker start "$GRAFANA_CONTAINER" || true
 }
 
 command="$1"
