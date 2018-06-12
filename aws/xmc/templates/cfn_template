@@ -41,7 +41,7 @@ Parameters:
     Description: ID of an existing Amazon Machine Image (AMI)
     Type: AWS::EC2::Image::Id
     ConstraintDescription: Must be the name of an existing AMI.
-    Default: ami-14c5486b
+    Default: ami-0054c6c4e445a0abe
   BootstrapUrl:
     Description: XCE Bootstrap Script
     Type: String

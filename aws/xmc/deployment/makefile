@@ -34,16 +34,10 @@
 TABLE_NAME = xmc_table#<< DYNAMO TABLE NAME , just leave it as is unless multiple instances of the tool needed on one AWS account
 BUCKET_NAME = abilgintest# << Xcalar reference bucket, customer should have the exact same structure and content in their own bucket
 VERSION = 1
-AWS_PROFILE = default# << AWS Account profile stored in &HOME/.aws/credentials file
 REGION = us-west-2# Region of the reference s3 bucket, it is used by script to build path of cfn yaml files
-
 # STEP 5 - Copy everything to Xcalar reference bucket
 finalize: stage
-	aws --profile $(AWS_PROFILE) s3 cp --recursive --acl public-read ./stage/src s3://$(BUCKET_NAME)/xmc
-	echo Cloudformation template files locations
-	echo https://s3-$(REGION).amazonaws.com/abilgintest/xmc/dep.yaml
-	echo https://s3-$(REGION).amazonaws.com/abilgintest/xmc/dep_ui.yaml
-	echo Provide these links to customer
+	aws  s3 cp --recursive --acl public-read ./stage/xmc s3://$(BUCKET_NAME)/xmc
 	
 # STEP 1 - Create Temporary directories
 directories : 
@@ -52,7 +46,7 @@ directories :
 	rm -rf ./source_base
 	rm -rf ./package
 	mkdir stage
-	mkdir stage/src
+	mkdir stage/xmc
 	mkdir source_base
 	mkdir source_base/ui
 	
@@ -64,26 +58,25 @@ copy_source : directories
 
 # STEP 3 - copy source code to temporary folders , replace dynamo table names in source code with given instance name
 sed_ops : copy_source
-	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/getFromDB.js > ./stage/src/getFromDB.js
-	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/postToDB.js > ./stage/src/postToDB.js
-	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/createCluster.js > ./stage/src/createCluster.js
-	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/deleteCluster.js > ./stage/src/deleteCluster.js
-	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/listClusters.js > ./stage/src/listClusters.js
-	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/templates/dep.yaml.template > ./stage/src/dep.yaml
-	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/templates/dep_ui.yaml.template > ./stage/src/dep_ui.yaml
-	cp ./source_base/templates/cfn_template ./stage/src
-	cp ./source_base/lambda/parser.js ./stage/src
-	cp -r ./source_base/ui ./stage/src
-	rm -rf ./stage/src/ui/node_modules 
+	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/getFromDB.js > ./stage/xmc/getFromDB.js
+	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/postToDB.js > ./stage/xmc/postToDB.js
+	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/createCluster.js > ./stage/xmc/createCluster.js
+	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/deleteCluster.js > ./stage/xmc/deleteCluster.js
+	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/lambda/listClusters.js > ./stage/xmc/listClusters.js
+	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/templates/dep.yaml.template > ./stage/xmc/dep.yaml
+	sed 's/XMC_TABLE_NAME/$(TABLE_NAME)/g' ./source_base/templates/dep_ui.yaml.template > ./stage/xmc/dep_ui.yaml
+	cp ./source_base/templates/cfn_template ./stage/xmc
+	cp -r ./source_base/ui ./stage/xmc
+	rm -rf ./stage/xmc/ui/node_modules 
 		
 # STEP 4 - create zip files for lambdas , clean up rest
 stage : sed_ops
-	zip -j ./stage/src/createCluster.zip ./stage/src/createCluster.js ./stage/src/cfn_template
-	zip -j ./stage/src/listClusters.zip ./stage/src/listClusters.js ./stage/src/parser.js
-	zip -j ./stage/src/deleteCluster.zip ./stage/src/deleteCluster.js
-	zip -j ./stage/src/postToDB.zip ./stage/src/postToDB.js
-	zip -j ./stage/src/getFromDB.zip ./stage/src/getFromDB.js
-	rm ./stage/src/*.js
-	rm ./stage/src/cfn_template	
+	zip -j ./stage/xmc/createCluster.zip ./stage/xmc/createCluster.js ./stage/xmc/cfn_template
+	zip -j ./stage/xmc/listClusters.zip ./stage/xmc/listClusters.js
+	zip -j ./stage/xmc/deleteCluster.zip ./stage/xmc/deleteCluster.js
+	zip -j ./stage/xmc/postToDB.zip ./stage/xmc/postToDB.js
+	zip -j ./stage/xmc/getFromDB.zip ./stage/xmc/getFromDB.js
+	rm ./stage/xmc/*.js
+	rm ./stage/xmc/cfn_template	
 
     	
