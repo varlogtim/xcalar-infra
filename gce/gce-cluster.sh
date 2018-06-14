@@ -102,6 +102,7 @@ if [ -z "$DISK_SIZE" ]; then
 fi
 
 SWAP_SIZE=${SWAP_SIZE:-$RAM_SIZE}
+SERDES_SIZE=${SERDES_SIZE:-$SWAP_SIZE}
 
 if ! command -v gcloud; then
     if test -e "$XLRDIR/bin/gcloud-sdk.sh"; then
@@ -207,7 +208,7 @@ res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
 fi
-gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SERDES_DISKS[@]}"
+gcloud compute disks create --size=${SERDES_SIZE}GB --type=pd-ssd "${SERDES_DISKS[@]}"
 res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
