@@ -126,11 +126,14 @@ cleanup() {
 
 # start XPE express server
 
-"$NODEBIN" "$INSTALLSERVER" > "$APPLOGDIR"/"$TIMESTAMP"_serverInstallLog 2>&1 &
+serverLogPath="$APPLOGDIR"/"$TIMESTAMP"_serverLog
+"$NODEBIN" "$INSTALLSERVER" > "$serverLogPath" 2>&1 &
 SERVER_PID=$!
 echo "server pid: $SERVER_PID" >&2
 echo "$SERVER_PID" > "$SERVERPIDFILE" >&2
 waitForServer
+# put a link to the log so can keep track of latest, for multiple app runs
+ln -sf "$serverLogPath" "$APPLOGDIR"/latest_serverLog
 
 ########## CHECK FOR ENTRYPOINT DEPENDENCIES ######
 
