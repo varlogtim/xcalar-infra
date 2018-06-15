@@ -1,10 +1,9 @@
 .PHONY: image stop run logs logsf xccli shell
 all: image run
 
-BUILD_NUMBER ?= latest # Jenkins env variable
-#CONTAINER_IMAGE ?= xdpce:$(BUILD_NUMBER)
 CONTAINER_IMAGE ?= xdpce
 CONTAINER_NAME  ?= xdpce
+TARFILE_NAME ?= xdpce.tar.gz
 TZ ?= America/Los_Angeles
 INSTALLER_PATH ?= /netstore/qa/Downloads/ReleaseCandidates/xcalar-1.2.3-RC4/20171024-3c9a47f4/prod/xcalar-1.2.3-1296-installer
 DEFAULT_CFG_PATH ?= default.cfg
@@ -84,9 +83,10 @@ commit:
 
 save:
     ifneq ($(XPE),)
-		docker tag $(CONTAINER_IMAGE):latest $(CONTAINER_IMAGE):$(BUILD_NUMBER)
+		bash -x ../xpe/scripts/tagxpe.sh create_xpe_tar $(CONTAINER_IMAGE):latest $(TARFILE_NAME)
+    else
+		docker save $(CONTAINER_IMAGE) | gzip > $(TARFILE_NAME)
     endif
-	docker save $(CONTAINER_IMAGE) | gzip > $(CONTAINER_NAME).tar.gz
 
 runWithCfg: image stop clean
 	docker run -d -t -v $(DEFAULT_CFG_PATH):/etc/xcalar/default.cfg $(INSTALLER_ARGS)

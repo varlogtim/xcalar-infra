@@ -28,9 +28,9 @@ debug() {
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 STAGING_DIR="/tmp/xpestaging"
 IMGID_FILE="$SCRIPT_DIR/../../../Data/.imgid"
-XCALAR_IMAGE_REPO=xdpce
+XCALAR_IMAGE_REPO=xcalar_design
 GRAFANA_IMAGE_REPO=grafana_graphite
-XCALAR_CONTAINER=xdpce
+XCALAR_CONTAINER=xcalar_design
 GRAFANA_CONTAINER=grafana_graphite
 # installer dirs created on the local machine
 # these should remain even after installation complete, as long as they want XPE)
@@ -58,27 +58,14 @@ GRAFANA_TARBALL=grafana_graphite.tar.gz
 cmd_clear_containers() {
     cmd_ensure_docker_up
     debug "Remove old docker containers..."
-    docker rm -fv $XCALAR_CONTAINER >/dev/null 2>&1 || true
+    docker rm -fv "$XCALAR_CONTAINER" >/dev/null 2>&1 || true
     # only remove grafana container if you're going to install it
     if [ ! -z "$INSTALL_GRAFANA" ]; then
         docker rm -fv "$GRAFANA_CONTAINER" >/dev/null 2>&1 || true
     fi
-}
 
-cmd_cleanly_delete_image() {
-
-    if [[ -z "$1" ]]; then
-        echo "No image ID supplied to cleanly_delete_image. you must supply an image ID to remove!" >&2
-        exit 1
-    fi
-
-    cmd_ensure_docker_up
-
-    # remove any containers (running or not) hosting this image
-    docker ps -a -q --filter ancestor="$1" --format="{{.ID}}" | xargs -I {} docker rm -fv {}
-    # now remove the image itself
-    docker rmi -f "$1"
-
+    # untag current
+    docker rmi "$XCALAR_IMAGE_REPO":current || true
 }
 
 cmd_setup () {
@@ -132,16 +119,7 @@ cmd_load_packed_images() {
 
     cd "$STAGING_DIR"
 
-    # each load, will have 2 versions of the image:
-    # xdpce:latest and xdpce:<build number> (same for grafana-graphite)
-    # want to keep previous install images, but only need one - the xdpce:<old build number>
-    # (if you specify 'rmi image' without a tag, will remove image:latest)
-    # also if you do not do this, when you load the new images in the tar
-    # (xdpce:latest and xdpce:<new build number>, and similar for grafana-graphite)
-    # will detect existing xdpce:latest (the one from the old build),
-    # and rename it to an unnamed image (keeping the xdpce:<old buld> as well)
     debug "load the packed images"
-    gzip -dc "$XDPCE_TARBALL" | docker load -q
     # if grafana supposed to be installed, make sure grafana tarball is here
     # else fail early
     if [ ! -z "$INSTALL_GRAFANA" ]; then
@@ -152,6 +130,22 @@ cmd_load_packed_images() {
             exit 1
         fi
     fi
+
+    # each xdpce tarball includes an image w/ 3 tags:
+    # <image name>:current, <image name>:lastInstall, and <image name>:<build number>
+    # When the new images are loaded, Docker will detect existing images named
+    # <image name>:current and <image name>:lastInstall
+    # and untag them, leaving the <build number> tag only from that previously installed image
+    # (want to keep these previous images, with their build number tag only)
+    # So make sure there is SOME unique identifying tag across installs,
+    # if they are always same, the last 'untag' of a previously installed image
+    # will leave it unnamed
+
+    gzip -dc "$XDPCE_TARBALL" | docker load -q
+
+    # dev check: ensure there is xpdce:lastInstall, and it is now the img id
+    # associated with this installer, in case tag names change on build side
+    cmd_compare_against_installer_img "$XCALAR_IMAGE_REPO":lastInstall
 
     cd "$cwd"
 
@@ -175,15 +169,15 @@ cmd_create_grafana() {
 }
 
 # create xdpce container
-#    1st arg: image to use (Defaults to xdpce:latest)
-#   2nd arg: ram (int in gb)
+#    1st arg: image to use (Defaults to <image name>:lastInstall)
+#    2nd arg: ram (int in gb)
 #    3rd arg: num cores
 cmd_create_xdpce() {
     cmd_ensure_docker_up
 
     debug "create xcalar container"
 
-    local container_image="${1:-$XCALAR_IMAGE_REPO:latest}"
+    local container_image="${1:-$XCALAR_IMAGE_REPO:lastInstall}"
     local extraArgs=""
     if [[ ! -z "$2" ]]; then
         extraArgs="$extraArgs --memory=${2}g"
@@ -224,6 +218,10 @@ cmd_create_xdpce() {
     --name "$XCALAR_CONTAINER" \
     -p 8818:"${CADDY_PORT:-443}" \
     $extraArgs $MNTARGS "$container_image" bash
+
+    # tag the image as current
+    # (this will clear out existing <image name>:current tag, if any)
+    docker tag "$container_image" "$XCALAR_IMAGE_REPO":current
 }
 
 cmd_start_xcalar() {
@@ -242,7 +240,7 @@ cmd_stop_xcalar() {
     docker exec --user xcalar "$XCALAR_CONTAINER" /opt/xcalar/bin/xcalarctl stop
 }
 
-cmd_verify_install() {
+cmd_compare_against_installer_img() {
     cmd_ensure_docker_up
     local appImgSha
     if [ ! -f "$IMGID_FILE" ]; then
@@ -251,15 +249,20 @@ cmd_verify_install() {
     else
         appImgSha=$(cat "$IMGID_FILE")
     fi
-    local userlatest
-    if ! userlatest=$(docker image inspect "$XCALAR_IMAGE_REPO":latest -f '{{ .Id }}'); then
-       echo "No image sha found for latest $XCALAR_IMAGE_REPO:latest!  Install was not successful!" >&2
+    local imgname="$1"
+    local imgid
+    if ! imgid=$(docker image inspect "$imgname" -f '{{ .Id }}'); then
+       echo "No image sha found for $imgname!" >&2
        exit 1
     fi
-    if [ "$userlatest" != "$appImgSha" ]; then
-       echo "Latest image of Xcalar is not image associated with this app" >&2
+    if [ "$imgid" != "$appImgSha" ]; then
+       echo "$imgname is not the image associated with this app" >&2
        exit 1
     fi
+}
+
+cmd_verify_install() {
+    cmd_compare_against_installer_img "$XCALAR_IMAGE_REPO":current
 }
 
 cmd_cleanup() {
@@ -300,22 +303,54 @@ cmd_revert_xdpce() {
     cmd_create_xdpce "$revert_img_id"
 }
 
-cmd_remove_containers() {
+# Remove any container with a exact match to a name or id
+# the container does not need to be running
+# @TODO: is this redundant?  Can you ever have more than one match?
+cmd_remove_docker_containers() {
     if [ -z "$1" ]; then
         echo "You must supply a container to remove" >&2
         exit 1
     fi
-    local containerId="$1"
-    docker ps -a | awk '{ print $1,$2 }' | grep -w "$containerId" | awk '{print $1 }' | xargs -I {} docker rm -fv {} || true
+    cmd_ensure_docker_up
+    docker container inspect "$1" -f '{{ .Id }}' | xargs -I {} docker rm -fv {} || true
 }
 
-cmd_remove_images() {
+# given name of a Docker image repo, for each of the images
+# having that name, remove all container associated with it and itself 
+cmd_remove_docker_image_repo() {
     if [ -z "$1" ]; then
         echo "You must supply an image to remove" >&2
         exit 1
     fi
-    local imageId="$1"
-    docker images | awk '$1 ~ /^'$imageId'$/ { print $3}' | xargs -I {} docker rmi -f {} || true # not working w " " in the grep
+    cmd_ensure_docker_up
+    # get ID of all Docker images in the repo; cleanly delete them
+    # note: image w multiple tags will get duplicate entries since they will have same id
+    docker images | awk '{ print $1,$3 }' | awk '$1 ~ /^'$1'$/ { print $2}' | while read line
+    do
+        if [ -n "$line" ]; then # getting some blank lines
+            cmd_cleanly_delete_docker_image "$line"
+        fi
+    done
+}
+
+# Given a unique identifier for an image
+# (short id, sha, or <image>:<tag>),
+# delete containers hosting that image, and then the image itself
+# will not fail if image does not exist
+cmd_cleanly_delete_docker_image() {
+    if [ -z "$1" ]; then
+        echo "Must supply an image to remove (id, sha, or <image>:<tag>)" >&2
+        exit 1
+    fi
+
+    cmd_ensure_docker_up
+
+    # remove any containers (running or not) hosting this image
+    docker ps -a -q --filter ancestor="$1" --format="{{.ID}}" | xargs -I {} docker rm -fv {} || true
+    # remove the image itself
+    # If you supplied an image ID - this will delete ALL images with that id (other taggged images)
+    # If you supplied <img>:<tag>, it will delete ONLY that specific image (other tagged images on the same image id will remain)
+    docker rmi -f "$1" || true
 }
 
 # nuke all the xdpce containers and images; optional $1 removes local xpe dir
@@ -323,12 +358,12 @@ cmd_nuke() {
     cmd_ensure_docker_up
 
     debug "Remove all the xdpce containers and images"
-    cmd_remove_containers "$XCALAR_CONTAINER"
-    cmd_remove_images "$XCALAR_IMAGE_REPO"
+    cmd_remove_docker_containers "$XCALAR_CONTAINER"
+    cmd_remove_docker_image_repo "$XCALAR_IMAGE_REPO"
 
     debug "Remove all grafana containers and images"
-    cmd_remove_containers "$GRAFANA_CONTAINER"
-    cmd_remove_images "$GRAFANA_IMAGE_REPO"
+    cmd_remove_docker_containers "$GRAFANA_CONTAINER"
+    cmd_remove_docker_image_repo "$GRAFANA_IMAGE_REPO"
 
     if [ ! -z "$1" ]; then
         debug "Remove all app data (specified full uninstall)"

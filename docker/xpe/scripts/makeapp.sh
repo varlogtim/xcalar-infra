@@ -16,17 +16,11 @@
 
 set -e
 
-export BUILD_GRAFANA="${BUILD_GRAFANA:-true}"
-export DEV_BUILD="${DEV_BUILD:-true}"
-
-if [ -z "$XLRINFRADIR" ]; then
-    echo "XLRINFRADIR should be set to run this script!" >&2
-    exit 1
-fi
-if [ -z "$XLRGUIDIR" ]; then
-    echo "XLRGUIDIR should be set to run this script!" >&2
-    exit 1
-fi
+: "${XLRINFRADIR:?Need to set non-empty XLRINFRADIR}"
+: "${XLRGUIDIR:?Need to set non-empty XLRGUIDIR}"
+: "${BUILD_GRAFANA:?Need to set true or false env var BUILD_GRAFANA}"
+: "${DEV_BUILD:?Need to set true or false env var DEV_BUILD}"
+: "${XCALAR_IMAGE_NAME:?Need to set name of Docker image for .imgid app file, as env var XCALAR_IMAGE_NAME}"
 
 cwd=$(pwd)
 
@@ -86,8 +80,8 @@ cd "$cwd"
 # file to indicate which img is associated with this installer bundle
 # so host program will know weather to open installer of main app at launch
 # this should have been made by Jenkins job and in cwd
-if ! imgsha=$(docker image inspect xdpce:latest -f '{{ .Id }}' 2>/dev/null); then
-    echo "No xdpce:latest!!" >&2
+if ! imgsha=$(docker image inspect $XCALAR_IMAGE_NAME:lastInstall -f '{{ .Id }}' 2>/dev/null); then
+    echo "No $XCALAR_IMAGE_NAME:lastInstall to get image sha from!!" >&2
     exit 1
 else
     echo "$imgsha" > "$APPNAME/Contents/Resources/Data/.imgid"

@@ -4,21 +4,7 @@ set -e
 
 : "${BUILD_DIRECTORY:?Need to set non-empty env var BUILD_DIRECTORY}"
 : "${BUILD_NUMBER:?Need to set non-empty env var BUILD_NUMBER}"
-
-# remove the docker images created, regardless of build failure/success
-# if you don't remove the images, next time Jenkins slave runs this job,
-# when it saves the xdpce and grafana images during Make, will be saving all
-# existing tagged images, from previous builds too
-# do not remove main grafana image though - do not want to rebuild everytime
-cleanup() {
-    docker rm -f xdpce || true
-    docker rmi -f xdpce:latest || true
-    docker rmi -f xdpce:"$BUILD_NUMBER" || true
-    docker rm -f grafana_graphite || true
-    docker rmi -f grafana_graphite:"$BUILD_NUMBER" || true
-}
-
-trap cleanup EXIT SIGINT SIGTERM # SIGTERM should handle if you abort the job through Jenkins
+: "${PATH_TO_XCALAR_INSTALLER:?Need to set netstore rpm installer path as PATH_TO_XCALAR_INSTALLER)}"
 
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export XLRINFRADIR="${XLRNFRADIR:-$(readlink -f $SCRIPTDIR/../../..)}"
@@ -27,6 +13,30 @@ export GRAFANADIR="${GRAFANADIR:-$XLRINFRADIR/../graphite-grafana}"
 export CADDY_PORT="${CADDYPORT:-443}"
 export BUILD_GRAFANA="${BUILD_GRAFANA:-true}"
 export DEV_BUILD="${DEV_BUILD:-true}"
+export OFFICIAL_RELEASE="${OFFICIAL_RELEASE:-false}" # if true will tag the Docker images with official Xcalar build Strings
+export XCALAR_IMAGE_NAME="${XCALAR_IMAGE_NAME:-xcalar_design}"
+export XCALAR_CONTAINER_NAME="${XCALAR_CONTAINER_NAME:-xcalar_design}"
+
+BASH_HELPER_FUNCS="$SCRIPTDIR/../scripts/local_installer_mac.sh"
+
+# remove build-specific Docker artefacts regardless of build failure/success
+# keeping grafana:latest so it'll be in cache at next build and won't need to re-build
+# but for Xcalar image, clearing repo entirely each time; don't want to cache
+# (mostly in case xdpce Dockerfile changes in future to incorporate src code checkout
+# which wouldn't want to cache; the build time it saves from the cache is about < 1 min so not worth this risk...)
+cleanup() {
+    "$BASH_HELPER_FUNCS" remove_docker_image_repo "$XCALAR_IMAGE_NAME"
+    # try to remove expected container too in case it did not become associated w image somehow
+    docker rm -f "$XCALAR_CONTAINER_NAME" || true
+    # only remove grafana image tag specific to this bld, leave main image
+    # so it'll be cached for next build
+    docker rm -f grafana_graphite || true
+    docker rmi -f grafana_graphite:"$BUILD_NUMBER" || true
+    # remove any dangling images (was getting some leftover layers)
+    docker image prune -f
+}
+
+trap cleanup EXIT SIGINT SIGTERM # SIGTERM should handle if you abort the job through Jenkins
 
 XPEDIR="$XLRINFRADIR/docker/xpe"
 
@@ -51,7 +61,7 @@ fi
 
 # build xdpce container
 cd "$XLRINFRADIR/docker/xdpce"
-make docker-image INSTALLER_PATH="$PATH_TO_XCALAR_INSTALLER"
+make docker-image INSTALLER_PATH="$PATH_TO_XCALAR_INSTALLER" CONTAINER_NAME="$XCALAR_CONTAINER_NAME" CONTAINER_IMAGE="$XCALAR_IMAGE_NAME"
 # running make will save an image of the container (xdpce.tar.gz)
 # along with these dirs which get generated install time in xcalar home,
 # that you will need if you map local volumes there (as it will overwrite
