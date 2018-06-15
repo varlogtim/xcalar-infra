@@ -2,6 +2,24 @@
 
 set -e
 
+: "${BUILD_DIRECTORY:?Need to set non-empty env var BUILD_DIRECTORY}"
+: "${BUILD_NUMBER:?Need to set non-empty env var BUILD_NUMBER}"
+
+# remove the docker images created, regardless of build failure/success
+# if you don't remove the images, next time Jenkins slave runs this job,
+# when it saves the xdpce and grafana images during Make, will be saving all
+# existing tagged images, from previous builds too
+# do not remove main grafana image though - do not want to rebuild everytime
+cleanup() {
+    docker rm -f xdpce || true
+    docker rmi -f xdpce:latest || true
+    docker rmi -f xdpce:"$BUILD_NUMBER" || true
+    docker rm -f grafana_graphite || true
+    docker rmi -f grafana_graphite:"$BUILD_NUMBER" || true
+}
+
+trap cleanup EXIT SIGINT SIGTERM # SIGTERM should handle if you abort the job through Jenkins
+
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export XLRINFRADIR="${XLRNFRADIR:-$(readlink -f $SCRIPTDIR/../../..)}"
 export XLRGUIDIR="${XLRGUIDIR:-$XLRINFRADIR/../xcalar-gui}"
@@ -69,17 +87,8 @@ chmod u+x xpe_installer_ubuntu.sh
 echo "making mac app..." >&2
 bash -x "$XPEDIR/scripts/makeapp.sh"
 
-# stop the docker containers created and remove them so not left over on jenkins slave after Job completes
-# if you dont remove the images, then next time Jenkins slave runs this job, when it saves the xdpce and
-# grafana/graphite images, will be saving all existing tagged images - not just the current one!
-docker rm -f xdpce || true
-docker rm -f grafana_graphite || true
-docker rmi -f xdpce || true
-docker rmi -f xdpce:"$BUILD_NUMBER" || true
-docker rmi -f grafana_graphite || true
-docker rmi -f grafana_graphite:"$BUILD_NUMBER" || true
-
 # remove from final dir everything but the final mkshar installers
+# don't do this as general cleanup - want to keep these dirs on build failures
 rm -r $TARCONTENTS
 rm "$TARFILE"
 
