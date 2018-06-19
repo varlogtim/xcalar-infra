@@ -43,8 +43,9 @@ LIC_FILENAME=XcalarLic.key # name of file of uncompressed license
 XCALAR_LIC_REL="xpeinstalledlic" # dir rel to XCALAR_ROOT where lic file will go
 LOCALDATASETS="$APPDATA/sampleDatasets"
 
-# this should match defaults given in xcalar/src/bin/pyClient/local/xcalar/compute/local/target/__init__.py
-MAINHOSTMNT=/hostmnt
+MAINHOSTMNT=/host # path in the Xcalar Docker container to mount user's $HOME dir to
+# will set as Xcalar's Default Data Target path (it must be a path in the container where Xcalar running)
+# this way when user opens file browser they will see contents of their $HOME dir (else will be default container root which won't make sense to user)
 
 XEM_PORT_NUMBER=15000 # should be port # in xemconfig
 # files that will be required for completing the installation process
@@ -215,6 +216,7 @@ cmd_create_xdpce() {
     -e XLRDIR=/opt/xcalar -e container=docker \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$HOME":"$MAINHOSTMNT":ro \
+    -e XCE_CUSTOM_DEFAULT_DATA_TARGET_PATH="$MAINHOSTMNT" \
     -v "$LOCALXCEHOME":"$XCALAR_ROOT" \
     -v "$LOCALLOGDIR":/var/log/xcalar \
     -p $XEM_PORT_NUMBER:15000 \
