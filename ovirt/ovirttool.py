@@ -487,7 +487,7 @@ def get_matching_vms(identifier):
     :throws Exception if multiple matches (don't catch these for now)
 
 '''
-def get_vm_id(identifier):
+def get_vm_id(identifier, failOnNoMatches=True):
 
     info("\nTry to find id of VM using identifier: {}".format(identifier))
     matches = get_matching_vms(identifier)
@@ -496,8 +496,9 @@ def get_vm_id(identifier):
             raise ValueError("\n\nERROR: More than one VM matched on identifier {}!  "
                 " I can not find a unique VM id for this VM.  "
                 "Be more specific".format(identifier))
-        else:
-            return matches[0].id
+        return matches[0].id
+    if failOnNoMatches:
+        raise RuntimeError("Found no matches for identifier {} (if this is a VM name and you're sure it exists, does it begin with one of Ovirt's search keywords?  Try typing in to Ovfirt search field)".format(identifier))
 
 '''
     Get the IP for the VM needed for cluster creation
@@ -725,7 +726,6 @@ def remove_vm(identifier, releaseIP=True):
     while timeout:
         try:
             match = get_vm_id(name)
-            info("Vm still exist...")
             # dev check: make sure that function didn't change from throwing exception
             # to returning None
             if not match:
@@ -994,6 +994,7 @@ def provision_vms(n, basename, ovirtcluster, puppet_role, puppet_cluster, ram, c
             " (perhaps default values changed for the --ram or --cores options?)\n")
 
     # check if any vms with the basename, if so they need to specify something different
+
     '''
         false negative cornercase!!!
 
@@ -1009,8 +1010,6 @@ def provision_vms(n, basename, ovirtcluster, puppet_role, puppet_cluster, ram, c
         the search will NOT return results because it's interpreting that value, as a search keyword!)
     '''
     matches = get_matching_vms(basename)
-    info("matches: ")
-    info(matches)
     if matches:
         matches = [x.name for x in matches]
         raise ValueError("\n\nERROR: The value you specified as the basename for requested VM(s), {},"
@@ -1279,7 +1278,7 @@ def create_cluster(nodeips, clustername):
         Note: The order of the ips in nodeips list is important!!
         Will be node 0 (root cluster node), node1, etc., in order of list
         '''
-        proc = multiprocessing.Process(target=configure_cluster_node, args=(ip, nodeips, sharedRemoteStoragePath))
+        proc = multiprocessing.Process(target=configure_cluster_node, args=(ip, nodeips, NETSTORE_IP, sharedRemoteStoragePath))
         procs.append(proc)
         proc.start()
         time.sleep(sleepBetween)
@@ -1288,47 +1287,138 @@ def create_cluster(nodeips, clustername):
     process_wait(procs, timeout=600+sleepBetween*len(nodeips))
 
 '''
-    Create a dir on netstore by the cluster name
-    Set owner to Xcalar uuid
-    Create a /config dir in the shared storage space and also
-    set its owner to xcalar (this is where cfg data gets written to)
+    Create a directory on netstore intended to be shared
+    storage by all nodes in the cluster.
 
-    :param remotePath: (String) path on netstore to use as cluster dir
+    :param remotePath: (String)
+        path on the remoteIP to use as the shared cluster storage
+
+    @TODO:
+        Handle taking a general IP (and credentials?) in case ever want
+        to create the shared storage somewhere other than netstore
 '''
 def create_cluster_dir(remotePath):
 
-    # create a dir on netstore, name after root node
-    # do it on netstore
+    # -m 0777 needed because xcalar needs to be owner but can't chown after rootsquash
     cmds = ['mkdir -p -m 0777 /netstore/' + remotePath]
     for cmd in cmds:
         run_system_cmd(cmd)
-        #info("System command:: {}".format(cmd))
-        #os.system(cmd)
 
 '''
     Configure a node to be part of a cluster
     by generating its default.cfg with a nodelist,
     and bringing up the node
 
-    :param node: (String) ip of node
-    :param clusternodes: (list of Strings) list of IPs of all the nodes in the cluster
-        ORDER OF THIS LIST IS IMPORTANT.
-        clusternodes[0] : root node (node 0)
-        clusternodes[1] : node1
-        ... etc
-    :param remoteClusterStoragePath: remote path on netstore that acts as shared storage for the nodes
+    :param node: (String)
+        ip of node
+    :param clusternodes: (list of Strings)
+        list of IPs of all the nodes in the cluster
+            ORDER OF THIS LIST IS IMPORTANT.
+            clusternodes[0] : root node (node 0)
+            clusternodes[1] : node1
+            ... etc
+    :pararm remoteIP: (String)
+        IP of the machine with the shared cluster storage
+    :param remoteClusterStoragePath: (String)
+        remote path remoteIP for the shared cluster storage for the nodes
 
 '''
-def configure_cluster_node(node, clusternodes, remoteClusterStoragePath):
+def configure_cluster_node(node, clusternodes, remoteIP, remoteClusterStoragePath):
 
-    info("\nConfigure cluster node of {} of cluster nodes: {}\n".format(node, clusternodes))
+    info("\nConfigure node {} as part of cluster nodes: {}\n".format(node, clusternodes))
 
-    info("get local path to shared storage {}".format(remoteClusterStoragePath))
-    local_cluster_storage_dir = setup_cluster_storage(node, remoteClusterStoragePath)
-    #mount_shared_cluster_storage(node, remoteClusterStoragePath, CLUSTER_DIR_VM)
+    info("get node's local path to the shared cluster storage directory on netstore, {}".format(remoteClusterStoragePath))
+    local_cluster_storage_dir = setup_cluster_storage(node, remoteIP, remoteClusterStoragePath)
 
     info("generate cluster template file...")
     generate_cluster_template_file(node, clusternodes, local_cluster_storage_dir)
+
+'''
+    Setup access to remote cluster storage on to the node
+
+    :paran node: (String)
+        IP of the node to set shared storage on
+    :param remoteIP: (String)
+        IP of the machine with the shared storage
+        (right now always using netstore - adding this in so it will be
+        easy to change things)
+    :param remotePath: (String) path on netstore to shared storage
+
+    :returns: (String)
+        local path on the node, to the shared cluster storage
+'''
+def setup_cluster_storage(node, remoteIP, remotePath):
+
+    info("\nDetermine local path VM {} should use for xcalar home "
+        " (Constants.XcalarRootCompletePath var in  /etc/xcalar/default.cfg".format(node))
+
+    # i think this will make the puppet change (which include automounting netstore)
+    # take effect?
+    run_ssh_cmd(node, "systemctl restart autofs")
+
+    '''
+        Check if netstore already mounted on the VM, with the remote path available
+        (puppet should set up automount of netstore on all the VMs.)
+        Check at an expected locaton; only if it is not already avaialble, mount netstore
+        (Check several times, because bind mount issues)
+    '''
+    tries = 50
+    netstoreMountDir = "/netstore"
+    possiblePath = netstoreMountDir + "/" + remotePath
+    while tries:
+        if path_exists_on_node(node, possiblePath):
+            return possiblePath
+        time.sleep(5)
+        tries -= 1
+
+    # if here, was not able to access through the possible path, even accounting
+    # for automount lags.  Mount netstore directly
+    # (the method called will return the local dir to the remote shared storage that results after successful mount)
+    return mount_shared_cluster_storage(node, remoteIP, remotePath, netstoreMountDir)
+
+'''
+    Mount a directory on Netstore provisioned for shared cluster storage,
+    on a cluster node.
+
+    :param node: (String)
+        IP of node to mount the storage space on
+    :param remoteIP: (String)
+        IP of the machine with the shared storage space
+    :param remotePath: (String)
+        Path on on remoteIP to shared storage space
+    :param mountDir: (String)
+        local directory to mount remoteIP to
+        (NOT local dir to remotePath)
+
+    :returns (String)
+        local path on node, to the shared cluster storage (remoteIP's remotePath)
+
+'''
+def mount_shared_cluster_storage(node, remoteIP, remotePath, mountDir):
+
+    info("\nMount netstore directory {} to {} on {} as shared cluster storage\n"
+        .format(remotePath, mountDir, node))
+
+    '''
+        add nfs mount instructions for netstore, in to fstab,
+        then mount from that
+        (having the instructions in fstab will mount again if node reboots)
+    '''
+    fsTabEntry = "{}: {} {} nfs rsize=8192,wsize=8192,timeo=14,intr".format(remoteIP, remotePath, mountDir)
+    run_ssh_cmd(node, "echo '{}' >> /etc/fstab".format(fsTabEntry))
+    # now that it's in fstab, can mount via the specified mount point
+    # (the mount point must exist first)
+    run_ssh_cmd(node, "mkdir -p {}; mount {}".format(mountDir, mountDir), timeout=400)
+
+    '''
+        make sure the shared cluster storage
+        now accessible on the node
+    '''
+    sharedStorageLocalDir = mountDir + "/" + remotePath
+    if not path_exists_on_node(node, sharedStorageLocalDir):
+        raise RuntimeError("Shared cluster storage dir on netstore, {}, not accessible locally on node {}, even after nfs mount".format(remotePath, node))
+
+    return sharedStorageLocalDir
 
 '''
     Generate template file for node
@@ -1354,100 +1444,20 @@ def generate_cluster_template_file(node, clusternodes, xcalarRoot):
     run_sh_script(node, TMPDIR_VM + '/' + TEMPLATE_HELPER_SH_SCRIPT, args=[xcalarRoot, nodeliststr])
 
 '''
-    Given a node IP and path to remote storage on netstore,
-    setup the node to have access to that directory.
-    check if netstore is mounted on the node, and it not mount it
-
-    :paran node: (String) IP of the node to set shared storage on
-    :param remotePath: (String) path on netstore to shared storage
-
-    :returns: (String) local path on the node, to access the
-        shared netstore storage
-'''
-def setup_cluster_storage(node, remotePath):
-
-    info("\nDetermine local path VM {} should use to for xcalar home "
-        " (Constants.XcalarRootCompletePath var in  /etc/xcalar/default.cfg".format(node))
-    localPath = None
-
-    '''
-        Check if netstore already mounted on the VM.
-        If so, local patha lready exists.
-    '''
-    alreadyMountedCheckPath = "/netstore/" + remotePath
-    if path_exists_on_node(node, alreadyMountedCheckPath):
-        info("Netstore already mounted... use {} as local path to shared storage".format(alreadyMountedCheckPath))
-        return alreadyMountedCheckPath
-    # netstore is not mounted.
-    # mount and return the local path that results.
-    # please try a couple times the mount command, it fails periodically
-    localPath = CLUSTER_DIR_VM
-    tries = 5
-    info("Netstore not yet mounted on this vm")
-    while tries:
-        try:
-            mount_shared_cluster_storage(node, remotePath, localPath)
-            break
-        except:
-            info("Hit an issue when trying to mount netstore on vm... try again")
-            time.sleep(5)
-            tries -= 1
-    if not tries:
-        raise RuntimeError("\n\nERROR: I was not able to mount netstore on node {}; "
-            " i kept hitting an exception\n".format(node))
-
-    # regardless which path you went down... make sure it exists now on the VM!
-    if path_exists_on_node(node, localPath):
-        return localPath
-
-'''
-    Mount a directory on Netstore provisioned for shared cluster storage,
-    on a cluster node.
-
-    :param node: (String)
-        IP of node to mount the storage space on
-    :param remotePath: (String)
-        Path on netstore, to remote shared storage space
-'''
-def mount_shared_cluster_storage(node, remotePath, localPath):
-
-    info("\nMount remote Netstore dir {} on node {} as shared storage,"
-        " at {}\n".format(remotePath, node, localPath))
-
-    '''
-        Check if netstore already mounted on the VM.
-        If so do not need to mount.
-    '''
-
-    cmds = [
-        ['systemctl restart autofs'],
-        ['mkdir -p ' + localPath],
-        ['chown xcalar:xcalar' + ' ' + localPath, 60],
-        ['mount -o bind /netstore/' + remotePath + ' ' + localPath]
-    ]
-
-    run_ssh_cmds(node, cmds)
-
-'''
-    Check if a path exists on a node
-    by SSHing and trying to cd to that path
+    Check if a path exists on a remote node
 
     :param node: (String) ip of node to check path on
     :param path: (String) path to check on the node
+
+    :returns True (path exists) or False (path does not exist)
 '''
-def path_exists_on_node(node, path, tries=25):
+def path_exists_on_node(node, path):
 
-    while tries:
-        try:
-            run_ssh_cmd(node, 'ls ' + path, timeout=10)
-            return True
-        except Exception as e:
-            info("Hit an exception trying to ls to {} (netstore) on {}... Will try again in case automount issue...".format(path, node))
-            tries -= 1
-            time.sleep(5)
-
-    if not tries:
-        info("Error each time tries 'ls {}'; assuming not mounted and returning False".format(path))
+    try:
+        status, output = run_ssh_cmd(node, 'ls ' + path, timeout=10)
+        return True
+    except Exception as e:
+        info("Can't ls to {} on {}: {}".format(path, node, e))
         return False
 
 '''
@@ -1632,8 +1642,7 @@ def run_sh_script(node, path, args=[], timeout=120, redirect=True, debug=True):
     cmds = []
     outputFile = None
     if redirect:
-        if not path_exists_on_node(node, OVIRT_SHELL_LOGS_DIR, tries=1):
-            cmds.append(['mkdir -p ' + OVIRT_SHELL_LOGS_DIR])
+        cmds.append(['mkdir -p ' + OVIRT_SHELL_LOGS_DIR])
         outputFile = OVIRT_SHELL_LOGS_DIR + "/" + os.path.basename(path) + "_log"
         shellCmd += ' &> ' + outputFile
     cmds.append([shellCmd, timeout])
