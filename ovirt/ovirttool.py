@@ -106,6 +106,9 @@ def info(string):
         - if False, return immediately after vm status is UP; don't
             wait for IP assignment
 
+    :returns:
+        if waitForIp - the String of the IP that got assigned to the new VM
+
     :throws Exception if any stage not successfull
 '''
 def bring_up_vm(vmid, waitForIP=None):
@@ -159,6 +162,7 @@ def bring_up_vm(vmid, waitForIP=None):
                 info("try to get vm ip")
                 ip = get_vm_ip(vmid)
                 info("\tIP {} assigned to {}!".format(ip, name))
+                return ip
                 break
             except:
                 # not available yet
@@ -179,7 +183,7 @@ def bring_up_vm(vmid, waitForIP=None):
 
     :returns: (String) the unique Ovirt id generated for the new VM
 '''
-def create_vm(name, cluster, template, ram, cores, iptries=5):
+def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptries=5):
 
     info("\nCreate a new VM called: {}\n\tOvirt cluster: {}\n\tTemplate VM  : {}\n\tRAM (bytes)  : {}\n\t# cores      : {}".format(name, cluster, template, ram, cores))
 
@@ -191,56 +195,96 @@ def create_vm(name, cluster, template, ram, cores, iptries=5):
     # need a types:Cpu object to define cores
     vm_cpu_top = types.CpuTopology(cores=cores, sockets=1)
     vm_cpu = types.Cpu(topology=vm_cpu_top)
-    newvmObj = types.Vm(
-        name=name,
-        cluster=types.Cluster(
-            name=cluster,
-        ),
-        template=types.Template(
-            name=template,
-        ),
-        memory=ram, # Ovirt SDK uses bytes!!
-        cpu=vm_cpu,
-    )
-    vms_service.add(newvmObj)
-    info("VM added...")
 
-    # get id of the newly added vm (can't get from obj you just created.  need to get from vms service)
-    vmid = get_vm_id(name)
-    info("\tid assigned: {}...".format(vmid))
-    # corner case: if they named it starting with a search keyword Ovirt uses,
-    # the VM will be added, but get_vm_id will return no results.
-    # trying to handle these in param validation but there could be more keywords
-    if not vmid:
-        raise RuntimeError("VM {} was successfully created, "
-            "but not finding the VM through Ovirt sdk\n"
-            "(Is there any chance the name {} starts with one of Ovirt's search keywords?"
-            " if so, please modify this tool and add to PROTECTED_KEYWORDS so vms of this name" 
-            " will not be allowed)\n"
-            "If not - Open ovirt, and try to type this name in the main search bar."
-            " are there any results?  If so, this indicates something is wrong with the API".format(name, name))
+    '''
+        Issue: Since Feynman went down, the IPs of the down VMs
+        are being re-assigned, but in Ovirt, the IPs remain attached
+        to the downed Feynman machines, in addition to new VM they get
+        provisioned to.
+        This happens about 1 in 10 times a new VM is created.
+        This causes the tool to fail, because the tool is expecintg only
+            one VM in Ovirt to be associated with a given IP, so that it
+            has a way to know (given an IP to do work on),
+            which VM that IP is referring to.
+        So once a VM is created, if there is more than one hit for its IP,
+		delete the VM and try creating it again, hoping to get a new IP
+    '''
+    feynmanTries = feynmanIssueRetries
+    while feynmanTries:
+        feynmanTries -= 1
 
-    # start vm and bring up until IP is displaying in Ovirt
-    info("Bring up {}...".format(vmid))
-    # sometimes IP not coming up first time around.  restart and ty again
-    triesleft = iptries
-    while triesleft:
-        try:
-            time.sleep(5)
-            bring_up_vm(vmid, waitForIP=True)
+        newvmObj = types.Vm(
+            name=name,
+            cluster=types.Cluster(
+                name=cluster,
+            ),
+            template=types.Template(
+                name=template,
+            ),
+            memory=ram, # Ovirt SDK uses bytes!!
+            cpu=vm_cpu,
+        )
+        vms_service.add(newvmObj)
+        info("VM added...")
+
+        # get id of the newly added vm (can't get from obj you just created.  need to get from vms service)
+        vmid = get_vm_id(name)
+        info("\tid assigned: {}...".format(vmid))
+        # corner case: if they named it starting with a search keyword Ovirt uses,
+        # the VM will be added, but get_vm_id will return no results.
+        # trying to handle these in param validation but there could be more keywords
+        if not vmid:
+            raise RuntimeError("VM {} was successfully created, "
+                "but not finding the VM through Ovirt sdk\n"
+                "(Is there any chance the name {} starts with one of Ovirt's search keywords?"
+                " if so, please modify this tool and add to PROTECTED_KEYWORDS so vms of this name"
+                " will not be allowed)\n"
+                "If not - Open ovirt, and try to type this name in the main search bar."
+                " are there any results?  If so, this indicates something is wrong with the API".format(name, name))
+
+        # start vm and bring up until IP is displaying in Ovirt
+        info("Bring up {}...".format(vmid))
+        # sometimes IP not coming up first time around.  restart and ty again
+        triesleft = iptries
+        assignedIp = None
+        while triesleft:
+            try:
+                time.sleep(5)
+                assignedIp = bring_up_vm(vmid, waitForIP=True)
+                break
+            except NoIpException:
+                info("WARNING: Timed out waiting for IP on new VM... will restart and try again...")
+                triesleft -= 1
+                stop_vm(vmid)
+
+        if not assignedIp:
+            raise RuntimeError("\n\nERROR: Never got Ip for {}/[id:{}],\n"
+                " even after {} restarts (dhcp issue?)\n".format(name, vmid, iptries))
+
+        # IP came up, but make sure it is actually unique to this new VM for Ovirt (feynman issue)
+        matchingVMs = get_matching_vms(assignedIp)
+        if len(matchingVMs) > 1:
+            info("\n\n\t --- FEYNMAN ISSUE HIT {} ---:\n\t"
+                "The IP that got assigned to your new VM "
+                " was re-assigned from an existing VM, but Ovirt associates "
+                " of these VMs with that IP!"
+                "\n(This is probably due to the Feynman outage)\n"
+                "Going to delete this new VM and re-create it, to try "
+                " and get a unique IP".format(name))
+            remove_vm(name, releaseIP=False) # set releaseIP as False -
+                # since it's of no use as the issue is that the IP is being re-assigned!
+            continue
+        else:
             break
-        except NoIpException:
-            info("WARNING: Timed out waiting for IP on new VM... will restart and try again...")
-            triesleft -= 1
-            stop_vm(vmid)
-    if not triesleft:
-        raise RuntimeError("\n\nERROR: Never got Ip for {}/[id:{}],\n"
-            " even after {} restarts (dhcp issue?)\n".format(name, vmid, iptries))
 
-    info("\nSuccessfully created VM {}, on {}!!".format(name, cluster))
-    #\n\tIP: {}\n\tCluster: {}\n\tTemplate {}".format(myvmname, new_ip, cluster, template))
-
-    return vmid
+    if feynmanTries:
+        info("\nSuccessfully created VM {}, on {}!!".format(name, cluster))
+        #\n\tIP: {}\n\tCluster: {}\n\tTemplate {}".format(myvmname, new_ip, cluster, template))
+        return vmid
+    else:
+        raise RuntimeError("VM was being provisioned, but kept getting re-assigned "
+            " IPs already registered with Ovirt.  Tried {} times before giving up!"
+            .format(feynmanIssueRetries))
 
 def setup_hostname(ip, name):
 
@@ -868,6 +912,7 @@ def provision_vm(name, puppet_role, puppet_cluster, ram, cores, availableCluster
             return True
         #except ResourceException as err:
         except Exception as e:
+            info("Exception hit when provisioning VM {}!".format(name))
             if 'available memory is too low' in str(e):
                 info("Hit memory error!! :"
                     " Not enough memory on {} to create requested VM"
