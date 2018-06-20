@@ -77,6 +77,12 @@ ADMIN_HELPER_SH_SCRIPT = 'setupadmin.sh'
 
 FORCE = False # a force option will allow certain operations when script would fail otherwise (use arg)
 
+# Ovirt GUI search bar has search refining keywords
+# if you try to name a VM starting with one of these, vms_service.list api will
+# fail if that name is the identifier.  add these here so can fail on param validation
+# (else the script will fail after provisioning and it is not obvious at all why its failing)
+PROTECTED_KEYWORDS = ['cluster', 'host', 'fdqn', 'name']
+
 class NoIpException(Exception):
     pass
 
@@ -202,6 +208,17 @@ def create_vm(name, cluster, template, ram, cores, iptries=5):
     # get id of the newly added vm (can't get from obj you just created.  need to get from vms service)
     vmid = get_vm_id(name)
     info("\tid assigned: {}...".format(vmid))
+    # corner case: if they named it starting with a search keyword Ovirt uses,
+    # the VM will be added, but get_vm_id will return no results.
+    # trying to handle these in param validation but there could be more keywords
+    if not vmid:
+        raise RuntimeError("VM {} was successfully created, "
+            "but not finding the VM through Ovirt sdk\n"
+            "(Is there any chance the name {} starts with one of Ovirt's search keywords?"
+            " if so, please modify this tool and add to PROTECTED_KEYWORDS so vms of this name" 
+            " will not be allowed)\n"
+            "If not - Open ovirt, and try to type this name in the main search bar."
+            " are there any results?  If so, this indicates something is wrong with the API".format(name, name))
 
     # start vm and bring up until IP is displaying in Ovirt
     info("Bring up {}...".format(vmid))
@@ -1823,6 +1840,16 @@ def validateparams(args):
             # validate the name they supplied is all lower case and contains no _ (because will be setting hostname of the VMs to the VM name)
             if any(filter(str.isupper, args.vmbasename)) or '_' in args.vmbasename:
                 raise ValueError("\n\nERROR: --vmbasename value must be all lower case letters, and may not contain any _ chars\n")
+
+            '''
+                if the basename begins with one of Ovirt's search refining keywords
+                (a string you can type in the GUI's search field to refine a search, ex. 'cluster', 'host')
+                then the vms_service.list api will not work.
+                this leads to confusing results which are not immediately obvious what's going on
+            '''
+            for ovirtSearchFilter in PROTECTED_KEYWORDS:
+                if args.vmbasename.startswith(ovirtSearchFilter):
+                    raise ValueError("\n\nERROR: --vmbasename can not begin with any of the values: {} (These are protected keywords in Ovirt)".format(PROTECTED_KEYWORDS))
 
         if args.noinstaller:
             if args.installer:
