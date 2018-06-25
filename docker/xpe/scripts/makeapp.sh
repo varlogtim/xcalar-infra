@@ -1,18 +1,9 @@
 #!/usr/bin/env bash
 
-# env vars:
-#    XLRINFRADIR should be set
-# will retrieve all needed files from xlrinfra except following,
-# which should be in cwd that CALLS this script, and set up by Jenkins job:
-# - xcalar-gui (assumes has xpe's config.js, etc. in it)
-# - .imgid (metadata for app.  should be created by Jenkins job)
-#    you can create it by running and saving output of getimgid.sh
-# - installertarball.tar.gz (has all the dependencies the installer needs)
-# also:
-# - nwjs binary (on netstore)
-# nwjs and xcalar-gui will be being removed in final product
-# when the nwjs binaries will be built entirely on Jenkins slave,
-# so this is just meantime
+# Constructs the actual Xcalar Design app directory by piecing together files
+# from the various repos
+#
+# optional arg forces build of xcalar-gui project ($XLRGUIDIR)
 
 set -e
 
@@ -22,7 +13,7 @@ set -e
 : "${DEV_BUILD:?Need to set true or false env var DEV_BUILD}"
 : "${XCALAR_IMAGE_NAME:?Need to set name of Docker image for .imgid app file, as env var XCALAR_IMAGE_NAME}"
 
-cwd=$(pwd)
+startCwd=$(pwd)
 
 APPBASENAME="Xcalar Design"
 APPNAME="${APPBASENAME}.app"
@@ -31,37 +22,81 @@ EXECUTABLENAME="Xcalar Design"
 
 XPEINFRAROOT="$XLRINFRADIR/docker/xpe"
 
-mkdir -p "$APPNAME/Contents/MacOS"
-mkdir -p "$APPNAME/Contents/Resources/Bin"
-mkdir -p "$APPNAME/Contents/Resources/scripts"
-mkdir -p "$APPNAME/Contents/Resources/guis"
-mkdir -p "$APPNAME/Contents/Resources/Data"
-mkdir -p "$APPNAME/Contents/Logs"
+# create base app dir at cwd and get its full path
+mkdir -p "$APPNAME"
+cd "$APPNAME"
+APPPATH=$(pwd)
+
+mkdir -p "$APPPATH/Contents/MacOS"
+mkdir -p "$APPPATH/Contents/Resources/Bin"
+mkdir -p "$APPPATH/Contents/Resources/Installer"
+mkdir -p "$APPPATH/Contents/Resources/scripts"
+mkdir -p "$APPPATH/Contents/Resources/Data"
+mkdir -p "$APPPATH/Contents/Logs"
+APPGUIDIR="$APPPATH/Contents/Resources/gui/xcalar-gui"
+mkdir -p "$APPGUIDIR"
+
+# if xcalar-gui not built, build it
+if [ ! -d "$XLRGUIDIR/xcalar-gui" ] || [ "$1" ]; then
+    cd "$XLRGUIDIR"
+#    git submodule update --init
+#    git submodule update
+#    npm install --save-dev
+#    node_modules/grunt/bin/grunt init
+#    node_modules/grunt/bin/grunt dev
+    make dev # once submodule update in Jenkins resolved, remove this in favor of all the other comments lines (see targui.sh)
+    cd "$startCwd"
+fi
 
 # app essential metadata
-cp "$XPEINFRAROOT/staticfiles/Info.plist" "$APPNAME/Contents"
-
-# add icon; must be in Resources
-# if xcalar-gui not built, build it and get icon from there
-if [ ! -d "$XLRGUIDIR/xcalar-gui" ]; then
-    cd "$XLRGUIDIR"
-    make dev
-    cd "$cwd"
-fi
-cp "$XLRGUIDIR/xcalar-gui/assets/images/appIcons/AppIcon.icns" "$APPNAME/Contents/Resources"
-
-# add full installer
-cd "$APPNAME/Contents/Resources/guis"
-bash -x "$XPEINFRAROOT/scripts/createGui.sh" true # after running, 'xpeGuis' dir created
-cd "$cwd"
-cp installertarball.tar.gz "$APPNAME/Contents/Resources/guis/xpeGuis/xpeServer" # has files needed by local_installer_mac.sh
+cp "$XPEINFRAROOT/staticfiles/Info.plist" "$APPPATH/Contents"
 
 # add xcalar-gui (config.js and package.json for nwjs should already be present)
-#cp -r xcalar-gui "$APPNAME/Contents/Resources/guis"
-tar xzf /netstore/users/jolsen/xcalar-gui.tar.gz -C "$APPNAME/Contents/Resources/guis" ### AMIT:: This a temporary hack for my testing
+tar xzf /netstore/users/jolsen/xcalar-gui.tar.gz -C "$APPPATH/Contents/Resources/gui" ### AMIT:: This a temporary hack for my testing
+#cp -r "$XLRGUIDIR/xcalar-gui/"* "$APPGUIDIR" # use this once git submodule update in Jenkins resolved
+
+# build the xpe server
+# put back in once figured out the git submodule update in jenkins issue
+#cd "$APPGUIDIR/services/xpeServer"
+#npm install
+#cd "$startCwd"
+
+# add the nwjs javascript entrypoint to the gui root
+mv "$APPGUIDIR/assets/js/xpe/starter.js" "$APPGUIDIR"
+# nwjs's package.json for xcalar-gui dir
+# config.js for letting xcalar-gui on the host machine communicate in to Docker for Xcalar backend
+cp "$XPEINFRAROOT/staticfiles/package.json" "$APPGUIDIR"
+cp "$XPEINFRAROOT/staticfiles/config.js" "$APPGUIDIR/assets/js/"
+
+# the built xcalar-gui project, will not include node_modules
+# because everything is intended to be run in browser context, so needed js files
+# are imported via <script> tags in the html
+# however, nwjs is rooting at xcalar-gui, and entrypoint is a js running in node context,
+# which will need to require files in node context, before any GUI runs.
+# therefore, need node_modules/<require module> modules, to get those js files.
+# normally could just add in the package.json, but package.json would need to be
+# shared by both nodejs (for npm install) and nwjs (to open gui);
+# package.json for nodejs does not allow capital letters in name field, but
+# nwjs' package.json needs name field to match app's name (Xcalar Design) else it
+# will generate additional Application Support directories by that name.
+# since right now only need one module - jquery - (for doing Deferreds)
+# just go ahead and npm install it
+# later if more needed, create a separate package.json
+cd "$APPGUIDIR"
+npm install jquery
+cd "$startCwd"
+
+# a few missing files
+curl http://repo.xcalar.net/deps/bootstrap.css -o "$APPGUIDIR/3rd/bootstrap.css"
+curl http://repo.xcalar.net/deps/googlefonts.css -o "$APPGUIDIR/3rd/googlefonts.css"
+curl http://netstore/users/jolsen/makeinstaller/xdlogo.png -o "$APPGUIDIR/assets/images/xdlogo.png"
+
+# installer assets
+cp "$XPEINFRAROOT/scripts/local_installer_mac.sh" "$APPPATH/Contents/Resources/Installer"
+cp installertarball.tar.gz "$APPPATH/Contents/Resources/Installer" # has files needed by local_installer_mac.sh
 
 # setup nwjs
-cd "$APPNAME/Contents/Resources/Bin"
+cd "$APPPATH/Contents/Resources/Bin"
 curl http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip -O
 unzip -aq nwjs-sdk-v0.29.3-osx-x64.zip
 rm nwjs-sdk-v0.29.3-osx-x64.zip
@@ -75,30 +110,34 @@ cp "$XLRGUIDIR/xcalar-gui/assets/images/appIcons/AppIcon.icns" nwjs-sdk-v0.29.3-
 
 # nodejs in to Bin directory
 curl http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz | tar zxf -
-cd "$cwd"
+cd "$startCwd"
 
 # file to indicate which img is associated with this installer bundle
 # so host program will know weather to open installer of main app at launch
 # this should have been made by Jenkins job and in cwd
-if ! imgsha=$(docker image inspect $XCALAR_IMAGE_NAME:lastInstall -f '{{ .Id }}' 2>/dev/null); then
+if ! imgsha=$(docker image inspect "$XCALAR_IMAGE_NAME":lastInstall -f '{{ .Id }}' 2>/dev/null); then
     echo "No $XCALAR_IMAGE_NAME:lastInstall to get image sha from!!" >&2
     exit 1
 else
-    echo "$imgsha" > "$APPNAME/Contents/Resources/Data/.imgid"
+    echo "$imgsha" > "$APPPATH/Contents/Resources/Data/.imgid"
 fi
 
 # executable app entrypoint
-cp "$XPEINFRAROOT/scripts/$EXECUTABLENAME" "$APPNAME/Contents/MacOS"
-chmod 777 "$APPNAME/Contents/MacOS/$EXECUTABLENAME"
+cp "$XPEINFRAROOT/scripts/$EXECUTABLENAME" "$APPPATH/Contents/MacOS"
+chmod 777 "$APPPATH/Contents/MacOS/$EXECUTABLENAME"
 
 # if supposed to build grafana, add a mark for this for host-side install
 if $BUILD_GRAFANA; then
-    touch "$APPNAME/Contents/MacOS/.grafana"
+    touch "$APPPATH/Contents/MacOS/.grafana"
 fi
 # if a dev build (will expose right click feature in GUIs), add a mark for this for host-side install
 if $DEV_BUILD; then
-    touch "$APPNAME/Contents/MacOS/.dev"
+    touch "$APPPATH/Contents/MacOS/.dev"
 fi
 
+# set app icon
+cp "$XLRGUIDIR/xcalar-gui/assets/images/appIcons/AppIcon.icns" "$APPPATH/Contents/Resources"
+
 # zip app
+cd "$startCwd"
 tar -zcf "$APPNAME.tar.gz" "$APPNAME"

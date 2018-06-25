@@ -27,7 +27,7 @@ debug() {
 
 SCRIPT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 STAGING_DIR="/tmp/xpestaging"
-IMGID_FILE="$SCRIPT_DIR/../../../Data/.imgid"
+IMGID_FILE="$SCRIPT_DIR/../Data/.imgid"
 XCALAR_IMAGE_REPO=xcalar_design
 GRAFANA_IMAGE_REPO=grafana_graphite
 XCALAR_CONTAINER=xcalar_design
@@ -140,6 +140,13 @@ cmd_load_packed_images() {
     # So make sure there is SOME unique identifying tag across installs,
     # if they are always same, the last 'untag' of a previously installed image
     # will leave it unnamed
+
+    # naming/build tag CAUTION::
+    # if you build more than one XPE app w/ an official release tag, for the same RC build,
+    # and go through install on both those apps, this action will untag all 3
+    # of the tags from the previous install resulting in <none>:<none> dangling image
+    # (won't happen if re-installing same app, because images its loading have same id as ones currently loaded so won't actually load anything, and
+    # won't happen with non-official release tag because 3rd tags would be unique between the two apps - Jenkins bld number)
 
     gzip -dc "$XDPCE_TARBALL" | docker load -q
 

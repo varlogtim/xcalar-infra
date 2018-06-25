@@ -70,12 +70,13 @@ cp -R .ipython $FINALDEST
 cp -R .jupyter $FINALDEST
 cp -R jupyterNotebooks $FINALDEST
 cp defaultAdmin.json $FINALDEST
-# copy here, the static files in infra for using nwjs, in to the xcalar-gui
-# that was copied out in the Makefile; copy whole thing to final dest
-# instead of taking care of the individual files during remote install
-cp "$XPEDIR/staticfiles/config.js" "xcalar-gui/assets/js/"
-cp "$XPEDIR/staticfiles/XD_package.json" "xcalar-gui/package.json"
-cp -R xcalar-gui/ $FINALDEST
+# makefile copies the xcalar-gui dir that was installed in to the Docker container
+# by the rpm installer, out of the Docker container.
+# TODO: Once all the gui code is checked in to the xcalar-gui project,
+# use this xcalar-gui dir as the one being included in the app
+# until then, having to build own xcalar-gui from private branch.
+#cp "$XPEDIR/staticfiles/config.js" "xcalar-gui/assets/js/" <-- add in the needed files here?
+#cp -R xcalar-gui/ $FINALDEST <-- @TODO: will cp in to $FINALDEST so makeapp.sh can use
 cp xdpce.tar.gz $FINALDEST
 
 # set caddy port as a text file, so host side will know which Caddyport to use
@@ -88,10 +89,13 @@ TARFILE=installertarball.tar.gz
 tar -czf "$TARFILE" $TARCONTENTS
 
 # run mkshar (ubuntu)
-ubuntuinstaller=local_installer.sh
-cp "$XPEDIR/scripts/$ubuntuinstaller" .
-"$XLRINFRADIR/bin/mkshar.sh" "$TARFILE" "$ubuntuinstaller" > xpe_installer_ubuntu.sh
-chmod u+x xpe_installer_ubuntu.sh
+# (taking this out for now to speed up bld process)
+# @TODO: Add options in Jenkins job for build mac, ubuntu, etc.
+# and do these based on that.
+#ubuntuinstaller=local_installer.sh
+#cp "$XPEDIR/scripts/$ubuntuinstaller" .
+#"$XLRINFRADIR/bin/mkshar.sh" "$TARFILE" "$ubuntuinstaller" > xpe_installer_ubuntu.sh
+#chmod u+x xpe_installer_ubuntu.sh
 
 # make the mac app (mac)
 echo "making mac app..." >&2

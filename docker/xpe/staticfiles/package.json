@@ -1,0 +1,8 @@
+{
+    "name": "Xcalar Design",
+    "main": "starter.js",
+    "window": {
+        "show": true
+    },
+    "chromium-args": "--allow-running-insecure-content --ignore-certificate-errors"
+}

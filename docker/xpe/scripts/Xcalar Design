@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
 
-# if host has no xdpce docker container,
-# or xdpce:latest is not image version
-# included in the app, opens an installer
-# and restarts app upon install completion.
-# else opens XD linked to xdpce:latest
+# This is the entrypoint for the 'Xcalar Design' Mac app.
+# When the app is launched, this script is run by the Operating System
+# with no arguments.
 #
-# cmd param can force particular tool:
+# nwjs is what provides the GUI for the app.
+# This script simply determines which GUI nwjs should open when it starts,
+# and then starts nwjs.
 #
-# bash XPE install    // forces installer to open
-# bash XPE uninstall  // forces uninstaller to open
-# bash XPE revert     // forces revert tool to open
-# bash XPE xd         // forces xd to open
+# -- If file .installed exists in script dir --> sets XD to open.
+# -- If no such file --> sets installer to open.
+#
+# ** cmd param can force particular GUI (for manual testing):
+#
+# bash Xcalar\ Design install    // forces installer to open
+# bash Xcalar\ Design uninstall  // forces uninstaller to open
+# bash Xcalar\ Design revert     // forces revert tool to open
+# bash Xcalar\ Design xd         // forces xd to open
+#
+# ** a text file, .launched, when in script dir, can also force a particular GUI.
+# The contents of the file instruct which GUI to open when script is run
+# (manual or by app)
+#
+# install              // forces installer to open
+# uninstall            // forces uninstaller to open
+# revert               // forces revert tool to open
+# xd                   // forces XD to open
+# <URL or path>        // opens the URL, or local file path to an HTML file
+#
+# (The cmd param takes precedence over launchfile)
 
 set -e
 
@@ -31,22 +48,18 @@ NWJSBIN="$RESOURCE_DIR/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs
 NODEBIN="$RESOURCE_DIR/Bin/node-v8.11.1-darwin-x64/bin/node"
 APPLOGDIR="$APP_DIR/Contents/Logs"
 
-INSTALLSERVER="$RESOURCE_DIR/guis/xpeGuis/xpeServer/xpeServer.js"
-
-BASHHELPER="$RESOURCE_DIR/guis/xpeGuis/xpeServer/local_installer_mac.sh"
+INSTALLSERVER="$APP_DIR/Contents/Resources/gui/xcalar-gui/services/xpeServer/xpeServer.js"
 
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
 INSTALLEDFILE="$APP_DIR/Contents/MacOS/.installed"
 GRAFANAMARK="$APP_DIR/Contents/MacOS/.grafana"
 DEVBLDMARK="$APP_DIR/Contents/MacOS/.dev"
 
-XDROOT="$RESOURCE_DIR/guis/xcalar-gui"
-INSTALLROOT="$RESOURCE_DIR/guis/xpeGuis/Installer"
-UNINSTALLROOT="$RESOURCE_DIR/guis/xpeGuis/Uninstaller"
-REVERTROOT="$RESOURCE_DIR/guis/xpeGuis/Reverter"
-DOCKERSTARTERROOT="$RESOURCE_DIR/guis/xpeGuis/DockerStarter"
+NWJSROOT="$APP_DIR/Contents/Resources/gui/xcalar-gui"
 
-LAUNCHED=false
+# var for setting an app action.  unset from previous runs
+APPACTIONVAR=XPESTARTACTION
+unset "$APPACTIONVAR"
 
 # set timestamp env to be used by various processes that will be called for writing log
 ts=$(date +%FT%T%z)
@@ -95,7 +108,7 @@ waitForServer() {
     until curl http://127.0.0.1:8388 >/dev/null 2>&1 || [ "$timeout" -eq "0" ]; do
         echo "server not up yet!" >&2
         sleep "$pauseTime"
-        timeout=$(($timeout - $pauseTime))
+        timeout=$((timeout - pauseTime))
     done
 
     if ! curl http://127.0.0.1:8388 >/dev/null 2>&1; then
@@ -104,15 +117,16 @@ waitForServer() {
     fi
 }
 
-# nwjs window closing signals main event loop end;
-# this kills app icon from mac dock (even if bash script still running)
-# but window might need to shut because a sep action should begin
-# (EX: install complete user selected to launch XD, user selected uninstall
-# from the nwjs menu that displays in XD)
-# in these cases, before curr nwjs window closes, a file created with
-# requested next action (install, revert, uninstall, launch)
-# restarting app and starting that new nwjs process instead of calling
-# sequentially from this same bash script process will get icon to re-appear
+# Last nwjs window closing terminates the nwjs process and signals app's main event loop end;
+# this kills app icon from mac dock, even if this bash script still running.
+# Window might need to shut because a sep action should begin
+# (EX: user selected uninstall from the nwjs menu that displays in XD)
+# in these cases, before last nwjs window closes, the GUI creates a 'launchfile'
+# w/ requested next action (install, revert, uninstall, launch, or URL to open to)
+# this script gives exit on nwjs process end and so this cleanup will then be hit.
+# so in cleanup if launchfile present, restart app - this will get the icon
+# to reappear in the dock - and when this script runs once the app restarts, it will
+# read the launchfile and open to the requested action/URL
 cleanup() {
     if [[ "$SERVER_PID" ]]; then
         kill -TERM $SERVER_PID
@@ -134,73 +148,95 @@ echo "$SERVER_PID" > "$SERVERPIDFILE" >&2
 waitForServer
 # put a link to the log so can keep track of latest, for multiple app runs
 ln -sf "$serverLogPath" "$APPLOGDIR"/latest_serverLog
-
-########## CHECK FOR ENTRYPOINT DEPENDENCIES ######
-
-if ! docker version >/dev/null 2>&1; then
-    "$NWJSBIN" "$DOCKERSTARTERROOT"
-    exit $?
-fi
+# export as an env variable so the GUis have access, and can print the path in failure msgs
+export XPE_CURR_LOG_PATH_SERVER="$serverLogPath"
 
 ########## LAUNCH APP GUI  ##########
 
 # app action:
-# open installer/uninstaller/revert tool/XD based on order of precedence:
+# open installer/uninstaller/revert tool/XD/<specific URL/path> based on order of precedence:
 #    1. cmdline param (install/uninstall/revert/xd)
 #    2. launchFile content (insatll/uninstall/revert/xd)
 #    3. in absence of either:
 #        (a) if no install mark set in app (blank file that gets set
 #             after install) --> install
 #        (b) else --> xd
+#
+# Will work by exporting an env var with the instruction on what to open.
+# nwjs process is then launched at very end of this script.
+# nwjs's entrypoint is a js file: assets/js/xpe/starter.js - that javascript file
+# opens the correct HTML window based on value of this env var.
+
+LAUNCHED=false
 
 launchInstaller() {
-    "$NWJSBIN" "$INSTALLROOT"
+    export "$APPACTIONVAR=install"
+    LAUNCHED=true
 }
 launchUninstaller() {
-    "$NWJSBIN" "$UNINSTALLROOT"
+    export "$APPACTIONVAR=uninstall"
+    LAUNCHED=true
 }
 launchReverter() {
-    "$NWJSBIN" "$REVERTROOT"
+    export "$APPACTIONVAR=revert"
+    LAUNCHED=true
 }
 launchXD() {
-    bash "$BASHHELPER" bring_up_containers
-    "$NWJSBIN" "$XDROOT"
+    export "$APPACTIONVAR=xd"
+    LAUNCHED=true
+}
+launchToUrl() {
+    if [ -n "$1" ]; then
+        # if the URL/path is not valid nwjs will still open a window and it will have an error
+        # indicating its not valid; user will need to close for nwjs to quit.
+        # TODO: Validate path/URL here?
+        export "$APPACTIONVAR=$1"
+        LAUNCHED=true
+    fi
 }
 
-# launches a requested GUI (install/uninstall/revert/xd)
+# Sets up nwjs to open a specific GUI (install/uninstall/revert/xd/<URL or path>)
+# once it is launched,
+# where <URL or path> is either a valid URL, or a local path (relative to nwjs root) to an HTML file
 launchGUI() {
-    LAUNCHED=true
-    case "$1" in
-        install)
-            launchInstaller
-            ;;
-        uninstall)
-            launchUninstaller
-            ;;
-        revert)
-            launchReverter
-            ;;
-        xd)
-            launchXD
-            ;;
-        *)
-            echo "can't launch based on argument: ($1)" >&2
-            LAUNCHED=false
-            ;;
-    esac
+    if [ -n "$1" ]; then
+        case "$1" in
+            install)
+                launchInstaller
+                ;;
+            uninstall)
+                launchUninstaller
+                ;;
+            revert)
+                launchReverter
+                ;;
+            xd)
+                launchXD
+                ;;
+            *)
+                launchToUrl "$1"
+                ;;
+        esac
+    else
+        echo "No arg was passed to launchGUI!" >&2
+    fi
 }
 
 if [ "$1" ]; then # cmd param passed to bash script
     launchGUI "$1"
 elif [ -e "$LAUNCHFILEPATH" ]; then
-    appaction=$(cat "$LAUNCHFILEPATH")
+    urlToLaunchTo=$(cat "$LAUNCHFILEPATH")
     rm "$LAUNCHFILEPATH"
-    launchGUI "$appaction"
+    launchGUI "$urlToLaunchTo"
 fi
 
-# need this as sep. if, in case 'restart' was set in the launch file
-# (when you want to restart not to launch a diff GUI, but
-# just to restart and run like regular app run)
+# need this as sep. case so that if one of the args was invalid
+# app will kick back to default behavior
+# (else no GUI at all will launch when app is double-clicked)
+# Also previously had 'restart' option for launchfile, so that launchfile
+# can force app to restart but want it to open and run like regular first
+# run (rather than launching something in particular)
+# Still keep this as sep case in case that is added back in.
 if [ "$LAUNCHED" = false ]; then
     if [ ! -f "$INSTALLEDFILE" ]; then
         launchInstaller
@@ -208,4 +244,12 @@ if [ "$LAUNCHED" = false ]; then
         launchXD
     fi
 fi
+
+# symlink to the file before you make the log
+# because want the exit result of the nwjs process to be the exit $?
+nwjsLogPath="$APPLOGDIR"/"$TIMESTAMP"_nwjsLog
+ln -sf "$nwjsLogPath" "$APPLOGDIR"/latest_nwjsLog
+# export as an env variable so the GUis have access, and can print path in failure msgs
+export XPE_CURR_LOG_PATH_NWJS="$nwjsLogPath"
+"$NWJSBIN" "$NWJSROOT" --enable-logging=stderr > "$nwjsLogPath" 2>&1
 exit $?
