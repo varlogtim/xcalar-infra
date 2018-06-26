@@ -19,26 +19,40 @@ export XCALAR_CONTAINER_NAME="${XCALAR_CONTAINER_NAME:-xcalar_design}"
 
 BASH_HELPER_FUNCS="$SCRIPTDIR/../scripts/local_installer_mac.sh"
 
-# remove build-specific Docker artefacts regardless of build failure/success
-# keeping grafana:latest so it'll be in cache at next build and won't need to re-build
-# but for Xcalar image, clearing repo entirely each time; don't want to cache
-# (mostly in case xdpce Dockerfile changes in future to incorporate src code checkout
-# which wouldn't want to cache; the build time it saves from the cache is about < 1 min so not worth this risk...)
-cleanup() {
+XPEDIR="$XLRINFRADIR/docker/xpe"
+
+# removes xcalar and grafana Docker artefacts. to run at job start and cleanup.
+# clear xcalar repo entirely; don't want to cache
+# (mostly in case xdpce Dockerfile changes in future to incorporate src code checkout as part of its bld
+# which wouldn't want to cache; the build time it saves from using cache is about < 1 min so not worth this risk...)
+clearDockerArtefacts() {
+    # try to remove expected container in case not associated w image
+    # (if it is associated w the image, remove_docker_image_repo will run much faster if you give this cmd first)
+    docker rm -fv "$XCALAR_CONTAINER_NAME" || true
     "$BASH_HELPER_FUNCS" remove_docker_image_repo "$XCALAR_IMAGE_NAME"
-    # try to remove expected container too in case it did not become associated w image somehow
-    docker rm -f "$XCALAR_CONTAINER_NAME" || true
-    # only remove grafana image tag specific to this bld, leave main image
-    # so it'll be cached for next build
-    docker rm -f grafana_graphite || true
-    docker rmi -f grafana_graphite:"$BUILD_NUMBER" || true
-    # remove any dangling images (was getting some leftover layers)
-    docker image prune -f
+    # only remove grafana container, not image; keep in cache so won't need to rebuild
+    docker rm -fv grafana_graphite || true
 }
 
-trap cleanup EXIT SIGINT SIGTERM # SIGTERM should handle if you abort the job through Jenkins
+# removes build specific artefacts which require context of this run (for cleanup)
+removeBuildArtefacts() {
+    docker kill "$XCALAR_CONTAINER_NAME" || true # use kill because it's quicker than rm and Jenkins abort cleanup has limited time
+    docker rmi -f grafana_graphite:"$BUILD_NUMBER" || true
+}
 
-XPEDIR="$XLRINFRADIR/docker/xpe"
+cleanup() {
+    # if you are running through Jenkins - if the job fails or completes, this entire function will run
+    # but if aborted, there are only a couple seconds before shell is terminated
+    # therefore prioritize cleaning up objects which could interfere w future runs or other jobs using this machine
+    removeBuildArtefacts
+    clearDockerArtefacts
+}
+
+trap cleanup EXIT SIGTERM SIGINT # Jenkins sends SIGTERM on abort
+
+### START JOB ###
+
+clearDockerArtefacts
 
 echo "current build number: $BUILD_NUMBER" >&2
 FINALDEST="$BUILD_DIRECTORY/$BUILD_NUMBER"
@@ -68,8 +82,11 @@ if [ "$BUILD_GRAFANA" = true ]; then
 fi
 
 # build xdpce container
+# (do not actually need any port exposed since just need the image, so do not expose any port when blding
+# just to reduce chances of port conflicts on this machine if the container gets left over somehow)
 cd "$XLRINFRADIR/docker/xdpce"
-make docker-image INSTALLER_PATH="$PATH_TO_XCALAR_INSTALLER" CONTAINER_NAME="$XCALAR_CONTAINER_NAME" CONTAINER_IMAGE="$XCALAR_IMAGE_NAME"
+make docker-image INSTALLER_PATH="$PATH_TO_XCALAR_INSTALLER" CONTAINER_NAME="$XCALAR_CONTAINER_NAME" CONTAINER_IMAGE="$XCALAR_IMAGE_NAME" PORT_MAPPING=""
+
 # running make will save an image of the container (xdpce.tar.gz)
 # along with these dirs which get generated install time in xcalar home,
 # that you will need if you map local volumes there (as it will overwrite

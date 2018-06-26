@@ -7,7 +7,13 @@ TARFILE_NAME ?= xdpce.tar.gz
 TZ ?= America/Los_Angeles
 INSTALLER_PATH ?= /netstore/qa/Downloads/ReleaseCandidates/xcalar-1.2.3-RC4/20171024-3c9a47f4/prod/xcalar-1.2.3-1296-installer
 DEFAULT_CFG_PATH ?= default.cfg
+CONFIG_DIR = /var/opt/xcalar/config
+
 CADDY_PORT ?= 443
+# port to expose outside the Docker container, to map to the Caddy port (if blank Docker will expose a random port)
+CADDY_EXTERNAL_PORT ?=
+PORT_MAPPING ?= -p $(CADDY_EXTERNAL_PORT):$(CADDY_PORT) # supply PORT_MAPPING="" if you dont want a port exposed for Caddy
+DOCKER_EXTRA_ARGS ?=
 
 EXEC_INPUT := $(shell test -t 0 && echo "-i")
 EXEC_TERMINAL ?= -t
@@ -28,8 +34,9 @@ CONTAINER_ARGS_COMMON = --cap-add=ALL --cap-drop=MKNOD \
                  -e XCE_HTTP_PORT=8839 \
                  -e container=docker \
                  -v /var/run/docker.sock:/var/run/docker.sock \
-                 --name $(CONTAINER_NAME) \
-                 -p 8818:$(CADDY_PORT)
+                  $(PORT_MAPPING) \
+                  $(DOCKER_EXTRA_ARGS) \
+                 --name $(CONTAINER_NAME)
 
 INSTALLER_ARGS = $(CONTAINER_ARGS_COMMON) -v $(INSTALLER_PATH):/tmp/xcalarInstaller $(CONTAINER_IMAGE)
 RUN_ARGS = $(CONTAINER_ARGS_COMMON)  $(CONTAINER_IMAGE)
@@ -51,7 +58,7 @@ strip-binaries: install
 install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
     ifneq ($(XPE),)
-		docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
+	docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
     endif
 
 enforce-samplesize: install-license
@@ -64,8 +71,10 @@ install-license: strip-binaries
 	docker cp XcalarLic.key $(CONTAINER_NAME):/etc/xcalar/XcalarLic.key
 
 createuser: install-license
-	docker cp $(XLRINFRADIR)/docker/xpe/staticfiles/defaultAdmin.json $(CONTAINER_NAME):/var/opt/xcalar/config/defaultAdmin.json
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 600 /var/opt/xcalar/config/defaultAdmin.json
+	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) mkdir -p $(CONFIG_DIR)
+	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 0700 $(CONFIG_DIR)
+	docker cp $(XLRINFRADIR)/docker/xpe/staticfiles/defaultAdmin.json $(CONTAINER_NAME):$(CONFIG_DIR)/defaultAdmin.json
+	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 600 $(CONFIG_DIR)/defaultAdmin.json
 
 stop-xcalar:
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl stop-supervisor
@@ -83,9 +92,9 @@ commit:
 
 save:
     ifneq ($(XPE),)
-		bash -x ../xpe/scripts/tagxpe.sh create_xpe_tar $(CONTAINER_IMAGE):latest $(TARFILE_NAME)
+	bash -x ../xpe/scripts/tagxpe.sh create_xpe_tar $(CONTAINER_IMAGE):latest $(TARFILE_NAME)
     else
-		docker save $(CONTAINER_IMAGE) | gzip > $(TARFILE_NAME)
+	docker save $(CONTAINER_IMAGE):latest | gzip > $(TARFILE_NAME)
     endif
 
 runWithCfg: image stop clean
@@ -110,7 +119,7 @@ copyconfig:
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.ipython ./.ipython
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.jupyter ./.jupyter
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/jupyterNotebooks ./jupyterNotebooks
-	docker cp $(CONTAINER_NAME):/var/opt/xcalar/config/defaultAdmin.json defaultAdmin.json
+	docker cp $(CONTAINER_NAME):$(CONFIG_DIR)/defaultAdmin.json defaultAdmin.json
 	docker cp $(CONTAINER_NAME):/opt/xcalar/xcalar-gui ./xcalar-gui
 
 docker-image: run install strip-binaries install-license replace-hostname enforce-samplesize createuser restart copyconfig commit save
