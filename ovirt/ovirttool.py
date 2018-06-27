@@ -68,6 +68,8 @@ OVIRT_KEYFILE_SRC = 'id_ovirt' # this a file to supply during ssh.  need to chmo
 home = os.path.expanduser('~') # '~' gives issues with paramiko; expand to home dir, this swill work cross-platform
 OVIRT_KEYFILE_DEST = home + '/.ssh/id_ovirt'
 
+OVIRT_SHELL_LOGS_DIR = '/tmp/ovirtShellScriptLogs' # if shell scripts called on a node are redicted, will keep that output here
+
 CONN=None
 LICFILENAME='XcalarLic.key'
 # helper scripts - they should be located in dir this python script is at
@@ -85,6 +87,40 @@ PROTECTED_KEYWORDS = ['cluster', 'host', 'fdqn', 'name']
 
 class NoIpException(Exception):
     pass
+
+class ShellError(Exception):
+    def __init__(self, cmd, node, status, stdout, stderr, summary):
+        self.cmd = cmd
+        self.node = node
+        self.status = status
+        self.stdout = stdout
+        self.stderr = stderr
+        self.summary = summary
+
+    def __str__(self):
+        errStr = '''
+
+>> shell command that caused error:
+    {}
+
+>> Run on node:
+    {}
+
+>> Returned Status:
+    {}
+
+>> stdout:
+
+{}
+
+>> stderr:
+
+{}
+
+'''.format(self.cmd, self.node, self.status, self.stdout, self.stderr)
+        if self.summary:
+            errStr += ">> Reason error thrown:\n\t{}".format(self.summary)
+        return errStr
 
 def info(string):
     print(string, file=sys.stderr)
@@ -207,7 +243,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
             has a way to know (given an IP to do work on),
             which VM that IP is referring to.
         So once a VM is created, if there is more than one hit for its IP,
-		delete the VM and try creating it again, hoping to get a new IP
+        delete the VM and try creating it again, hoping to get a new IP
     '''
     feynmanTries = feynmanIssueRetries
     while feynmanTries:
@@ -291,7 +327,7 @@ def setup_hostname(ip, name):
     info("Set hostname of VM {} to {}".format(ip, name))
     fqdn = "{}.int.xcalar.com".format(name)
     run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
-    run_ssh_cmd(ip, 'systemctl restart network')
+    run_ssh_cmd(ip, 'systemctl restart network', timeout=300)
     run_ssh_cmd(ip, 'systemctl restart autofs')
 
 def reboot_node(ip):
@@ -1399,12 +1435,11 @@ def mount_shared_cluster_storage(node, remotePath, localPath):
     :param node: (String) ip of node to check path on
     :param path: (String) path to check on the node
 '''
-def path_exists_on_node(node, path):
+def path_exists_on_node(node, path, tries=25):
 
-    tries=25
     while tries:
         try:
-            status, output = run_ssh_cmd(node, 'ls ' + path, timeout=10)
+            run_ssh_cmd(node, 'ls ' + path, timeout=10)
             return True
         except Exception as e:
             info("Hit an exception trying to ls to {} (netstore) on {}... Will try again in case automount issue...".format(path, node))
@@ -1515,7 +1550,7 @@ def run_ssh_cmds(host, cmds):
                 extraops['timeout'] = cmd[1]
             if len(cmd) > 2:
                 extraops['valid_exit_codes'] = cmd[2]
-        status, output = run_ssh_cmd(host, cmd[0], **extraops)
+        run_ssh_cmd(host, cmd[0], **extraops)
 
 def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
     # get list of valid codes
@@ -1526,20 +1561,23 @@ def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_K
     info("connected...".format(host))
     chan = client.get_transport().open_session()
     chan.settimeout(timeout)
-    chan.set_combine_stderr(True)
-    chan.get_pty()
     info("[{}@{}  ~]# {}".format(user, host, command))
     chan.exec_command(command)
-    stdout = chan.makefile('r', bufsize)
+    stdout = chan.makefile('r', bufsize) # opens stdout stream
+    stderr = chan.makefile_stderr('rb', bufsize) # opens stderr stream
     stdout_text = stdout.read()
-    info("stdout:\n\t{}".format(stdout_text))
+    stderr_text = stderr.read()
+    stdout_formatted_text = stdout_text.decode("utf-8")
+    stderr_formatted_text = stderr_text.decode("utf-8")
+    info("stdout:\n\t{}".format(stdout_formatted_text))
+    info("stderr:\n\t{}".format(stderr_formatted_text))
     status = int(chan.recv_exit_status())
     info("status: {}".format(status))
     if status not in valid_exit_codes:
-        info("stdout text:\n{}\n\nEncountered invalid exit status running SSH cmd {} on host {}!  (See above stdout)  Valid codes: {}".format(stdout_text, command, host, ', '.join(str(x) for x in valid_exit_codes)))
-        raise RuntimeError("error in ssh cmd")
+        summary = "Encountered invalid exit status {}. Valid codes: {}".format(status, ', '.join(str(x) for x in valid_exit_codes))
+        raise ShellError(command, host, status, stdout_formatted_text, stderr_formatted_text, summary)
     client.close()
-    return status, stdout_text.decode("utf-8")
+    return status, stdout_formatted_text, stderr_formatted_text
 
 '''
     run system command on local machine calling this function
@@ -1569,21 +1607,45 @@ def run_system_cmd(cmd):
 '''
     Run a shell script on a node
 
-    :param node: IP of node to run shell script on
-    :param path: filepath (on node) of shell script
-    :param args: list of positional args to supply to shell script
+    :param node:
+        (String) IP of node to run shell script on
+    :param path:
+        (String) filepath (on node) of shell script to run
+    :param args:
+        (list) list of Strings as positional args to supply to shell script
+    :redirect:
+        if True will redirct shell output on node to OVIRT_SHELL_LOGS_DIR
+        (if dir does not exist on node will create it)
+    :debug:
+        if True will run bash with -x option
 
 '''
-def run_sh_script(node, path, args=[], timeout=120, tee=False):
+def run_sh_script(node, path, args=[], timeout=120, redirect=True, debug=True):
 
     info("\nRun shell script {} on node {}...\n".format(path, node))
 
-    shellCmd = '/bin/bash ' + path + ' ' + ' '.join(args)
-    if tee:
-        filename = os.path.basename(path)
-        shellCmd = shellCmd + ' | tee ' + filename + 'log.log'
-    cmds = [['chmod u+x ' + path], [shellCmd, timeout]]
-    run_ssh_cmds(node, cmds)
+
+    bashCall = '/bin/bash'
+    if debug:
+        bashCall += ' -x'
+    shellCmd = bashCall + ' ' + path + ' ' + ' '.join(args)
+    cmds = []
+    outputFile = None
+    if redirect:
+        if not path_exists_on_node(node, OVIRT_SHELL_LOGS_DIR, tries=1):
+            cmds.append(['mkdir -p ' + OVIRT_SHELL_LOGS_DIR])
+        outputFile = OVIRT_SHELL_LOGS_DIR + "/" + os.path.basename(path) + "_log"
+        shellCmd += ' &> ' + outputFile
+    cmds.append([shellCmd, timeout])
+    try:
+        run_ssh_cmds(node, cmds)
+    except ShellError as e:
+        errInfo = "\nHit error running shell script {} on {}".format(path, node)
+        if outputFile: # no stderr to print to them it was all redirected
+            errInfo += "\nLogfile for this shell script @ {} on {}\n".format(outputFile, node)
+        else:
+            errInfo += "\nStderr:\n\t{}".format(e.stderr)
+        raise Exception(errInfo) from e
 
 '''
     Given a list of multiprocessing:Process objects,
@@ -1731,18 +1793,18 @@ def is_cluster_up(ip):
     info("\nCheck if cluster is up from perspective of node {}".format(ip))
 
     cmd = '/opt/xcalar/bin/xccli -c version'
-    status, output = run_ssh_cmd(ip, cmd)
-    info("\n\nOUTPUT:\n\n" + output)
-    if 'error' in output.lower():
+    status, stdout, stderr = run_ssh_cmd(ip, cmd)
+    info("\n\nOUTPUT:\n\n" + stdout)
+    if 'error' in stdout.lower():
         info("Cluster is not up from perspective of node with ip: {}."
             "\nOutput of {} "
-            "(was used to determine cluster status):\n{}".format(ip, cmd, output))
+            "(was used to determine cluster status):\n{}".format(ip, cmd, stdout))
         return False
 
     # right now determining cluster is up if not finding error
     info("Cluster is up from perspective of node with ip: {}"
-        "\n(Used output of {} to determine; did not find error string so determined up."
-        "\ncmd output was: {}".format(ip, cmd, output))
+        "\n(Used stdout of {} to determine; did not find error string so determined up."
+        "\nstdout: {}".format(ip, cmd, stdout))
     return True
 
 '''
@@ -1789,23 +1851,23 @@ def extract_cluster_node_ips(ip):
     configfilepath = '/etc/xcalar/default.cfg'
     info("\nExtract cluster node data from {}  file on {}".format(configfilepath, ip))
 
-    status, output = run_ssh_cmd(ip, 'cat ' + configfilepath)
+    status, stdout, stderr = run_ssh_cmd(ip, 'cat ' + configfilepath)
 
     nodeips = {}
 
     # get num nodes in the cluster
     numnodes = None
     nodenumreg = re.compile('.*Node\.NumNodes=(\d+).*', re.DOTALL)
-    matchres = nodenumreg.match(output)
+    matchres = nodenumreg.match(stdout)
     if matchres:
         info("found match")
         numnodes = int(matchres.groups()[0])
     else:
-        raise AttributeError("\n\nFound no entry for number of nodes in {}\n".format(configfilepath))
+        raise AttributeError("\n\nFound no entry for number of nodes in {} on {}\n".format(configfilepath, ip))
 
     # parse all the node data
     nodeipdata = re.compile('.*Node\.(\d+)\.IpAddr=([\d\.]+).*')
-    for line in output.split('\n'):
+    for line in stdout.split('\n'):
         info("Next line: {}".format(line))
         matchres = nodeipdata.match(line)
         if matchres:

@@ -21,13 +21,13 @@ rm -f /etc/yum.repos.d/epel*.repo /etc/yum.repos.d/mapr.repo /etc/yum.repos.d/no
 /bin/bash $DIR/installer.sh --nostart --caddy --startonboot
 
 # copy in the license files
-echo 'copy lic files in to xcalar'
+echo 'copy lic files in to xcalar' >&2
 cp $DIR/XcalarLic.key /etc/xcalar/XcalarLic.key
 
 # generate config file.
 # if you passed only one node (single node cluster - use localhost)
 # multiple nodes passed put that node list
-echo 'generate config file via templatehelper.sh'
+echo 'generate config file via templatehelper.sh' >&2
 
 /bin/bash -e $DIR/templatehelper.sh $2
 
