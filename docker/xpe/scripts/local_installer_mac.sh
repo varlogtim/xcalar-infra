@@ -64,6 +64,14 @@ cmd_clear_containers() {
         docker rm -fv "$GRAFANA_CONTAINER" >/dev/null 2>&1 || true
     fi
 
+    # short term: clear out container by the old name
+    # (name of container changed; if someone installed when it was called xdpce,
+    # that container won't get cleared up from above code, and install will end up
+    # failing for port being in use)
+    # don't keep this in long term because it'll add to install time.
+    # but short term because everyone who's done a prev install will end up hitting this
+    docker rm -fv xdpce >/dev/null 2>&1 || true
+
     # untag current
     docker rmi "$XCALAR_IMAGE_REPO":current || true
 }
