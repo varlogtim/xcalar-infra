@@ -9,6 +9,9 @@ export XCE_LICENSEFILE=${XCE_LICENSEDIR}/XcalarLic.key
 NUM_USERS=${NUM_USERS:-$(shuf -i 2-3 -n 1)}
 TEST_DRIVER_PORT="5909"
 
+# Make symbolic link
+sudo ln -sfn $WORKSPACE/xcalar-gui/xcalar-gui /var/www/xcalar-gui
+
 if [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
     cd $XLRGUIDIR
     git diff --name-only HEAD^1 > out
@@ -24,9 +27,6 @@ if [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
         echo "No target file changed"
         exit 0
     fi
-
-    # Make symbolic link
-    sudo ln -sfn $WORKSPACE/xcalar-gui/xcalar-gui /var/www/xcalar-gui
 fi
 
 echo "Installing required packages"
@@ -129,6 +129,7 @@ export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/bin/usrnode/test-config.cfg}"
 launcher.sh 1 daemon
 
 echo "Starting Caddy"
+pkill caddy || true
 TmpCaddy=`mktemp Caddy.conf.XXXXX`
 TmpCaddyLogs=`mktemp CaddyLogs.XXXXX.log`
 cp $XLRDIR/conf/Caddyfile "$TmpCaddy"
@@ -145,16 +146,18 @@ cd $XLRGUIDIR/assets/dev/unitTest
 npm install node-bin-setup
 npm install
 
+exitCode=0
 echo "Starting test driver"
 if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
-    npm test -- sqlTest https://localhost:8443
-    exitCode=$?
-    sudo unlink /var/www/xcalar-gui
+    npm test -- sqlTest https://localhost:8443 || exitCode=$?
+elif [ $JOB_NAME = "XDUnitTest" ]; then
+    npm test -- unitTest https://localhost:8443 || exitCode=$?
+    exitCode=0
 else
-    npm test -- testSuite https://localhost:8443
-    exitCode=$?
+    npm test -- testSuite https://localhost:8443 || exitCode=$?
 fi
 
+sudo unlink /var/www/xcalar-gui
 kill $serverPid || true
 kill $caddyPid || true
 kill $tailPid || true
