@@ -2,36 +2,36 @@
 
 # This is the entrypoint for the 'Xcalar Design' Mac app.
 # When the app is launched, this script is run by the Operating System
-# with no arguments.
+# (note:: older versions of OSX will sometimes pass cmd args in that call)
 #
 # nwjs is what provides the GUI for the app.
 # This script simply determines which GUI nwjs should open when it starts,
 # and then starts nwjs.
 #
-# -- If file .installed exists in script dir --> sets XD to open.
-# -- If no such file --> sets installer to open.
+# ** Default behavior:
+#        If file .installed exists in this script's dir --> sets XD to open.
+#        else --> sets installer to open.
 #
-# ** cmd param can force particular GUI (for manual testing):
+# ** -a option can force a particular GUI (for testing):
 #
-# bash Xcalar\ Design install    // forces installer to open
-# bash Xcalar\ Design uninstall  // forces uninstaller to open
-# bash Xcalar\ Design revert     // forces revert tool to open
-# bash Xcalar\ Design xd         // forces xd to open
+# bash Xcalar\ Design -a install    // forces installer to open
+# bash Xcalar\ Design -a uninstall  // forces uninstaller to open
+# bash Xcalar\ Design -a revert     // forces revert tool to open
+# bash Xcalar\ Design -a xd         // forces xd to open
 #
-# ** a text file, .launched, when in script dir, can also force a particular GUI.
-# The contents of the file instruct which GUI to open when script is run
-# (manual or by app)
+# ** having text file .launched in this script's dir, can also force a particular GUI.
+#    (this is used by the GUIs to restart app to a particular Window)
+#    The content of the file will instruct which GUI to open:
 #
 # install              // forces installer to open
 # uninstall            // forces uninstaller to open
 # revert               // forces revert tool to open
 # xd                   // forces XD to open
-# <URL or path>        // opens the URL, or local file path to an HTML file
+# <URL/filepath>       // opens the URL, or local file path, specified
 #
-# (The cmd param takes precedence over launchfile)
+# (cmd param takes precedence over the launchfile)
 
 set -e
-
 export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin
 
 ########## SETUP #############
@@ -117,16 +117,18 @@ waitForServer() {
     fi
 }
 
-# Last nwjs window closing terminates the nwjs process and signals app's main event loop end;
-# this kills app icon from mac dock, even if this bash script still running.
-# Window might need to shut because a sep action should begin
-# (EX: user selected uninstall from the nwjs menu that displays in XD)
-# in these cases, before last nwjs window closes, the GUI creates a 'launchfile'
-# w/ requested next action (install, revert, uninstall, launch, or URL to open to)
-# this script gives exit on nwjs process end and so this cleanup will then be hit.
-# so in cleanup if launchfile present, restart app - this will get the icon
-# to reappear in the dock - and when this script runs once the app restarts, it will
+# will sometimes need to close the app and restart to a particular GUI
+# (example: re-install, uninstaller)
+# in these cases, the GUI creates a 'launchfile', w/ requrested next action
+# and then terminates nwjs (which will quit this script and trigger cleanup)
+# so in cleanup if launchfile present, restart app -
+# when this script runs again when the app restarts, it will
 # read the launchfile and open to the requested action/URL
+#
+# [[NOTE: do like this, instead of just re-launching nwjs itself from
+# this script, because when last nwjs window closes, the app icon will disappear
+# from the dock, even if this script is still running, and re-launching nwjs
+# will cause nwjs icon to appear, not the app's]]
 cleanup() {
     if [[ "$SERVER_PID" ]]; then
         kill -TERM $SERVER_PID
@@ -151,99 +153,131 @@ ln -sf "$serverLogPath" "$APPLOGDIR"/latest_serverLog
 # export as an env variable so the GUis have access, and can print the path in failure msgs
 export XPE_CURR_LOG_PATH_SERVER="$serverLogPath"
 
-########## LAUNCH APP GUI  ##########
+########## SET WHICH GUI SHOULD OPEN WHEN NWJS IS STARTED  ##########
 
 # app action:
 # open installer/uninstaller/revert tool/XD/<specific URL/path> based on order of precedence:
 #    1. cmdline param (install/uninstall/revert/xd)
-#    2. launchFile content (insatll/uninstall/revert/xd)
+#    2. launchFile content (insatll/uninstall/revert/xd/<URL/path>)
 #    3. in absence of either:
-#        (a) if no install mark set in app (blank file that gets set
-#             after install) --> install
+#        (a) if no .installed file (gets set by GUI after successful install) --> installer
 #        (b) else --> xd
 #
-# Will work by exporting an env var with the instruction on what to open.
-# nwjs process is then launched at very end of this script.
-# nwjs's entrypoint is a js file: assets/js/xpe/starter.js - that javascript file
-# opens the correct HTML window based on value of this env var.
+# Works as follows:
+# nwjs process is started at very end of this script.
+# nwjs's entrypoint is a js file: assets/js/xpe/starter.js -
+# that js file opens the initial window based on value of env var XPESTARTACTION
+# (opens XD by default if the var isn't set)
+# so this section detects if a particular GUI should open first and if so, sets
+# XPESTARTACTION before starting nwjs
 
-LAUNCHED=false
+# wrapper functions in case additional settings need to be set in future
+# to prepare for specific GUIs.
 
-launchInstaller() {
+setInstallerLaunch() {
     export "$APPACTIONVAR=install"
-    LAUNCHED=true
 }
-launchUninstaller() {
+setUninstallerLaunch() {
     export "$APPACTIONVAR=uninstall"
-    LAUNCHED=true
 }
-launchReverter() {
+setReverterLaunch() {
     export "$APPACTIONVAR=revert"
-    LAUNCHED=true
 }
-launchXD() {
+setXdLaunch() {
     export "$APPACTIONVAR=xd"
-    LAUNCHED=true
 }
-launchToUrl() {
+# takes one arg: an URL, or local filepath to an HTML file (abs. or rel to nwjs root)
+# and sets env var so that nwjs will open a Window with that content when it starts.
+# (note: still need the GUI specific options, i.e., XPESTARTACTION=install,
+# rather than calling this function w/ their URLs, because if nwjs finds one of those
+# specific actions, will open the Window with settings specific to that GUI;
+# whatever is set to open via this function will open w/ default Window settings)
+setOtherLaunch() {
     if [ -n "$1" ]; then
-        # if the URL/path is not valid nwjs will still open a window and it will have an error
-        # indicating its not valid; user will need to close for nwjs to quit.
-        # TODO: Validate path/URL here?
+        # if the URL/path is not valid nwjs will still open a window but it will have an error
+        # user will need to close for nwjs (and app) to quit.
+        # TODO: Validate valid path/URL here?
         export "$APPACTIONVAR=$1"
-        LAUNCHED=true
     fi
 }
 
-# Sets up nwjs to open a specific GUI (install/uninstall/revert/xd/<URL or path>)
-# once it is launched,
-# where <URL or path> is either a valid URL, or a local path (relative to nwjs root) to an HTML file
-launchGUI() {
-    if [ -n "$1" ]; then
-        case "$1" in
-            install)
-                launchInstaller
-                ;;
-            uninstall)
-                launchUninstaller
-                ;;
-            revert)
-                launchReverter
-                ;;
-            xd)
-                launchXD
-                ;;
-            *)
-                launchToUrl "$1"
-                ;;
-        esac
-    else
-        echo "No arg was passed to launchGUI!" >&2
-    fi
-}
+## SET ACTION BASED ON CMD PARAM -a ##
 
-if [ "$1" ]; then # cmd param passed to bash script
-    launchGUI "$1"
-elif [ -e "$LAUNCHFILEPATH" ]; then
-    urlToLaunchTo=$(cat "$LAUNCHFILEPATH")
+# some older versions of Mac will launch the app executable
+# with cmd params we don't care about
+# so not sufficient just to check if there are cmd params present; use
+# named param and make sure it's valid
+foundAction=false
+# note; getopts will hault if unnamed params given before named
+while getopts ":a:" opt && ! $foundAction; do
+    case $opt in
+        a)
+            # -a arg was detected; make sure it's valid option
+            foundAction=true
+            case "$OPTARG" in
+                install)
+                    setInstallerLaunch
+                    ;;
+                uninstall)
+                    setUninstallerLaunch
+                    ;;
+                revert)
+                    setReverterLaunch
+                    ;;
+                xd)
+                    setXdLaunch
+                    ;;
+                # don't do anything on default
+                # in case they gave a bad param ignore it
+            esac
+            ;;
+        :)
+            echo "WARNING: -$opt requires an arg! Ignoring! App will exhibit default behavior..." >&2
+            ;;
+    esac
+done
+
+## SET ACTION BASED ON LAUNCHFILE: (only if cmd params didn't set a launch behavior)
+if ! printenv $APPACTIONVAR && [ -e "$LAUNCHFILEPATH" ]; then
+    launchFileCmd=$(cat "$LAUNCHFILEPATH")
     rm "$LAUNCHFILEPATH"
-    launchGUI "$urlToLaunchTo"
+    case "$launchFileCmd" in
+        # it can get set as these specific terms
+        install)
+            setInstallerLaunch
+            ;;
+        uninstall)
+            setUninstallerLaunch
+            ;;
+        revert)
+            setReverterLaunch
+            ;;
+        xd)
+            setXdLaunch
+            ;;
+        *)
+            # can also get set to any URL
+            # launch to URL if its not one of the terms above
+            setOtherLaunch "$launchFileCmd"
+            ;;
+    esac
 fi
 
-# need this as sep. case so that if one of the args was invalid
-# app will kick back to default behavior
-# (else no GUI at all will launch when app is double-clicked)
-# Also previously had 'restart' option for launchfile, so that launchfile
-# can force app to restart but want it to open and run like regular first
-# run (rather than launching something in particular)
-# Still keep this as sep case in case that is added back in.
-if [ "$LAUNCHED" = false ]; then
+## DEFAULT :
+#     no -a param or launchfile:
+#     if no .installed file- open installer, else- open xd.
+# note: keep as sep. case (not else)
+# because launchfile can exist but be empty in which case no launch action would get set
+# (intention is for app to restart on close, and open w/ the ddefault behavior)
+if ! printenv $APPACTIONVAR; then
     if [ ! -f "$INSTALLEDFILE" ]; then
-        launchInstaller
+        setInstallerLaunch
     else
-        launchXD
+        setXdLaunch
     fi
 fi
+
+########### LAUNCH NWJS ############
 
 # symlink to the file before you make the log
 # because want the exit result of the nwjs process to be the exit $?
