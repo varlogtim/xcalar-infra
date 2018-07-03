@@ -44,6 +44,14 @@ echo "current build number: $BUILD_NUMBER" >&2
 FINALDEST="$BUILD_DIRECTORY/$BUILD_NUMBER"
 mkdir -p $FINALDEST
 
+# write out a file with build info
+cat > BLDINFO.txt <<EOF
+PATH_TO_XCALAR_INSTALLER=$PATH_TO_XCALAR_INSTALLER
+OFFICIAL_RELEASE=$OFFICIAL_RELEASE
+DEV_BUILD=$DEV_BUILD
+BUILD_GRAFANA=$BUILD_GRAFANA
+EOF
+
 # contents of tarfile that will be packaged with the app and used by the installer
 # (all additional files required for an install on the host)
 # script generates these during build process; everythign needs to end up in FINALDEST
