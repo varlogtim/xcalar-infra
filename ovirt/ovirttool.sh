@@ -21,6 +21,7 @@ check_module() {
 check_module ovirtsdk4 ovirt-engine-sdk-python
 check_module paramiko
 check_module requests
+check_module future
 
 # cmd args to send to ovirttool.py
 cmds="$@"

@@ -28,6 +28,9 @@ Tool to spin up VMs on Ovirt and create Xcalar clusters
         python ovirttool.py --count=2 --vmbasename=myclus --ram=32 --cores=8 --installer=http://netstore/builds/byJob/BuildTrunk/lastSuccessful/debug/xcalar-1.3.1-1657-installer
 
 """
+from __future__ import absolute_import, division, print_function
+from future.utils import raise_from # re-raise exceptions python3 way in python2.7
+from builtins import input # for input to work on python2.7 and python3
 
 import ovirtsdk4 as sdk
 import ovirtsdk4.types as types
@@ -35,6 +38,8 @@ import ovirtsdk4.types as types
 import argparse
 import getpass
 import logging
+import random
+import string
 import math
 import multiprocessing
 import os
@@ -68,7 +73,10 @@ OVIRT_KEYFILE_SRC = 'id_ovirt' # this a file to supply during ssh.  need to chmo
 home = os.path.expanduser('~') # '~' gives issues with paramiko; expand to home dir, this swill work cross-platform
 OVIRT_KEYFILE_DEST = home + '/.ssh/id_ovirt'
 
-OVIRT_SHELL_LOGS_DIR = '/tmp/ovirtShellScriptLogs' # if shell scripts called on a node are redicted, will keep that output here
+def generateRandomString(length=5):
+    return ''.join([random.choice(string.ascii_letters + string.digits) for n in range(length)])
+
+OVIRT_SHELL_LOGS_DIR = '/tmp/ovirtShellScriptLogs_' + generateRandomString() # dir on created VMs to hold redirected shell script output
 
 CONN=None
 LICFILENAME='XcalarLic.key'
@@ -86,6 +94,9 @@ FORCE = False # a force option will allow certain operations when script would f
 PROTECTED_KEYWORDS = ['cluster', 'host', 'fdqn', 'name']
 
 class NoIpException(Exception):
+    pass
+
+class TimeoutError(Exception): # built in python3 but not python2.7
     pass
 
 class ShellError(Exception):
@@ -301,12 +312,12 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
         matchingVMs = get_matching_vms(assignedIp)
         if len(matchingVMs) > 1:
             info("\n\n\t --- FEYNMAN ISSUE HIT {} ---:\n\t"
-                "The IP that got assigned to your new VM "
+                "The IP that got assigned to your new VM, {},"
                 " was re-assigned from an existing VM, but Ovirt associates "
                 " of these VMs with that IP!"
                 "\n(This is probably due to the Feynman outage)\n"
                 "Going to delete this new VM and re-create it, to try "
-                " and get a unique IP".format(name))
+                " and get a unique IP".format(assignedIp, name))
             remove_vm(name, releaseIP=False) # set releaseIP as False -
                 # since it's of no use as the issue is that the IP is being re-assigned!
             continue
@@ -467,11 +478,31 @@ def get_matching_vms(identifier):
     info("\nTry to find VMs matching identifier {}".format(identifier))
 
     vms_service = CONN.system_service().vms_service()
-    # search.  what you give as search is just like searching in the Ovirt search bar
-    matching_vms = vms_service.list(search=identifier)
+
+    # search ovirt for vms matching the identifier
+    # (value supplied to search attr is just like searching by that value in Ovirt GUI's search bar)
+
+    # search attr must be type 'str'; handle differently in python2.7 vs. python3
+    searchStr = pyString(identifier)
+    matching_vms = vms_service.list(search=searchStr)
     if matching_vms:
         return matching_vms
     return []
+
+'''
+    Returns a string representation of a variable that's of type 'str',
+    regardless if you are running python3 or python2.7
+
+    (Reason: in python 3, str(<var>) will return a variable of type 'str',
+    but in python2.7, if the variable is type 'unicode', would need to encode it explicitally
+    However encoding in python3 will return type 'Byte', not 'str', so can't this for both.
+    - ovirtsdk's search api requires search var must be type 'str' hence why this is needed.)
+'''
+def pyString(var):
+    convertedVar = str(var)
+    if sys.version_info[0] >= 3:
+        return convertedVar
+    return var.strip().encode('utf-8') # strip off formatting so it doesn't get encoded to literals
 
 '''
     Given some identifier, such as an IP or the name of a VM,
@@ -1062,7 +1093,7 @@ def provision_vms(n, basename, ovirtcluster, puppet_role, puppet_cluster, ram, c
     for i in range(n):
         nextvmname = basename
         if n > 1:
-            nextvmname = nextvmname + "-vm{}".format(str(i))
+            nextvmname = "{}-vm{}".format(nextvmname, str(i))
         vmnames.append(nextvmname)
         info("\nFork new process to create a new VM by name {}".format(nextvmname))
         proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, puppet_role, puppet_cluster, ram, cores, availableClusters))
@@ -1099,7 +1130,8 @@ def is_xcalar_running(node):
 '''
     Bring up Xcalar service on node
 
-    :param node: (String) ip of node to start Xcalar service on
+    :param node:
+        (String) ip of node to start Xcalar service on
 '''
 def start_xcalar(node):
 
@@ -1220,11 +1252,9 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
         create_cluster(ips, createcluster)
 
     '''
-        power up all the nodes in parallel and set up admin accounts
-        doing here instead of in initial setup, so that you don't have
-        to bring up Xcalar more than once in the case of cluster creating.
-        (setting up admin requires bringing up xcalar and so does cluster
-        creating so do at very end for both cluster and non-cluster scen.)
+        power up all the nodes in parallel and set up admin account
+        doing here instead of in initial setup, because for cluster nodes,
+        cluster needs to be created before admin account can get setup in shared storage
     '''
     procs = []
     sleepBetween = 20
@@ -1454,7 +1484,7 @@ def generate_cluster_template_file(node, clusternodes, xcalarRoot):
 def path_exists_on_node(node, path):
 
     try:
-        status, output = run_ssh_cmd(node, 'ls ' + path, timeout=10)
+        run_ssh_cmd(node, 'ls ' + path, timeout=10)
         return True
     except Exception as e:
         info("Can't ls to {} on {}: {}".format(path, node, e))
@@ -1654,7 +1684,7 @@ def run_sh_script(node, path, args=[], timeout=120, redirect=True, debug=True):
             errInfo += "\nLogfile for this shell script @ {} on {}\n".format(outputFile, node)
         else:
             errInfo += "\nStderr:\n\t{}".format(e.stderr)
-        raise Exception(errInfo) from e
+        raise_from(Exception(errInfo), e)
 
 '''
     Given a list of multiprocessing:Process objects,
@@ -1679,7 +1709,7 @@ def process_wait(procs, timeout=600, valid_exit_codes=[0]):
             else:
                 exitcode = proc.exitcode
                 if exitcode not in valid_exit_codes:
-                    raise ChildProcessError("Encountered invalid exit code, {} in a forked child process.  Valid exit codes for these processes: {}".format(exitcode, ', '.join(str(x) for x in valid_exit_codes)))
+                    raise RuntimeError("Encountered invalid exit code, {} in a forked child process.  Valid exit codes for these processes: {}".format(exitcode, ', '.join(str(x) for x in valid_exit_codes)))
                 del procs[i]
                 break
 
@@ -1762,6 +1792,8 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
 
     summary_header = "\n\n=====================================================\n" \
             "------------ Your Ovirt VMs are ready!!! ------------\n" \
+            "|\n| (But they have just been rebooted; please give them \n" \
+            "|  approx. 5 minutes to come up)\n" \
             "|\n| " + str(len(vmids)) + " VMs were created.\n" \
             "|\n| The VMs have the following specs:\n" \
             "|\tRAM (GB)     : " + str(ram) + "\n" \
