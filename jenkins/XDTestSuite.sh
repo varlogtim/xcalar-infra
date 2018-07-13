@@ -153,6 +153,8 @@ if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
 elif [ $JOB_NAME = "XDUnitTest" ]; then
     npm test -- unitTest https://localhost:8443 || exitCode=$?
     exitCode=0
+elif [ $JOB_NAME = "GerritExpServerTest" ]; then
+    npm test -- expServer || exitCode=$?
 else
     npm test -- testSuite https://localhost:8443 || exitCode=$?
 fi
