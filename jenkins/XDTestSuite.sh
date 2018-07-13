@@ -155,6 +155,7 @@ elif [ $JOB_NAME = "XDUnitTest" ]; then
     exitCode=0
 elif [ $JOB_NAME = "GerritExpServerTest" ]; then
     npm test -- expServer || exitCode=$?
+    exitCode=0
 else
     npm test -- testSuite https://localhost:8443 || exitCode=$?
 fi
