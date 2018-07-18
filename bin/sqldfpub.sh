@@ -45,4 +45,4 @@ SQLDF_FILE=$(find tmp -name xcalar-sqldf.jar -print | head -1)
 test -z "$SQLDF_FILE" && echo "xcalar-sqldf.jar not found. repo.xcalar.net/deps not updated." && exit 1
 mv ${SQLDF_FILE} ./xcalar-sqldf-${VERSION}.jar
 gsutil cp ./xcalar-sqldf-${VERSION}.jar gs://repo.xcalar.net/deps
-
+echo "# Please update SQLDF_VERSION in xcalar/bin/build-user-installer.sh to use version ${VERSION} for non-RPM builds #"
