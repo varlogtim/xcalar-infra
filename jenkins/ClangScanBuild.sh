@@ -1,14 +1,22 @@
 #!/bin/bash
+set -e
 
-export XLRDIR=$PWD
-export PATH=$XLRDIR/bin:$PATH
-
-test -e /opt/clang && export PATH=/opt/clang/bin:$PATH
+CLANG=${CLANG:-/opt/clang5}
+test -e $CLANG && export PATH=$CLANG/bin:$PATH || true
 
 export ASAN_OPTIONS=suppressions=$XLRDIR/bin/ASan.supp
 export LSAN_OPTIONS=suppressions=$XLRDIR/bin/LSan.supp
 
-git clean -fxd
-build clean
-build config
-scan-build-3.9 -o `pwd`/clangScanBuildReports -v -v --force-analyze-debug-code -disable-checker deadcode.DeadStores --use-cc=`which clang-3.9` --use-c++=`which clang++-3.9` --use-analyzer=`which clang-3.9` make V=0 -s -j`nproc` CFLAGS="-Wno-unknown-warning-option" CXXFLAGS="-Wno-overloaded-virtual -Wno-unknown-warning-option -Wno-unused"
+export CCC_CC=clang
+export CCC_CXX=clang++
+
+scan_build() {
+    scan-build -o $XLRDIR/clangScanBuildReports -v --force-analyze-debug-code -disable-checker deadcode.DeadStores --keep-going "$@"
+}
+
+cd ${XLRDIR?Need XLRDIR set}
+rm -rf buildOut
+mkdir -p buildOut
+cd buildOut
+scan_build 'cmake -GNinja -DUSE_CCACHE=OFF -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_C_COMPILER=$CC  -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX:PATH=/opt/xcalar $XLRDIR'
+scan_build "$@" ninja
