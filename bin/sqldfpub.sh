@@ -1,18 +1,12 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
-if [ "$#" -ne 1 ]
-then
-    echo "Usage:"
-    echo "  $0 <iterationNumber>"
-    exit 1
-fi
-
-ITER=$1
-VERSION=${2:-"0.2"}
-TMPDIR="/tmp/tmpsqldf_$(date +%s)"
-mkdir "$TMPDIR"
+usage() {
+    echo "Usage: $0 [options] <iterationNumber> [version]"
+    echo "  -l  List repo state after publish"
+}
 
 onExit() {
     rm -f "$TMPDIR"/*.rpm "$TMPDIR"/*.deb "$TMPDIR"/*.jar
@@ -21,28 +15,42 @@ onExit() {
     rmdir "$TMPDIR"
 }
 
-cd "$TMPDIR"
+optListRepo=false
+while getopts "l" opt; do
+  case $opt in
+      l) optListRepo=true;;
+      *) usage; exit 1;;
+  esac
+done
+
+shift $(($OPTIND - 1))
+ITER="$1"
+VERSION=${2:-"0.2"}
+
+if [[ -z "$ITER" ]]; then
+    echo "Missing iteration number"
+    usage
+    exit 1
+fi
 
 trap onExit EXIT
+TMPDIR=$(mktemp --tmpdir -d sqldfpub.XXXXXX)
+cd "$TMPDIR"
 
-wget http://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/build/el6/xcalar-sqldf-${VERSION}-${ITER}.el6.noarch.rpm
-$XLRDIR/bin/reposync.sh rhel6-repo xcalar-sqldf-${VERSION}-${ITER}.el6.noarch.rpm
+wget http://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
+$XLRDIR/bin/reposync.sh rpmcommon -- xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
 
-wget http://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/build/el7/xcalar-sqldf-${VERSION}-${ITER}.el7.noarch.rpm
-$XLRDIR/bin/reposync.sh rhel7-repo xcalar-sqldf-${VERSION}-${ITER}.el7.noarch.rpm
+wget http://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf_${VERSION}-${ITER}_all.deb
+$XLRDIR/bin/apt-includedeb.sh -d all xcalar-sqldf_${VERSION}-${ITER}_all.deb
 
-wget http://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/build/amzn1/xcalar-sqldf-${VERSION}-${ITER}.amzn1.noarch.rpm
-$XLRDIR/bin/reposync.sh amzn1-repo xcalar-sqldf-${VERSION}-${ITER}.amzn1.noarch.rpm
-
-wget http://jenkins.int.xcalar.com/job/BuildSqldf/lastSuccessfulBuild/artifact/build/ub14/xcalar-sqldf_${VERSION}-${ITER}_all.deb
-$XLRDIR/bin/apt-includedeb.sh xcalar-sqldf_${VERSION}-${ITER}_all.deb
-
-tar xvf /netstore/builds/byJob/BuildSqldf/${ITER}/archive.tar el7/xcalar-sqldf-${VERSION}-${ITER}.el7.tar.gz
-! test -f el7/xcalar-sqldf-${VERSION}-${ITER}.el7.tar.gz && \
-    echo "xcalar-sqldf-${VERSION}-${ITER}.el7.tar.gz not found. repo.xcalar.net/deps not updated" && exit 1
-tar xvzf el7/xcalar-sqldf-${VERSION}-${ITER}.el7.tar.gz
-SQLDF_FILE=$(find tmp -name xcalar-sqldf.jar -print | head -1)
-test -z "$SQLDF_FILE" && echo "xcalar-sqldf.jar not found. repo.xcalar.net/deps not updated." && exit 1
-mv ${SQLDF_FILE} ./xcalar-sqldf-${VERSION}.jar
+tar -xOf /netstore/builds/byJob/BuildSqldf/${ITER}/archive.tar xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm | rpm2cpio | cpio -i --to-stdout ./opt/xcalar/lib/xcalar-sqldf.jar > xcalar-sqldf-${VERSION}.jar
 gsutil cp ./xcalar-sqldf-${VERSION}.jar gs://repo.xcalar.net/deps
 echo "# Please update SQLDF_VERSION in xcalar/bin/build-user-installer.sh to use version ${VERSION} for non-RPM builds #"
+
+if $optListRepo; then
+    echo
+    echo "Final sqldf repo state: "
+    gsutil ls -r gs://repo.xcalar.net/rpm-deps/common/x86_64/Packages/xcalar-sqldf-0.2-84.noarch.rpm | grep sqldf | xargs gsutil hash -h
+    echo "User installer sqldf repo state: "
+    gsutil ls -r gs://repo.xcalar.net/deps/ | grep sqldf | xargs gsutil hash -h
+fi
