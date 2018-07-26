@@ -123,6 +123,7 @@ java -jar src/sqldf/sbt/target/xcalar-sqldf.jar >"$TmpSqlDfLogs" 2>&1 &
 
 echo "Starting usrnodes"
 export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/bin/usrnode/test-config.cfg}"
+export NODE_ENV="dev"
 launcher.sh 1 daemon
 
 echo "Starting Caddy"
