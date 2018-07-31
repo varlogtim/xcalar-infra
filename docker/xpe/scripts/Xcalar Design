@@ -12,16 +12,16 @@
 #        If file .installed exists in this script's dir --> sets XD to open.
 #        else --> sets installer to open.
 #
-# ** -a option can force a particular GUI (for testing):
+# ** Supplying command arg to this script can force a GUI (for testing):
 #
 # bash Xcalar\ Design -a install    // forces installer to open
 # bash Xcalar\ Design -a uninstall  // forces uninstaller to open
 # bash Xcalar\ Design -a revert     // forces revert tool to open
 # bash Xcalar\ Design -a xd         // forces xd to open
 #
-# ** having text file .launched in this script's dir, can also force a particular GUI.
+# ** Having a file named .launched in script dir can also force a particular GUI.
 #    (this is used by the GUIs to restart app to a particular Window)
-#    The content of the file will instruct which GUI to open:
+#    The content of .launched will instruct which GUI to open:
 #
 # install              // forces installer to open
 # uninstall            // forces uninstaller to open
@@ -66,6 +66,22 @@ ts=$(date +%FT%T%z)
 export TIMESTAMP="$ts"
 echo "timestamp: $ts" >&2
 
+## export env vars for the nwjs entrypoint (starter.js) and server ##
+
+# vars for server app GUIs will make calls to
+export XPE_SERVER_HOSTNAME="${XPE_SERVER_HOSTNAME:-127.0.0.1}"
+export XPE_SERVER_PORT="${XPE_SERVER_PORT:-8388}"
+export XPE_SERVER_PROTOCOL="${XPE_SERVER_PROTOCOL:-http}"
+export XPE_SERVER_URL="$XPE_SERVER_PROTOCOL://$XPE_SERVER_HOSTNAME:$XPE_SERVER_PORT"
+echo "XPE_SERVER_URL=$XPE_SERVER_URL"
+
+# vars for GUI roots (can be URL or filepath rel nwjs root (where package.json is)
+export XD_URL="${XD_URL:-index.html}"
+export XPE_INSTALLER_URL="${XPE_INSTALLER_URL:-xpe/xpeInstaller.html}"
+export XPE_UNINSTALLER_URL="${XPE_UNINSTALLER_URL:-xpe/xpeUninstaller.html}"
+export XPE_IMT_URL="${XPE_IMT_URL:-xpe/xpeImageManagementTool.html}"
+export XPE_GRAFANA_URL="${XPE_GRAFANA_URL:-http://127.0.0.1:8082}"
+
 # if app should build a Grafana container during install, set INSTALL_GRAFANA var
 # for the api server to detect
 
@@ -105,13 +121,13 @@ fi
 waitForServer() {
     local timeout=10
     local pauseTime=1
-    until curl http://127.0.0.1:8388 >/dev/null 2>&1 || [ "$timeout" -eq "0" ]; do
+    until curl "$XPE_SERVER_URL" >/dev/null 2>&1 || [ "$timeout" -eq "0" ]; do
         echo "server not up yet!" >&2
         sleep "$pauseTime"
         timeout=$((timeout - pauseTime))
     done
 
-    if ! curl http://127.0.0.1:8388 >/dev/null 2>&1; then
+    if ! curl "$XPE_SERVER_URL" >/dev/null 2>&1; then
         echo "Timed out waiting for server to come up!" >&2
         exit 1
     fi
