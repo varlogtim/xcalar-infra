@@ -1507,7 +1507,9 @@ def path_exists_on_node(node, path):
 def get_cluster_priority(prioritize=None):
 
     # try the clusters in this order
-    clusterPriority = ['einstein-cluster2', 'feynman-dc', 'node3-cluster', 'node2-cluster', 'node4-cluster', 'node1-cluster']
+    devClusters = [ 'einstein-cluster2' ]
+    qaClusters = [ 'feynman-dc', 'node3-cluster', 'node2-cluster', 'node1-cluster' ]
+    clusterPriority = devClusters
     validClusters = []
     mapping = get_template_mapping() # get the official template mapping
     if prioritize:
