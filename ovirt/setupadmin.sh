@@ -26,6 +26,8 @@ if [ -z "$XCE_HOME" ]; then
 fi
 
 #XCE_HOME=/var/opt/xcalar
-mkdir -p -m 0777 $XCE_HOME/config # this is where the api is going to write the config file to
-jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"$ADMIN_USERNAME\", \"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\" }"
-curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set"
+# ovirttool should have copied static defaultadmin.json file to VM's root
+mkdir -p -m 0777 "$XCE_HOME/config"
+mv /defaultAdmin.json "$XCE_HOME/config"
+chown xcalar:xcalar "$XCE_HOME/config/defaultAdmin.json"
+chmod 0600 "$XCE_HOME/config/defaultAdmin.json"

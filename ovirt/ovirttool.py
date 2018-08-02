@@ -61,9 +61,11 @@ MAX_VMS_ALLOWED=1024
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
 JENKINS_USER_PASS = "jenkins" # password to set for user 'jenkins' on provisioned VMs
-LOGIN_UNAME = "xdpadmin"
-LOGIN_PWORD = "Welcome1"
+LOGIN_UNAME = "admin"
+LOGIN_PWORD = "admin"
 LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
+
+SCRIPT_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
 
 TMPDIR_LOCAL='/tmp/ovirt_tool' # tmp dir to create on local machine running python script, to hold pem cert for connecting to Ovirt
 TMPDIR_VM='/tmp/ovirt_tool' # tmp dir to create on VMs to hold helper shell scripts, lic files (dont put timestamp because forking processes during install processing)
@@ -81,6 +83,7 @@ OVIRT_SHELL_LOGS_DIR = '/tmp/ovirtShellScriptLogs_' + generateRandomString() # d
 CONN=None
 LICFILENAME='XcalarLic.key'
 # helper scripts - they should be located in dir this python script is at
+DEFAULT_ADMIN_FILE = 'defaultAdmin.json'
 INSTALLER_SH_SCRIPT = 'e2einstaller.sh'
 TEMPLATE_HELPER_SH_SCRIPT = 'templatehelper.sh'
 ADMIN_HELPER_SH_SCRIPT = 'setupadmin.sh'
@@ -338,7 +341,7 @@ def setup_hostname(ip, name):
     info("Set hostname of VM {} to {}".format(ip, name))
     fqdn = "{}.int.xcalar.com".format(name)
     run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
-    run_ssh_cmd(ip, 'systemctl restart network', timeout=300)
+    run_ssh_cmd(ip, 'systemctl restart network', timeout=500)
     run_ssh_cmd(ip, 'systemctl restart autofs')
 
 def reboot_node(ip):
@@ -1159,11 +1162,10 @@ def setup_admin_account(node):
 
     info("\nSetup admin account on {}\n".format(node))
 
-    # the script calls the Xcalar API and xcalar service needs to be started for it to work
-    start_xcalar(node)
-
-    # there's a shell script for that...
-    scp_file(node, ADMIN_HELPER_SH_SCRIPT, TMPDIR_VM)
+    # scp in shell script that sets up default admin account; it looks for
+    # defaultAdmin.json at vm's root
+    scp_file(node, SCRIPT_DIR + '/../docker/xpe/staticfiles/defaultAdmin.json', '/')
+    scp_file(node, SCRIPT_DIR + '/' + ADMIN_HELPER_SH_SCRIPT, TMPDIR_VM)
     # run the helper script
     run_sh_script(node, TMPDIR_VM + '/' + ADMIN_HELPER_SH_SCRIPT)
 
@@ -1197,8 +1199,8 @@ def setup_xcalar(ip, licfilepath, installer):
     run_ssh_cmd(ip, 'mkdir -p {}'.format(TMPDIR_VM))
 
     # copy in installer shell script and files it depends on
-    fileslist = [[INSTALLER_SH_SCRIPT, TMPDIR_VM],
-        [TEMPLATE_HELPER_SH_SCRIPT, TMPDIR_VM], # installer script will call this template helper script
+    fileslist = [[SCRIPT_DIR + '/' + INSTALLER_SH_SCRIPT, TMPDIR_VM],
+        [SCRIPT_DIR + '/' + TEMPLATE_HELPER_SH_SCRIPT, TMPDIR_VM], # installer script will call this template helper script
         # rename lic file to std name in case they supplied a file with a diff name, because e2e script will call by st name
         [licfilepath, TMPDIR_VM + '/' + LICFILENAME]]
     for filedata in fileslist:
@@ -1599,7 +1601,7 @@ def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_K
     info("\nssh {}@{}".format(user, host))
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname=host, port=port, username=user, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=10)
+    client.connect(hostname=host, port=port, username=user, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
     info("connected...".format(host))
     chan = client.get_transport().open_session()
     chan.settimeout(timeout)
@@ -2009,7 +2011,7 @@ def setup():
     # to authenticate.  but if exists not sure if its acceptible perm
     # level, so delete it and copy it back in fresh
     # (todo - when make cleanup remove)
-    cmds = ['cp ' + OVIRT_KEYFILE_SRC + ' ' + OVIRT_KEYFILE_DEST,
+    cmds = ['cp ' + SCRIPT_DIR + '/' + OVIRT_KEYFILE_SRC + ' ' + OVIRT_KEYFILE_DEST,
             'chmod 400 ' + OVIRT_KEYFILE_DEST]
 
     if os.path.exists(OVIRT_KEYFILE_DEST):
@@ -2089,8 +2091,8 @@ def validateparams(args):
 
             scriptcwd = os.path.dirname(os.path.realpath(__file__))
             if not licfilepath:
-                licfilepath = LICFILENAME
-                info("\tYou did not supply --licfile option... will look in cwd for Xcalar license file...")
+                licfilepath = SCRIPT_DIR + '/' + LICFILENAME
+                info("\tYou did not supply --licfile option... will look in script's cwd for Xcalar license file...")
             if not os.path.exists(licfilepath):
                 raise FileNotFoundError("\n\nERROR: File {} does not exist!\n"
                     " (Re-run with --licfile=<path to latest licence file>, or,\n"
