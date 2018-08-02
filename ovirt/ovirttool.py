@@ -1209,6 +1209,9 @@ def setup_xcalar(ip, licfilepath, installer):
     # install using bld requested
     run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=1000)
 
+    # start xcalar
+    start_xcalar(ip)
+
 '''
     Install and setup Xcalar on a set of nodes.
     Once xcalar installation completes on all of them,
