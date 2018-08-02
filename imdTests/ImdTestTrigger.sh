@@ -10,17 +10,6 @@ restartXcalar() {
     sudo xcalar-infra/functests/launcher.sh $memAllocator
 }
 
-genSupport() {
-    sudo /opt/xcalar/scripts/support-generate.sh
-}
-trap "genSupport" EXIT
-
-if [ $MemoryAllocator -eq 2 ]; then
-    memAllocator=2
-else
-    memAllocator=0
-fi
-
 # Build the source
 source doc/env/xc_aliases
 xcEnvEnter
@@ -28,9 +17,15 @@ cmBuild clean
 cmBuild config debug
 cmBuild
 
+if [ $MemoryAllocator -eq 2 ]; then
+    memAllocator=2
+else
+    memAllocator=0
+fi
+
 ##installing required python packages
-pip3 install psycopg2
-pip3 install faker
+sudo pip3 install psycopg2
+sudo pip3 install faker
     
 set +e
 # Kill previous instances of xcalar processes
@@ -62,18 +57,15 @@ fi
 gitsha=`xccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
-source doc/env/xc_aliases
-xcEnvEnter
-
 python3 xcalar-infra/imdTests/genIMD.py \
-        --xcalar   $XCALAR_URL --user $XCALAR_USER \
-        --session "imdTest" --env $TARGET_ENV \
-        --exportUrl $EXPORT_URL --bases \
-        --updates --cube $CUBE_NAME \
-        --numBaseRows $NUM_BASE_ROWS \
-        --numUpdateRows $NUM_UPDATE_ROWS \
-        --numUpdates $NUM_UPDATES \
-        --updateSleep $UPDATE_SLEEP
+            --user $XCALAR_USER \
+            --session "imdTest" --env $TARGET_ENV \
+            --exportUrl $EXPORT_URL --bases \
+            --updates --cube $CUBE_NAME \
+            --numBaseRows $NUM_BASE_ROWS \
+            --numUpdateRows $NUM_UPDATE_ROWS \
+            --numUpdates $NUM_UPDATES \
+            --updateSleep $UPDATE_SLEEP
 
 
 sudo pkill -9 usrnode

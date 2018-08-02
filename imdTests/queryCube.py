@@ -21,8 +21,7 @@ def initialise(args):
     global numThreads
     global workbook
 
-    mgmtdUrl="http://%s:9090/thrift/service/XcalarApiService/" % args.xcalar.rstrip()
-    xcalarApi = XcalarApi(mgmtdUrl)
+    xcalarApi = XcalarApi(bypass_proxy = True)
     username = args.user
     userIdUnique = int(hashlib.md5(username.encode("UTF-8")).hexdigest()[:5], 16) + 4000000
     try:
@@ -55,10 +54,10 @@ def queryPubTable(pubTab, processNum):
             break
         except:
             errorOccurred = True
-            sleep(1)
+            time.sleep(1)
             
     if errorOccurred:
-        print("Failed to do select on {}, retired {}".format(pubTab, numRetries))
+        print("Failed to do select on {}, retried {} times".format(pubTab, numRetries))
         raise
     
     resultSet = ResultSet(xcalarApi, tableName=tableName, maxRecords=500)
@@ -123,6 +122,7 @@ def main():
 ##then do inactive and delete
 def sessionCleanUp():
     session = None
+    global workbook
     for sess in workbook.list().sessions:
         if sess.name == workbook.name:
             session = sess
@@ -144,7 +144,6 @@ def sessionCleanUp():
 
 if __name__ == '__main__':
     argParser = argparse.ArgumentParser(description="Queries the published cube")
-    argParser.add_argument('--xcalar', '-x', help="Ip address/hostname of mgmtd instance", required=True, default="localhost")
     argParser.add_argument('--user', '-u', help="Xcalar User", required=True, default="admin")
     argParser.add_argument('--cube', '-c', help="what cube data to generate", 
                         choices=['ecommcube', 'transcube'], required=True)

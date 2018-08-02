@@ -21,10 +21,12 @@ from xcalar.external.LegacyApi.Retina import Retina
 from IMDUtil import IMDOps
 from prepareEnv import TestEnvironment
 
+here = os.path.abspath(os.path.dirname(__file__))
+xcalar_python = "python3"
+
 class DataGenerator(object):
     def __init__(self, args):
-        self.mgmtdUrl="http://%s:9090/thrift/service/XcalarApiService/" % args.xcalar.rstrip()
-        self.xcApi = XcalarApi(self.mgmtdUrl)
+        self.xcApi = XcalarApi(bypass_proxy = True)
         self.username = args.user
         self.userIdUnique = int(hashlib.md5(self.username.encode("UTF-8")).hexdigest()[:5], 16) + 4000000
         try:
@@ -52,7 +54,6 @@ class DataGenerator(object):
             self.exportTargetName = 'pgDbDatagenExport'
             self.imd = False
 
-        self.xcalar = args.xcalar
         self.retName = args.cube
         self.numBaseRows = args.numBaseRows
         self.numUpdateRows = args.numUpdateRows
@@ -69,7 +70,7 @@ class DataGenerator(object):
 
     def __getSchema(self, schemaName):
         schema = None
-        with open("schemas/" + schemaName) as f:
+        with open(os.path.join(here, "schemas", schemaName)) as f:
             return json.load(f)
 
     def __genData(self):
@@ -109,24 +110,26 @@ class DataGenerator(object):
                 self.__doIMD()
         
         #trigger the slow changing and cubes asyncly
-        programPath = os.path.abspath("triggerDimsCubes.py")
+        programPath = os.path.join(here, "triggerDimsCubes.py")
         datasetPath = "/freenas/imdtests/"
         
-        triggerCubeCmd = "python3 {} -x {} -u {} -i \"{}\" -p {} -c {}".format(programPath, self.xcalar, self.username, "Default Shared Root", datasetPath, self.retName)
+        triggerCubeCmd = "{} {} -u {} -i \"{}\" -p {} -c {}".format(
+                        xcalar_python, programPath, self.username, 
+                        "Default Shared Root", datasetPath, self.retName)
         pr1 = subprocess.Popen(triggerCubeCmd,
                            stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE,
                            shell=True)
-        queryCubeProgramPath = os.path.abspath("queryCube.py")
+        queryCubeProgramPath = os.path.join(here, "queryCube.py")
         if self.retName == 'ecommTables':
             cubeName = 'ecommcube'
         elif self.retName == 'transacTables':
             cubeName = 'transcube'
         else:
             raise ValueError("Invalid data generation retina")
-        queryCubeCmd = "python3 {} -x {} -u {} -c {} --numThreads {}".format(
-                        queryCubeProgramPath, self.xcalar, self.username, 
-                        cubeName, self.numThreads)
+        queryCubeCmd = "{} {} -u {} -c {} --numThreads {}".format(
+                        xcalar_python, queryCubeProgramPath, 
+                        self.username, cubeName, self.numThreads)
         pr2 = subprocess.Popen(queryCubeCmd,
                            stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE,
@@ -141,6 +144,7 @@ class DataGenerator(object):
                     self.__doIMD()
                 self.numUpdates -= 1
                 time.sleep(self.updateSleep)
+        print("Stopped applying updates, stopping the other processes!")
         if pr1.poll():
             out, err = pr1.communicate()
             print ("{}".format(out.strip().decode('utf-8')))
@@ -152,13 +156,14 @@ class DataGenerator(object):
             if pr2.returncode != 0:
                 raise ValueError(err)
         if pr1.poll() is None:
-            os.killpg(os.getpgid(pr1.pid), signal.SIGTERM)
+            print("Terminating process which triggers dimension and cube updates")
+            pr1.terminate()
         if pr2.poll() is None:
-            os.killpg(os.getpgid(pr2.pid), signal.SIGTERM)
+            print("Terminating process which queries the cube")
+            pr2.terminate()
 
 if __name__ == '__main__':
     argParser = argparse.ArgumentParser(description="Prime Xcalar cluster with imd tables and cubes generation and updates running")
-    argParser.add_argument('--xcalar', '-x', help="Ip address/hostname of mgmtd instance", required=True, default="localhost")
     argParser.add_argument('--user', '-u', help="Xcalar User", required=True, default="admin")
     argParser.add_argument('--session', '-s', help="Name of session", required=True)
     argParser.add_argument('--numBaseRows', help="Number of rows to generate", required=False, default=2000, type=int)

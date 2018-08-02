@@ -9,14 +9,14 @@ sudo /opt/xcalar/bin/pip3.6 install psycopg2; sudo /opt/xcalar/bin/pip3.6 instal
 Step 1) Log in to Xcalar say as USERNAME and create a workbook called WORKBOOKNAME
 
 Step 2) You can use this script to generate imd tables for 2 cubes with base data
-python3.6 genIMD.py -x localhost -u support@xcalar.com -s test --exportUrl /var/opt/xcalar/export/ -c ecommTables --env local --bases --numBaseRows 1000 --updates --numUpdateRows 10  
+python3.6 genIMD.py -s test --exportUrl /var/opt/xcalar/export/ -c ecommTables --env local --bases --numBaseRows 1000 --updates --numUpdateRows 10  
 
 s3 example:
-python3.6 genIMD.py -x localhost -u support@xcalar.com -s test --exportUrl hvr-integ-datae1/datagen/ -c ecommTables --env s3 --bases --numBaseRows 1000 --updates --numUpdateRows 10
+python3.6 genIMD.py -s test --exportUrl hvr-integ-datae1/datagen/ -c ecommTables --env s3 --bases --numBaseRows 1000 --updates --numUpdateRows 10
 
 
 Example output:
-(xcve) vgonela@kalam:~/xcalar-infra/imdTests$ python3.6 genIMD.py -x localhost -u support@xcalar.com -s test --exportUrl /var/opt/xcalar/export/ -c ecommTables --env local --bases --numBaseRows 1000 --updates --numUpdateRows 10
+(xcve) vgonela@kalam:~/xcalar-infra/imdTests$ python3.6 genIMD.py -s test --exportUrl /var/opt/xcalar/export/ -c ecommTables --env local --bases --numBaseRows 1000 --updates --numUpdateRows 10
 Uploading import_udf_ecomm
 Uploading import_udf_trade
 Uploading pgdbexportudf

@@ -22,6 +22,8 @@ from xcalar.compute.coretypes.DagTypes.ttypes import *
 
 ##TODO: Add one more cube which will generate schema
 ##on fly and generate all the stuff dynamically
+here = os.path.abspath(os.path.dirname(__file__))
+
 class TestEnvironment(object):
     def __init__(self, xcalarApi, exportUrl, env):
         self.xcApi = xcalarApi
@@ -49,11 +51,11 @@ class TestEnvironment(object):
         self.createTargets()
         
     def uploadUdfs(self):
-        udfsFiles = os.listdir("udfs/")
+        udfsFiles = os.listdir(os.path.join(here, "udfs/"))
         for pyFile in udfsFiles:
             moduleName=pyFile.split(".")[0].lower()
             print ("Uploading %s" % (moduleName))
-            with open("udfs/" + pyFile) as fp:
+            with open(os.path.join(here, "udfs", pyFile)) as fp:
                 self.udf.addOrUpdate(moduleName, fp.read())
         print("All UDFs uplaoded!")
 
@@ -111,7 +113,7 @@ class TestEnvironment(object):
 
     def getSchema(self, schemaName):
         schema = None
-        with open("schemas/" + schemaName) as f:
+        with open(os.path.join(here, "schemas", schemaName)) as f:
             return json.load(f)
 
     def addParamsDF(self, retinaName):
@@ -228,8 +230,7 @@ class TestEnvironment(object):
         print("====================================\n")
 
 def parseArgs(args):
-    mgmtdUrl="http://%s:9090/thrift/service/XcalarApiService/" % args.xcalar.rstrip()
-    xcApi = XcalarApi(mgmtdUrl)
+    xcApi = XcalarApi(bypass_proxy = True)    
     username = args.user
     userIdUnique = int(hashlib.md5(username.encode("UTF-8")).hexdigest()[:5], 16) + 4000000
     try:
@@ -243,7 +244,6 @@ def parseArgs(args):
 
 if __name__ == '__main__':
     argParser = argparse.ArgumentParser(description="Prime a Xcalar Workbook with the datasets required for the credit score demo")
-    argParser.add_argument('--xcalar', '-x', help="Ip address/hostname of mgmtd instance", required=True, default="localhost")
     argParser.add_argument('--user', '-u', help="Xcalar User", required=True, default="admin")
     argParser.add_argument('--session', '-s', help="Name of session", required=True)
     argParser.add_argument('--exportUrl', '-l', help="Where to export the data", required=False, default="/mnt/xcalar/demo")

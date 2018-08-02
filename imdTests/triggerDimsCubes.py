@@ -79,8 +79,7 @@ def initialise(args):
     global path
     global workbook
 
-    mgmtdUrl="http://%s:9090/thrift/service/XcalarApiService/" % args.xcalar.rstrip()
-    xcalarApi = XcalarApi(mgmtdUrl)
+    xcalarApi = XcalarApi(bypass_proxy = True)
     username = args.user
     userIdUnique = int(hashlib.md5(username.encode("UTF-8")).hexdigest()[:5], 16) + 4000000
     try:
@@ -114,12 +113,12 @@ def uploadDF(dataflowName):
     dataflowStr = None
     udfs = {}
     dataflowPath = os.path.join(path, "dataflows", dataflowName)
-    with open(dataflowPath + "/dataflowInfo.json", 'r') as df:
+    with open(os.path.join(dataflowPath, "dataflowInfo.json"), 'r') as df:
         dataflowStr = df.read()
 
     if os.path.exists(dataflowPath + "/udfs/"):
-        for udf in os.listdir(dataflowPath + "/udfs/"):
-            with open(dataflowPath + "/udfs/" + udf, 'r') as udfFile:
+        for udf in os.listdir(os.path.join(dataflowPath, "udfs")):
+            with open(os.path.join(dataflowPath, "udfs", udf), 'r') as udfFile:
                 udfs[udf] = udfFile.read()
 
     retinaBuf = io.BytesIO()
@@ -238,6 +237,7 @@ def main():
         sessionCleanUp()
 
 def sessionCleanUp():
+    global workbook
     session = None
     for sess in workbook.list().sessions:
         if sess.name == workbook.name:
@@ -260,7 +260,6 @@ def sessionCleanUp():
 
 if __name__ == '__main__':
     argParser = argparse.ArgumentParser(description="Generates/Updates dimensions and cubes")
-    argParser.add_argument('--xcalar', '-x', help="Ip address/hostname of mgmtd instance", required=True, default="localhost")
     argParser.add_argument('--user', '-u', help="Xcalar User", required=True, default="admin")
     argParser.add_argument('--importTargetName', '-i', help="import target name", required=True, default="Default Shared Root")
     argParser.add_argument('--path', '-p', help="datasets path", required=True, default="xcalar-infra/imdTests/datasets")
