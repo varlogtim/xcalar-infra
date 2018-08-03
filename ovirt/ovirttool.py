@@ -133,6 +133,9 @@ class TimeoutError(Exception): # built in python3 but not python2.7
 class CantFindClusterError(Exception):
     pass
 
+class NoMatchingVmsException(Exception):
+    pass
+
 class ShellError(Exception):
     def __init__(self, cmd, node, status, stdout, stderr, summary):
         self.cmd = cmd
@@ -346,7 +349,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
         info("VM added...")
 
         # get id of the newly added vm (can't get from obj you just created.  need to get from vms service)
-        vmid = get_vm_id(name)
+        vmid = get_vm_id("name=" + name)
         info("\tid assigned: {}...".format(vmid))
         # corner case: if they named it starting with a search keyword Ovirt uses,
         # the VM will be added, but get_vm_id will return no results.
@@ -380,7 +383,9 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
                 " even after {} restarts (dhcp issue?)\n".format(name, vmid, iptries))
 
         # IP came up, but make sure it is actually unique to this new VM for Ovirt (feynman issue)
-        matchingVMs = get_matching_vms(assignedIp)
+        # args is search string to use in ovirt search bar; search by actual ip
+        # else just supplying ip would return superstrings of that ip too
+        matchingVMs = get_matching_vms("ip=" + assignedIp)
         if len(matchingVMs) > 1:
             info("\n\n\t --- FEYNMAN ISSUE HIT {} ---:\n\t"
                 "The IP that got assigned to your new VM, {},"
@@ -646,8 +651,7 @@ def get_cluster_available_memory(name):
             "cluster names)\n".format(name, name))
 
 '''
-    Given some identifier, such as an IP or the name of a VM,
-    return list of VMs that match it.
+    returns list of VM objects matching a given identifier
     (This is equivalent to logging in to Ovirt, and typing
     the identifier string in the search bar, and returning a ovirtsdk4.type.Vm
     object for each matching row)
@@ -690,17 +694,16 @@ def pyString(var):
     return var.strip().encode('utf-8') # strip off formatting so it doesn't get encoded to literals
 
 '''
-    Given some identifier, such as an IP or the name of a VM,
-    return a VM which matches.
+    Return the id of VM that matches a given identifier,
+    with option to throw exception if no matching VMs found.
 
     :param identifier: search criteria you would type in the Ovirt search bar.
         YOu want to give something specific like an IP or the name ofyour VM
+    :param failOnNoMatches: throw exception if no matching vm found
 
-    :returns:
-        unique VM id if 1 VM found
-        None if no VM found
+    :return: String (unique VM id if 1 VM found)
 
-    :throws Exception if multiple matches (don't catch these for now)
+    :throws NoMatchingVmsException if no matches and failOnNoMatches specified
 
 '''
 def get_vm_id(identifier, failOnNoMatches=True):
@@ -714,7 +717,10 @@ def get_vm_id(identifier, failOnNoMatches=True):
                 "Be more specific".format(identifier))
         return matches[0].id
     if failOnNoMatches:
-        raise RuntimeError("Found no matches for identifier {} (if this is a VM name and you're sure it exists, does it begin with one of Ovirt's search keywords?  Try typing in to Ovfirt search field)".format(identifier))
+        raise NoMatchingVmsException("Found no matching VMs for identifier {} " \
+            "(If you are sure this identifier should return a result, " \
+            " go to ovirt gui, open the 'VM' tab, and try typing {} in " \
+            " in the search bar and see if that gives any results)".format(identifier, identifier))
 
 '''
     Get the IP for the VM needed for cluster creation
@@ -930,7 +936,8 @@ def remove_vm(identifier, releaseIP=True):
     timeout = 20
     while timeout:
         try:
-            match = get_vm_id(name)
+            # search by exact name; else will return all vms that grep match the str
+            match = get_vm_id("name=" + name)
             # dev check: make sure that function didn't change from throwing exception
             # to returning None
             if not match:
@@ -1327,6 +1334,9 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
 
     # check if any vms with the basename, if so they need to specify something different
 
+    # do NOT check name=<basename>, as multi-node clusters will append
+    # to the basename so it won't be an exact match
+
     '''
         false negative cornercase!!!
 
@@ -1334,12 +1344,10 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
         (i.e., a string you can type in the GUI's main search field to refine a search,
         such as the string 'name')
         then match will return NO results, even if there ARE vms by that name!
-
-        (This is because, this call essentially has the same effect as typing the arg passed in,
-        in to the GUI's main search field; it returns a types.Vm object for each 'row' you'd see
-        if you typed that value in the search field.
-        therefore, if the basename you're passing, begins wth one of Ovirt's search refining keywords,
-        the search will NOT return results because it's interpreting that value, as a search keyword!)
+        (get_matching_vms(<arg>) generates same results as typing <arg> in Ovirt
+        GUI search field;
+        therefore, if <arg> begins wth one of Ovirt's search refining keywords,
+        the search will NOT return results because it's interpreting that value as a search keyword!)
     '''
     matches = get_matching_vms(basename)
     if matches:
@@ -1412,8 +1420,8 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
     # get the list of the unique vm ids
     # a good check to make sure these VMs actually existing by these names now
     ids = []
-    for vm in vmnames:
-        ids.append(get_vm_id(vm))
+    for vmname in vmnames:
+        ids.append(get_vm_id("name=" + vmname))
     #return vm_names
     return ids
 
@@ -1482,7 +1490,7 @@ def setup_admin_account(node):
 '''
 def setup_xcalar(ip, licfilepath, installer):
 
-    vmname = get_vm_name(get_vm_id(ip))
+    vmname = get_vm_name(get_vm_id("ip=" + ip))
 
     info("\nInstall Xcalar on {} (IP: {}), using RPM at installer:\n\t{}\n".format(vmname, ip, installer))
 
