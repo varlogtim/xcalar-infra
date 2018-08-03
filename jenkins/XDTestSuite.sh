@@ -10,6 +10,7 @@ NUM_USERS=${NUM_USERS:-$(shuf -i 2-3 -n 1)}
 TEST_DRIVER_PORT="5909"
 
 # Make symbolic link
+sudo mkdir /var/www || true
 sudo ln -sfn $WORKSPACE/xcalar-gui/xcalar-gui /var/www/xcalar-gui
 
 if [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
