@@ -68,16 +68,20 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     else
         echo "Current version of XCE is not compatible. Trying..."
         gitshas=`git log --format=%H src/include/libapis/LibApisCommon.h`
+        prevSha="HEAD"
         for gitsha in $gitshas; do
             git checkout "$gitsha" src/include/libapis/LibApisCommon.h
             versionSig=`md5sum src/include/libapis/LibApisCommon.h | cut -d\  -f 1`
             echo "$gitsha: VersionSig = $versionSig"
             if grep -q "$versionSig" "$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"; then
                 echo "$gitsha is a match"
+                echo "Checking out $prevSha as the last commit with the matching signature"
                 git checkout HEAD src/include/libapis/LibApisCommon.h
-                git checkout "$gitsha"
+                git checkout "$prevSha"
                 foundVersion="true"
                 break
+            else
+                prevSha="$gitsha^1"
             fi
         done
     fi
