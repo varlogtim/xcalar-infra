@@ -3,6 +3,7 @@
 export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$PATH"
 export CCACHE_BASEDIR=$XLRDIR
+export ADDRESS_SANITIZER=true
 #pgrep -u `whoami` usrnode | xargs -r kill -9
 #pgrep -u `whoami` xcmgmtd | xargs -r kill -9
 # Nuke as soon as possible
