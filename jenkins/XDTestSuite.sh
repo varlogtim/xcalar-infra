@@ -17,7 +17,7 @@ if [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
     cd $XLRGUIDIR
     git diff --name-only HEAD^1 > out
     echo `cat out`
-    diffTargetFile=`cat out | grep -E "assets/extensions/ext-available/sql.ext|ts/components/sql/|ts/thrift/XcalarApi.js|ts/shared/api/xiApi.ts|ts/XcalarThrift.js"`
+    diffTargetFile=`cat out | grep -E "(assets\/test\/json\/SQLTest.json|assets\/extensions\/ext-available\/sql.ext|ts\/components\/sql\/|ts\/thrift\/XcalarApi.js|ts\/shared\/api\/xiApi.ts|ts\/XcalarThrift.js)" | grep -v "ts\/components\/sql\/sqlQueryHistoryPanel.ts"`
 
     rm -rf out
 
