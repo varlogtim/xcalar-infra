@@ -3,4 +3,4 @@
 export XLRDIR=$PWD
 export PATH=$XLRDIR/bin:$PATH
 
-bash -e bin/gerrit-reviewers.sh
+bash -e gerrit-reviewers.sh
