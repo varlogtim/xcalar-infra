@@ -10,23 +10,12 @@ restartXcalar() {
     sudo xcalar-infra/functests/launcher.sh $memAllocator
 }
 
-# Build the source
-source doc/env/xc_aliases
-xcEnvEnter
-cmBuild clean
-cmBuild config debug
-cmBuild
-
 if [ $MemoryAllocator -eq 2 ]; then
     memAllocator=2
 else
     memAllocator=0
 fi
 
-##installing required python packages
-sudo pip3 install psycopg2
-sudo pip3 install faker
-    
 set +e
 # Kill previous instances of xcalar processes
 sudo pkill -9 usrnode
@@ -57,16 +46,19 @@ fi
 gitsha=`xccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
-python3 xcalar-infra/imdTests/genIMD.py \
+##installing required python packages
+sudo /opt/xcalar/bin/pip3.6 install psycopg2
+sudo /opt/xcalar/bin/pip3.6 install faker
+
+/opt/xcalar/bin/python3.6 xcalar-infra/imdTests/genIMD.py \
             --user $XCALAR_USER \
-            --session "imdTest" --env $TARGET_ENV \
+            --session "imdTests" --env $TARGET_ENV \
             --exportUrl $EXPORT_URL --bases \
             --updates --cube $CUBE_NAME \
             --numBaseRows $NUM_BASE_ROWS \
             --numUpdateRows $NUM_UPDATE_ROWS \
             --numUpdates $NUM_UPDATES \
             --updateSleep $UPDATE_SLEEP
-
 
 sudo pkill -9 usrnode
 sudo pkill -9 childnode
