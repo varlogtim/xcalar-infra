@@ -17,18 +17,10 @@ else
 fi
 
 set +e
-# Kill previous instances of xcalar processes
-sudo pkill -9 usrnode
-sudo pkill -9 childnode
-sudo pkill -9 xcmonitor
-sudo pkill -9 xcmgmtd
-sleep 60
+source doc/env/xc_aliases
+xclean
 
-sudo find /var/opt/xcalar -type f -not -path "/var/opt/xcalar/support/*" -delete
-sudo rm -rf /var/opt/xcalar/kvs/
-sudo find . -name "core.childnode.*" -type f -delete
 set -e
-
 sudo yum -y remove xcalar
 
 sudo $INSTALLER_PATH --noStart
