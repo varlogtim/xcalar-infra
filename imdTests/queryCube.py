@@ -6,8 +6,7 @@ Will be enhanced to do some JDBC queries
 import time
 import sys
 import argparse
-import hashlib
-from concurrent import futures
+from concurrent.futures import ProcessPoolExecutor, wait, as_completed
 
 from xcalar.external.LegacyApi.XcalarApi import XcalarApi
 from xcalar.external.LegacyApi.Session import Session
@@ -23,10 +22,9 @@ def initialise(args):
 
     xcalarApi = XcalarApi(bypass_proxy = True)
     username = args.user
-    userIdUnique = int(hashlib.md5(username.encode("UTF-8")).hexdigest()[:5], 16) + 4000000
     try:
-        workbook = Session(xcalarApi, username, username, 
-                userIdUnique, True, sessionName="queryWB")
+        workbook = Session(xcalarApi, username, username,
+                None, True, sessionName="queryWB")
     except Exception as e:
         print("Could not set session for %s" % (username))
         raise e
@@ -55,11 +53,11 @@ def queryPubTable(pubTab, processNum):
         except:
             errorOccurred = True
             time.sleep(1)
-            
+
     if errorOccurred:
         print("Failed to do select on {}, retried {} times".format(pubTab, numRetries))
         raise
-    
+
     resultSet = ResultSet(xcalarApi, tableName=tableName, maxRecords=500)
     results = []
     resultSize = 0
@@ -76,6 +74,7 @@ def queryPubTable(pubTab, processNum):
         pass
     duration = time.time() - start
     print("Process {} completed querying {} in {}".format(processNum, pubTab, duration))
+    sys.stdout.flush()
     return resultSize
 
 def concurrentQueries(count, pubTab):
@@ -92,35 +91,40 @@ def concurrentQueries(count, pubTab):
         time.sleep(60)
     if not pubTabFound:
         raise ValueError(pubTab, "cube not published, quering failed")
-    pubTablist = [pubTab] * count
-    processNums = []
-    for n in range(1, count+1):
-        processNums.append(n)
 
-    with futures.ProcessPoolExecutor(count) as executor:
-        sizes = executor.map(queryPubTable, pubTablist, processNums)
+    pool = ProcessPoolExecutor(count)
+    futures = []
+    for x in range(count):
+        futures.append(pool.submit(queryPubTable, pubTab, x))
 
-    totalSize = sum(sizes)
+    totalSize = 0
+    for x in as_completed(futures):
+        totalSize += x.result()
+
     return totalSize
 
 def main():
-    count = numThreads
+    global numThreads
     try:
         while True:
             start = time.time()
-            totalSize = concurrentQueries(count, cubeName)
+            totalSize = concurrentQueries(numThreads, cubeName)
             print("Total size queried", totalSize)
             duration = time.time() - start
             print("Total time for all processes to run", duration)
+            sys.stdout.flush()
             time.sleep(5)
     except:
         raise
     finally:
         sessionCleanUp()
+        sys.stdout.flush()
 
-##Weird way of getting session state 
+##Weird way of getting session state
 ##then do inactive and delete
 def sessionCleanUp():
+    print("In session cleanup")
+    return
     session = None
     global workbook
     for sess in workbook.list().sessions:
@@ -145,10 +149,10 @@ def sessionCleanUp():
 if __name__ == '__main__':
     argParser = argparse.ArgumentParser(description="Queries the published cube")
     argParser.add_argument('--user', '-u', help="Xcalar User", required=True, default="admin")
-    argParser.add_argument('--cube', '-c', help="what cube data to generate", 
+    argParser.add_argument('--cube', '-c', help="what cube data to generate",
                         choices=['ecommcube', 'transcube'], required=True)
-    argParser.add_argument('--numThreads', help="number of threads to run and do concurrent selects on cube", 
-                    required=False, default=8, type=int)
+    argParser.add_argument('--numThreads', help="number of threads to run and do concurrent selects on cube",
+                    required=False, default=16, type=int)
 
     args = argParser.parse_args()
     initialise(args)

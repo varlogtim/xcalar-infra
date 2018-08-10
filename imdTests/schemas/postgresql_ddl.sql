@@ -1,8 +1,8 @@
-DROP DATABASE IF EXISTS ecommercedb;
+-- DROP DATABASE IF EXISTS ecommercedb;
 
-CREATE DATABASE ecommercedb  WITH OWNER = postgres;
+-- CREATE DATABASE ecommercedb  WITH OWNER = postgres;
 
-GRANT ALL ON DATABASE ecommercedb TO jenkins;
+-- GRANT ALL ON DATABASE ecommercedb TO jenkins;
 
 --Create tables
 
@@ -27,6 +27,7 @@ CREATE TABLE public.customers
   cust_7 varchar(100),
   cust_8 varchar(100),
   cust_9 varchar(100),
+  opcode integer,
   CONSTRAINT customer_pkey PRIMARY KEY (customerid)
 );
 
@@ -52,6 +53,7 @@ CREATE TABLE public.customer_phone
   cust_phone_8 varchar(100),
   cust_phone_9 varchar(100),
   cust_phone_10 varchar(100),
+  opcode integer,
   CONSTRAINT phone_pkey PRIMARY KEY (phonenum)
 );
 
@@ -76,6 +78,7 @@ CREATE TABLE public.address
   address_4 varchar(100),
   address_5 varchar(100),
   address_6 varchar(100),
+  opcode integer,
   CONSTRAINT address_pkey PRIMARY KEY (addressid)
 );
 
@@ -91,6 +94,7 @@ CREATE TABLE public.customer_address
   customerid integer REFERENCES customers,
   addresstype varchar(20),
   modifieddate date,
+  opcode integer,
   PRIMARY KEY (addressid, customerid)
 );
 
@@ -163,7 +167,8 @@ CREATE TABLE orders (
     order_6 varchar(100),
     order_7 varchar(100),
     order_8 varchar(100),
-    order_9 varchar(100)
+    order_9 varchar(100),
+    opcode integer
 );
 
 ALTER TABLE public.orders
@@ -190,16 +195,9 @@ CREATE TABLE order_items (
     order_item_10 varchar(100),
     order_item_11 varchar(100),
     order_item_12 varchar(100),
+    opcode integer,
     PRIMARY KEY (orderitemsid, orderid)
 );
 
 ALTER TABLE public.order_items
   OWNER TO jenkins;
-
-
---create sequence order_id_seq;
---alter table orders alter orderid set default nextval('order_id_seq');
-
---create sequence order_items_id_seq;
---alter table order_items alter orderitemsid set default nextval('order_items_id_seq');
-

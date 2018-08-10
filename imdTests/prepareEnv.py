@@ -3,10 +3,9 @@ import json
 import hashlib
 import time
 import timeit
+import psycopg2
 from datetime import datetime
 
-### Start Xcalar Code ###
-#Xcalar imports. For more information, refer to discourse.xcalar.com
 from xcalar.external.LegacyApi.XcalarApi import XcalarApi
 from xcalar.external.LegacyApi.Session import Session
 from xcalar.external.LegacyApi.WorkItem import WorkItem
@@ -25,7 +24,7 @@ from xcalar.compute.coretypes.DagTypes.ttypes import *
 here = os.path.abspath(os.path.dirname(__file__))
 
 class TestEnvironment(object):
-    def __init__(self, xcalarApi, exportUrl, env):
+    def __init__(self, xcalarApi, **kwargs):
         self.xcApi = xcalarApi
         self.username = xcalarApi.session.username
         self.op = Operators(self.xcApi)
@@ -36,10 +35,12 @@ class TestEnvironment(object):
         datasetName = None
         dataset = None
 
-        ##get export and import information from config file
-        self.exportUrl = exportUrl
-        self.env = env
-        
+        defaultArgs = ['env', 'exportUrl', "dbHost", "dbPort", "dbUser",
+            "dbPass","db", "validateData"]
+        for k,v in kwargs.items():
+            if k in defaultArgs:
+                setattr(self, k, v)
+
         ##get sessionid, it is not present in session object
         ##need to workaround this way to get it
         self.sessionId = None
@@ -47,58 +48,99 @@ class TestEnvironment(object):
             if sess.name == xcalarApi.session.name:
                 self.sessionId = sess.sessionId
                 break
-        self.uploadUdfs()
-        self.createTargets()
-        
-    def uploadUdfs(self):
-        udfsFiles = os.listdir(os.path.join(here, "udfs/"))
-        for pyFile in udfsFiles:
-            moduleName=pyFile.split(".")[0].lower()
-            print ("Uploading %s" % (moduleName))
-            with open(os.path.join(here, "udfs", pyFile)) as fp:
-                self.udf.addOrUpdate(moduleName, fp.read())
-        print("All UDFs uplaoded!")
+
+    def uploadUdf(self, moduleName):
+        print ("Uploading %s.." % (moduleName))
+        with open(os.path.join(here, "udfs", moduleName+".py")) as fp:
+            self.udf.addOrUpdate(moduleName, fp.read())
 
     def createTargets(self):
-        #memory and import targets
-        targetNames = ["Memory", "s3DatagenImport"]
-        types = ["memory", "s3environ"]
-        params = {}
-        for tName, tType in zip(targetNames, types):
-            self.importTarget.add(tType, tName, params)
-        self.dataGenTarget = targetNames[0]
+        self.uploadUdf("import_udf_ecomm")
+        self.uploadUdf("import_udf_trade")
+        #memory target
+        self.memoryImportTarget = "memoryTarget"
+        self.importTarget.add("memory", self.memoryImportTarget, {})
 
-        #set export target
-        exportTargets = []
-        pgExportTarget = {
-            'name': 'pgDbDatagenExport',
-            'udfModule' : 'pgdb_export_udf',
-            'exportUrl' : '/'
-        }
-        exportTargets.append(pgExportTarget)
-        if self.exportUrl:
-            exportTarget = {
-                'name': 's3DatagenExport',
-                'udfModule' : 's3_export_udf',
-                'exportUrl' : self.exportUrl
-            }
-            exportTargets.append(exportTarget)
-        for expTarget in exportTargets:
-            ##remove if target present
-            try:
-                self.exportTarget.removeUDF(expTarget['name'])
-            except:
-                pass
-            try:
-                udfModule = "/workbook/{}/{}/udf/{}:main".format(self.username, self.sessionId, expTarget['udfModule'])
-                self.exportTarget.addUDF(expTarget['name'],
-                                    expTarget['exportUrl'],
-                                    udfModule)
-            except Exception as e:
-                print("Warining: Export target creation failed with:", str(e))
-
+        if self.env == 's3':
+            self.createS3Targets()
+        if self.env == 'postgresqldb' or self.validateData:
+            self.createDBTargets()
         print("Targets created!")
 
+    def createS3Targets():
+        #create import target
+        self.importTarget.add("s3environ", "s3DatagenImport", {})
+        #create export target
+        udfModule="s3_export_udf"
+        self.uploadUdf(udfModule)
+        self.createExportTarget(targetName="s3DatagenExport",
+                            udfModule=udfModule,
+                            eUrl=self.exportUrl)
+
+    def createDBTargets(self):
+        ##Import target
+        params = {'dbname':self.db, 'dbtype':'PG',
+                'host':self.dbHost, 'port':self.dbPort,
+                'psw_arguments':self.dbPass, 'psw_provider': 'plaintext',
+                'uid': self.dbUser}
+        importTargetName = "pgDb_{}_import".format(self.db)
+        dbExportTarget = "pgDb_{}_export".format(self.db)
+        self.importTarget.add('dsn', importTargetName, params)
+        ##export udf
+        udfModule = 'pgdb_export_udf'
+        with open(os.path.join(here, "udfs", udfModule+".py")) as fp:
+            content = fp.read()
+            content = content.replace('<DBNAME>', self.db)
+            content = content.replace('<DBUSER>', self.dbUser)
+            content = content.replace('<DBHOST>', self.dbHost)
+            content = content.replace('<DBPORT>', str(self.dbPort))
+            content = content.replace('<DBPASS>', self.dbPass)
+            self.udf.addOrUpdate(udfModule, content)
+        self.createExportTarget(targetName=dbExportTarget,
+                            udfModule=udfModule,
+                            eUrl="/")
+        self.resetDB()
+
+    def createExportTarget(self, targetName, udfModule, eUrl):
+        try:
+            self.exportTarget.removeUDF(targetName)
+        except:
+            pass
+        try:
+            exportUdfModule = "/workbook/{}/{}/udf/{}:main".\
+                    format(self.username, self.sessionId, udfModule)
+            self.exportTarget.addUDF(targetName,
+                                eUrl,
+                                exportUdfModule)
+        except Exception as e:
+            print("Warning: Export target creation failed with:", str(e))
+
+    ##Will remove this once postgresql is dockerized and run locally
+    def resetDB(self):
+        tablesToDelete = []
+        if self.db == "ecommercedb":
+            tablesToDelete = ["order_items", "orders", "customer_phone",
+                        "customer_address", "customers", "address"]
+        params = {}
+        params["dbname"] = self.db
+        params["user"] = self.dbUser
+        params["host"] = self.dbHost
+        params["port"] = self.dbPort
+        params["password"] = self.dbPass
+        conn = None
+        try:
+            conn = psycopg2.connect(**params)
+            cur = conn.cursor()
+            delStatament = 'DELETE FROM public.{}'
+            for tab in tablesToDelete:
+                cur.execute(delStatament.format(tab))
+            conn.commit()
+            cur.close()
+        except:
+            raise
+        finally:
+            if conn is not None:
+                conn.close()
 
     def loadDataset(self, numRows, importUdf, cubeName):
         timestamp = int(time.time())
@@ -106,7 +148,7 @@ class TestEnvironment(object):
                     timestamp, cubeName)
         args = {}
         datasetUrl = str(numRows)
-        dataset = UdfDataset(self.xcApi, self.dataGenTarget, datasetUrl, 
+        dataset = UdfDataset(self.xcApi, self.memoryImportTarget, datasetUrl,
                 datasetName, importUdf, args)
         dataset.load()
         return (dataset, datasetName)
@@ -150,7 +192,7 @@ class TestEnvironment(object):
             if evalStr == "":
                 evalStr = s
             else:
-                evalStr = "concat({}, {})".format(s, evalStr)    
+                evalStr = "concat({}, {})".format(s, evalStr)
             cols.insert(0, (prefixedCol, col['name']))
         mapTab = "map_{}_{}".format(destTab, int(time.time()))
         self.op.map(srcTab, mapTab, [evalStr], [mapTab])
@@ -164,18 +206,18 @@ class TestEnvironment(object):
         return (destTab, cols)
 
     def genEcommDFs(self):
-        retinaName = "ecommTables"
+        retinaName = "ecommercedb"
         dataset, datasetName = self.loadDataset(numRows = 1000,
                                 importUdf = "import_udf_ecomm:genData",
                                 cubeName = retinaName)
         tabsCreated = ["{}_1".format(retinaName)]
-        self.op.indexDataset(dataset.name, tabsCreated[0], 
+        self.op.indexDataset(dataset.name, tabsCreated[0],
                 "xcalarRecordNum", fatptrPrefixName=datasetName)
         schema = self.getSchema("{}.json".format(retinaName))
         destTables = []
         destColumns = []
         for tab in schema:
-            tab, cols = self.doUnion(tabsCreated[0], tab, 
+            tab, cols = self.doUnion(tabsCreated[0], tab,
                                 schema[tab]['columns'], datasetName)
             destTables.append(tab)
             destColumns.append(cols)
@@ -192,18 +234,18 @@ class TestEnvironment(object):
         dataset.delete()
 
     def genTransacDfs(self):
-        retinaName = "transacTables"
+        retinaName = "transactionsdb"
         dataset, datasetName = self.loadDataset(numRows = 1000,
                                 importUdf = "import_udf_trade:genData",
                                 cubeName = retinaName)
         tabsCreated = ["{}_1".format(retinaName)]
-        self.op.indexDataset(dataset.name, tabsCreated[0], 
+        self.op.indexDataset(dataset.name, tabsCreated[0],
                 "xcalarRecordNum", fatptrPrefixName=datasetName)
         schema = self.getSchema("{}.json".format(retinaName))
         destTables = []
         destColumns = []
         for tab in schema:
-            tab, cols = self.doUnion(tabsCreated[0], tab, 
+            tab, cols = self.doUnion(tabsCreated[0], tab,
                                 schema[tab]['columns'], datasetName)
             destTables.append(tab)
             destColumns.append(cols)
@@ -218,37 +260,14 @@ class TestEnvironment(object):
         for tab in tabsCreated:
             self.op.dropTable(tab)
         dataset.delete()
-        
+
     def run(self):
+        print("Creating IMD test environment..")
+        self.createTargets()
         try:
             self.op.dropTable('*')
         except:
             pass
-
         self.genEcommDFs()
         self.genTransacDfs()
-        print("====================================\n")
-
-def parseArgs(args):
-    xcApi = XcalarApi(bypass_proxy = True)    
-    username = args.user
-    userIdUnique = int(hashlib.md5(username.encode("UTF-8")).hexdigest()[:5], 16) + 4000000
-    try:
-        session = Session(xcApi, username, username, 
-                    userIdUnique, True, sessionName=args.session)
-    except Exception as e:
-        print("Could not set session for %s" % (username))
-        raise e
-    xcApi.setSession(session)
-    return xcApi
-
-if __name__ == '__main__':
-    argParser = argparse.ArgumentParser(description="Prime a Xcalar Workbook with the datasets required for the credit score demo")
-    argParser.add_argument('--user', '-u', help="Xcalar User", required=True, default="admin")
-    argParser.add_argument('--session', '-s', help="Name of session", required=True)
-    argParser.add_argument('--exportUrl', '-l', help="Where to export the data", required=False, default="/mnt/xcalar/demo")
-    args = argParser.parse_args()
-    
-    xcApi = parseArgs(args)
-    prepareEnv = TestEnvironment(xcApi, args.user, exportUrl=args.exportUrl)
-    prepareEnv.run()
+        print("="*20, "Done", "="*20)

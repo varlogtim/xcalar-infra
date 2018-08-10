@@ -43,18 +43,25 @@ gitsha=`xccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
 ##installing required python packages
-sudo /opt/xcalar/bin/pip3.6 install psycopg2
-sudo /opt/xcalar/bin/pip3.6 install faker
+sudo pip3 install psycopg2
+sudo pip3 install faker
 
-/opt/xcalar/bin/python3.6 xcalar-infra/imdTests/genIMD.py \
-            --user $XCALAR_USER \
-            --session "imdTests" --env $TARGET_ENV \
-            --exportUrl $EXPORT_URL --bases \
-            --updates --cube $CUBE_NAME \
-            --numBaseRows $NUM_BASE_ROWS \
-            --numUpdateRows $NUM_UPDATE_ROWS \
-            --numUpdates $NUM_UPDATES \
-            --updateSleep $UPDATE_SLEEP
+options="--user $XCALAR_USER \
+        --env $TARGET_ENV \
+        --exportUrl $EXPORT_URL --bases \
+        --updates --db $DB \
+        --numBaseRows $NUM_BASE_ROWS \
+        --numUpdateRows $NUM_UPDATE_ROWS \
+        --numUpdates $NUM_UPDATES \
+        --updateSleep $UPDATE_SLEEP \
+        --dbHost $DB_HOST --dbPort $DB_PORT \
+        --dbUser $DB_USER --dbPass $DB_PASS"
+
+if $VALIDATE_DATA ; then
+    options="$options --validateData"
+fi
+
+python3 xcalar-infra/imdTests/genIMD.py $options
 
 pkill -9 usrnode
 pkill -9 childnode

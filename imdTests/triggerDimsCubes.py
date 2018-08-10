@@ -1,4 +1,13 @@
-import hashlib
+from datetime import datetime, timedelta
+from time import sleep
+import timeit
+import tarfile
+from tarfile import TarInfo
+import os
+import io
+import sys
+import argparse
+
 from xcalar.external.LegacyApi.XcalarApi import XcalarApi, XcalarApiStatusException
 from xcalar.external.LegacyApi.Session import Session
 from xcalar.external.LegacyApi.WorkItem import WorkItem, WorkItemListXdfs
@@ -8,56 +17,48 @@ from xcalar.external.LegacyApi.Operators import *
 from xcalar.compute.coretypes.Status.ttypes import StatusT
 import xcalar.external.LegacyApi.Udf as XcUdf
 
-from datetime import datetime, timedelta
-from time import sleep
-import timeit
-import tempfile
-import tarfile
-from tarfile import TarInfo
-import os
-import io
-import argparse
-
+ecommDb = "ecommercedb"
+transacDb = "transactionsdb"
 ##These are the slow changing dimension tables and cubes
 ##Slow changing dimesions will update very less frequently
 cubesArrays = {
-    "ecommTables": [
+    ecommDb: [
         {
             "publishedTableName": "product_category",
             "dataflowName": "product_categ_dim",
-            "intervalInMins": 10,
+            "intervalInMins": 1,
             "enable": True,
         },
         {
             "publishedTableName": "product_sub_category",
             "dataflowName": "product_sub_categ_dim",
-            "intervalInMins": 15,
+            "intervalInMins": 1,
             "enable": True,
         },
         {
             "publishedTableName": "product",
             "dataflowName": "product_dim",
-            "intervalInMins": 12,
+            "intervalInMins": 1,
             "enable": True
         },
-        { 
+        {
             "publishedTableName": "ecommcube",
             "dataflowName": "ecommcube",
-            "intervalInMins": 5,
+            "intervalInMins": 2,
             "enable": True
         }
     ],
-    "transacTables": [
+    transacDb: [
         {
             "publishedTableName": "company",
             "dataflowName": "company_dim",
-            "intervalInMins": 20,
+            "intervalInMins": 1,
             "enable": True
         },
         {
             "publishedTableName": "exch_countrycode",
             "dataflowName": "exch_countrycode_dim",
-            "intervalInMins": 25,
+            "intervalInMins": 1,
             "enable": True
         },
         {
@@ -81,10 +82,9 @@ def initialise(args):
 
     xcalarApi = XcalarApi(bypass_proxy = True)
     username = args.user
-    userIdUnique = int(hashlib.md5(username.encode("UTF-8")).hexdigest()[:5], 16) + 4000000
     try:
-        workbook = Session(xcalarApi, username, username, 
-                userIdUnique, True, sessionName="automatic_cube")
+        workbook = Session(xcalarApi, username, username,
+                None, True, sessionName="triggerCubesNDims_WB")
     except Exception as e:
         print("Could not set session for %s" % (username))
         raise e
@@ -94,8 +94,8 @@ def initialise(args):
     xcUdf = XcUdf.Udf(xcalarApi)
 
     cubeArray = cubesArrays[args.cube]
-    importTargetName = args.importTargetName 
-    path = args.path 
+    importTargetName = args.importTargetName
+    path = args.path
 
     params = []
     params.append({
@@ -168,11 +168,11 @@ def runDfAndPublish(dataflowName, publishedTableName):
         except:
             errorOccurred = True
             sleep(1)
-            
+
     if (errorOccurred):
         print("Failed to execute dataflow {}".format(dataflowName))
         raise
-    
+
     print("Attempting to create/update {}".format(publishedTableName))
     for ii in range(numRetries):
         errorOccurred = False
@@ -185,7 +185,7 @@ def runDfAndPublish(dataflowName, publishedTableName):
         except:
             errorOccurred = True
             sleep(1)
-            
+
     if errorOccurred:
         print("Failed to publish {}".format(publishedTableName))
         raise
@@ -199,10 +199,10 @@ def runDfAndPublish(dataflowName, publishedTableName):
         except:
             errorOccurred = True
             sleep(1)
-            
+
     if errorOccurred:
         print("Failed to coalesce {}".format(publishedTableName))
-            
+
     end = timeit.default_timer()
     elapsed = end - start
     print("Update of {} done!".format(publishedTableName))
@@ -212,33 +212,39 @@ def main():
     iterationIdx = 0
     try:
         while True:
-            print("====================================")
-            print(datetime.now().strftime("%d %b %Y %H:%M:%S"))
-            print("====================================")
-            
             for cube in cubeArray:
-                if cube["enable"]:
-                    lastRun = cube.get("lastRun", None)
-                    if lastRun is not None:
-                        timeNow = datetime.now()
-                        timeDiff = timeNow - lastRun
+                if not cube["enable"]:
+                    continue
+                lastRun = cube.get("lastRun", None)
+                if lastRun is not None:
+                    timeNow = datetime.now()
+                    timeDiff = timeNow - lastRun
 
-                    if lastRun is None or timeDiff > timedelta(minutes = cube["intervalInMins"]):
-                        try:
-                            print("Running {}".format(cube["publishedTableName"]))
-                            runDfAndPublish(cube["dataflowName"], cube["publishedTableName"])
-                            cube["lastRun"] = datetime.now()
-                        finally:
-                            op.dropTable(cube["dataflowName"] + "_*")
+                if lastRun is None or timeDiff > timedelta(minutes = cube["intervalInMins"]):
+                    try:
+                        print("Running {}".format(cube["publishedTableName"]))
+                        runDfAndPublish(cube["dataflowName"], cube["publishedTableName"])
+                        cube["lastRun"] = datetime.now()
+                    finally:
+                        sys.stdout.flush()
+                        tableCleanUp(cube["dataflowName"] + "_*")
             sleep(10)
     except:
         raise
     finally:
+        sys.stdout.flush()
         sessionCleanUp()
+
+def tableCleanUp(tableName):
+    try:
+        op.dropTable(tableName)
+    except:
+        print("Error dropping the table", tableName)
 
 def sessionCleanUp():
     global workbook
     session = None
+    print("Cleaning up the workbook")
     for sess in workbook.list().sessions:
         if sess.name == workbook.name:
             session = sess
@@ -263,11 +269,9 @@ if __name__ == '__main__':
     argParser.add_argument('--user', '-u', help="Xcalar User", required=True, default="admin")
     argParser.add_argument('--importTargetName', '-i', help="import target name", required=True, default="Default Shared Root")
     argParser.add_argument('--path', '-p', help="datasets path", required=True, default="xcalar-infra/imdTests/datasets")
-    argParser.add_argument('--cube', '-c', help="what cube data to generate", 
-                        choices=['ecommTables', 'transacTables'], required=True)
-    
-    
+    argParser.add_argument('--cube', '-c', help="what cube data to generate",
+                        choices=[ecommDb, transacDb], required=True)
+
     args = argParser.parse_args()
     initialise(args)
-    
     main()

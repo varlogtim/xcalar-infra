@@ -1,50 +1,38 @@
 import psycopg2
 import json
 
-
-def __config_params():
+def _config_params():
     params = {}
-    params["dbname"] = 'ecommercedb'
-    params["user"] = 'jenkins'
-    params["host"] = 'mssqlserver-demos-linux'
-    params["password"] = 'jenkins'
+    params["dbname"] = '<DBNAME>'
+    params["user"] = '<DBUSER>'
+    params["host"] = '<DBHOST>'
+    params["port"] = '<DBPORT>'
+    params["password"] = '<DBPASS>'
     return params
 
-customers_sql = """INSERT INTO public.customers VALUES(
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s)
-            ON CONFLICT (customerid)
-            DO NOTHING;"""
+keyInfo = {'address': ['addressid'],
+           'customer_address': ['addressid', 'customerid'],
+           'customer_phone': ['phonenum'],
+           'customers': ['customerid'],
+           'order_items': ['orderitemsid', 'orderid'],
+           'orders': ['orderid']
+           }
 
-customer_phone_sql = """INSERT INTO public.customer_phone VALUES(
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s)
-            ON CONFLICT (phonenum)
-            DO NOTHING;"""
+def _prepareStatement(tableName, headers):
+    keys = keyInfo[tableName]
+    colStr = ["%({})s".format(colName) for colName in headers]
 
-address_sql = """INSERT INTO public.address VALUES(
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s)
-            ON CONFLICT (addressid)
-            DO NOTHING;"""
-
-customer_address_sql = """INSERT INTO public.customer_address VALUES(
-            %s, %s, %s, %s)
-            ON CONFLICT (addressid, customerid)
-            DO NOTHING;"""
-
-orders_sql = """INSERT INTO public.orders VALUES(
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s)
-            ON CONFLICT (orderid)
-            DO NOTHING;"""
-
-order_items_sql = """INSERT INTO public.order_items VALUES(
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (orderitemsid, orderid)
-            DO NOTHING;"""
-
+    remColNames = []
+    remColValues = []
+    for col in headers:
+        if col in keys:
+            continue
+        remColNames.append(col)
+        remColValues.append("EXCLUDED." + col)
+    return '''INSERT INTO {} ({}) VALUES ({}) ON CONFLICT ({}) DO UPDATE SET ({}) = ({})
+        '''.format(tableName, ', '.join(headers),
+                   ', '.join(colStr), ', '.join(keys),
+                   ', '.join(remColNames), ', '.join(remColValues))
 
 def main(inStr):
     inObj = json.loads(inStr)
@@ -52,9 +40,8 @@ def main(inStr):
     filePath = inObj["filePath"]
     chunks = filePath.lstrip("/").split("/")
     tableName = chunks[-2]
-    sqlStatement = globals()["{}_sql".format(tableName)]
     try:
-        params = __config_params()
+        params = _config_params()
         conn = psycopg2.connect(**params)
         cur = conn.cursor()
         headers = []
@@ -66,23 +53,24 @@ def main(inStr):
                 continue
             if not row.strip():
                 continue
-            vals = []
+            vals = {}
             for idx, col in enumerate(row.split('\t')):
-                col = col.replace('\'', '')
-                vals.append('{}'.format(col))
+                vals[headers[idx]] = col
             if vals:
-                listVals.append(tuple(vals))
+                listVals.append(vals)
+        sqlStatement = _prepareStatement(tableName, headers)
         cur.executemany(sqlStatement, listVals)
         conn.commit()
         cur.close()
     except (Exception, psycopg2.DatabaseError) as error:
-        with open("/tmp/testDbExport.txt", 'w+') as f:
-            f.write(tableName + '\n')
-            f.write(str(listVals) + "\n")
-            f.write(str(error) + "\n")
-            f.write(sqlStatement + "\n")
-            raise error
+        ##debug statements
+        # with open("/tmp/testDbExport.txt", 'w+') as f:
+        #     f.write(tableName + '\n')
+        #     f.write(str(listVals) + "\n")
+        #     f.write(str(error) + "\n")
+        #     f.write(sqlStatement + "\n")
+        raise error
     finally:
-        if conn is not None:
+        if conn:
             conn.commit()
             conn.close()

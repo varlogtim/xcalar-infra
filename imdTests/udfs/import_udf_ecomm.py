@@ -75,9 +75,9 @@ def __genCustomer(fake):
     return cust
 
 def __genRandomCols(fake, prefix, numCols=9):
-    formats = ['word', 
-        'domain_name', 
-        'color_name', 
+    formats = ['word',
+        'domain_name',
+        'color_name',
         'currency_code'
     ]
     randCols = {}
@@ -115,7 +115,7 @@ def genData(filepath, instream, imd=False):
         return
     start = inObj["startRow"] + 1
     end = start + inObj["numRows"]
-    
+
     fake = Faker()
     fake.seed(int(time.time()) + start)
     fake.add_provider(CustomFaker)

@@ -29,11 +29,12 @@ class IMDOps(object):
 
         # createRestoreDF(tableName, info)
         if self.op.listPublishedTables(tableName).numTables == 1:
-            print("Skiping table ", tableName)
-            return
+            print("Published table {} already present".format(tableName))
+            print("Recreating the table..")
+            self.op.unpublish(tableName)
 
         if len(info["key"]) == 0:
-            print("")
+            print("No primary key specified for the table", tableName)
             return
 
         print("Creating IMD table {}".format(tableName))
@@ -45,36 +46,18 @@ class IMDOps(object):
             synthCol["sourceColumn"] = tableName + "::" + col["name"]
             parseCol["sourceColumn"] = col["name"]
 
+            synthCol["destColumn"] = col["name"]
+            synthCol["columnType"] = col["type"]
+
+            parseCol["destColumn"] = col["name"]
+            parseCol["columnType"] = col["type"]
             if col["name"] == info["opcode"]:
-                synthCol["destColumn"] = "XcalarOpCode"
-                synthCol["columnType"] = "DfInt64"
-
-                parseCol["destColumn"] = "opcode"
-                parseCol["columnType"] = "DfInt64"
-                opCodeFound = True
-            else:
-                synthCol["destColumn"] = col["name"]
-                synthCol["columnType"] = col["type"]
-
-                parseCol["destColumn"] = col["name"]
-                parseCol["columnType"] = col["type"]
-
-            synthesizeColumns.append(synthCol)
-            parserCols.append(parseCol)
-
-
-        if not opCodeFound:
-            synthesizeColumns.append({"sourceColumn": tableName + "::" + info["opcode"],
+                synthesizeColumns.append({"sourceColumn": tableName + "::" + info["opcode"],
                                       "columnType": "DfInt64",
                                       "destColumn": "XcalarOpCode"})
-
-        synthesizeColumns.append({"sourceColumn": tableName + "::" + "fn",
-                                  "columnType": "DfString",
-                                  "destColumn": "fn"})
-
-        synthesizeColumns.append({"sourceColumn": tableName + "::" + "rec",
-                                  "columnType": "DfInt64",
-                                  "destColumn": "rec"})
+                opCodeFound = True
+            synthesizeColumns.append(synthCol)
+            parserCols.append(parseCol)
 
         columnHints = [{"columnName": col["sourceColumn"], "type": col["columnType"]} for col in synthesizeColumns]
 
@@ -205,11 +188,7 @@ class IMDOps(object):
 
         tableColumns = []
         for col in info["columns"]:
-            if col["name"] == info["opcode"]:
-                continue
-
             tableColumns.append({"columnName": col["name"], "headerAlias": col["name"]})
-
 
         if keyCreated:
             tableColumns.append({"columnName": key, "headerAlias": key})
@@ -224,41 +203,24 @@ class IMDOps(object):
             }
         ]
         dataflowInfo["query"] = query
-
         dataflowInfo["schema hints"] = columnHints
-        
         dataflowStr = json.dumps(dataflowInfo)
-
         retinaBuf = io.BytesIO()
-
         with tarfile.open(fileobj = retinaBuf, mode = "w:gz") as tar:
             info = TarInfo("dataflowInfo.json")
             info.size = len(dataflowStr)
             tar.addfile(info, io.BytesIO(bytearray(dataflowStr, "utf-8")))
-
         try:
             self.retina.delete(tableName)
         except:
             pass
-
         self.retina.add(tableName, retinaBuf.getvalue())
-
-        try:
-            self.retina.execute(tableName, [], tableName)
-        except:
-            pass
-
-        try:
-            self.op.unpublish(tableName)
-        except:
-            pass
-
-        self.op.publish(tableName, tableName)
-
         try:
             self.op.dropTable(tableName)
         except:
             pass
+        self.retina.execute(tableName, [], tableName)
+        self.op.publish(tableName, tableName)
         end = timeit.default_timer()
         elapsed = end - start
         print("published table {} in {:.2f}sec!".format(tableName, elapsed))
@@ -267,8 +229,6 @@ class IMDOps(object):
         start = timeit.default_timer()
         for tab in tables:
             self.__createPubTable(tab, tables[tab])
-        print("Publishing tables done in {:.2f}sec!".format(timeit.default_timer() - start))
-        print("====================================\n")
 
     def applyUpdates(self, tables):
         print("Updating {} tables: {}".format(len(tables), str(tables.keys())))
@@ -281,7 +241,6 @@ class IMDOps(object):
 
             print("Applying update for", tabName)
             retObj = self.retina.getDict(tabName)
-            # targetName = retObj["query"][0]["args"]["loadArgs"]["sourceArgsList"][0]["targetName"]
             retObj["query"][0]["args"]["loadArgs"]["sourceArgsList"] = []
 
             argsDict = {}
@@ -314,12 +273,6 @@ class IMDOps(object):
             print("Failed to update published tables".format(dataflowName))
             raise
 
-        for tab in update_table_names:
-            try:
-                self.op.dropTable(tab)
-            except:
-                pass
         end = timeit.default_timer()
         elapsed = end - start
         print("Updating tables done in {:.2f}sec!".format(elapsed))
-        print("====================================\n")
