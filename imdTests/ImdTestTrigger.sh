@@ -19,6 +19,8 @@ fi
 set +e
 source doc/env/xc_aliases
 xclean
+sudo ln -sfn $PWD/src/data/EcdsaPub.key /etc/xcalar/
+sudo ln -sfn $PWD/src/data/XcalarLic.key /etc/xcalar/
 
 set -e
 sudo yum -y remove xcalar
