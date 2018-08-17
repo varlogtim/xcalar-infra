@@ -37,10 +37,10 @@ trap onExit EXIT
 TMPDIR=$(mktemp --tmpdir -d sqldfpub.XXXXXX)
 cd "$TMPDIR"
 
-wget http://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
+wget https://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
 $XLRDIR/bin/reposync.sh rpmcommon -- xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
 
-wget http://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf_${VERSION}-${ITER}_all.deb
+wget https://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf_${VERSION}-${ITER}_all.deb
 $XLRDIR/bin/apt-includedeb.sh -d all xcalar-sqldf_${VERSION}-${ITER}_all.deb
 
 tar -xOf /netstore/builds/byJob/BuildSqldf/${ITER}/archive.tar xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm | rpm2cpio | cpio -i --to-stdout ./opt/xcalar/lib/xcalar-sqldf.jar > xcalar-sqldf-${VERSION}.jar
@@ -50,7 +50,7 @@ echo "# Please update SQLDF_VERSION in xcalar/bin/build-user-installer.sh to use
 if $optListRepo; then
     echo
     echo "Final sqldf repo state: "
-    gsutil ls -r gs://repo.xcalar.net/rpm-deps/common/x86_64/Packages/xcalar-sqldf-0.2-84.noarch.rpm | grep sqldf | xargs gsutil hash -h
+    gsutil ls -r gs://repo.xcalar.net/rpm-deps/common/x86_64/Packages/xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm | grep sqldf | xargs gsutil hash -h
     echo "User installer sqldf repo state: "
     gsutil ls -r gs://repo.xcalar.net/deps/ | grep sqldf | xargs gsutil hash -h
 fi
