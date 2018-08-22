@@ -7,6 +7,7 @@ echo 'This script will set up admin acct' >&2
 ADMIN_USERNAME=${ADMIN_USERNAME:-xdpadmin}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-Welcome1}
 ADMIN_EMAIL=${ADMIN_EMAIL:-support@xcalar.com}
+LDAP_CONFIG_URL=${LDAP_CONFIG_URL:-"http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/ldapConfig.json"}
 
 XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
 if [ ! -e "$XCE_CONFIG" ]; then
@@ -31,3 +32,7 @@ mkdir -p -m 0777 "$XCE_HOME/config"
 mv /defaultAdmin.json "$XCE_HOME/config"
 chown xcalar:xcalar "$XCE_HOME/config/defaultAdmin.json"
 chmod 0600 "$XCE_HOME/config/defaultAdmin.json"
+curl -sSL "$LDAP_CONFIG_URL" > "$XCE_HOME/config/ldapConfig.json"
+chown xcalar:xcalar "$XCE_HOME/config/ldapConfig.json"
+chmod 0600 "$XCE_HOME/config/ldapConfig.json"
+

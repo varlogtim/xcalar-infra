@@ -973,6 +973,8 @@ def provision_vm(name, puppet_role, puppet_cluster, ram, cores, availableCluster
             ip = get_vm_ip(vmid)
             info("Change password for user 'jenkins' on {} ({})".format(name, ip))
             run_ssh_cmd(ip, 'echo "jenkins:{}" | chpasswd'.format(JENKINS_USER_PASS))
+            info("Set MariaDB timeout to 30 seconds because it sometimes crashes")
+            run_ssh_cmd(ip, 'sed -i \'s:TimeoutSec=300:TimeoutSec=30:\' /usr/lib/systemd/system/mariadb.service')
 
             # set the hostname now (in case they don't want to install Xcalar)
             setup_hostname(ip, name)
