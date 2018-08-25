@@ -4,6 +4,10 @@ source doc/env/xc_aliases
 
 trap '(xclean; kill $(jobs -p)) || true' SIGINT SIGTERM EXIT
 
+# Build xcalar-gui so that expServer will run
+export XLRGUIDIR=$PWD/xcalar-gui
+(cd $XLRGUIDIR && make dev)
+
 # Clean up
 sudo pkill -9 usrnode || true
 sudo pkill -9 childnode || true
