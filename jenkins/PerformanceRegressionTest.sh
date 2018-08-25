@@ -19,7 +19,6 @@ cmBuild qa
 # Copy in the sqlite db file locally from netstore
 # This is because the nfs file locking is flaky(seen that taking in minutes)
 cp $PERFTEST_DB $XLRDIR/
-export ExpServerd=false
 python "$XLRDIR/src/bin/tests/perfTest/runPerf.py" -p "" -t "$XLRDIR/src/bin/tests/perfTest/perfTests" -r "$XLRDIR/perf.db" -s "`git rev-parse HEAD`"
 ret="$?"
 
