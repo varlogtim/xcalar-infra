@@ -22,7 +22,7 @@ from IMDUtil import IMDOps
 from prepareEnv import TestEnvironment
 
 here = os.path.abspath(os.path.dirname(__file__))
-xcalar_python = "/opt/xcalar/bin/python3.6"
+xcalar_python = "python3"
 
 class DataGenerator(object):
     def __init__(self, args):

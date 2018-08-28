@@ -4,10 +4,12 @@ touch /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME
 
 export XLRDIR=/opt/xcalar
 export PATH=$XLRDIR/bin:$PATH
-export XCE_CONFIG=/etc/xcalar/default.cfg
+export XCE_CONFIG=`pwd`/default.cfg
+export XCE_USER=`id -un`
+export XCE_GROUP=`id -gn`
 
 restartXcalar() {
-    sudo xcalar-infra/functests/launcher.sh $memAllocator
+    xcalar-infra/functests/launcher.sh $memAllocator
 }
 
 if [ $MemoryAllocator -eq 2 ]; then
@@ -17,18 +19,18 @@ else
 fi
 
 set +e
-source doc/env/xc_aliases
-xclean
-sudo ln -sfn $PWD/src/data/EcdsaPub.key /etc/xcalar/
-sudo ln -sfn $PWD/src/data/XcalarLic.key /etc/xcalar/
+find /var/opt/xcalar -type f -not -path "/var/opt/xcalar/support/*" -delete
+rm -rf /var/opt/xcalar/kvs/
+rm -rf /var/opt/xcalar/published/
+find . -name "core.childnode.*" -type f -delete
 
 set -e
-sudo yum -y remove xcalar
+sudo -E yum -y remove xcalar
 
-sudo $INSTALLER_PATH --noStart
+sudo -E $INSTALLER_PATH --noStart
 
-sudo rm $XCE_CONFIG
-sudo -E $XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
+rm $XCE_CONFIG
+$XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
 
 restartXcalar || true
 
@@ -54,8 +56,8 @@ sudo /opt/xcalar/bin/pip3.6 install faker
             --numUpdates $NUM_UPDATES \
             --updateSleep $UPDATE_SLEEP
 
-sudo pkill -9 usrnode
-sudo pkill -9 childnode
-sudo pkill -9 xcmonitor
-sudo pkill -9 xcmgmtd
+pkill -9 usrnode
+pkill -9 childnode
+pkill -9 xcmonitor
+pkill -9 xcmgmtd
 sleep 60

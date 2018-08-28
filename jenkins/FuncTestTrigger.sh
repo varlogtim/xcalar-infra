@@ -4,14 +4,16 @@ touch /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME
 
 export XLRDIR=/opt/xcalar
 export PATH=$XLRDIR/bin:$PATH
-export XCE_CONFIG=/etc/xcalar/default.cfg
+export XCE_CONFIG=`pwd`/default.cfg
+export XCE_USER=`id -un`
+export XCE_GROUP=`id -gn`
 
 TestsToRun=($TestCases)
 TAP="AllTests.tap"
 rm -f "$TAP"
 
 restartXcalar() {
-    sudo xcalar-infra/functests/launcher.sh $memAllocator
+    xcalar-infra/functests/launcher.sh $memAllocator
 }
 
 genSupport() {
@@ -43,20 +45,20 @@ funcstatsd () {
 
 genBuildArtifacts() {
     mkdir -p ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-    mkdir -p $XLRDIR/tmpdir
+    mkdir -p `pwd`/tmpdir
 
     # Find core files and dump backtrace
     gdbcore.sh -c core.tar.bz2 $XLRDIR /var/log/xcalar /var/tmp/xcalar-root
 
-    find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2>/dev/null | xargs cp --parents -rt $XLRDIR/tmpdir/
+    find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2>/dev/null | xargs cp --parents -rt `pwd`/tmpdir/
 
     PIDS=()
     for dir in tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
         if [ -d $dir ]; then
             if [ "$dir" = "/var/log/xcalar" ]; then
-                sudo tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 $dir &
+                tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 $dir &
             elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
-                sudo tar -cf xcalar_dataflows.tar.bz2 --use-compress-prog=pbzip2 $dir &
+                tar -cf xcalar_dataflows.tar.bz2 --use-compress-prog=pbzip2 $dir &
             else
                 tar -cf $dir.tar.bz2 --use-compress-prog=pbzip2 $dir &
             fi
@@ -73,11 +75,11 @@ genBuildArtifacts() {
     for dir in core tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
         if [ "$dir" = "/var/log/xcalar" ]; then
             cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-            sudo rm var_log_xcalar.tar.bz2
-            sudo rm $dir/*
+            rm var_log_xcalar.tar.bz2
+            rm $dir/*
         elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
             cp xcalar_dataflows.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-            sudo rm xcalar_dataflows.tar.bz2
+            rm xcalar_dataflows.tar.bz2
         else
             if [ -f $dir.tar.bz2 ]; then
                 cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
@@ -98,10 +100,6 @@ trap "genBuildArtifacts" EXIT
 
 # Build the source
 source doc/env/xc_aliases
-xcEnvEnter
-cmBuild clean
-cmBuild config debug
-cmBuild
 
 if [ $MemoryAllocator -eq 2 ]; then
     memAllocator=2
@@ -113,34 +111,34 @@ echo $GuardRailsArgs > grargs.txt
 
 set +e
 # Kill previous instances of xcalar processes
-sudo pkill -9 usrnode
-sudo pkill -9 childnode
-sudo pkill -9 xcmonitor
-sudo pkill -9 xcmgmtd
+pkill -9 usrnode
+pkill -9 childnode
+pkill -9 xcmonitor
+pkill -9 xcmgmtd
 sleep 60
 
-sudo find /var/opt/xcalar -type f -not -path "/var/opt/xcalar/support/*" -delete
-sudo rm -rf /var/opt/xcalar/kvs/
-sudo find . -name "core.childnode.*" -type f -delete
+find /var/opt/xcalar -type f -not -path "/var/opt/xcalar/support/*" -delete
+rm -rf /var/opt/xcalar/kvs/
+find . -name "core.childnode.*" -type f -delete
 set -e
 
-sudo yum -y remove xcalar
+sudo -E yum -y remove xcalar
 
-sudo $INSTALLER_PATH --noStart
+sudo -E $INSTALLER_PATH --noStart
 
-sudo rm $XCE_CONFIG
-sudo -E $XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
-echo "$FuncParams" | sudo tee -a $XCE_CONFIG
+rm $XCE_CONFIG
+$XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
+echo "$FuncParams" | tee -a $XCE_CONFIG
 
 # Enable XEM
-#echo "Constants.XcalarEnterpriseManagerEnabled=true" | sudo tee -a $XCE_CONFIG
-#echo "Constants.XcalarClusterName=`hostname`" | sudo tee -a $XCE_CONFIG
-#echo "XcalarEnterpriseManager.Host=xem-202-1.int.xcalar.com" | sudo tee -a $XCE_CONFIG
-#echo "XcalarEnterpriseManager.Port=15000" | sudo tee -a $XCE_CONFIG
-#echo "XcalarEnterpriseManager.IsVirtualXceCluster=true" | sudo tee -a $XCE_CONFIG
+#echo "Constants.XcalarEnterpriseManagerEnabled=true" >> $XCE_CONFIG
+#echo "Constants.XcalarClusterName=`hostname`" >> $XCE_CONFIG
+#echo "XcalarEnterpriseManager.Host=xem-202-1.int.xcalar.com" >> $XCE_CONFIG
+#echo "XcalarEnterpriseManager.Port=15000" >> $XCE_CONFIG
+#echo "XcalarEnterpriseManager.IsVirtualXceCluster=true" >> $XCE_CONFIG
 
 # Enable NoChildLDPreload so that childnodes do not inherit LD_PRELOAD from usrnode
-echo "Constants.NoChildLDPreload=true" | sudo tee -a $XCE_CONFIG
+echo "Constants.NoChildLDPreload=true" >> $XCE_CONFIG
 
 sudo sed --in-place '/\dev\/shm/d' /etc/fstab
 tmpFsSizeGb=`cat /proc/meminfo | grep MemTotal | awk '{ printf "%.0f\n", $2/1024/1024 }'`
@@ -240,7 +238,7 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
                 echo "Failed pagekvbuf leak test"
                 # abort the usrnode to get a core file.
                 # XXX: Commenting this out out for now to reduce noise.
-                # pgrep -f "usrnode --nodeId $nodeid" | xargs -r sudo kill -6
+                # pkill -9 usrnode
                 # anyfailed=1
             fi
         done
@@ -251,9 +249,9 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
             filepath="`pwd`/usrnode.$now"
             retinapath="`pwd`/retina.$now"
             exportpath="`pwd`/export.$now"
-            sudo cp /opt/xcalar/bin/usrnode "$filepath"
-            sudo cp -r /var/opt/xcalar/dataflows/ "$retinapath"
-            sudo cp -r /var/opt/xcalar/export/ "$exportpath"
+            cp /opt/xcalar/bin/usrnode "$filepath"
+            cp -r /var/opt/xcalar/dataflows/ "$retinapath"
+            cp -r /var/opt/xcalar/export/ "$exportpath"
             # mark the test as failed
             funcstatsd "$Test" "FAIL" "$gitsha"
             echo "not ok ${ii} - $Test" | tee -a $TAP
@@ -283,8 +281,8 @@ for ii in `seq 1 60`; do
 done
 
 if [ "$shutdownSuccessful" = "false" ]; then
-    sudo pkill -9 usrnode
-    sudo pkill -9 childnode
-    sudo pkill -9 xcmonitor
-    sudo pkill -9 xcmgmtd
+    pkill -9 usrnode
+    pkill -9 childnode
+    pkill -9 xcmonitor
+    pkill -9 xcmgmtd
 fi
