@@ -58,6 +58,12 @@ logging.basicConfig(level=logging.DEBUG, filename='example.log')
 
 MAX_VMS_ALLOWED=1024
 
+DEFAULT_OVIRT_CLUSTER="ovirt-node-1-cluster"
+DEFAULT_PUPPET_CLUSTER="ovirt"
+DEFAULT_PUPPET_ROLE="jenkins_slave"
+DEFAULT_CORES=4
+DEFAULT_RAM=8
+
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
 JENKINS_USER_PASS = "jenkins" # password to set for user 'jenkins' on provisioned VMs
@@ -1514,8 +1520,8 @@ def path_exists_on_node(node, path):
 def get_cluster_priority(prioritize=None):
 
     # try the clusters in this order
-    devClusters = [ 'einstein-cluster2' ]
-    qaClusters = [ 'feynman-dc', 'node3-cluster', 'node2-cluster', 'node1-cluster' ]
+    devClusters = ['ovirt-node-1-cluster', 'einstein-cluster2' ]
+    qaClusters = ['node3-cluster', 'node2-cluster', 'node1-cluster']
     clusterPriority = devClusters
     validClusters = []
     mapping = get_template_mapping() # get the official template mapping
@@ -1533,8 +1539,8 @@ def get_cluster_priority(prioritize=None):
 def get_template_mapping():
 
     return {
+        'ovirt-node-1-cluster': 'el7-template-20180816',
         'einstein-cluster2': 'ovirt-tool-einstein-updated',
-        'feynman-dc'   : 'el7-template-1',
         'node2-cluster': 'ovirt-cli-tool-node2-template',
         'node3-cluster': 'ovirt-cli-tool-node3-template',
         'node4-cluster': 'ovirt-cli-tool-node4-template',
@@ -2140,22 +2146,36 @@ if __name__ == "__main__":
     '''
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--count", type=int, default=0, help="Number of VMs you'd like to create")
-    parser.add_argument("--vmbasename", type=str, help="Basename to use for naming the new VMs (will create VMs named <basename>-vm0, <basename>-vm1, .., <basename>-vm(n-1) )")
-    parser.add_argument("--cores", type=int, default=4, help="Number of cores per VM.")
-    parser.add_argument("--ram", type=int, default=8, help="RAM on VM(s) (in GB)")
-    parser.add_argument("--nocluster", action='store_true', help="Do not create a Xcalar cluster of the new VMs.")
+    parser.add_argument("-c", "--count", type=int, default=0,
+        help="Number of VMs you'd like to create")
+    parser.add_argument("--vmbasename", type=str,
+        help="Basename to use for naming the new VM(s) (If creating a single VM, will name VMBASENAME, if multiple, will name them VMBASENAME-vm0, VMBASENAME-vm1, .., VMBASENAME-vm(n-1) )")
+    parser.add_argument("--cores", type=int, default=DEFAULT_CORES,
+        help="Number of cores per VM. (Defaults to {} cores)".format(DEFAULT_CORES))
+    parser.add_argument("--ram", type=int, default=DEFAULT_RAM,
+        help="RAM on VM(s) (in GB).  (Defaults to {})".format(DEFAULT_RAM))
+    parser.add_argument("--nocluster", action='store_true',
+        help="Do not create a Xcalar cluster of the new VMs.")
     parser.add_argument("--installer", type=str, #default='builds/Release/xcalar-latest-installer-prod',
         help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for latest BuildTrunk prod build.)")
-    parser.add_argument("--noinstaller", action="store_true", default=False, help="Don't install Xcalar on provisioned VMs")
-    parser.add_argument("--ovirtcluster", type=str, default='einstein-cluster2', help="Which ovirt cluster to create the VM(s) on.  Defaults to einstein-cluster2")
-    parser.add_argument("--tryotherclusters", action="store_true", default=False, help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
-    parser.add_argument("--licfile", type=str, help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
-    parser.add_argument("--puppet_role", type=str, default="jenkins_slave", help="Role the VM should have (Defaults to jenkins_slave)")
-    parser.add_argument("--puppet_cluster", type=str, default="ovirt", help="Role the VM should have (Defaults to jenkins_slave)")
-    parser.add_argument("--delete", type=str, help="Single VM or comma separated String of VMs you want to remove from Ovirt (could be, IP, VM name, etc).")
-    parser.add_argument("--user", type=str, help="Your SSO username (no '@xcalar.com')")
-    parser.add_argument("-f", "--force", action="store_true", default=False, help="Force certain operations such as provisioning, delete, when script would fail normally")
+    parser.add_argument("--noinstaller", action="store_true", default=False,
+        help="Don't install Xcalar on provisioned VM(s)")
+    parser.add_argument("--ovirtcluster", type=str, default=DEFAULT_OVIRT_CLUSTER,
+        help="Which ovirt cluster to create the VM(s) on.  (Defaults to {})".format(DEFAULT_OVIRT_CLUSTER))
+    parser.add_argument("--tryotherclusters", action="store_true", default=False,
+        help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
+    parser.add_argument("--licfile", type=str,
+        help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
+    parser.add_argument("--puppet_role", type=str, default=DEFAULT_PUPPET_ROLE,
+        help="Role the VM(s) should have (Defaults to {})".format(DEFAULT_PUPPET_ROLE))
+    parser.add_argument("--puppet_cluster", type=str, default=DEFAULT_PUPPET_CLUSTER,
+        help="Puppet cluster to enable (Defaults to {})".format(DEFAULT_PUPPET_CLUSTER))
+    parser.add_argument("--delete", type=str,
+        help="Single VM or comma separated String of VMs you want to remove from Ovirt (could be, IP, VM name, etc).")
+    parser.add_argument("--user", type=str,
+        help="Your SSO username (no '@xcalar.com')")
+    parser.add_argument("-f", "--force", action="store_true", default=False,
+        help="Force certain operations such as provisioning, delete, when script would fail normally")
 
     args = parser.parse_args()
 
