@@ -1533,7 +1533,7 @@ def get_cluster_priority(prioritize=None):
 def get_template_mapping():
 
     return {
-        'einstein-cluster2': 'ovirt-cli-tool-einstein-template',
+        'einstein-cluster2': 'ovirt-tool-einstein-updated',
         'feynman-dc'   : 'el7-template-1',
         'node2-cluster': 'ovirt-cli-tool-node2-template',
         'node3-cluster': 'ovirt-cli-tool-node3-template',
