@@ -71,6 +71,14 @@ LOGIN_UNAME = "admin"
 LOGIN_PWORD = "admin"
 LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
 
+OVIRT_TEMPLATE_MAPPING = {
+    'ovirt-node-1-cluster': 'el7-template-20180816',
+    'einstein-cluster2': 'ovirt-tool-einstein-updated',
+    'node2-cluster': 'ovirt-cli-tool-node2-template',
+    'node3-cluster': 'ovirt-cli-tool-node3-template',
+    'node4-cluster': 'ovirt-cli-tool-node4-template'
+}
+
 SCRIPT_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
 
 TMPDIR_LOCAL='/tmp/ovirt_tool' # tmp dir to create on local machine running python script, to hold pem cert for connecting to Ovirt
@@ -106,6 +114,9 @@ class NoIpException(Exception):
     pass
 
 class TimeoutError(Exception): # built in python3 but not python2.7
+    pass
+
+class CantFindClusterError(Exception):
     pass
 
 class ShellError(Exception):
@@ -464,6 +475,7 @@ def get_cluster_available_memory(name):
     '''
 
     mem_found = 0
+    found_cluster = False
 
     hosts_service = CONN.system_service().hosts_service()
     hosts = hosts_service.list()
@@ -477,14 +489,24 @@ def get_cluster_available_memory(name):
             cluster = CONN.follow_link(host.cluster)
             # try to get the name
             if cluster.name and cluster.name == name:
+                found_cluster = True
                 info("Host {} is part of requested cluster, {}".format(host.name, cluster.name))
                 # add this hosts available memory to cnt
                 if host.max_scheduling_memory:
                     info("Host {}'s max scheduling memory (in bytes): {}".format(host.name, str(host.max_scheduling_memory)))
                     mem_found = mem_found + host.max_scheduling_memory
 
-    info("Available memory found on cluster {}: {} bytes".format(name, mem_found))
-    return int(mem_found)
+    if found_cluster:
+        info("Available memory found on cluster {}: {} bytes".format(name, mem_found))
+        return int(mem_found)
+    else:
+        raise CantFindClusterError("\n\nTrying to determine available memory "
+            "for ovirt cluster '{}', but can not find this cluster on any "
+            "'Host' (see 'Host' tab in ovirt and for each row in the table, "
+            "look at the 'cluster' column.  Can't find {} in any of those "
+            "rows.)\n(have the names of any ovirt clusters "
+            "changed?  Check that the keys in OVIRT_TEMPLATE_MAPPING are valid "
+            "cluster names)\n".format(name, name))
 
 '''
     Given some identifier, such as an IP or the name of a VM,
@@ -1548,25 +1570,16 @@ def get_cluster_priority(prioritize=None):
     validClusters = []
     mapping = get_template_mapping() # get the official template mapping
     if prioritize:
-        if prioritize in mapping:
+        if prioritize in OVIRT_TEMPLATE_MAPPING:
             validClusters.append(prioritize)
         else:
-            raise RuntimeError("\n\nERROR: Trying to prioritize {}, but it is not a valid cluster\n"
-                "(dev: Is it a new cluster; have you added entry in to get_template_mapping for it?)\n".format(prioritize))
+            raise RuntimeError("\n\nERROR: Trying to prioritize {}, but there "
+                " is no template for this Cluster. (have you added an entry in "
+                " OVIRT_TEMPLATE_MAPPING for it?)\n".format(prioritize))
     for orderedcluster in clusterPriority:
-        if orderedcluster != prioritize and orderedcluster in mapping:
+        if orderedcluster != prioritize and orderedcluster in OVIRT_TEMPLATE_MAPPING:
             validClusters.append(orderedcluster)
     return validClusters
-
-def get_template_mapping():
-
-    return {
-        'ovirt-node-1-cluster': 'el7-template-20180816',
-        'einstein-cluster2': 'ovirt-tool-einstein-updated',
-        'node2-cluster': 'ovirt-cli-tool-node2-template',
-        'node3-cluster': 'ovirt-cli-tool-node3-template',
-        'node4-cluster': 'ovirt-cli-tool-node4-template',
-    }
 
 '''
     Return name of template and cluster template is on,
@@ -1581,17 +1594,16 @@ def get_template(ovirtcluster):
         For now, just base on the node specified,
         or if no node use node4
     '''
-    template_mapping = get_template_mapping()
 
     # make so the value is a hash with keys for RAM, cores, etc.
     #and appropriate template for now just one std template each
     # check that the node arg a valid option
-    if ovirtcluster in template_mapping.keys():
+    if ovirtcluster in OVIRT_TEMPLATE_MAPPING.keys():
         ## todo - there should be templates for all the possible ram/cores/etc configs
-        return template_mapping[ovirtcluster]
+        return OVIRT_TEMPLATE_MAPPING[ovirtcluster]
     else:
-        raise AttributeError("\n\nERROR: No template found to use on ovirt node {}."
-            "\nValid nodes with templates: {}\n".format(ovirtcluster, ",".join(template_mapping.keys())))
+        raise AttributeError("\n\nERROR: No template found for ovirt node {}."
+            "\nValid nodes with templates: {}\n".format(ovirtcluster, ", ".join(OVIRT_TEMPLATE_MAPPING.keys())))
 
 '''
         SYSTEM COMMANDS
@@ -2089,6 +2101,12 @@ def validateparams(args):
             for ovirtSearchFilter in PROTECTED_KEYWORDS:
                 if args.vmbasename.startswith(ovirtSearchFilter):
                     raise ValueError("\n\nERROR: --vmbasename can not begin with any of the values: {} (These are protected keywords in Ovirt)".format(PROTECTED_KEYWORDS))
+
+        if args.ovirtcluster:
+            # make sure they supplied a valid cluster with a template
+            if args.ovirtcluster not in OVIRT_TEMPLATE_MAPPING:
+                raise ValueError("\n\nERROR: --ovirtcluster={}.  No template found for {}.\n"
+                    "Valid clusters that can be selected: {}\n".format(args.ovirtcluster, args.ovirtcluster, ", ".join(OVIRT_TEMPLATE_MAPPING.keys())))
 
         if args.noinstaller:
             if args.installer:
