@@ -75,8 +75,7 @@ OVIRT_TEMPLATE_MAPPING = {
     'ovirt-node-1-cluster': 'el7-template-20180816',
     'einstein-cluster2': 'ovirt-tool-einstein-updated',
     'node2-cluster': 'ovirt-cli-tool-node2-template',
-    'node3-cluster': 'ovirt-cli-tool-node3-template',
-    'node4-cluster': 'ovirt-cli-tool-node4-template'
+    'node3-cluster': 'ovirt-cli-tool-node3-template'
 }
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -1591,8 +1590,7 @@ def get_template(ovirtcluster):
     @TODO:
         Select the template based on their preferences
         of RAM, etc.
-        For now, just base on the node specified,
-        or if no node use node4
+        For now, just base on the ovirt cluster specified
     '''
 
     # make so the value is a hash with keys for RAM, cores, etc.
