@@ -357,15 +357,32 @@ def reboot_node(ip):
     except Exception as e:
         info("expect to hit exception after the reboot")
 
-def puppet_setup(ip, puppet_role, puppet_cluster):
-
-    info("Setup puppt to run on {} as role {}".format(ip, puppet_role))
+'''
+    setup a node to be able to run puppet
+'''
+def setup_puppet(ip, puppet_role, puppet_cluster):
+    info("Setup puppet to run on {} as role {}".format(ip, puppet_role))
     cmds = [
         ['echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role)],
         ['echo "cluster={}" > /etc/facter/facts.d/cluster.txt'.format(puppet_cluster)],
-        ['/opt/puppetlabs/bin/puppet agent -t -v', 2700, [0, 2]],
     ]
     run_ssh_cmds(ip, cmds)
+
+'''
+    Run puppet agent -t -v on an IP, with option to do skip setup
+    (in case puppet needs to be run multiple times)
+    :puppet_role: :puppet_cluster: required if setup True
+'''
+def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True):
+    info("Run puppet agent on {}".format(ip))
+    if setup:
+        if not puppet_role or not puppet_cluster:
+            raise RuntimeError("Specified to setup puppet before running "
+                " puppet agent, but either puppet_role or puppet_cluster "
+                " were not specified.  Both are required to setup puppet")
+        setup_puppet(ip, puppet_role, puppet_cluster)
+    # run puppet agent
+    run_ssh_cmd(ip, '/opt/puppetlabs/bin/puppet agent -t -v', timeout=2700, valid_exit_codes=[0, 2])
 
 '''
     Given a list of names of clusters to try and provision n VMs on,
@@ -985,7 +1002,8 @@ def provision_vm(name, puppet_role, puppet_cluster, ram, cores, availableCluster
             # set the hostname now (in case they don't want to install Xcalar)
             setup_hostname(ip, name)
             # setup puppet only after hostname is set
-            puppet_setup(ip, puppet_role, puppet_cluster)
+            # going to re-run post-install, temporarily
+            run_puppet_agent(ip, puppet_role=puppet_role, puppet_cluster=puppet_cluster)
 
             return True
         #except ResourceException as err:
@@ -1215,7 +1233,11 @@ def setup_xcalar(ip, licfilepath, installer):
         scp_file(ip, filedata[0], filedata[1])
 
     # install using bld requested
-    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=1000)
+    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=2000)
+
+    # run puppet agent post-install to deal with python version being packaged w installer
+    # already done setup pre-install
+    run_puppet_agent(ip, setup=False)
 
     # start xcalar
     start_xcalar(ip)
