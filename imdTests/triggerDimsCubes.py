@@ -88,6 +88,10 @@ def initialise(args):
     except Exception as e:
         print("Could not set session for %s" % (username))
         raise e
+    try:
+        workbook.activate()
+    except:
+        print("Workbook already active!")
     xcalarApi.setSession(workbook)
     op = Operators(xcalarApi)
     retina = Retina(xcalarApi)

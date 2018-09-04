@@ -42,10 +42,6 @@ fi
 gitsha=`xccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
-##installing required python packages
-sudo $XLRDIR/bin/pip3 install psycop2
-sudo $XLRDIR/bin/pip3 install faker
-
 options="--user $XCALAR_USER \
         --env $TARGET_ENV \
         --exportUrl $EXPORT_URL --bases \

@@ -28,6 +28,10 @@ def initialise(args):
     except Exception as e:
         print("Could not set session for %s" % (username))
         raise e
+    try:
+        workbook.activate()
+    except:
+        print("Workbook already active!")
     xcalarApi.setSession(workbook)
     op = Operators(xcalarApi)
 
@@ -124,7 +128,6 @@ def main():
 ##then do inactive and delete
 def sessionCleanUp():
     print("In session cleanup")
-    return
     session = None
     global workbook
     for sess in workbook.list().sessions:

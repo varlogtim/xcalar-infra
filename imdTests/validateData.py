@@ -155,6 +155,10 @@ def parseArgs(args):
     except Exception as e:
         print("Could not set session for %s" % (username))
         raise e
+    try:
+        session.activate()
+    except:
+        print("Session already active!")
     xcApi.setSession(session)
     return xcApi
 

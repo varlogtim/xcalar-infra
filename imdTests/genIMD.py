@@ -35,10 +35,13 @@ class DataGenerator(object):
         try:
             self.session = Session(self.xcApi, self.username, self.username,
                     None, True, sessionName="ImdTests")
-            self.session.activate()
         except Exception as e:
             print("Could not set session for %s" % (self.username))
             raise e
+        try:
+            self.session.activate()
+        except:
+            print("Session already active!")
         self.xcApi.setSession(self.session)
         self.retina = Retina(self.xcApi)
         self.export = Export(self.xcApi)
