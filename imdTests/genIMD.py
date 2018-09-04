@@ -22,7 +22,7 @@ from validateData import IMDDataValidation
 
 here = os.path.abspath(os.path.dirname(__file__))
 datasetPath = "/freenas/imdtests/"
-xcalarPython = "python3"
+xcalarPython = os.path.join(os.environ.get('XLRDIR','/opt/xcalar'), "bin", "python3")
 ecommDb = "ecommercedb"
 transacDb = "transactionsdb"
 triggerDimProg = os.path.join(here, "triggerDimsCubes.py")
@@ -35,6 +35,7 @@ class DataGenerator(object):
         try:
             self.session = Session(self.xcApi, self.username, self.username,
                     None, True, sessionName="ImdTests")
+            self.session.activate()
         except Exception as e:
             print("Could not set session for %s" % (self.username))
             raise e

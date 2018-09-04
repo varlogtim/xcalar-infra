@@ -43,8 +43,8 @@ gitsha=`xccli -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
 ##installing required python packages
-sudo pip3 install psycopg2
-sudo pip3 install faker
+sudo $XLRDIR/bin/pip3 install psycop2
+sudo $XLRDIR/bin/pip3 install faker
 
 options="--user $XCALAR_USER \
         --env $TARGET_ENV \
@@ -61,7 +61,7 @@ if $VALIDATE_DATA ; then
     options="$options --validateData"
 fi
 
-python3 xcalar-infra/imdTests/genIMD.py $options
+$XLRDIR/bin/python3 xcalar-infra/imdTests/genIMD.py $options
 
 pkill -9 usrnode
 pkill -9 childnode
