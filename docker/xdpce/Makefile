@@ -9,6 +9,15 @@ INSTALLER_PATH ?= /netstore/qa/Downloads/ReleaseCandidates/xcalar-1.2.3-RC4/2017
 DEFAULT_CFG_PATH ?= default.cfg
 CONFIG_DIR = /var/opt/xcalar/config
 
+# temporary for XPE;
+# the gui required in the Docker needs to be built with --product=xdee option
+# but no rpm installers exist which install GUI built in this manner.
+# provide this option to swap out what gets installed in to the Docker with a custom gui before Docker image saved
+# once rpm installers are generated which install this this product option, remove this option
+CUSTOM_GUI ?=
+
+GUI_DIR_IN_CONTAINER= /opt/xcalar/xcalar-gui
+
 CADDY_PORT ?= 443
 # port to expose outside the Docker container, to map to the Caddy port (if blank Docker will expose a random port)
 CADDY_EXTERNAL_PORT ?=
@@ -59,6 +68,11 @@ install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
     ifneq ($(XPE),)
 	docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
+    endif
+
+    ifneq ($(CUSTOM_GUI),)
+	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) rm -r $(GUI_DIR_IN_CONTAINER)
+	docker cp $(CUSTOM_GUI) $(CONTAINER_NAME):$(GUI_DIR_IN_CONTAINER)
     endif
 
 enforce-samplesize: install-license
@@ -120,7 +134,7 @@ copyconfig:
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/.jupyter ./.jupyter
 	docker cp $(CONTAINER_NAME):/var/opt/xcalar/jupyterNotebooks ./jupyterNotebooks
 	docker cp $(CONTAINER_NAME):$(CONFIG_DIR)/defaultAdmin.json defaultAdmin.json
-	docker cp $(CONTAINER_NAME):/opt/xcalar/xcalar-gui ./xcalar-gui
+	docker cp $(CONTAINER_NAME):$(GUI_DIR_IN_CONTAINER) ./xcalar-gui
 
 docker-image: run install strip-binaries install-license replace-hostname enforce-samplesize createuser restart copyconfig commit save
 
