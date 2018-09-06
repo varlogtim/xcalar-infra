@@ -43,7 +43,7 @@ LIC_FILENAME=XcalarLic.key # name of file of uncompressed license
 XCALAR_LIC_REL="xpeinstalledlic" # dir rel to XCALAR_ROOT where lic file will go
 LOCALDATASETS="$APPDATA/sampleDatasets"
 
-MAINHOSTMNT=/host # path in the Xcalar Docker container to mount user's $HOME dir to
+MAINHOSTMNT="$HOME" # path in the Xcalar Docker container to mount user's $HOME dir to
 # will set as Xcalar's Default Data Target path (it must be a path in the container where Xcalar running)
 # this way when user opens file browser they will see contents of their $HOME dir (else will be default container root which won't make sense to user)
 
