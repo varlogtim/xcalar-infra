@@ -30,7 +30,7 @@ the TTL is up (1h in this case), Vault will go and delete the API keys as well
 as deleting the user.
 
 
-    $ vault read aws/creds/deploy
+    $ vault read aws/creds/deploy ttl=1h
 
     Key                Value
     ---                -----
@@ -46,7 +46,7 @@ A better way that doesn't involve generating a temporary IAM user, is to use STS
 is the same, but you needn't go through an intermediate IAM user. There is one extra bit
 of information for you to keep track of, however, the security token.
 
-    vault write aws/sts/deploy
+    vault write aws/sts/poweruser ttl=1h
 
     Key                Value
     ---                -----
@@ -118,7 +118,7 @@ Before assuming the role, that same call gave me
 The aws cli can call out to an external process and read back the output as a json containing your credentials. Make a small
 shell script that calls vault with the role you want to assume, say in `~/bin/awscreds.sh`
 
-```
+```sh
 #!/bin/bash
 vault write -format=json aws-xcalar/sts/$1 ttl=60m | ./aws-credentials-from-vault.sh -f -
 ```
@@ -176,6 +176,19 @@ You can further narrow this down based on puppet roles, or hostnames.
     token_meta_cert_name           web
     token_meta_common_name         jenkins-slave-el7-1.int.xcalar.com
 
+Then renew the token
+
+    # export VAULT_TOKEN=fd514741-d8a7-ceef-ceed-05bb336f4210
+    # vault token renew -client-cert=/etc/puppetlabs/puppet/ssl/certs/jenkins-slave-el7-1.int.xcalar.com.pem  -client-key=/etc/puppetlabs/puppet/ssl/private_keys/jenkins-slave-el7-1.int.xcalar.com.pem
+
+
+
+## Azure SP
+
+    $ vault secrets enable azure
+    Success! Enabled the azure secrets engine at: azure/
+
+    $ vault write azure/config  subscription=$ARM_SUBSCRIPTION_ID tenant_id=$ARM_TENANT_ID  client_id=8ff27c66-96d9-43a5-xx92-566xxx client_secret=fdxxxx-6xxx-4xxx-9xxx-eca1dbxxxx
 
 ## Reading secrets from Vault
 
@@ -196,10 +209,43 @@ can publish trusted certificates for hostnames
 
 ## Vault for SSH Trusted CA auth
 
+
+### Setup SSH CA
+
+    $ vault secrets enable ssh
+    Success! Enabled the ssh secrets engine at: ssh/
+
+    $ vault vault write ssh/config/ca generate_signing_key=true
+    Key           Value
+    ---           -----
+    public_key    ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQClB8/ojx1CxILuvLOjO....
+
+    $
+
 You can ask Vault to sign your SSH pub key for you. Once it's signed, you can use the ssh key to log into
 any machine that trusts our CA.
 
-    $ vault write -format=json ssh-client-signer/sign/xctest public_key=@$HOME/.ssh/id_rsa.pub
+The public key should be present on the nodes you want to ssh to:
+
+    $ vault read -field=public_key ssh/config/ca > /etc/ssh/trusted-ca-cert.pem \
+    && (sed '/TrustedUserCAKeys/d' /etc/ssh/sshd_config; echo "TrustedUserCAKey /etc/ssh/trusted-ca-cert.pem") > /etc/ssh/sshd_config.$$ \
+    && mv /etc/ssh/sshd_config.$$ /etc/ssh/sshd_config \
+    && systemctl restart sshd
+
+
+Create the jenkins role created via
+
+    $ vault write ssh/roles/jenkins allow_user_certificates=true default_user=jenkins max_ttl=2h ttl=30m key_type=ca key_bits=2048 allowed_users=jenkins
+
+Now you can  use vault ssh directly to ssh into one of the instances:
+
+    $ vault ssh -mode=ca -role=jenkins jenkins@jenkins-slave-el7-2
+
+This does the same as the following steps, all in one:
+
+Sign your local pub key:
+
+    $ vault write -format=json ssh/sign/jenkins public_key=@$HOME/.ssh/id_rsa.pub
     {
     "request_id": "c1c2b2c7-633a-b421-9a9b-1e38951a6834",
     "lease_id": "",
@@ -215,14 +261,12 @@ any machine that trusts our CA.
     "warnings": null
     }
 
-The xctest role was created via:
+Rerun, saving just the signed key (which is just another SSH pub key):
 
-    cat ssh-client-signer-role.json | vault write ssh-client-signer/roles/xctest
-Save just the signed key (which is just another SSH pub key):
+    $ vault write -field=signed_key ssh/sign/jenkins public_key=@$HOME/.ssh/id_rsa.pub > ~/.ssh/id_rsa-cert.pub
 
-    $ vault write -field=signed_key ssh-client-signer/sign/xctest public_key=@$HOME/.ssh/id_rsa.pub > ~/.ssh/id_rsa-cert.pub
+View the properties:
 
-    # View the properties
     $ ssh-keygen -Lf ~/.ssh/id_rsa-cert.pub
         Type: ssh-rsa-cert-v01@openssh.com user certificate
         Public key: RSA-CERT SHA256:qdNGV0z+ljzCmMsKNWGzTbCXhd3tP5YbKVDlaeo4LuY
@@ -238,7 +282,7 @@ Save just the signed key (which is just another SSH pub key):
 
 Now you can ssh into any instance that has the TrustedUserCAKey set in sshd_config
 
-    $ ssh -i ~/.ssh/signed-cert.pub -i ~/.ssh/id_rsa jenkins@jenkins-slave-el7-1
+    $ ssh -i ~/.ssh/id_rsa-cert.pub jenkins@jenkins-slave-el7-2
     Last login: Tue Apr 10 10:30:21 2018 from 10.10.1.208
 
 ## Vault as a CA for SSL certs
@@ -272,3 +316,23 @@ Request a cert:
     },
     "warnings": null
     }
+
+
+## AppRole
+
+    vault write auth/approle/role/jenkins_slave \
+        secret_id_ttl=10m \
+        token_num_uses=10 \
+        token_ttl=20m \
+        token_max_ttl=30m \
+        secret_id_num_uses=40 \
+        policies=jenkins_slave,aws
+
+    role_id=$(vault read -field=role_id auth/approle/role/jenkins_slave/role-id)
+    secret_id=$(vault write -field=secret_id -f auth/approle/role/jenkins_slave/secret-id)
+
+Using the role_id (semi-secret) and the secret_id (secret) you can log in as that approle (service principal):
+
+    vault write -field=token auth/approle/login \
+        role_id=f693adbb-0f58-c71b-253c-xxxx \
+        secret_id=0aa1be8a-4278-53d1-95e4-xxxx
