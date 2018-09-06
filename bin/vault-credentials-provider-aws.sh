@@ -31,7 +31,7 @@
 
 FILE=""
 TTL=12h
-ACCOUNT="aws"
+ACCOUNT="aws-xcalar"
 TYPE="sts"
 ROLE="poweruser"
 CLEAR=false
@@ -73,9 +73,13 @@ vault_install_credential_helper() {
     aws configure set default.region us-west-2
     aws configure set default.s3.signature_version s3v4
     aws configure set default.s3.addressing_style path
+
+    touch ~/.aws/credentials
+    sed -i'' '/^\[vault\]/,+1 d' ~/.aws/credentials
     cat >> ~/.aws/credentials <<EOF
+
 [vault]
-credential_process = $(readlink -f ${BASH_SOURCE[0]}) --path $ACCOUNT/$TYPE/$ROLE
+credential_process = $(readlink -f ${BASH_SOURCE[0]}) --path $AWSPATH
 EOF
     echo "Done. Please use 'aws --profile vault <cmd>'. To avoid having to type --profile" >&2
     echo "on every command, add 'export AWS_PROFILE=vault' to your ~/.bashrc" >&2
@@ -174,12 +178,12 @@ main() {
             *) break;;
         esac
     done
+    if [ -z "$AWSPATH" ]; then
+        AWSPATH="$ACCOUNT/$TYPE/$ROLE"
+    fi
     if $INSTALL; then
         vault_install_credential_helper
         exit $?
-    fi
-    if [ -z "$AWSPATH" ]; then
-        AWSPATH="$ACCOUNT/$TYPE/$ROLE"
     fi
     VAULTCACHE="$HOME/.aws/cache/${AWSPATH}.json"
     AWSCACHE="$HOME/.aws/cache/${AWSPATH}-aws.json"
