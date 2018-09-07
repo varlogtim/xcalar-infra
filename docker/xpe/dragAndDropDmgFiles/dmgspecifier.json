@@ -1,0 +1,16 @@
+{
+  "title": "Xcalar Design EE",
+  "icon": "Xcalar Design.app/Contents/Resources/AppIcon.icns",
+  "background": "Xcalar_Design_EE_dmg_bg.png",
+  "window": {
+	"size": {
+		"width": 720,
+		"height": 326
+	}
+  },
+  "icon-size": 120,
+  "contents": [
+    { "x": 540, "y": 164, "type": "link", "path": "/Applications" },
+    { "x": 180, "y": 164, "type": "file", "path": "Xcalar Design.app" }
+  ]
+}

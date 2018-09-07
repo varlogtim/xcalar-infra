@@ -29,7 +29,13 @@ XDEE_GUI_BUILD_DIR="${XDEE_GUI_BUILD_DIR:-"$XLRGUIDIR/$XDEE_BUILD_TARGET_DIR"}" 
 
 APPBASENAME="${APPBASENAME:-"Xcalar Design"}" # basename for the app
 APPTARFILE="${APPTARFILE:-"$APPBASENAME.tar.gz"}" # name of final tarred app that ends up in bld
+DMGNAME="${DMGNAME:-"$APPBASENAME.dmg"}" # will create script to be run post-bld to generate dmg for the app; script will specify to name the dmg this
+DMGHELPER="dragAndDropDmgGenerator.sh" # name of script that will get created
+DMGHELPER_COPY_PASTE_CMD="" # msg to print at EOB with how to call dmg helper script for this build
 INSTALLERTARFILE=installertarball.tar.gz # name for tarball containing docker images, dependencies, etc.
+
+DRAG_AND_DROP_MSG="" # will display msg explaining how to create drag and drop dmg post-build
+# will get set if build was successful and print as last step in exit trap so its last thing displayed in console log
 
 ### CREATE STAGING DIR TO DO BUILDING IN ###
 STAGING_DIR="$(mktemp -d --tmpdir xpeBldStagingXXXXXX)"
@@ -64,6 +70,7 @@ cleanup() {
     rm -r "$STAGING_DIR"
     removeBuildArtefacts
     clearDockerArtefacts
+    echo "$DRAG_AND_DROP_MSG"
 }
 
 # builds the xcalar-gui project in the state required by the app to be in the Docker container
@@ -71,6 +78,7 @@ cleanup() {
 # (RPM installers will install xcalar-gui build with standard build targets; for xcalar-gui
 # to work in the app needs to be built with --product=XDEE option)
 buildXcalarGuiForApp() {
+
     if [ ! -d "$XDEE_GUI_BUILD_DIR" ]; then
         echo ">>> gui build dir does NOT exist; building from $XLRGUIDIR" >&2
         cd "$XLRGUIDIR"
@@ -195,6 +203,19 @@ build_app() {
     cp -r "$APPTARFILE" "$FINALDEST"
 }
 
+# the drag and drop dmg for the app, is created post-build from a Mac.
+# there is a script which creates the dmg.
+# copy in that script and its dependencies to final build, and take note of way
+# to call the script specifically for this build, so can display it to user at
+# end of build
+setup_files_for_drag_and_drop_dmg() {
+    dmgCreatorDir="dragAndDropDmgFiles"
+    # copy in creator script and dependencies
+    cp -r "$INFRA_XPE_DIR/$dmgCreatorDir" "$FINALDEST"
+    # what cmd to use to run the script; will display at end of build
+    DMGHELPER_COPY_PASTE_CMD="APPTAR=\"$FINALDEST/$APPTARFILE\" OUTPATH=\"/netstore/xpe_dmgs/$BUILD_NUMBER/$DMGNAME\" bash $FINALDEST/$dmgCreatorDir/createDragAndDropDmg.sh"
+}
+
 trap cleanup EXIT SIGTERM SIGINT # Jenkins sends SIGTERM on abort
 
 ### START JOB ###
@@ -216,11 +237,37 @@ BUILD_GRAFANA=$BUILD_GRAFANA
 EOF
 
 build_app
+setup_files_for_drag_and_drop_dmg
 
 # symlink to this bld
 cd "$BUILD_DIRECTORY" && ln -sfn "$BUILD_NUMBER" lastSuccessful
 
 # (staging dir removed in cleanup, which is called on normal exit)
+
+# msg of summary with instructions for creating a dmg using the script generated
+# will print as last step in trap so its last thing printed
+DRAG_AND_DROP_MSG="
+=========================================
+
+ YOUR APP HAS BEEN GENERATED!!
+ THE FULL APP IS STORED IN THIS TARFILE:
+
+    $FINALDEST/$APPTARFILE
+
+ TO CREATE THE DRAG-AND-DROP DMG FOR THIS APP,
+ RUN THE FOLLOWING BASH SCRIPT FROM ANY MAC WHICH
+ HAS NETSTORE MOUNTED:
+ (note: the script will assume netstore is mounted
+ at '/netstore')
+
+ $DMGHELPER_COPY_PASTE_CMD
+
+ (the script will generate the dmg and store it on
+  netstore; it will inform you of the dmg's
+  final location)
+
+========================================
+" >&2
 
 # printing to stdout for other scripts to call
 echo "$FINALDEST"
