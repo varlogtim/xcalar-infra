@@ -68,7 +68,7 @@ else
 fi
 
 usage() {
-    cat <<EOF >&2
+    cat << EOF >&2
     usage: $0 [--account ACCOUNT] [--type TYPE] [--role ROLE] [--path PATH] [--ttl TTL] [--install [--profile PROFILE]]
               [-c|--clear] [-e|--export-env] [--export-profile] [-f|--file FILE|-] [--check]
 
@@ -91,7 +91,10 @@ EOF
 
 vault_status() {
     local status
-    if status="$(set -o pipefail; vault status -format=json | jq -r .sealed)" && [ "$status" = false ]; then
+    if status="$(
+        set -o pipefail
+        vault status -format=json | jq -r .sealed
+    )" && [ "$status" = false ]; then
         return 0
     fi
     return 1
@@ -115,7 +118,7 @@ vault_install_credential_helper() {
 
     touch ~/.aws/credentials
     sed -i.bak '/^\['$PROFILE'\]/,+2 d' ~/.aws/credentials
-    cat >> ~/.aws/credentials <<EOF
+    cat >> ~/.aws/credentials << EOF
 [$PROFILE]
 credential_process = $(readlink -f ${BASH_SOURCE[0]}) --path $AWSPATH
 
@@ -134,19 +137,19 @@ EOF
     fi
 }
 
-vault_sanity () {
+vault_sanity() {
     local -a aws_version
-    aws_version=($(aws --version 2>&1 | sed -E 's@^aws-cli/([0-9\.]+).*$@\1@g' | tr  . ' '))
+    aws_version=($(aws --version 2>&1 | sed -E 's@^aws-cli/([0-9\.]+).*$@\1@g' | tr . ' '))
     if [ ${aws_version[1]} -lt 15 ]; then
         die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
     fi
     local progs="jq vault curl" prog
     for prog in $progs; do
-        if ! command -v $prog >/dev/null; then
+        if ! command -v $prog > /dev/null; then
             please_install $prog
         fi
     done
-    if [[ $OSTYPE =~ darwin ]] && ! command -v gdate >/dev/null; then
+    if [[ $OSTYPE =~ darwin ]] && ! command -v gdate > /dev/null; then
         please_install coreutils
     fi
     if [ -z "$VAULT_ADDR" ]; then
@@ -158,7 +161,10 @@ vault_sanity () {
     if ! vault_status; then
         die "Failed to get 'vault status', or vault is sealed"
     fi
-    if ! AUTH_TOKEN=$(set -o pipefail; vault read -format=json -field=data auth/token/lookup-self | jq -r .id); then
+    if ! AUTH_TOKEN=$(
+        set -o pipefail
+        vault read -format=json -field=data auth/token/lookup-self | jq -r .id
+    ); then
         die "Failed to look you up. Are you logged into vault? Try 'vault login -method=ldap username=jdoe'. Your username is your LDAP username (usually the part before @xcalar.com in your email)"
     fi
 }
@@ -183,7 +189,7 @@ expiration_json() {
 
 vault2aws() {
     local ttl expiration
-    if ! ttl="$(jq -r .lease_duration "$1")";  then
+    if ! ttl="$(jq -r .lease_duration "$1")"; then
         say "Failed to get lease_duration from $1"
         ttl=''
     fi
@@ -208,7 +214,7 @@ vault2aws() {
     fi
 }
 
-vault_render_file () {
+vault_render_file() {
     local file="$1" tmp
     if [ -z "$file" ] || [ "$file" = - ]; then
         tmp=$(mktemp -t vaultXXXXXX.json)
@@ -235,23 +241,45 @@ vault_render_file () {
 main() {
     while [ $# -gt 0 ]; do
         local cmd="$1"
+        shift
         case "$cmd" in
-            -h|--help) usage;;
-            -i|--install) INSTALL=true; shift ;;
-            --check) vault_sanity;;
-            --account) ACCOUNT="$2"; shift 2;;
-            --role) ROLE="$2"; shift 2;;
-            --type) TYPE="$2"; shift 2;;
-            -c|--clear) CLEAR=true; shift;;
-            -f|--file) FILE="$2";shift 2;;
-            --path) AWSPATH="$2"; shift 2;;
-            --export-env) EXPORT_ENV=true; shift;;
-            --export-profile) EXPORT_PROFILE=true; shift;;
-            --profile) PROFILE="$2"; shift 2;;
-            --ttl) TTL="$2"; shift 2;;
-            --) shift; break;;
-            -*) usage "Unknown argument $cmd"; exit 1;;
-            *) break;;
+        -h | --help) usage ;;
+        -i | --install) INSTALL=true ;;
+        --check) vault_sanity ;;
+        --account)
+            ACCOUNT="$2"
+            shift
+            ;;
+        --role)
+            ROLE="$2"
+            shift
+            ;;
+        --type)
+            TYPE="$2"
+            shift
+            ;;
+        -c | --clear) CLEAR=true ;;
+        -f | --file)
+            FILE="$2"
+            shift
+            ;;
+        --path)
+            AWSPATH="$2"
+            shift
+            ;;
+        --export-env) EXPORT_ENV=true ;;
+        --export-profile) EXPORT_PROFILE=true ;;
+        --profile)
+            PROFILE="$2"
+            shift
+            ;;
+        --ttl)
+            TTL="$2"
+            shift
+            ;;
+        --) ;;
+        -*) usage "Unknown argument $cmd" ;;
+        *) break ;;
         esac
     done
     if [ -n "$FILE" ]; then
@@ -281,7 +309,7 @@ main() {
     if [ -s "$VAULTCACHE" ]; then
         NOW=$(date +%s)
         EXPIRATION=$(expiration_json "$VAULTCACHE")
-        if [[ "$EXPIRATION" = 0 ]] || [[ $((EXPIRATION - NOW)) -gt 300 ]]; then
+        if [[ $EXPIRATION == 0 ]] || [[ $((EXPIRATION - NOW)) -gt 300 ]]; then
             vault_render_file "$VAULTCACHE"
             exit $?
         fi
@@ -289,9 +317,9 @@ main() {
     rm -f -- "$VAULTCACHE"
 
     case "$AWSPATH" in
-        */sts/*) vault write -format=json "$AWSPATH" ttl=$TTL > "$TMP";;
-        */creds/*) vault read -format=json "$AWSPATH" ttl=$TTL > "$TMP";;
-        *) die "Unknown type of path $AWSPATH";;
+    */sts/*) vault write -format=json "$AWSPATH" ttl=$TTL > "$TMP" ;;
+    */creds/*) vault read -format=json "$AWSPATH" ttl=$TTL > "$TMP" ;;
+    *) die "Unknown type of path $AWSPATH" ;;
     esac
     if [ $? -ne 0 ]; then
         echo >&2 "ERROR: Failed to get valid vault creds for $AWSPATH"
