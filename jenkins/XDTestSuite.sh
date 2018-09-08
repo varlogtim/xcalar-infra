@@ -117,12 +117,8 @@ fi
 cd $XLRDIR
 TmpSqlDfLogs=`mktemp SqlDf.XXXXX.log`
 echo "Starting SQLDF"
-cp /netstore/builds/byJob/BuildSqldf/lastSuccessful/archive.tar .
 mkdir -p src/sqldf/sbt/target
-tar -xvf archive.tar
-
-dpkg-deb -R xcalar-sqldf_0.2-*_all.deb .
-cp opt/xcalar/lib/xcalar-sqldf.jar src/sqldf/sbt/target/xcalar-sqldf.jar
+cp /netstore/users/jerene/xcalar-sqldf.jar src/sqldf/sbt/target/xcalar-sqldf.jar
 
 java -jar src/sqldf/sbt/target/xcalar-sqldf.jar >"$TmpSqlDfLogs" 2>&1 &
 
