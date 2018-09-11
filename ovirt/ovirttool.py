@@ -1618,8 +1618,9 @@ def scp_file(node, localfilepath, remotefilepath, keyfile=OVIRT_KEYFILE_DEST):
 
     info("\nSCP: Copy file {} from host, to {}:{}".format(localfilepath, node, remotefilepath))
 
-    # do not need -i keyfile if puppet is set up
-    cmd = 'scp -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
+    # adding -i option back in for new employees that dont have vault set up
+    # todo : remove the ovirt public key from authorized_keys of generated vms
+    cmd = 'scp -i ' + keyfile + ' -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
     run_system_cmd(cmd)
 
 def run_ssh_cmds(host, cmds):
