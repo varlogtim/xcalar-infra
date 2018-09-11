@@ -70,7 +70,7 @@ Parameters:
       can include numbers, lowercase letters, uppercase letters, hyphens (-), and
       forward slash (/).
     Type: String
-  S3Installer:
+  InstallerUrl:
     MaxLength: '2047'
     ConstraintDescription: Optional. HTTPS/S3 URL to installer or empty if AMI is pre-baked.
     Default: ''
@@ -139,6 +139,15 @@ Resources:
             - '-'
             - - !Ref 'AWS::StackName'
               - XcalarSecGroup
+  XcalarSecGroupMonitorIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: XcalarSecGroup
+    Properties:
+      GroupId: !Ref 'XcalarSecGroup'
+      IpProtocol: 'udp'
+      FromPort: '8000'
+      ToPort: '8000'
+      SourceSecurityGroupId: !Ref 'XcalarSecGroup'
   EfsSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
@@ -156,7 +165,7 @@ Resources:
             - - !Ref 'AWS::StackName'
               - EfsSecurityGroup
   EfsSecurityGroupIngress:
-    Type: "AWS::EC2::SecurityGroupIngress"
+    Type: AWS::EC2::SecurityGroupIngress
     DependsOn: EfsSecurityGroup
     Properties:
       GroupId: !Ref 'EfsSecurityGroup'
@@ -188,6 +197,7 @@ Resources:
       Strategy: cluster
   XcalarServerAsg:
     Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: EfsMountTarget
     Properties:
       PlacementGroup: !Ref 'XcalarPlacementGroup'
       LaunchConfigurationName: !Ref 'XcalarServerLC'
@@ -201,8 +211,12 @@ Resources:
           Value: !Join
             - '-'
             - - !Ref 'AWS::StackName'
-              - Xcalar-Server
+              - XcalarServer
           PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: !Ref 'XcalarServerNodes'
   XcalarServerLC:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
@@ -220,10 +234,14 @@ Resources:
         Fn::Join:
           - ''
           - - "#!/bin/bash\n"
+            - "set -x\n"
             - "yum update -y\n"
             - "#install the cfn-init tools\n"
             - "yum install -y python-setuptools wget\n"
             - "yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm\n"
+            - EFSMOUNT=
+            - !Sub '${EfsSharedRoot}:/'
+            - "\n"
             - "XCALAR_BOOTSTRAP_FILE=user-data.sh\n"
             - XCALAR_BOOTSTRAP=
             - !Sub 'https://s3.amazonaws.com/${S3BucketName}/${S3KeyPrefix}scripts/'
@@ -241,7 +259,7 @@ Resources:
             - !Ref 'AWS::Region'
             - "\n"
             - "chmod +x ${XCALAR_BOOTSTRAP_FILE}\n"
-            - './${XCALAR_BOOTSTRAP_FILE} '
+            - '/bin/bash -x ./${XCALAR_BOOTSTRAP_FILE} '
             - ' --bootstrap-expect '
             - !Ref 'XcalarServerNodes'
             - ' --tag-key '
@@ -254,18 +272,23 @@ Resources:
             - !Ref 'S3BucketName'
             - ' --s3prefix '
             - !Ref 'S3KeyPrefix'
-            - ' --nfs-mount-target '
-            - !Ref 'EfsMountTarget'
+            - ' --nfs-mount ${EFSMOUNT}'
             - ' --license "'
             - !Ref 'LicenseKey'
             - '"'
+            - ' --installer-url "'
+            - !Ref 'InstallerUrl'
+            - '"'
             - "\n"
-            - '/opt/aws/bin/cfn-signal -e $? '
+            - "rc=$?\n"
+            - '/opt/aws/bin/cfn-signal -e $rc '
             - ' --stack '
             - !Ref 'AWS::StackName'
             - ' --resource XcalarServerAsg '
             - ' --region '
             - !Ref 'AWS::Region'
+            - "\n"
+            - "exit $rc"
   XcalarServerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -312,3 +335,9 @@ Outputs:
     Value: !Ref 'AWS::StackName'
     Description: The Amazon EC2 instance tag value to filter on when joining to other
       Xcalar nodes.
+  MountTargetID:
+    Description: Mount target ID
+    Value: !Ref 'EfsMountTarget'
+  FileSystemID:
+    Description: File system ID
+    Value: !Ref 'EfsSharedRoot'
