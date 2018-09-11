@@ -65,6 +65,9 @@ DEFAULT_CORES=4
 DEFAULT_RAM=8
 
 REBOOT_TIMEOUT=500 # seconds to wait before timing out after waiting to be able to ssh to a VM after 'reboot -h'
+SHUTDOWN_TIMEOUT = 600 # seconds to wait before timing out on vms to shut down
+POWER_ON_TIMEOUT = 120 # seconds to wait before timing out waiting for a vm to power on
+IP_ASSIGN_TIMEOUT = 400 # seconds to wait before timing out waiting for IP to be assigned to newly powered on VM
 
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
@@ -175,11 +178,11 @@ def info(string):
             wait for IP assignment
 
     :returns:
-        if waitForIp - the String of the IP that got assigned to the new VM
+        if waitForIP - the String of the IP that got assigned to the new VM
 
     :throws Exception if any stage not successfull
 '''
-def bring_up_vm(vmid, waitForIP=None):
+def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_ASSIGN_TIMEOUT, waitForIP=None):
 
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
@@ -190,6 +193,7 @@ def bring_up_vm(vmid, waitForIP=None):
     else:
         info("\nStart service on {}".format(name))
         timeout=60
+        # timeout for just being able to issue the start cmd through the api
         while timeout:
             try:
                 # start the vm
@@ -211,21 +215,24 @@ def bring_up_vm(vmid, waitForIP=None):
             raise TimeoutError("Was never able to start service on {}!".format(name))
 
         info("\nWait for {} to come up".format(name))
-        timeout=120
-        while timeout:
+        timeout_remaining = power_on_timeout
+        sleep_seconds_between_checks = 5
+        while timeout_remaining:
             if is_vm_up(vmid):
                 info("\t{} is up!".format(name))
                 break
             else:
-                time.sleep(5)
-                timeout-=1
-        if not timeout:
-            raise TimeoutError("Started service on {}, but VM never came up!".format(name))
+                time.sleep(sleep_seconds_between_checks)
+                timeout_remaining -= sleep_seconds_between_checks
+        if not timeout_remaining:
+            raise TimeoutError("Started service on {}, but VM never came up!" \
+                " Waited {} seconds".format(name, power_on_timeout))
 
     if waitForIP:
         info("\nWait until IP assigned and displaying for {}".format(name))
-        timeout = 30
-        while timeout:
+        timeout_remaining = ip_assign_timeout
+        sleep_seconds_between_checks = 5
+        while timeout_remaining:
             try:
                 info("try to get vm ip")
                 ip = get_vm_ip(vmid)
@@ -235,10 +242,12 @@ def bring_up_vm(vmid, waitForIP=None):
             except:
                 # not available yet
                 info("still no ip")
-                timeout -= 1
-                time.sleep(6)
-        if not timeout:
-            raise NoIpException("Started service on {} and the VM came up, but never got IP (might increase timeout)".format(name))
+                time.sleep(sleep_seconds_between_checks)
+                timeout_remaining -= sleep_seconds_between_checks
+        if not timeout_remaining:
+            raise NoIpException("Started service on {} and the VM came up, " \
+                " but never got IP (might increase timeout, waited {} " \
+                "seconds)".format(name,ip_assign_timeout))
 
 '''
     Create a new vm and wait until you can get ip
@@ -884,6 +893,119 @@ def remove_vms(vms, releaseIP=True):
     if badvmidentifiers:
         valid_vms = get_all_vms()
         raise ValueError("\n\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
+            "\n\nCould not find matches in Ovirt for following VMs: {}." \
+            "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
+
+def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
+
+    info("\nTry to shut down VM {} from Ovirt\n".format(identifier))
+    # try to get the vm to remove...
+    vmid = get_vm_id(identifier)
+    if not vmid:
+        info("No VM found to shut down, using identifier : {}".format(identifier))
+        raise RuntimeError("\n\nERROR: Could not shutdown vm of identifier: {}; "
+            " VM does not return from search!\n".format(identifier))
+    name = get_vm_name(vmid)
+
+    vm_service = get_vm_service(vmid)
+
+    # shutdown
+    if is_vm_up(vmid):
+        info("\nShut down {}".format(name))
+        vm_service.shutdown() # send shutdown signal through vms service
+
+    # wait for service to come down outside shutdown block,
+    # in case its in the process of shutdown (not up state)
+    # when script begins
+    info("\nWait for service to come down")
+    timeout_remaining=timeout
+    sleep_seconds_between_checks = 5
+    while timeout:
+        vm = vm_service.get()
+        if vm.status == types.VmStatus.DOWN:
+            info("vm status: down!")
+            break
+        else:
+            time.sleep(sleep_seconds_between_checks)
+            timeout_remaining -= sleep_seconds_between_checks
+    if not timeout_remaining:
+        raise TimeoutError("Sent shut down to VM {}, but service never " \
+            "came down, even after waiting {} seconds".format(name, timeout))
+
+    info("\n\nSuccessfully shut down {}".format(name))
+
+'''
+    safely power off (shut-down) a list of ovirt vms, in parallel
+
+    :param vms: list of vm 'identifiers'
+        Some string which should identify the VM, such as an IP or name
+        (same as if you typed the String in the search bar in Ovirt GUI)
+        (a String that would give mu ltiple results, won't delete those VMs)
+'''
+def shutdown_vms(vms):
+
+    info("Shut down VMs {} in parallel".format(vms))
+
+    procs = []
+    badvmidentifiers = []
+    sleepBetween = 5
+    sleepOffset = 0
+    for vm in vms:
+        if get_matching_vms(vm):
+            proc = multiprocessing.Process(target=shutdown_vm, args=(vm, SHUTDOWN_TIMEOUT))
+            proc.start()
+            procs.append(proc)
+            time.sleep(sleepBetween)
+            sleepOffset += sleepBetween
+        else:
+            badvmidentifiers.append(vm)
+
+    # wait for the processes
+    process_wait(procs, timeout=SHUTDOWN_TIMEOUT+sleepOffset)
+
+    if badvmidentifiers:
+        valid_vms = get_all_vms()
+        raise ValueError("\n\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
+            "\n\nCould not find matches in Ovirt for following VMs: {}." \
+            "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
+
+'''
+    power on existing VMs in to an up state with IP displaying
+
+    :param vms: list of vm 'identifiers'
+        Some string which should identify the VM, such as an IP or name
+        (same as if you typed the String in the search bar in Ovirt GUI)
+        (a String that would give mu ltiple results, won't delete those VMs)
+'''
+def power_on_vms(vms):
+
+    info("Power-on VMs {} in parallel".format(vms))
+
+    procs = []
+    badvmidentifiers = []
+    sleepBetween = 5
+    sleepOffset = 0
+    for vm in vms:
+        if get_matching_vms(vm):
+            vmid = get_vm_id(vm)
+            proc = multiprocessing.Process(target=bring_up_vm, args=(vmid,), kwargs={
+                'waitForIP':True,
+                'power_on_timeout': POWER_ON_TIMEOUT,
+                'ip_assign_timeout': IP_ASSIGN_TIMEOUT
+            })
+            proc.start()
+            procs.append(proc)
+            time.sleep(sleepBetween)
+            sleepOffset += sleepBetween
+        else:
+            badvmidentifiers.append(vm)
+
+    # wait for the processes
+    process_wait(procs, timeout=POWER_ON_TIMEOUT + IP_ASSIGN_TIMEOUT +sleepOffset)
+
+    if badvmidentifiers:
+        valid_vms = get_all_vms()
+        raise ValueError("\n\nYou supplied some invalid VMs to power on.\nValid VMs:\n\n\t{}" \
             "\n\nCould not find matches in Ovirt for following VMs: {}." \
             "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
@@ -1873,49 +1995,47 @@ def get_access_url(ip):
     return "{}://{}:{}".format(caddyProtocol, ip, caddyPort)
 
 '''
-    display a summary of work done
-    (putting in own function right now so can deal with where to direct output... in here only
-    once logging set up ill change
+    Returns a summary string with information about vms
 '''
-def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
+def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
 
-    summary_header = "\n\n=====================================================\n" \
-            "------------ Your Ovirt VMs are ready!!! ------------\n" \
-            "|\n| " + str(len(vmids)) + " VMs were created.\n" \
-            "|\n| The VMs have the following specs:\n" \
-            "|\tRAM (GB)     : " + str(ram) + "\n" \
-            "|\t#  Cores     : " + str(cores)
+    notes = []
+    created_vms_summary = "\n\n=====================================================\n" \
+        "------------ Your Ovirt VMs are ready!!! ------------\n" \
+        "|\n| " + str(len(vmids)) + " VMs were created.\n" \
+        "|\n| The VMs have the following specs:\n" \
+        "|\tRAM (GB)     : " + str(ram) + "\n" \
+        "|\t#  Cores     : " + str(cores)
     if installer:
-        summary_header = summary_header + "\n|\tInstaller    : " + str(installer)
-    #summary_str = summary_str + "\n|\tOvirt cluster: {}".format(ovirt_cluster) # it might have gone to another cluster. need to check through sdk
+        created_vms_summary = created_vms_summary + "\n|\tInstaller    : " + str(installer)
+        #created_vms_summary = created_vms_summary + "\n|\tOvirt cluster: {}".format(ovirt_cluster) # it might have gone to another cluster. need to check through sdk
 
     # get the ips from the ids
     vmips = [get_vm_ip(vmid) for vmid in vmids]
 
     vm_ssh_creds = "|\tssh creds: jenkins/" + JENKINS_USER_PASS
 
-    summary_str = "|\n=====================THE VMS=========================\n|"
+    created_vms_summary = "|\n=====================THE VMS=========================\n|"
     for i, vmid in enumerate(vmids):
         vmip = get_vm_ip(vmid)
         vmname = get_vm_name(vmid)
         # if multiple vms put a separator line between them
         if len(vmids) > 1 and i > 0:
-            summary_str = summary_str + "\n|      --------------------------------------"
-        summary_str = summary_str + "\n|\t Hostname: " + vmname + "\n" \
-                                    "|\t IP      : " + vmip + "\n" + vm_ssh_creds
-
+            created_vms_summary = created_vms_summary + "\n|      --------------------------------------"
+        created_vms_summary = created_vms_summary + "\n|\t Hostname: " + vmname + "\n" \
+                                        "|\t IP      : " + vmip + "\n" + vm_ssh_creds
         if installer:
             accessUrl = get_access_url(vmip)
-            summary_str = summary_str + "\n|\n|\tAccess URL: " + accessUrl + "\n" \
+            created_vms_summary = created_vms_summary + "\n|\n|\tAccess URL: " + accessUrl + "\n" \
                 "|\tUsername (login page): " + LOGIN_UNAME + "\n" \
                 "|\tPassword (login page): " + LOGIN_PWORD
 
     if installer:
-        summary_str = summary_str + "\n|\n| License key * (see note): \n|\n" + LICENSE_KEY
+        created_vms_summary = created_vms_summary + "\n|\n| License key * (see note): \n|\n" + LICENSE_KEY
+        notes.append("LICENSE KEY: This is a dev key and will not work on RC builds")
 
     clussumm = ""
     if clustername:
-
         clusternodedata = validate_cluster(vmips)
         info("node data: " + str(clusternodedata))
 
@@ -1937,18 +2057,54 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
             vmname = get_vm_name(get_vm_id(ip))
             clussumm = clussumm + "|\n| Cluster Node" + nodenum + " is vm " + vmname + " [ip: " + ip + "]\n"
         clussumm = clussumm + "|\n ------------------------------------------"
+    created_vms_summary = created_vms_summary + clussumm
 
-    summary_str = summary_str + clussumm + "\n|\n=====================================================" \
-                                        "\n|\n|                  Notes              \n" \
-                                        "|\n| * LICENSE KEY: This is a dev key and will not work on RC builds\n" \
-                                        "|\n====================================================="
-    # print each of the vm ids to stdout
-    info("\n")
-    for ip in vmips:
-        print(ip)
+    if notes:
+        created_vms_summary = created_vms_summary + "\n|\n=====================================================" \
+            "\n|\n|                  Notes              \n"
+        for note in notes:
+            created_vms_summary = created_vms_summary + "|\n| * {}\n".format(note)
+        created_vms_summary = created_vms_summary + "|\n====================================================="
 
-    info("SUMMARY START") # will get for thsi
-    info("{}\n{}".format(summary_header, summary_str))
+    return created_vms_summary
+
+'''
+    display a summary of work done
+    (putting in own function right now so can deal with where to direct output... in here only
+    once logging set up ill change
+'''
+def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
+
+    summary_str = ""
+
+    # vms were created
+    if vmids:
+        summary_str = summary_str + summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=installer, clustername=clustername)
+
+    # print info on delete, shutdown, or powered on VMs with this job
+    if args.delete:
+        summary_str = summary_str + "\n\n====================================="\
+                        "\n|\n|  The following VMs were deleted:\n|"
+        for deletedVm in args.delete.split(','):
+                    summary_str = summary_str + "\n|\t{}".format(deletedVm)
+        summary_str = summary_str + "\n|\n================================="
+
+    if args.shutdown:
+        summary_str = summary_str + "\n\n====================================="\
+                        "\n|\n|  The following VMs have been shut down:\n|"
+        for shutDownVm in args.shutdown.split(','):
+                    summary_str = summary_str + "\n|\t{}".format(shutDownVm)
+        summary_str = summary_str + "\n|\n================================="
+
+    if args.poweron:
+        summary_str = summary_str + "\n\n====================================="\
+                        "\n|\n|  The following VMs are powered on:\n|"
+        for poweredOnVm in args.poweron.split(','):
+                    summary_str = summary_str + "\n|\t{}".format(poweredOnVm)
+        summary_str = summary_str + "\n|\n================================="
+
+    info("SUMMARY START") # shell script wrapper will grep for this and print stderr what appears between
+    info("{}".format(summary_str))
     info("\nSUMMARY END")
 
 '''
@@ -2193,7 +2349,7 @@ def validateparams(args):
             if not trying to create vms,
             make sure at least runing to remove VMs then, else nothing to do
         '''
-        if not args.delete:
+        if not args.delete and not args.shutdown and not args.poweron:
             raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
 
     return int(args.ram), int(args.cores), args.ovirtcluster, licfilepath, installer, basename
@@ -2250,6 +2406,10 @@ if __name__ == "__main__":
         help="Puppet cluster to enable (Defaults to {})".format(DEFAULT_PUPPET_CLUSTER))
     parser.add_argument("--delete", type=str,
         help="Single VM or comma separated String of VMs you want to remove from Ovirt (could be, IP, VM name, etc).")
+    parser.add_argument("--shutdown", type=str,
+        help="Single VM or comma separated String of VMs you want to shut down (could be, IP, VM name, etc).  This will help free up resources while your VM is not in use.")
+    parser.add_argument("--poweron", type=str,
+        help="Single VM or comma separated String of VMs to power on")
     parser.add_argument("--user", type=str,
         help="Your SSO username (no '@xcalar.com')")
     parser.add_argument("-f", "--force", action="store_true", default=False,
@@ -2274,12 +2434,29 @@ if __name__ == "__main__":
         deletevms = args.delete.split(',')
         remove_vms(deletevms)
 
+    '''
+        shut down VMs if requsted, to free up resources
+    '''
+    shutdownVms = []
+    if args.shutdown:
+        shutdownVms = args.shutdown.split(',')
+        shutdown_vms(shutdownVms)
+
+    '''
+        power up existing VMs if requested before creating new ones
+    '''
+    powerExistingVms = []
+    if args.poweron:
+        powerExistingVms = args.poweron.split(',')
+        power_on_vms(powerExistingVms)
+
     ''''
         main driver
     '''
 
     #  spin up number of vms requested
-    vmids = []
+    vmids = [] # unique ovirt ids for vms generated
+    vmips = [] # ips assigned to the vms generated
     clustername = None
     if args.count:
         vmids = provision_vms(int(args.count), basename, ovirtcluster, args.puppet_role, args.puppet_cluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
@@ -2295,10 +2472,20 @@ if __name__ == "__main__":
         # reboot all of the nodes in parallel
         reboot_nodes(vmids)
 
-        '''
-            display a useful summary to user which has IP, VM names, etc.
-        '''
-        display_summary(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername) #, removed=deletevms)
+        # get ips to print to stdout
+        for vmid in vmids:
+            vmips.append(get_vm_ip(vmid))
+
+    '''
+        display a useful summary to user of work done
+    '''
+    display_summary(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername)
+
+    # print ip of each created vm to stdout for other scripts to consume
+    # (should be only stdout printed by this tool)
+    info("\n")
+    for vmip in vmips:
+        print(vmip)
 
     # close connection
     close_connection(CONN)
