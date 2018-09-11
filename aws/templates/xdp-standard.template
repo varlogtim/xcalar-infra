@@ -1,0 +1,314 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 'Xcalar Data Platform.
+  Derived from https://github.com/aws-quickstart/quickstart-hashicorp-consul  (Please do not remove) Aug,18,2018
+  QS(0036). License: Apache 2.0.'
+Parameters:
+  BastionSecurityGroupID:
+    Description: ID of the bastion host security group to enable SSH/HTTPS connections (e.g.,
+      sg-7f16e910)
+    Type: AWS::EC2::SecurityGroup::Id
+  XcalarInstanceType:
+    Type: String
+    Description: Xcalar node instance type
+    AllowedValues:
+      - c5d.2xlarge
+      - c5d.4xlarge
+      - c5d.9xlarge
+      - c5d.18xlarge
+      - m5d.2xlarge
+      - m5d.4xlarge
+      - m5d.12xlarge
+      - m5d.24xlarge
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.12xlarge
+      - m5.24xlarge
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+    ConstraintDescription: Choose an instance type.
+    Default: c5d.2xlarge
+  XcalarEc2RetryTagKey:
+    Description: The Amazon EC2 instance tag key to filter on when joining to other
+      Xcalar nodes.
+    Type: String
+    Default: aws:cloudformation:stack-name
+    ConstraintDescription: Must match EC2 Tag Name requirements.
+  KeyPair:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: id_rsa_aws
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+  PrivateSubnetServers:
+    Description: ID of the private subnet of servers (e.g., subnet-xxxxxxxx)
+    Type: AWS::EC2::Subnet::Id
+  S3BucketName:
+    AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
+    ConstraintDescription: Quick Start bucket name can include numbers, lowercase
+      letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen
+      (-).
+    Default: xcrepoe1
+    Description: S3 bucket name for the Quick Start assets. Quick Start bucket name
+      can include numbers, lowercase letters, uppercase letters, and hyphens (-).
+      It cannot start or end with a hyphen (-).
+    Type: String
+  S3KeyPrefix:
+    AllowedPattern: ^[0-9a-zA-Z-/]*$
+    ConstraintDescription: Quick Start key prefix can include numbers, lowercase letters,
+      uppercase letters, hyphens (-), and forward slash (/).
+    Default: cfn-deploy/
+    Description: S3 key prefix for the Quick Start assets. Quick Start key prefix
+      can include numbers, lowercase letters, uppercase letters, hyphens (-), and
+      forward slash (/).
+    Type: String
+  S3Installer:
+    MaxLength: '2047'
+    ConstraintDescription: Optional. HTTPS/S3 URL to installer or empty if AMI is pre-baked.
+    Default: ''
+    Type: String
+  LicenseKey:
+    Description: Optional. Xcalar License. Leave blank to enter via GUI.
+    MinLength: '0'
+    MaxLength: '1024'
+    Default: ''
+    Type: String
+  VPCID:
+    Description: VPC ID
+    Type: AWS::EC2::VPC::Id
+  VPCCIDR:
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    Description: CIDR Block for the VPC
+    Type: String
+  AssociatePublicIpAddress:
+    Type: String
+    Description: 'Associate a Public IP address with resources'
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+  XcalarServerNodes:
+    Description: Sets DesiredCapacity, MinSize, and MaxSize
+    AllowedValues:
+      - '3'
+      - '5'
+      - '7'
+    Default: '3'
+    Type: String
+  PerformanceMode:
+    Description: 'EFS Performance'
+    Default: generalPurpose
+    AllowedValues:
+      - generalPurpose
+      - maxIO
+    Type: String
+Mappings:
+  AWSAMIRegionMap:
+    AMI:
+      AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20180811-x86_64-gp2
+    us-east-1:
+      AMZN1HVM: ami-0e1208a711cebcbe9
+    us-west-2:
+      AMZN1HVM: ami-06c372e7fd1cd1f9c
+Resources:
+  XcalarSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enables SSH access.
+      VpcId: !Ref 'VPCID'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          SourceSecurityGroupId: !Ref 'BastionSecurityGroupID'
+        - IpProtocol: tcp
+          FromPort: '0'
+          ToPort: '65535'
+          CidrIp: !Ref 'VPCCIDR'
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref 'AWS::StackName'
+              - XcalarSecGroup
+  EfsSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Instance to EFS Mount Access
+      VpcId: !Ref 'VPCID'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '2049'
+          ToPort: '2049'
+          SourceSecurityGroupId: !Ref 'XcalarSecGroup'
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref 'AWS::StackName'
+              - EfsSecurityGroup
+  EfsSecurityGroupIngress:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: EfsSecurityGroup
+    Properties:
+      GroupId: !Ref 'EfsSecurityGroup'
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref 'EfsSecurityGroup'
+  EfsSharedRoot:
+    Type: "AWS::EFS::FileSystem"
+    Properties:
+      Encrypted: false
+      FileSystemTags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref 'AWS::StackName'
+              - EFS
+  EfsMountTarget:
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+      - EfsSharedRoot
+      - EfsSecurityGroup
+    Properties:
+      FileSystemId: !Ref 'EfsSharedRoot'
+      SubnetId: !Ref 'PrivateSubnetServers'
+      SecurityGroups:
+        - !Ref 'EfsSecurityGroup'
+  XcalarPlacementGroup:
+    Type: AWS::EC2::PlacementGroup
+    Properties:
+      Strategy: cluster
+  XcalarServerAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      PlacementGroup: !Ref 'XcalarPlacementGroup'
+      LaunchConfigurationName: !Ref 'XcalarServerLC'
+      MinSize: !Ref 'XcalarServerNodes'
+      MaxSize: !Ref 'XcalarServerNodes'
+      DesiredCapacity: !Ref 'XcalarServerNodes'
+      VPCZoneIdentifier:
+        - !Ref 'PrivateSubnetServers'
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref 'AWS::StackName'
+              - Xcalar-Server
+          PropagateAtLaunch: true
+  XcalarServerLC:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      InstanceType: !Ref 'XcalarInstanceType'
+      AssociatePublicIpAddress: !Ref 'AssociatePublicIpAddress'
+      SecurityGroups:
+        - !Ref 'XcalarSecGroup'
+      KeyName: !Ref 'KeyPair'
+      ImageId: !FindInMap
+        - AWSAMIRegionMap
+        - !Ref 'AWS::Region'
+        - AMZN1HVM
+      IamInstanceProfile: !Ref 'XcalarServerProfile'
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "#!/bin/bash\n"
+            - "yum update -y\n"
+            - "#install the cfn-init tools\n"
+            - "yum install -y python-setuptools wget\n"
+            - "yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm\n"
+            - "XCALAR_BOOTSTRAP_FILE=user-data.sh\n"
+            - XCALAR_BOOTSTRAP=
+            - !Sub 'https://s3.amazonaws.com/${S3BucketName}/${S3KeyPrefix}scripts/'
+            - ${XCALAR_BOOTSTRAP_FILE}
+            - "\n"
+            - echo ${XCALAR_BOOTSTRAP}
+            - "\n"
+            - wget ${XCALAR_BOOTSTRAP}
+            - "\n"
+            - '/opt/aws/bin/cfn-init -v '
+            - '  --stack '
+            - !Ref 'AWS::StackName'
+            - ' --resource XcalarServerAsg '
+            - ' --region '
+            - !Ref 'AWS::Region'
+            - "\n"
+            - "chmod +x ${XCALAR_BOOTSTRAP_FILE}\n"
+            - './${XCALAR_BOOTSTRAP_FILE} '
+            - ' --bootstrap-expect '
+            - !Ref 'XcalarServerNodes'
+            - ' --tag-key '
+            - !Ref 'XcalarEc2RetryTagKey'
+            - ' --tag-value '
+            - !Ref 'AWS::StackName'
+            - ' --stack-name '
+            - !Ref 'AWS::StackName'
+            - ' --s3bucket '
+            - !Ref 'S3BucketName'
+            - ' --s3prefix '
+            - !Ref 'S3KeyPrefix'
+            - ' --nfs-mount-target '
+            - !Ref 'EfsMountTarget'
+            - ' --license "'
+            - !Ref 'LicenseKey'
+            - '"'
+            - "\n"
+            - '/opt/aws/bin/cfn-signal -e $? '
+            - ' --stack '
+            - !Ref 'AWS::StackName'
+            - ' --resource XcalarServerAsg '
+            - ' --region '
+            - !Ref 'AWS::Region'
+  XcalarServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Principal:
+              Service: ec2.amazonaws.com
+            Effect: Allow
+            Sid: ''
+      Policies:
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${S3BucketName}/${S3KeyPrefix}*'
+                Effect: Allow
+          PolicyName: xcalar-scripts-s3-policy
+  XcalarServerPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: xcalar-server
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+            Resource: '*'
+      Roles:
+        - !Ref 'XcalarServerRole'
+  XcalarServerProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'XcalarServerRole'
+Outputs:
+  XcalarEc2RetryTagKey:
+    Value: !Ref 'XcalarEc2RetryTagKey'
+    Description: The Amazon EC2 instance tag key to filter on when joining to other
+      Xcalar nodes.
+  XcalarEc2RetryTagValue:
+    Value: !Ref 'AWS::StackName'
+    Description: The Amazon EC2 instance tag value to filter on when joining to other
+      Xcalar nodes.

@@ -21,9 +21,9 @@ Parameters:
     ConstraintDescription: Must be a valid availabiliy zone
     Default: us-west-2c
   SGList:
-    Type: List<AWS::EC2::SecurityGroup::GroupName>
+    Type: List<AWS::EC2::SecurityGroup::Id>
     Description: A list of existing security groups.
-    Default: "default,open-to-users-at-home,open-to-office"
+    Default: default,open-to-users-at-home,open-to-office
   KeyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
     Type: AWS::EC2::KeyPair::KeyName
@@ -36,12 +36,7 @@ Parameters:
     MaxLength: '2047'
     AllowedPattern: http[s]?://.*
     ConstraintDescription: Must be a valid url.
-    Default: https://s3.us-west-2.amazonaws.com/xcrepo/builds/prod/xcalar-1.3.2-1758-installer?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAJU4DLXF3P2I7WGCQ%2F20180506%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20180506T014404Z&X-Amz-Expires=604799&X-Amz-SignedHeaders=host&X-Amz-Signature=9f788ed764160cb966992dcb1f97c94773b0f3793e1a90804a6540161e3f55e1
-  ImageId:
-    Description: ID of an existing Amazon Machine Image (AMI)
-    Type: AWS::EC2::Image::Id
-    ConstraintDescription: Must be the name of an existing AMI.
-    Default: ami-0a90baf2febfd32ac
+    Default: https://s3.us-west-2.amazonaws.com/xcrepo/builds/prod/xcalar-1.4.0-1882-installer?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAJU4DLXF3P2I7WGCQ%2F20180606%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20180606T201342Z&X-Amz-Expires=604200&X-Amz-SignedHeaders=host&X-Amz-Signature=1c7688b3de9457f92b30eff9dccefa094de3388cdd86b618eebd48e342049558
   BootstrapUrl:
     Description: XCE Bootstrap Script
     Type: String
@@ -49,12 +44,13 @@ Parameters:
     MaxLength: '2047'
     AllowedPattern: http[s]?://.*
     ConstraintDescription: Must be a valid url.
-    Default: http://repo.xcalar.net/scripts/aws-asg-bootstrap-v6.sh
+    Default: https://s3-us-west-2.amazonaws.com/xcrepo.xcalar.net/scripts/aws-asg-bootstrap-v6.sh
   LicenseKey:
     Description: XCE License
     Type: String
     MinLength: '0'
     MaxLength: '1024'
+    Default: ''
   AdminUsername:
     Description: XD Administrator name used to log into the GUI
     Type: String
@@ -72,17 +68,20 @@ Parameters:
   InstanceType:
     Description: XCE EC2 instance type
     Type: String
-    Default: m5.2xlarge
+    Default: c5d.2xlarge
     AllowedValues:
-      - m5.xlarge
-      - m5.2xlarge
-      - m5.4xlarge
-      - m5.12xlarge
-      - m5.24xlarge
-      - c5.2xlarge
-      - c5.4xlarge
-      - c5.9xlarge
-      - c5.18xlarge
+      - m5d.2xlarge
+      - m5d.4xlarge
+      - m5d.12xlarge
+      - m5d.24xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
+      - c5d.9xlarge
+      - c5d.18xlarge
+      - r5d.2xlarge
+      - r5d.4xlarge
+      - r5d.9xlarge
+      - r5d.18xlarge
       - r4.2xlarge
       - r4.4xlarge
       - r4.8xlarge
@@ -97,12 +96,14 @@ Parameters:
       - x1.32xlarge
     ConstraintDescription: must be a valid EC2 instance type.
   ELRelease:
-    Description: 'Enterprise Linux Distro. RHEL7 is RedHat Enterprise Linux 7.4, EL7 is CentOS 7.4'
+    Description: OS base to use. RHEL7 is RedHat Enterprise Linux 7.4, EL7 is CentOS
+      7.4. AmazonLinux is Amazon Linux HVM 2018.03
     Type: String
-    Default: EL7
+    Default: AmazonLinux
     AllowedValues:
       - RHEL7
       - EL7
+      - AmazonLinux
   SSHLocation:
     Description: ' The IP address range that can be used to SSH to the EC2 instances'
     Type: String
@@ -128,17 +129,26 @@ Parameters:
     Type: Number
     Default: '64'
   SwapSize:
-    Description: 'Size of swap disk. NOTE: This should be at least 2x the amount of memory.'
+    Description: 'Size of swap disk. NOTE: This should be at least 2x the amount of
+      memory.'
     Type: Number
     Default: '64'
+  PerformanceMode:
+    Type: String
+    Default: generalPurpose
+    AllowedValues:
+      - generalPurpose
+      - maxIO
 Mappings:
   RegionMap:
     us-east-1:
       RHEL7: ami-6871a115
-      EL7: ami-00bab8ce796583b60
+      EL7: ami-0f80d62666b176446
+      AmazonLinux: ami-14c5486b
     us-west-2:
       RHEL7: ami-28e07e50
-      EL7: ami-0a90baf2febfd32ac
+      EL7: ami-02ff71c14348cdca4
+      AmazonLinux: ami-e251209a
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -157,7 +167,6 @@ Metadata:
           - InstanceType
           - RootSize
           - SwapSize
-          - ImageId
           - ELRelease
       - Label:
           default: Security configuration
@@ -187,60 +196,106 @@ Metadata:
         default: 'HTTP CIDR range:'
       AvZone:
         default: 'Availability Zone:'
-      ImageId:
-        default: 'AMI Image:'
       BootstrapUrl:
         default: 'Bootstrap Url:'
 Resources:
   SGDefault:
-    Type: 'AWS::EC2::SecurityGroup'
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: SSH
-      VpcId: !Ref VpcId
+      GroupDescription: Instance security group
+      VpcId: !Ref 'VpcId'
       SecurityGroupIngress:
-      - CidrIp: !Ref 'SSHLocation'
-        IpProtocol: tcp
-        FromPort: '22'
-        ToPort: '22'
-      - CidrIp: !Ref HTTPLocation
-        IpProtocol: tcp
-        FromPort: '443'
-        ToPort: '443'
-      - CidrIp: !Ref HTTPLocation
-        IpProtocol: tcp
-        FromPort: '80'
-        ToPort: '80'
-  InstanceProfile:
-    Type: 'AWS::IAM::InstanceProfile'
+        - CidrIp: !Ref 'SSHLocation'
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: '22'
+        - CidrIp: !Ref 'HTTPLocation'
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+        - CidrIp: !Ref 'HTTPLocation'
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+  SecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: SGDefault
     Properties:
-      Roles:
-      - !Ref 'Role'
-  Role:
-    Type: 'AWS::IAM::Role'
+      GroupId: !Ref 'SGDefault'
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref 'SGDefault'
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    GroupDescription: Instance to EFS Mount Access
+    Properties:
+      VpcId: !Ref 'VpcId'
+      GroupDescription: Security group for mount target
+      Tags:
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+  EfsSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: EfsSecurityGroup
+    Properties:
+      GroupId: !Ref 'EfsSecurityGroup'
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref 'EfsSecurityGroup'
+  IamRole:
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: 'ec2.amazonaws.com'
-          Action: 'sts:AssumeRole'
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
       Path: /
-      Policies:
-      - PolicyName: Ec2Describe
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
+  IamPolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-instance-policy'
+      PolicyDocument:
+        Statement:
           - Effect: Allow
             Action:
-            - 'ec2:DescribeInstances'
-            - 'ec2:DescribeTags'
-            - 'autoscaling:DescribeAutoScalingGroups'
+              - s3:*
+              - ec2:Describe*
+              - autoscaling:Describe*
             Resource: '*'
+      Roles:
+        - !Ref 'IamRole'
+  IamInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'IamRole'
   PlacementGroup:
     Type: AWS::EC2::PlacementGroup
     Properties:
       Strategy: cluster
+  SharedFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: false
+      FileSystemTags:
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+    PerformanceMode: !Ref 'PerformanceMode'
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+      - EfsFileSystem
+      - EfsSecurityGroup
+    Properties:
+      FileSystemId: !Ref 'SharedFileSystem'
+      SubnetId: !Ref 'Subnet'
+      SecurityGroups:
+        - !Ref 'EfsSecurityGroup'
   InstanceGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -258,7 +313,10 @@ Resources:
   LaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      ImageId: !Ref 'ImageId'
+      ImageId: !FindInMap
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - !Ref 'ELRelease'
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -278,31 +336,72 @@ Resources:
           VirtualName: ephemeral2
         - DeviceName: /dev/sde
           VirtualName: ephemeral3
-      IamInstanceProfile: !Ref 'InstanceProfile'
+      IamInstanceProfile: !Ref 'IamInstanceProfile'
       InstanceType: !Ref 'InstanceType'
       SecurityGroups: !Ref 'SGList'
-      #        - Ref: "SecurityGroup"
-      #  - Ref: "SGroup1"
       KeyName: !Ref 'KeyName'
       EbsOptimized: true
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash -x
-          set -x
-          set +e
-          safe_curl() { curl -4 --location --retry 20 --retry-delay 3 --retry-max-time 60 "$@"; }
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash
+          mkdir -m 0700 -p /var/tmp/cloud
+          cd /var/tmp/cloud
+          cat > /etc/ec2.env <<EOF
+          AWS_STACKNAME=${AWS::StackName}
+          AWS_REGION=${AWS::Region}
+          AWS_STACKID="${AWS::StackId}"
+          LicenseKey="${LicenseKey}"
+          LICENSE="${LicenseKey}"
+          BootstrapUrl="${BootstrapUrl}"
+          INSTALLERURL="${InstallerUrl}"
+          InstallerUrl="${InstallerUrl}"
+          AdminUsername="${AdminUsername}"
+          AdminPassword="${AdminPassword}"
+          AdminEmail="${AdminEmail}"
+          InstanceCount="${InstanceCount}"
+          CLUSTERNAME=${ClusterName}
+          Resource="InstanceGroup"
+          EFSMOUNT=${}
+          EOF
+          chmod 0600 /etc/ec2.env
+          set -a
+          . /etc/ec2.env
+          set +a
+
+          curl -4 --location --retry 20 --retry-delay 3 --retry-max-time 60 "${BootstrapUrl}" -o bootstrap.sh
+          bash -x bootstrap.sh
+
+          if test -e /etc/redhat-release; then
+            ELVERSION="$(rpm -qf /etc/redhat-release --qf '%{VERSION}' | cut -c1)"
+            case "$(rpm -qf /etc/redhat-release --qf '%{NAME}')" in
+              centos-*) OSNAME=el;;
+              redhat-*) OSNAME=rhel;;
+              oraclelinux*) OSNAME=ol;;
+              *) OSNAME=unk;;
+            esac
+            VERSTRING=$OSNAME$ELVERSION
+          elif test -e /etc/system-release; then
+            VENDORVER="$(rpm -qf /etc/system-release --qf '%{VENDOR} %{VERSION}')"
+            if [[ $VENDORVER =~ Amazon.com\ 201 ]]; then
+              OSNAME=amzn
+              ELVERSION=1
+              VERSTRING=amzn1
+            elif [[ $VENDORVER =~ Amazon\ Linux\ 201 ]]; then
+              OSNAME=amzn
+              ELVERSION=2
+              VERSTRING=amzn2
+            fi
+          fi
+
           yum install -y epel-release
           yum install -y jq nfs-utils curl
-          RELEASE_RPM=$(rpm -qf /etc/redhat-release)
-          RELEASE=$(rpm -q --qf %{VERSION} $RELEASE_RPM)
-          ELVERSION="$(echo $RELEASE | sed -e 's/Server//g')"
-          if ! test -e /opt/aws/bin/cfn-init; then
-            yum install -y awscli
-            rpm -q aws-cfn-bootstrap || yum localinstall -y http://repo.xcalar.net/deps/aws-cfn-bootstrap-1.4-18.el$ELVERSION.noarch.rpm
-          fi
-          export PATH="$PATH:/opt/aws/bin"
+
+          export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/opt/aws/bin
+
+          safe_curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "/tmp/awscli-bundle.zip" && (cd /tmp/ && unzip awscli-bundle.zip && ./awscli-bundle/install -i /opt/aws -b /usr/local/bin/aws)
+          yum localinstall -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
           # Install the files and packages from the metadata
-          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource InstanceGroup --region ${AWS::Region}
+          /opt/aws/bin/cfn-init -v --stack $AWS_STACKNAME --resource InstanceGroup --region ${AWS::Region}
           try=20
           safe_curl -L https://storage.googleapis.com/repo.xcalar.net/deps/discover-1.gz | gzip -dc > /usr/local/bin/discover
           chmod +x /usr/local/bin/discover
@@ -319,17 +418,23 @@ Resources:
           safe_curl -fL "${BootstrapUrl}" -o /usr/local/bin/aws-asg-bootstrap.sh && \
           chmod +x /usr/local/bin/aws-asg-bootstrap.sh && \
           /bin/bash -x /usr/local/bin/aws-asg-bootstrap.sh ${InstanceCount} "${InstallerUrl}" 2>&1 | tee /var/log/aws-asg-bootstrap.log
-          rc=$?
+          rc=${PIPESTATUS[0]}
           # Signal the status from cfn-init
-          /opt/aws/bin/cfn-signal -e $rc --stack ${AWS::StackName} --resource InstanceGroup --region ${AWS::Region}
+          /opt/aws/bin/cfn-signal -e $rc --stack ${AWS::StackName} --resource $Resource --region ${AWS::Region}
           if [ -n "${AdminUsername}" ]; then
               XCE_HOME="$(cat /etc/xcalar/default.cfg | grep "^Constants.XcalarRootCompletePath" | cut -d'=' -f2)"
               mkdir -p $XCE_HOME/config
               chown -R xcalar:xcalar $XCE_HOME/config
-              jsonData='{ "defaultAdminEnabled": true, "username": "'${AdminUsername}'", "email": "'${AdminEmail}'", "password": "'${AdminPassword}'" }'
+              jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"${AdminUsername}\", \"email\": \"${AdminEmail}\", \"password\": \"${AdminPassword}\" }"
               echo "Creating default admin user ${AdminUsername} (${AdminEmail})"
               safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set"
           else
               echo "\$AdminUsername is not specified"
           fi
-          exit $rc
+          # Signal the status from cfn-init
+          /opt/aws/bin/cfn-signal -e $rc --stack $AWS_STACKNAME --resource $Resource --region $AWS_REGION
+          if [ $rc != 0 ]; then
+            echo >&2 "ERROR($rc): Deployment had failures"
+            exit $rc
+          fi
+          exit 0

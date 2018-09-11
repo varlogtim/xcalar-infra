@@ -18,3 +18,4 @@ azure/xdp-standard/.tmp
 .vs
 .vscode
 .lego
+*.rpm
