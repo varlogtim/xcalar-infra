@@ -64,6 +64,8 @@ DEFAULT_PUPPET_ROLE="jenkins_slave"
 DEFAULT_CORES=4
 DEFAULT_RAM=8
 
+REBOOT_TIMEOUT=500 # seconds to wait before timing out after waiting to be able to ssh to a VM after 'reboot -h'
+
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
 JENKINS_USER_PASS = "jenkins" # password to set for user 'jenkins' on provisioned VMs
@@ -360,12 +362,39 @@ def setup_hostname(ip, name):
     run_ssh_cmd(ip, 'systemctl restart network', timeout=500)
     run_ssh_cmd(ip, 'systemctl restart autofs')
 
-def reboot_node(ip):
+def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT):
 
     try:
         run_ssh_cmd(ip, 'reboot -h')
     except Exception as e:
         info("expect to hit exception after the reboot")
+
+    if waitForVmToComeUp:
+        info("Wait for {} to come up from reboot...".format(ip))
+        # wait a few seconds before initial ssh; immediately after reboot
+        # was able to make the ssh call
+        time.sleep(10)
+        timeout_remaining=reboot_timeout
+        seconds_to_sleep_between_checks=10
+        while timeout_remaining:
+            try:
+                run_ssh_cmd(ip, 'echo hello')
+                info("{}is back up!".format(ip))
+                break
+            except Exception as e:
+                if 'Unable to connect' in str(e):
+                    info("still unable to ssh...")
+                    info(e)
+                    time.sleep(seconds_to_sleep_between_checks)
+                    timeout_remaining-=seconds_to_sleep_between_checks
+                else:
+                    info("Exception thrown waiting for {} to come up " \
+                        " after reboot, for reason other than " \
+                        "'Unable to connect'".format(ip))
+                    raise e
+        if not timeout_remaining:
+            raise TimeoutError("Timed out waiting for {} to come up " \
+                " after reboot.  Waited {} seconds".format(ip, reboot_timeout))
 
 '''
     setup a node to be able to run puppet
@@ -858,16 +887,28 @@ def remove_vms(vms, releaseIP=True):
             "\n\nCould not find matches in Ovirt for following VMs: {}." \
             "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
-def reboot_nodes(vmids):
+'''
+    reboot nodes in parallel.  Optionally wait for all nodes to come up
+'''
+def reboot_nodes(vmids, waitForNodesToComeUp=True):
 
     info("Reboot nodes in parallel")
 
     procs = []
+    sleepBetween = 5
+    sleepOffset = 0
     for vmid in vmids:
         ip = get_vm_ip(vmid)
-        proc = multiprocessing.Process(target=reboot_node, args=(ip,))
+        proc = multiprocessing.Process(target=reboot_node, args=(ip,), kwargs={
+            'waitForVmToComeUp': waitForNodesToComeUp,
+            'reboot_timeout': REBOOT_TIMEOUT
+        })
         proc.start()
         procs.append(proc)
+        sleepOffset+=sleepBetween
+
+    # wait for the processes
+    process_wait(procs, timeout=sleepOffset + REBOOT_TIMEOUT)
 
 '''
     stop vm and wait for status to be down
@@ -1840,8 +1881,6 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
 
     summary_header = "\n\n=====================================================\n" \
             "------------ Your Ovirt VMs are ready!!! ------------\n" \
-            "|\n| (But they have just been rebooted; please give them \n" \
-            "|  approx. 5 minutes to come up)\n" \
             "|\n| " + str(len(vmids)) + " VMs were created.\n" \
             "|\n| The VMs have the following specs:\n" \
             "|\tRAM (GB)     : " + str(ram) + "\n" \
@@ -2253,13 +2292,13 @@ if __name__ == "__main__":
                 clustername = basename
             initialize_xcalar(vmids, licfilepath, installer, createcluster=clustername)
 
+        # reboot all of the nodes in parallel
+        reboot_nodes(vmids)
+
         '''
             display a useful summary to user which has IP, VM names, etc.
         '''
         display_summary(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername) #, removed=deletevms)
-
-        # reboot all of the nodes in parallel
-        reboot_nodes(vmids)
 
     # close connection
     close_connection(CONN)
