@@ -174,6 +174,7 @@ def info(string):
     :vmid: Ovirt id for the VM
     :timeout: time in seconds to wait for the IP to be assigned
 
+    :returns: IP address if found
     :throws: NoIpException if no valid ip found after timeout
 '''
 def wait_for_ip(vmid, timeout):
@@ -186,7 +187,7 @@ def wait_for_ip(vmid, timeout):
             assigned_ip = get_vm_ip(vmid)
             info("\tIP {} assigned!".format(assigned_ip))
             return assigned_ip
-        except:
+        except NoIpException as e: # let other Exception fail
             # not available yet
             info("still no ip")
             time.sleep(sleep_seconds_between_checks)
@@ -645,7 +646,7 @@ def get_vm_id(identifier, failOnNoMatches=True):
     :param vmid: unique id of VM in Ovirt to get IP of
 
     :returns: IP address if found
-    :throws Exception: if no IP found
+    :throws NoIpException: if no IP found
 '''
 def get_vm_ip(vmid):
 
@@ -2403,8 +2404,8 @@ def getMultiParamValues(paramName, param, errorOnDupes=True):
         else:
             values[arg] = ''
     if dupes and errorOnDupes:
-        raise ValueError("\n\nERROR: Duplicate values supplied " \
-            "to {}: {}\n".format(paramName, param))
+        raise ValueError("\n\nERROR: Duplicate values were supplied " \
+            "to {}: {}\n".format(paramName, ", ".join(dupes)))
     return values.keys()
 
 
