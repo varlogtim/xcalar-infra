@@ -1,0 +1,87 @@
+variables:
+  ssh_username: ec2-user
+  uid: '1000'
+  osid: 'amzn1'
+  disk_size: '63'
+  aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
+  aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
+  region: '{{env `AWS_DEFAULT_REGION`}}'
+  aws_image_version: '2018.03'
+  today: '{{isotime "20060102"}}'
+  image_build_number: '1'
+  product: xdp-standard
+  product_desc: Xcalar Data Platform
+builders:
+  - type: amazon-ebs
+    name: amazon-ebs-amzn1
+    access_key: '{{user `aws_access_key`}}'
+    secret_key: '{{user `aws_secret_key`}}'
+    region: '{{user `region`}}'
+    ami_regions:
+      - us-east-1
+      - us-west-2
+    ami_users:
+      - '045297022527'
+      - '043829555035'
+      - '151528745488'
+    source_ami_filter:
+      filters:
+        virtualization-type: hvm
+        root-device-type: ebs
+        block-device-mapping.volume-type: gp2
+        name: amzn-ami-hvm-{{user `aws_image_version`}}.*
+      owners:
+        - '137112412989'
+      most_recent: true
+    instance_type: c5.xlarge
+    iam_instance_profile: ec2-default
+    ssh_username: ec2-user
+    ssh_pty: true
+    ami_name: '{{user `osid` | upper}}-{{user `aws_image_version`}}-HVM-GP2_{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-v{{user `image_build_number`}}'
+    ena_support: true
+    ebs_optimized: true
+    force_deregister: false
+    force_delete_snapshot: false
+    shutdown_behavior: terminate
+    snapshot_tags:
+      Name: '{{user `osid` | upper}}-{{user `aws_image_version`}}-HVM-GP2_{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-v{{user `image_build_number`}}'
+      BaseOS: '{{user `osid`}}'
+      Version: '{{user `version`}}'
+      Build: '{{user `build_number`}}'
+      Product: '{{user `product`}}'
+    ami_description: '{{user `product_desc`}} ({{user `osid` | upper}} {{user `version`}}
+      {{user `build_number`}} ({{user `today`}}-v{{user `image_build_number`}})'
+    tags:
+      Name: '{{user `desc` }} v{{user `version`}} {{user `build_number`}} {{user `osid` | upper}}'
+      BaseOS: '{{user `osid`}}'
+      Version: '{{user `version`}}'
+      Build: '{{user `build_number`}}'
+      Product: '{{user `product`}}'
+    launch_block_device_mappings:
+      - device_name: /dev/xvda
+        volume_size: '{{user `disk_size`}}'
+        volume_type: gp2
+        delete_on_termination: true
+    ami_block_device_mappings:
+      - device_name: /dev/sdb
+        virtual_name: ephemeral0
+      - device_name: /dev/sdc
+        virtual_name: ephemeral1
+provisioners:
+  - type: file
+    source: scripts/genDefaultAdmin.sh
+    destination: /tmp/genDefaultAdmin.sh
+  - type: shell
+    environment_vars:
+      - OSID={{user `osid`}}
+      - BUILD_NAME={{build_name}}
+      - BUILD_TYPE={{build_type}}
+      - INSTALLER_URL={{user `installer_url`}}
+    execute_command: '{{.Vars}} /usr/bin/sudo -E -S bash ''{{.Path}}'''
+    scripts:
+      - scripts/start.sh
+      - scripts/install-epel.sh
+      - 'scripts/packages-{{user `osid`}}.sh'
+      - scripts/install-xcalar.sh
+      - scripts/fixup-kpmg.sh
+      - scripts/finish.sh

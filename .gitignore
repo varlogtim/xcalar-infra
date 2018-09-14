@@ -14,8 +14,9 @@ pkg/*.deb
 pkg/*.rpm
 aws/billing/
 azure/xdp-standard/temp
-azure/xdp-standard/.tmp
+.tmp
 .vs
 .vscode
 .lego
 *.rpm
+tmp

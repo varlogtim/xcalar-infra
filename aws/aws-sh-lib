@@ -1,13 +1,18 @@
 #!/bin/bash
 
+. infra-sh-lib
+
 AWS_AMI_OWNER_REDHAT=309956199498
 AWS_AMI_OWNER_CANONICAL=099720109477
 AWS_AMI_MARKETPLACE=679593333241
-AWS_AMI_FILTERS=('Name=state,Values=available' 'Name=architecture,Values=x86_64' 'Name=virtualization-type,Values=hvm' 'Name=root-device-type,Values=ebs') #'Name=ena-support,Values=true')
+AWS_AMI_AMAZON=amazon
+AWS_AMI_FILTERS=('Name=state,Values=available' 'Name=architecture,Values=x86_64' 'Name=virtualization-type,Values=hvm' 'Name=root-device-type,Values=ebs' 'Name=block-device-mapping.volume-type,Values=gp2' 'Name=ena-support,Values=true')
+JQ_TAG_NAME='"\(if .Tags and ([.Tags[] | select( .Key == "Name" )] != []) then .Tags[] | select( .Key == "Name" ) | .Value else "-" end)"'
+JQ_TAGS_OTHER='"\(if .Tags then [.Tags[] | select( .Key != "Name") |"\(.Key)=\(.Value)"] | join(",") else "-" end)"'
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-west-2}"
 
 aws_sh_setup () {
-    export TMPDIR="${TMPDIR:-/tmp/$(id -u)}/$(basename $0 .sh)/$$"
+    export TMPDIR="${TMPDIR:-/tmp/aws-sh-lib-$(id -u)}/$(basename $0 .sh)/$$"
     rm -rf "$TMPDIR"
     mkdir -p "$TMPDIR"
 }
@@ -34,10 +39,15 @@ aws_latest_official_image() {
 }
 
 aws_list_images () { aws ec2 describe-images --output=json --owners "${1:-self}" --filters "Name=name,Values=${2:-*}" "${AWS_AMI_FILTERS[@]}"; }
+aws_list_self_images () { aws_list_images self '*' | aws_format_images; }
 aws_list_rhel6_images () { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-6.?_HVM_GA*' | aws_format_images; }
 aws_list_rhel7_images () { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-7.?_HVM_GA*' | aws_format_images; }
-aws_list_el6_images () { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 6 x86_64 HVM*' | aws_format_images; }
-aws_list_el7_images () { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 7 x86_64 HVM*' | aws_format_images; }
+aws_list_centos6_images () { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 6 x86_64 HVM*' | aws_format_images; }
+aws_list_centos7_images () { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 7 x86_64 HVM*' | aws_format_images; }
+aws_list_el6_images () { aws_list_images self 'EL-6.*' | aws_format_images; }
+aws_list_el7_images () { aws_list_images self 'EL-7.*' | aws_format_images; }
+aws_list_amzn1_images () { aws_list_images $AWS_AMI_AMAZON 'amzn-ami-hvm-20*' | aws_format_images; }
+aws_list_amzn2_images () { aws_list_images $AWS_AMI_AMAZON 'amzn2-ami-hvm-2.*-x86_64-gp2' | aws_format_images; }
 aws_list_ub14_images ()  { aws_list_images $AWS_AMI_OWNER_CANONICAL  '*/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*' | aws_format_images; }
 aws_list_ub14_image_latest () { aws_list_ub14_images | aws_jq_images | head -1; }
 aws_share_ami () {
@@ -52,9 +62,6 @@ aws_share_ami () {
 
 aws_list_running () { aws_list_instances_info --filter Name='instance-state-name',Values='running'; }
 
-
-JQ_TAG_NAME='"\(if .Tags and ([.Tags[] | select( .Key == "Name" )] != []) then .Tags[] | select( .Key == "Name" ) | .Value else "-" end)"'
-JQ_TAGS_OTHER='"\(if .Tags then [.Tags[] | select( .Key != "Name") |"\(.Key)=\(.Value)"] | join(",") else "-" end)"'
 
 jq_value_or () {
     echo '"\(if '$1' and '$1' != "" then '$1' else "'${2:-}'" end)"'
@@ -116,8 +123,6 @@ aws_instance_sriov () {
 aws_image_sriov () {
     aws ec2 describe-image-attribute --image-id ${1} --attribute sriovNetSupport
 }
-
-
 
 aws_show_images () {
     jq -r "
@@ -252,14 +257,38 @@ aws_get_role_iam () {
     curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/$1 | jq -r '{AWS_ACCESS_KEY_ID:.AccessKeyId,AWS_SECRET_ACCESS_KEY:.SecretAccessKey,AWS_SESSION_TOKEN:.Token}'  | jq -r "to_entries|map(\"export \(.key)=\(.value|tostring)\")|.[]"
 }
 
+aws_s3_region() {
+    local region
+    if ! region=$(aws s3api get-bucket-location --bucket "$1" --query LocationConstraint --output text); then
+        echo >&2 "ERROR: aws_s3_region: $1: Unable to determine bucket region"
+        return 1
+    fi
+    if [ "$region" = None ]; then
+        echo "us-east-1"
+    else
+        echo "$region"
+    fi
+}
+
 aws_s3_du() {
-    aws cloudwatch get-metric-statistics --namespace AWS/S3 --metric-name BucketSizeBytes \
+    local size human region
+    if ! region="$(aws_s3_region "$1")"; then
+        return 1
+    fi
+    if ! size=$(aws cloudwatch --region $region get-metric-statistics --namespace AWS/S3 --metric-name BucketSizeBytes \
         --start-time $(date --date "1 day ago" +%FT%T) \
         --end-time $(date +%FT%T)  \
         --period 86400 \
         --statistics Average \
         --dimensions Name=BucketName,Value=$1 Name=StorageType,Value=StandardStorage \
-        --query 'Datapoints[].Average' --output text
+        --query 'Datapoints[].Average' --output text); then
+        return 1
+    fi
+    if [ -z "$size" ]; then
+        echo >&2 "ERROR: aws_s3_du: $1: Unable to determine bucket size"
+        return 1
+    fi
+    bytes_to_human $size
 }
 
 aws_inventory() {
@@ -280,13 +309,13 @@ aws_inventory() {
 }
 
 # Print out pairs of: 'ZONEID foo.dns.'
-aws_zoneid_to_dns()  {
-    aws route53 list-hosted-zones --query 'HostedZones[][].[Id,Name]' --output text | sed -e 's@^/hostedzone/@@g'
+aws_r53_zoneids()  {
+    aws route53 list-hosted-zones --query 'HostedZones[][].{ZoneId: Id, Zone: Name, PrivateZone: Config.PrivateZone}' #--output text | sed -e 's@^/hostedzone/@@g'
 }
 
-aws_cname_mappings()  {
+aws_r53_cname_mapping()  {
     local zone_id
-    if zone_id=$(aws_zoneid_to_dns | grep "$1" | awk '{print $1}') && [ -n "$zone_id" ]; then
+    if zone_id=$(aws_r53_zoneids | grep "$1" | awk '{print $1}') && [ -n "$zone_id" ]; then
         aws route53 list-resource-record-sets --hosted-zone-id $zone_id | jq -r '.[][] | select(.Type == "CNAME")|[.ResourceRecords[0].Value,.Name]|@tsv'
     fi
 }
@@ -294,16 +323,171 @@ aws_cname_mappings()  {
 aws_cfn_url() {
     local url
     url="$(urlencode "$1")"
-    echo "https://${AWS_DEFAULT_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_DEFAULT_REGION}#/stacks/create/review?filter=active&templateURL=${url}&stackName=${USER}-cfn-$(date +%Y%m%d%H%M%S)&param_AdminEmail=${USER}%40xcalar.com&param_AdminUsername=xdpadmin"
+    echo "https://${AWS_DEFAULT_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_DEFAULT_REGION}#/stack/detail?stackId=$url"
 }
 
-aws_cfn_vault_consul() {
-    local template="https://aws-quickstart.s3.amazonaws.com/quickstart-hashicorp-vault/templates/quickstart-hashicorp-vault-master.template"
-    local cfnurl="https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?filter=active&templateURL=https%3A%2F%2Faws-quickstart.s3.amazonaws.com%2Fquickstart-hashicorp-vault%2Ftemplates%2Fquickstart-hashicorp-vault-master.template&stackName=Vault&param_AccessCIDR=0.0.0.0%2F0&param_AvailabilityZones%5B%5D=us-west-2a&param_AvailabilityZones%5B%5D=us-west-2b&param_AvailabilityZones%5B%5D=us-west-2c&param_ConsulClientNodes=3&param_ConsulInstanceType=t2.medium&param_ConsulServerNodes=3&param_EmailAddress=abakshi%40xcalar.com&param_KeyPairName=xcalar-us-west-2&param_PrivateSubnet1CIDR=10.100.0.0%2F19&param_PrivateSubnet2CIDR=10.100.32.0%2F19&param_PrivateSubnet3CIDR=10.100.64.0%2F19&param_PublicSubnet1CIDR=10.100.128.0%2F20&param_PublicSubnet2CIDR=10.100.144.0%2F20&param_PublicSubnet3CIDR=10.100.160.0%2F20&param_QSS3BucketName=quickstart-reference&param_QSS3KeyPrefix=hashicorp%2Fvault%2Flatest%2F&param_VaultInstanceType=m4.large&param_VPCCIDR=10.100.0.0%2F16"
-    echo "$cfnurl"
+cfn_template_default() {
+    local ext
+    if ! ext="$(file_ext "$1")"; then
+        return 1
+    fi
+    case "$ext" in
+        json) jq -r ".Parameters.$2.Default" < "$1";;
+        yml|yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default";;
+        *) echo >&2 "Unknown file type: $1"; return 1;;
+    esac
 }
 
-aws_cfn_vault_consul_prod() {
-    local template="https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?filter=active&templateURL=https%3A%2F%2Faws-quickstart.s3.amazonaws.com%2Fquickstart-hashicorp-vault%2Ftemplates%2Fquickstart-hashicorp-vault-master.template&stackName=vault&param_AccessCIDR=0.0.0.0%2F0&param_AvailabilityZones%5B%5D=us-west-2c&param_AvailabilityZones%5B%5D=us-west-2b&param_AvailabilityZones%5B%5D=us-west-2a&param_ConsulClientNodes=3&param_ConsulInstanceType=t2.medium&param_ConsulServerNodes=3&param_EmailAddress=abakshi%40xcalar.com&param_KeyPairName=xcalar-prod-us-west-2&param_PrivateSubnet1CIDR=10.100.0.0%2F19&param_PrivateSubnet2CIDR=10.100.32.0%2F19&param_PrivateSubnet3CIDR=10.100.64.0%2F19&param_PublicSubnet1CIDR=10.100.128.0%2F20&param_PublicSubnet2CIDR=10.100.144.0%2F20&param_PublicSubnet3CIDR=10.100.160.0%2F20&param_QSS3BucketName=quickstart-reference&param_QSS3KeyPrefix=hashicorp%2Fvault%2Flatest%2F&param_VaultInstanceType=m4.large&param_VPCCIDR=10.100.0.0%2F16"
-    echo "$template"
+aws_canonical_user_id() {
+    aws s3api list-buckets --query 'Owner.ID' --output text
 }
+
+aws_s3_upload_public() {
+    if ! test -r "$1"; then
+        echo >&2 "Unable to read $1"
+        return 1
+    fi
+    aws s3 cp --acl public-read  \
+        --metadata-directive REPLACE \
+        --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' \
+        --content-type text/plain \
+        --only-show-errors \
+        "$1" "$2"
+}
+
+# Call with the tag name (eg, ClusterName) and the name of the cluster (eg, abakshi-cluster-1)
+aws_cluster_memebers() {
+    aws ec2 describe-instances --filters Name=tag:$1,Values=$2 --query "Reservations[].Instances[].[AmiLaunchIndex,NetworkInterfaces[0].${3:-PrivateIpAddress}]"  --output text \
+        | sort -n \
+        | awk '{print $2}'
+}
+
+# Print out /etc/hosts compatible format cluster info, eg.
+# sorted by AMI launch index
+# 172.31.17.91	ip-172-31-17-91.ec2.internal	ip-172-31-17-91	    vm0
+# 172.31.29.109	ip-172-31-29-109.ec2.internal	ip-172-31-29-109	vm1
+aws_cluster_hosts() {
+    aws ec2 describe-instances --filters Name=tag:$1,Values=$2 --query "Reservations[].Instances[].[AmiLaunchIndex,NetworkInterfaces[0].PrivateIpAddress, NetworkInterfaces[0].PrivateDnsName]"  --output text \
+    | sort -n \
+    | while read INDEX IP NAME; do \
+        echo -e "$IP\t$NAME\t${NAME%%.*}\tvm${INDEX}"; \
+    done
+}
+
+aws_cluster_tags() {
+    local state=running tag_key=ClusterName tag_value="$(id -un)*" cmd="$1"
+    while [ $# -gt 0 ]; do
+        local cmd="$1"
+        shift
+        case "$cmd" in
+        --state) state="$1"; shift;;
+        --tag-key) tag_key="$1"; shift;;
+        --tag-value) tag_value="$1"; shift;;
+        -h|--help) echo >&2 "Usage: aws_cluster_tags [--state running,pending,stopped] [--tag-key key (default: $tag_key)] [--tag-value value (default: $tag_value)]"; return 1;;
+        esac
+    done
+
+    aws ec2 describe-instances --filter Name=instance-state-name,Values="$state" Name=tag:"$tag_key",Values="$tag_value" \
+        --query 'Reservations[].Instances[].{ LaunchIndex: AmiLaunchIndex, ClusterName: Tags[?Key==`'"$tag_key"'`].Value|[0], Name: Tags[?Key==`Name`].Value|[0], InstanceId: InstanceId}'
+}
+
+
+cdn_template_default() {
+    local ext
+    if ! ext="$(file_ext "$1")"; then
+        return 1
+    fi
+    case "$ext" in
+        json) jq -r ".Parameters.$2.Default" < "$1";;
+        yml|yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default";;
+        *) echo >&2 "Unknown file type: $1"; return 1;;
+    esac
+}
+
+
+aws_canonical_user_id() {
+    aws s3api list-buckets --query 'Owner.ID' --output text
+}
+
+aws_s3_upload_public() {
+    if ! test -r "$1"; then
+        echo >&2 "Unable to read $1"
+        return 1
+    fi
+    aws s3 cp --acl public-read  \
+        --metadata-directive REPLACE \
+        --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' \
+        --content-type text/plain \
+        --only-show-errors \
+        "$1" "$2"
+}
+
+aws_ec2_instances_by_tag() {
+    local instance_ids
+    local key="$1"
+    local value="$2"
+    shift 2
+    instance_ids="$(aws ec2 describe-instances --query 'Reservations[].Instances[].InstanceId' --output text --filters "Name=tag:$key,Values=$value" "$@")"
+    if [ -z "$instance_ids" ]; then
+        return 1
+    fi
+    echo $instance_ids
+}
+
+aws_ec2_start_instances_by_tag() {
+    local instance_ids
+    instance_ids="$(aws_ec2_instances_by_tag "$1" "$2" Name=instance-state-name,Values=running)"
+    if [ -z "$instance_ids" ]; then
+        say "No instances matching Name=tag:$1 with Values=$2 were found"
+        return 1
+    fi
+    aws ec2 start-instances --instance-ids $instance_ids
+}
+
+aws_ec2_stop_instances_by_tag() {
+    local instance_ids
+    instance_ids="$(aws_ec2_instances_by_tag "$1" "$2" Name=instance-state-name,Values=running)"
+    if [ -z "$instance_ids" ]; then
+        say "No instances matching Name=tag:$1 with Values=$2 were found"
+        return 1
+    fi
+    aws ec2 start-instances --instance-ids $instance_ids
+}
+
+aws_ec2_cmd_instances_by_tag() {
+    local instance_ids
+    instance_ids="$(aws_ec2_instances_by_tag "$1" "$2" Name=instance-state-name,Values=running)"
+    if [ -z "$instance_ids" ]; then
+        say "No instances matching Name=tag:$1 with Values=$2 were found"
+        return 1
+    fi
+    aws ec2 start-instances --instance-ids $instance_ids
+}
+
+aws_s3_endpoint() {
+    local bucket_location
+    if ! bucket_location="$(aws s3api get-bucket-location --bucket $1 --query LocationConstraint --output text)"; then
+        return 1
+    fi
+    if [ "$bucket_location" == None ]; then
+        bucket_location=''
+    fi
+    echo "s3${bucket_location:+.$bucket_location}.amazonaws.com/$1"
+}
+
+
+aws_s3_check() {
+    local bucket_key="${1#s3://}"
+    local bucket="${bucket_key/\/*/}"
+    local key="${bucket_key#$bucket/}"
+    aws s3api head-object --bucket $bucket --key $key
+}
+
+aws_s3_sync() {
+    (set -x; aws s3 sync --metadata-directive REPLACE --content-disposition inline --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' "$@")
+}
+
+aws_s3_sync_public() {
+    aws_s3_sync --acl public-read "$@"
+}
+

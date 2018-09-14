@@ -1,0 +1,405 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Xcalar Data Platform. This template deploys a XDP Cluster on AWS.'
+Parameters:
+  ClusterAccessSGId:
+    Description: Security Group ID of wanting access to the Xcalar Cluster (SSH/HTTPS)
+    Type: AWS::EC2::SecurityGroup::Id
+  InstanceType:
+    Type: String
+    Description: Xcalar node instance type
+    AllowedValues:
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
+      - c5d.9xlarge
+      - c5d.18xlarge
+      - r5d.2xlarge
+      - r5d.4xlarge
+      - r5d.12xlarge
+      - r5d.24xlarge
+      - m5d.xlarge
+      - m5d.2xlarge
+      - m5d.4xlarge
+      - m5d.12xlarge
+      - m5d.24xlarge
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.12xlarge
+      - m5.24xlarge
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+    ConstraintDescription: Choose an instance type.
+    Default: c5d.4xlarge
+  Ec2RetryTagKey:
+    Description: The Amazon EC2 instance tag key to filter on when joining to other
+      Xcalar nodes.
+    Type: String
+    Default: aws:cloudformation:stack-name
+    ConstraintDescription: Must match EC2 Tag Name requirements.
+  Ec2RetryTagValue:
+    Description: The Amazon EC2 instance tag value to filter on when joining to other
+      Xcalar nodes. Optional, leave blank to use the stack name.
+    Type: String
+    Default: ''
+    ConstraintDescription: Must match EC2 Tag Name requirements.
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: id_rsa_aws
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+  Subnet:
+    Description: ID of the private subnet of servers (e.g., subnet-xxxxxxxx)
+    Type: AWS::EC2::Subnet::Id
+  InstallerUrl:
+    MaxLength: '2047'
+    ConstraintDescription: Optional. HTTPS/S3 URL to installer or empty if AMI is
+      pre-baked
+    Default: ''
+    Type: String
+  BootstrapUrl:
+    MaxLength: '2047'
+    ConstraintDescription: Location of the bootstrap script. For example, https://s3.amazonaws.com/xcrepoe1/cfn/prod/v2/scripts/user-data.sh
+    Type: String
+  CustomScriptUrl:
+    MaxLength: '2047'
+    ConstraintDescription: Optional. Location of a custom script to run after bootstrap.
+    Default: ''
+    Type: String
+  LicenseKey:
+    Description: Optional. Xcalar License. Leave blank to enter via GUI.
+    MinLength: '0'
+    MaxLength: '1024'
+    Default: ''
+    NoEcho: true
+    Type: String
+  VpcId:
+    Description: VPC ID
+    Type: AWS::EC2::VPC::Id
+  AllowedCIDR:
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    Description: CIDR Block for the VPC that should have access to this cluster. For
+      example, your Bastion host IP address or your Office IP
+    Type: String
+  AssociatePublicIpAddress:
+    Type: String
+    Description: Associate a Public IP address with resources
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+  ClusterSize:
+    Description: Sets DesiredCapacity, MinSize, and MaxSize
+    MinValue: 1
+    MaxValue: 16
+    Default: 3
+    Type: Number
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Instance configuration
+        Parameters:
+          - InstanceType
+          - ClusterSize
+          - RootSize
+          - SwapSize
+      - Label:
+          default: Security configuration
+        Parameters:
+          - KeyName
+      - Label:
+          default: Network configuration
+        Parameters:
+          - VpcId
+          - Subnet
+          - AssociatePublicIpAddress
+          - ClusterAccessSGId
+          - AllowedCIDR
+      - Label:
+          default: Xcalar Configuration
+        Parameters:
+          - LicenseKey
+          - AdminEmail
+          - AdminUsername
+          - AdminPassword
+      - Label:
+          default: Advanced Options
+        Parameters:
+          - InstallerUrl
+          - BootstrapUrl
+          - CustomScriptUrl
+          - Ec2RetryTagKey
+          - Ec2RetryTagValue
+    ParameterLabels:
+      #      InstallerUrl:
+      #        default: 'XCE Installer Url:'
+      #      LicenseKey:
+      #        default: 'XCE License Key:'
+      #      InstanceType:
+      #        default: 'Server size:'
+      #      KeyName:
+      #        default: 'Key pair:'
+      #      SSHLocation:
+      #        default: 'SSH CIDR range:'
+      #      HTTPLocation:
+      #        default: 'HTTP CIDR range:'
+  Version: 1.4.1
+  Release: '3'
+Mappings:
+  AWSAMIRegionMap:
+    AMI:
+      AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20180811-x86_64-gp2
+    us-east-1:
+      AMZN1HVM: ami-079b87c75f15ac882
+    us-west-2:
+      AMZN1HVM: ami-07ef94c860b8c06f6
+Resources:
+  ClusterSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access between nodes, and HTTPS/SSH from the given CIDR.
+      VpcId: !Ref 'VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref 'ClusterAccessSGId'
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref 'ClusterAccessSGId'
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref 'ClusterAccessSGId'
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: !Ref 'AllowedCIDR'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ClusterSG'
+  ClusterMonitorIngressTCP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref 'ClusterSG'
+  ClusterMonitorIngressUDP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: udp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref 'ClusterSG'
+  ClusterIngressHTTP:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !Ref 'ClusterSG'
+  ClusterIngressSSL:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref 'ClusterSG'
+  ClusterIngressAPI:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: tcp
+      FromPort: 18552
+      ToPort: 18552
+      SourceSecurityGroupId: !Ref 'ClusterSG'
+  ClusterIngressProto:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: tcp
+      FromPort: 5000
+      ToPort: 5000
+      SourceSecurityGroupId: !Ref 'ClusterSG'
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EFS Mount Access Security Group
+      VpcId: !Ref 'VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref 'ClusterSG'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EfsSecurityGroup'
+  EfsSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'EfsSecurityGroup'
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref 'EfsSecurityGroup'
+  EfsSharedRoot:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: false
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EFS'
+  EfsMountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref 'EfsSharedRoot'
+      SubnetId: !Ref 'Subnet'
+      SecurityGroups:
+        - !Ref 'EfsSecurityGroup'
+  PlacementGroup:
+    Type: AWS::EC2::PlacementGroup
+    Properties:
+      Strategy: cluster
+  ClusterASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: EfsMountTarget
+    Properties:
+      PlacementGroup: !Ref 'PlacementGroup'
+      LaunchConfigurationName: !Ref 'ClusterLC'
+      MinSize: !Ref 'ClusterSize'
+      MaxSize: !Ref 'ClusterSize'
+      DesiredCapacity: !Ref 'ClusterSize'
+      VPCZoneIdentifier:
+        - !Ref 'Subnet'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-XcalarCluster'
+          PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: !Ref 'ClusterSize'
+  ClusterLC:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      InstanceType: !Ref 'InstanceType'
+      AssociatePublicIpAddress: !Ref 'AssociatePublicIpAddress'
+      SecurityGroups:
+        - !Ref 'ClusterSG'
+      KeyName: !Ref 'KeyName'
+      ImageId: !FindInMap
+        - AWSAMIRegionMap
+        - !Ref 'AWS::Region'
+        - AMZN1HVM
+      IamInstanceProfile: !Ref 'IamClusterProfile'
+      UserData: !Base64
+        Fn::Sub:
+          - |-
+            #!/bin/bash
+            yum update -y
+            yum install -y curl ca-certificates unzip
+            yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
+            if [ "${Ec2RetryTagKey}" == "aws:cloudformation:stack-name" ]; then
+              retryTagValue=${AWS::StackName}
+            else
+              retryTagValue=${Ec2RetryTagValue}
+            fi
+            mkdir -p /var/lib/cfn
+            cd /var/lib/cfn
+            curl -Lf "${BootstrapUrl}" -o bootstrap.sh
+            rc=$?
+            if [ $rc -eq 0 ]; then
+              /bin/bash -x bootstrap.sh --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" --nfs-mount "${EfsMount}" --license "${LicenseKey}" --installer-url "${InstallerUrl}"
+              rc=$?
+            fi
+            if [ $rc -eq 0 ] && [ -n "${CustomScriptUrl}" ]; then
+              curl -Lf "${CustomScriptUrl}" -o customscript.sh
+              rc=$?
+              if [ $rc -eq 0 ]; then
+                /bin/bash -x customscript.sh --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" --nfs-mount "${EfsMount}" --license "${LicenseKey}" --installer-url "${InstallerUrl}"
+                rc=$?
+              fi
+            fi
+            /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
+            exit $rc
+          - EfsMount: !Sub '${EfsSharedRoot}:/'
+  IamClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Principal:
+              Service: ec2.amazonaws.com
+            Effect: Allow
+            Sid: ''
+  IamClusterPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: xcalar-cluster
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+            Resource: '*'
+      Roles:
+        - !Ref 'IamClusterRole'
+  IamClusterProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'IamClusterRole'
+#  XcalarLaunchTemplate:
+#    Type: AWS::EC2::LaunchTemplate
+#    Properties:
+#      LaunchTemplateName: XcalarLaunchTemplate
+#      LaunchTemplateData:
+#        TagSpecifications:
+#          - TagSpecification
+#        UserData: String
+#        InstanceInitiatedShutdownBehavior: String
+#        BlockDeviceMappings:
+#          - BlockDeviceMapping
+#        IamInstanceProfile: IamInstanceProfile
+#        SecurityGroupIds:
+#          - String
+#        KeyName: !Ref 'KeyName'
+#        Placement: !Ref 'XcalarPlacementGroup'
+#        InstanceMarketOptions: InstanceMarketOptions
+#        NetworkInterfaces:
+#          - NetworkInterface
+#        ImageId: String
+#        InstanceType: !Ref 'InstanceType'
+#        ImageId: !FindInMap
+#          - AWSAMIRegionMap
+#          - !Ref 'AWS::Region'
+#          - AMZN1HVM
+#
+
+
+Outputs:
+  MountTargetID:
+    Description: Mount target ID
+    Value: !Ref 'EfsMountTarget'
+  FileSystemID:
+    Description: File system ID
+    Value: !Ref 'EfsSharedRoot'
+
+# vim: ft=yaml

@@ -53,8 +53,6 @@ IMAGE=$(aws_latest_official_image "EL7")
 SPOT=0
 LICENSE="license.txt"
 
-aws_sh_setup
-
 usage () {
     cat << EOF
 usage: $0 [-a image-id (default: $IMAGE)] [-i installer (default: $INSTALLER)] [-u installer-url (default: $INSTALLER_URL)]
