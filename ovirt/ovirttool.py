@@ -2384,6 +2384,29 @@ def ip_address(string):
         info("{} not showing as a valid IP address".format(string))
         return False
 
+'''
+    some user-supplied arguments allow multiple values.
+    This function splits such values in to a list of values.  Error on dupes.
+
+    :paramName: String to display in Error output in dupe case,
+         indicating which param is having an issue
+    :param: the param the user supplied
+
+'''
+def getMultiParamValues(paramName, param, errorOnDupes=True):
+    splitList = param.split(',')
+    values = {}
+    dupes = []
+    for arg in splitList:
+        if arg in values.keys():
+            dupes.append(arg)
+        else:
+            values[arg] = ''
+    if dupes and errorOnDupes:
+        raise ValueError("\n\nERROR: Duplicate values supplied " \
+            "to {}: {}\n".format(paramName, param))
+    return values.keys()
+
 
 if __name__ == "__main__":
 
@@ -2441,25 +2464,22 @@ if __name__ == "__main__":
     '''
         remove vms first if requested, to free up resources
     '''
-    deletevms = []
     if args.delete:
-        deletevms = args.delete.split(',')
+        deletevms = getMultiParamValues("--delete", args.delete)
         remove_vms(deletevms)
 
     '''
         shut down VMs if requsted, to free up resources
     '''
-    shutdownVms = []
     if args.shutdown:
-        shutdownVms = args.shutdown.split(',')
+        shutdownVms = getMultiParamValues("--shutdown", args.shutdown)
         shutdown_vms(shutdownVms)
 
     '''
         power up existing VMs if requested before creating new ones
     '''
-    powerExistingVms = []
     if args.poweron:
-        powerExistingVms = args.poweron.split(',')
+        powerExistingVms = getMultiParamValues("--poweron", args.poweron)
         power_on_vms(powerExistingVms)
 
     ''''
