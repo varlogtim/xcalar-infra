@@ -165,6 +165,37 @@ def info(string):
 '''
 
 '''
+    wait until Ovirt is showing a valid ip for a vm.
+    return the ip.
+    (This is useful if you've just created or rebooted a VM,
+    and the VM itself is up, but need to wait for an IP to be
+    assigned to the VM by Ovirt.)
+
+    :vmid: Ovirt id for the VM
+    :timeout: time in seconds to wait for the IP to be assigned
+
+    :throws: NoIpException if no valid ip found after timeout
+'''
+def wait_for_ip(vmid, timeout):
+    info("\nWait until IP displaying in Ovirt for a VM")
+    timeout_remaining = timeout
+    sleep_seconds_between_checks = 5
+    while timeout_remaining:
+        try:
+            info("try to get vm ip")
+            assigned_ip = get_vm_ip(vmid)
+            info("\tIP {} assigned!".format(assigned_ip))
+            return assigned_ip
+        except:
+            # not available yet
+            info("still no ip")
+            time.sleep(sleep_seconds_between_checks)
+            timeout_remaining -= sleep_seconds_between_checks
+    if not timeout_remaining:
+        raise NoIpException("Never got IP (might increase timeout, waited {} " \
+            "seconds.  Might try increasing timeout)".format(timeout))
+
+'''
     Start a VM by given ID,
     and wait until it is up.
     if requested, wait until IP is generated
@@ -230,24 +261,8 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
 
     if waitForIP:
         info("\nWait until IP assigned and displaying for {}".format(name))
-        timeout_remaining = ip_assign_timeout
-        sleep_seconds_between_checks = 5
-        while timeout_remaining:
-            try:
-                info("try to get vm ip")
-                ip = get_vm_ip(vmid)
-                info("\tIP {} assigned to {}!".format(ip, name))
-                return ip
-                break
-            except:
-                # not available yet
-                info("still no ip")
-                time.sleep(sleep_seconds_between_checks)
-                timeout_remaining -= sleep_seconds_between_checks
-        if not timeout_remaining:
-            raise NoIpException("Started service on {} and the VM came up, " \
-                " but never got IP (might increase timeout, waited {} " \
-                "seconds)".format(name,ip_assign_timeout))
+        assignedIp = wait_for_ip(vmid, ip_assign_timeout)
+        return assignedIp
 
 '''
     Create a new vm and wait until you can get ip
@@ -371,8 +386,9 @@ def setup_hostname(ip, name):
     run_ssh_cmd(ip, 'systemctl restart network', timeout=500)
     run_ssh_cmd(ip, 'systemctl restart autofs')
 
-def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT):
+def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_assign_timeout=IP_ASSIGN_TIMEOUT):
 
+    vmid = get_vm_id(ip)
     try:
         run_ssh_cmd(ip, 'reboot -h')
     except Exception as e:
@@ -404,6 +420,12 @@ def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT):
         if not timeout_remaining:
             raise TimeoutError("Timed out waiting for {} to come up " \
                 " after reboot.  Waited {} seconds".format(ip, reboot_timeout))
+
+        # wait until IP is displaying again in ovirt
+        assignedIp = wait_for_ip(vmid, ip_assign_timeout)
+        if assignedIp != ip:
+            info("WARNING: node {} came up after reboot, but in Ovirt now is " \
+                " assigned as IP {}".format(ip, assignedIp))
 
 '''
     setup a node to be able to run puppet
@@ -760,38 +782,27 @@ def remove_vm(identifier, releaseIP=True):
 
         # if vm up, wait until ip displaying in case
         # this is a vm that was just created and we tried to
-        # remove right away
-        timeout = 10
-        while timeout:
-            try:
-                ip = get_vm_ip(vmid)
-                # dev check -it should be throwing exception if can't find
-                # if switched to returning None need to update logic
-                if ip is None:
-                    raise Exception("\n\nLOGIC ERROR:: get_vm_ip was raising exception when can't find ip"
-                        " now returning None.  Please sync code")
-                break
-            except NoIpException:
-                time.sleep(5)
-                timeout -= 1
-
-        '''
-            sometimes the IP is not coming up.
-            This seems to happen on new VMs that had an issue
-            coming up initially.
-            So if timed out here,
-            just skip getting the IP.  power down and remove like normal
-        '''
-        if timeout:
-            vm_ip = get_vm_ip(vmid)
-            info("\nFound IP of VM... Release IP {}".format(vm_ip))
-            cmds = [['dhclient -v -r']] # assuming Centos7... @TODO for other cases?
-            run_ssh_cmds(vm_ip, cmds)
-        else:
+        # remove right away (in which case IP might not be available yet)
+        try:
+            assignedIp = wait_for_ip(vmid, IP_ASSIGN_TIMEOUT)
+            if assignedIp is None:
+                raise Exception("\n\nLOGIC ERROR:: wait_for_ip returns without " \
+                    " NoIpException, but ip returned is none. Please sync code")
+            else:
+                info("\nFound IP of VM... Release IP {}".format(assignedIp))
+                cmds = [['dhclient -v -r']] # assuming Centos7... @TODO for other cases?
+                run_ssh_cmds(assignedIp, cmds)
+        except NoIpException:
+            '''
+                sometimes the IP is not coming up.
+                This seems to happen on new VMs that had an issue
+                coming up initially.
+                So if timed out here,
+                just skip getting the IP.  power down and remove like normal
+            '''
             info("\nWARNING: I could still never get an IP for {}, "
                 " even though it shows as up,"
                 " will just shut down and remove VM without IP release".format(name))
-            #raise Exception("Never found IP for {}, even though it shows as up".format(name))
 
     # must power down before removal
     if is_vm_up(vmid):
@@ -1023,14 +1034,15 @@ def reboot_nodes(vmids, waitForNodesToComeUp=True):
         ip = get_vm_ip(vmid)
         proc = multiprocessing.Process(target=reboot_node, args=(ip,), kwargs={
             'waitForVmToComeUp': waitForNodesToComeUp,
-            'reboot_timeout': REBOOT_TIMEOUT
+            'reboot_timeout': REBOOT_TIMEOUT,
+            'ip_assign_timeout': IP_ASSIGN_TIMEOUT
         })
         proc.start()
         procs.append(proc)
         sleepOffset+=sleepBetween
 
     # wait for the processes
-    process_wait(procs, timeout=sleepOffset + REBOOT_TIMEOUT)
+    process_wait(procs, timeout=sleepOffset + REBOOT_TIMEOUT + IP_ASSIGN_TIMEOUT)
 
 '''
     stop vm and wait for status to be down
