@@ -19,6 +19,7 @@ export DEV_BUILD="${DEV_BUILD:-true}"
 export OFFICIAL_RELEASE="${OFFICIAL_RELEASE:-false}" # if true will tag Docker images with official Xcalar build Strings
 export XCALAR_IMAGE_NAME="${XCALAR_IMAGE_NAME:-xcalar_design}"
 export XCALAR_CONTAINER_NAME="${XCALAR_CONTAINER_NAME:-xcalar_design}"
+export IGNORE_VERSION_MISMATCH="${IGNORE_VERSION_MISMATCH:-false}" # Jenkins param
 
 INFRA_XPE_DIR="$XLRINFRADIR/docker/xpe"
 BASH_HELPER_FUNCS="$INFRA_XPE_DIR/scripts/local_installer_mac.sh"
@@ -90,6 +91,11 @@ buildXcalarGuiForApp() {
     # build the xpe server
     cd "$XDEE_GUI_BUILD_DIR/services/xpeServer"
     npm install
+
+    # modify GUI code to ignore version mismatch, if requested
+    if "$IGNORE_VERSION_MISMATCH"; then
+        sed -i 's/versionMatch\s*=\s*false/versionMatch = true/g' ${XDEE_GUI_BUILD_DIR}/assets/js/shared/setup/xvm.js
+    fi
 }
 
 # create installer tarball to be packaged in the app (tarball with
