@@ -59,7 +59,7 @@ logging.basicConfig(level=logging.DEBUG, filename='example.log')
 MAX_VMS_ALLOWED=1024
 
 DEFAULT_OVIRT_CLUSTER="ovirt-node-1-cluster"
-DEFAULT_PUPPET_CLUSTER="ovirt"
+#DEFAULT_PUPPET_CLUSTER="ovirt"
 DEFAULT_PUPPET_ROLE="jenkins_slave"
 DEFAULT_CORES=4
 DEFAULT_RAM=8
@@ -434,23 +434,24 @@ def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_as
 def setup_puppet(ip, puppet_role, puppet_cluster):
     info("Setup puppet to run on {} as role {}".format(ip, puppet_role))
     cmds = [
-        ['echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role)],
-        ['echo "cluster={}" > /etc/facter/facts.d/cluster.txt'.format(puppet_cluster)],
+        ['echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role)]
     ]
+    if puppet_cluster:
+        cmds.append(['echo "cluster={}" > /etc/facter/facts.d/cluster.txt'.format(puppet_cluster)])
     run_ssh_cmds(ip, cmds)
 
 '''
     Run puppet agent -t -v on an IP, with option to do skip setup
     (in case puppet needs to be run multiple times)
-    :puppet_role: :puppet_cluster: required if setup True
+    :puppet_role: required if setup True (puppet_cluster optional)
 '''
 def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True):
     info("Run puppet agent on {}".format(ip))
     if setup:
-        if not puppet_role or not puppet_cluster:
+        if not puppet_role:
             raise RuntimeError("Specified to setup puppet before running "
-                " puppet agent, but either puppet_role or puppet_cluster "
-                " were not specified.  Both are required to setup puppet")
+                " puppet agent, but no puppet_role specified. "
+                " (puppet_role required to setup puppet)")
         setup_puppet(ip, puppet_role, puppet_cluster)
     # run puppet agent
     run_ssh_cmd(ip, '/opt/puppetlabs/bin/puppet agent -t -v', timeout=2700, valid_exit_codes=[0, 2])
@@ -2438,8 +2439,8 @@ if __name__ == "__main__":
         help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
     parser.add_argument("--puppet_role", type=str, default=DEFAULT_PUPPET_ROLE,
         help="Role the VM(s) should have (Defaults to {})".format(DEFAULT_PUPPET_ROLE))
-    parser.add_argument("--puppet_cluster", type=str, default=DEFAULT_PUPPET_CLUSTER,
-        help="Puppet cluster to enable (Defaults to {})".format(DEFAULT_PUPPET_CLUSTER))
+    parser.add_argument("--puppet_cluster", type=str,
+        help="Puppet cluster to enable")
     parser.add_argument("--delete", type=str,
         help="Single VM or comma separated String of VMs you want to remove from Ovirt (could be, IP, VM name, etc).")
     parser.add_argument("--shutdown", type=str,
