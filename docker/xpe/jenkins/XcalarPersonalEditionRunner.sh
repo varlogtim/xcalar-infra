@@ -20,6 +20,7 @@ export OFFICIAL_RELEASE="${OFFICIAL_RELEASE:-false}" # if true will tag Docker i
 export XCALAR_IMAGE_NAME="${XCALAR_IMAGE_NAME:-xcalar_design}"
 export XCALAR_CONTAINER_NAME="${XCALAR_CONTAINER_NAME:-xcalar_design}"
 export IGNORE_VERSION_MISMATCH="${IGNORE_VERSION_MISMATCH:-false}" # Jenkins param
+export XPE=true # Makefile for creating Xcalar docker image relies on this
 
 INFRA_XPE_DIR="$XLRINFRADIR/docker/xpe"
 BASH_HELPER_FUNCS="$INFRA_XPE_DIR/scripts/local_installer_mac.sh"
