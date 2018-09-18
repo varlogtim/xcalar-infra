@@ -4,5 +4,6 @@
     "window": {
         "show": true
     },
+    "node-remote" : "<all_urls>",
     "chromium-args": "--allow-running-insecure-content --ignore-certificate-errors"
 }
