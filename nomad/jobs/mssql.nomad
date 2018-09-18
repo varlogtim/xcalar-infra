@@ -1,17 +1,17 @@
 job "mssql" {
   datacenters = ["xcalar-sjc"]
-  type = "service"
+  type        = "service"
   update {
-    max_parallel = 1
-    min_healthy_time = "10s"
-    healthy_deadline = "3m"
+    max_parallel      = 1
+    min_healthy_time  = "10s"
+    healthy_deadline  = "3m"
     progress_deadline = "10m"
-    auto_revert = false
-    canary = 0
+    auto_revert       = false
+    canary            = 0
   }
   migrate {
-    max_parallel = 1
-    health_check = "checks"
+    max_parallel     = 1
+    health_check     = "checks"
     min_healthy_time = "10s"
     healthy_deadline = "5m"
   }
@@ -20,13 +20,13 @@ job "mssql" {
     restart {
       attempts = 2
       interval = "30m"
-      delay = "15s"
-      mode = "fail"
+      delay    = "15s"
+      mode     = "fail"
     }
     ephemeral_disk {
-      sticky = true
+      sticky  = true
       migrate = true
-      size = 300
+      size    = 300
     }
     task "mssql" {
       driver = "docker"
@@ -37,19 +37,19 @@ job "mssql" {
         }
       }
       env {
-	PATH = "/opt/mssql-tools/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/local/bin:/usr/bin:/bin"
-	MSSQL_HOST = "mssql"
-	MSSQL_USER = "sa"
-	SA_PASSWORD = "Password10@"
-	MSSQL_SA_PASSWORD = "Password10@"
-	ACCEPT_EULA = "Y"
+        PATH              = "/opt/mssql-tools/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/local/bin:/usr/bin:/bin"
+        MSSQL_HOST        = "mssql"
+        MSSQL_USER        = "sa"
+        SA_PASSWORD       = "Password10@"
+        MSSQL_SA_PASSWORD = "Password10@"
+        ACCEPT_EULA       = "Y"
       }
       resources {
         cpu    = 2000 # 500 MHz
         memory = 1200 # 256MB
         network {
           mbits = 10
-          port "db" {}
+          port  "db"  {}
         }
       }
       service {

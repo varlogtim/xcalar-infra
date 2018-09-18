@@ -1,7 +1,6 @@
 job "jenkins_swarm" {
   datacenters = ["xcalar-sjc"]
   type        = "service"
-
   update {
     max_parallel      = 1
     min_healthy_time  = "10s"
@@ -10,40 +9,33 @@ job "jenkins_swarm" {
     auto_revert       = false
     canary            = 0
   }
-
   migrate {
     max_parallel     = 1
     health_check     = "checks"
     min_healthy_time = "10s"
     healthy_deadline = "5m"
   }
-
   group "swarm" {
     count = 2
-
     constraint {
       distinct_hosts = true
     }
-
     constraint {
       attribute = "${node_class}"
       operator  = "set_contains"
       value     = "jenkins_slave"
     }
-
     restart {
       attempts = 3
       interval = "5m"
       delay    = "15s"
       mode     = "fail"
     }
-
     #    ephemeral_disk {
     #      sticky  = true
     #      migrate = true
     #      size    = 20000
     #    }
-
     #    task "decode" {
     #      vault {
     #        policies = ["jenkins_slave"]
@@ -59,16 +51,13 @@ job "jenkins_swarm" {
     #
     task "worker" {
       driver = "java"
-
       resources {
         cpu    = 8000  # MHz
         memory = 16048 # MB
       }
-
       config {
         jar_path    = "local/swarm-client-3.14.jar"
         jvm_options = ["-Xmx2048m", "-Xms256m"]
-
         args = [
           "-master",
           "https://jenkins.int.xcalar.com/",
@@ -86,17 +75,14 @@ job "jenkins_swarm" {
           "SWARM_PASS",
         ]
       }
-
       env {
         "SWARM_PASS" = "D7XmxQFAmqiN66vQtnmz6+bt"
         "SWAR_TAGS"  = "nomad debug"
       }
-
       # Specifying an artifact is required with the "java" driver. This is the
       # mechanism to ship the Jar to be run.
       artifact {
         source = "http://repo.xcalar.net/deps/swarm-client-3.14.jar"
-
         options {
           checksum = "sha256:d3bdef93feda423b4271e6b03cd018d1d26a45e3c2527d631828223a5e5a21fc"
         }

@@ -2,7 +2,7 @@ job "hdfs" {
   datacenters = ["xcalar-sjc"]
 
   group "NameNode" {
-    count = 1
+    count = 2
 
     constraint {
       operator = "distinct_hosts"
