@@ -114,6 +114,9 @@ FORCE = False # a force option will allow certain operations when script would f
 # (else the script will fail after provisioning and it is not obvious at all why its failing)
 PROTECTED_KEYWORDS = ['cluster', 'host', 'fdqn', 'name']
 
+# chars that are disallowed in VM names
+ILLEGAL_VMNAME_CHARS = ['.', '_']
+
 class NoIpException(Exception):
     pass
 
@@ -2296,9 +2299,11 @@ def validateparams(args):
                 errmsg = errmsg + "The --vmbasename value will become the name of the created cluster, too.\n"
             raise ValueError(errmsg)
         else:
-            # validate the name they supplied is all lower case and contains no _ (because will be setting hostname of the VMs to the VM name)
-            if any(filter(str.isupper, args.vmbasename)) or '_' in args.vmbasename:
-                raise ValueError("\n\nERROR: --vmbasename value must be all lower case letters, and may not contain any _ chars\n")
+            # validate the name they supplied is all lower case and contains no illegal chars (will be setting hostname of the VMs to the VM name)
+            if any(filter(str.isupper, args.vmbasename)) or any(illegal_char in args.vmbasename for illegal_char in ILLEGAL_VMNAME_CHARS):
+                raise ValueError("\n\nERROR: --vmbasename value must be all "
+                    "lower case letters, and may not contain any of "
+                    "the following chars: {}\n".format(" ".join(ILLEGAL_VMNAME_CHARS)))
 
             '''
                 if the basename begins with one of Ovirt's search refining keywords
