@@ -67,7 +67,7 @@ DEFAULT_RAM=8
 REBOOT_TIMEOUT=500 # seconds to wait before timing out after waiting to be able to ssh to a VM after 'reboot -h'
 SHUTDOWN_TIMEOUT = 600 # seconds to wait before timing out on vms to shut down
 POWER_ON_TIMEOUT = 120 # seconds to wait before timing out waiting for a vm to power on
-IP_ASSIGN_TIMEOUT = 400 # seconds to wait before timing out waiting for IP to be assigned to newly powered on VM
+IP_ASSIGN_TIMEOUT = 800 # seconds to wait before timing out waiting for IP to be assigned to newly powered on VM
 
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
