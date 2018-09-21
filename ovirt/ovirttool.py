@@ -89,6 +89,10 @@ TMPDIR_LOCAL='/tmp/ovirt_tool' # tmp dir to create on local machine running pyth
 TMPDIR_VM='/tmp/ovirt_tool' # tmp dir to create on VMs to hold helper shell scripts, lic files (dont put timestamp because forking processes during install processing)
 CLUSTER_DIR_VM='/mnt/xcalar' # if creating cluster of the VMs and need to mount netstore, will be local dir to create on VMs, to mount shared storage space to.
 
+# location of puppet lock file on a VM to check if puppet service
+# is running (won't run puppet agent if this file present)
+PUPPET_LOCK_FILE='/var/run/puppetlabs/agent_catalog_run.lock'
+
 OVIRT_KEYFILE_SRC = 'id_ovirt' # this a file to supply during ssh.  need to chmod it for scp but dont want it to show up in users git status, so this its loca nd will move it to chmod
 home = os.path.expanduser('~') # '~' gives issues with paramiko; expand to home dir, this swill work cross-platform
 OVIRT_KEYFILE_DEST = home + '/.ssh/id_ovirt'
@@ -457,6 +461,19 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True):
                 " (puppet_role required to setup puppet)")
         setup_puppet(ip, puppet_role, puppet_cluster)
     # run puppet agent
+    # wait until 'lock file' is no longer present
+    # (if running puppet agent more than once, the puppet service could be running;
+    # puppet agent will fail until the service is no longer running)
+    info("(Check if lock file {} present before running "
+        " puppet agent...)".format(PUPPET_LOCK_FILE))
+    lockfileWait = 100
+    while lockfileWait:
+        if path_exists_on_node(ip, PUPPET_LOCK_FILE):
+            time.sleep(10)
+            lockfileWait -= 1
+        else:
+            break
+    # still try to run puppet agent; if it fails, it fails...
     run_ssh_cmd(ip, '/opt/puppetlabs/bin/puppet agent -t -v', timeout=2700, valid_exit_codes=[0, 2])
 
 '''
