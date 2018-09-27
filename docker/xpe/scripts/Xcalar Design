@@ -48,14 +48,14 @@ NWJSBIN="$RESOURCE_DIR/Bin/nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/MacOS/nwjs
 NODEBIN="$RESOURCE_DIR/Bin/node-v8.11.1-darwin-x64/bin/node"
 APPLOGDIR="$APP_DIR/Contents/Logs"
 
-INSTALLSERVER="$APP_DIR/Contents/Resources/gui/xcalar-gui/services/xpeServer/xpeServer.js"
+INSTALLSERVER="$APP_DIR/Contents/Resources/server/xpeServer.js"
 
 LAUNCHFILEPATH="$APP_DIR/Contents/MacOS/.launch"
 INSTALLEDFILE="$APP_DIR/Contents/MacOS/.installed"
 GRAFANAMARK="$APP_DIR/Contents/MacOS/.grafana"
 DEVBLDMARK="$APP_DIR/Contents/MacOS/.dev"
 
-NWJSROOT="$APP_DIR/Contents/Resources/gui/xcalar-gui"
+NWJSROOT="$APP_DIR/Contents/Resources/nwjs_root"
 
 # var for setting an app action.  unset from previous runs
 APPACTIONVAR=XPESTARTACTION
@@ -76,11 +76,11 @@ export XPE_SERVER_URL="$XPE_SERVER_PROTOCOL://$XPE_SERVER_HOSTNAME:$XPE_SERVER_P
 echo "XPE_SERVER_URL=$XPE_SERVER_URL"
 
 # vars for GUI roots (can be URL or filepath rel nwjs root (where package.json is)
-export XD_URL="${XD_URL:-index.html}"
-export XPE_INSTALLER_URL="${XPE_INSTALLER_URL:-xpe/xpeInstaller.html}"
-export XPE_UNINSTALLER_URL="${XPE_UNINSTALLER_URL:-xpe/xpeUninstaller.html}"
-export XPE_IMT_URL="${XPE_IMT_URL:-xpe/xpeImageManagementTool.html}"
-export DOCKER_STARTER_URL="${DOCKER_STARTER_URL:-xpe/xpeDockerStarter.html}"
+export XD_URL="${XD_URL:-https://127.0.0.1:8818}" # give 'index.html' and it will take local to package.json
+export XPE_INSTALLER_URL="${XPE_INSTALLER_URL:-guis/xpeInstaller.html}"
+export XPE_UNINSTALLER_URL="${XPE_UNINSTALLER_URL:-guis/xpeUninstaller.html}"
+export XPE_IMT_URL="${XPE_IMT_URL:-guis/xpeImageManagementTool.html}"
+export XPE_DOCKER_STARTER_URL="${XPE_IMT_URL:-guis/xpeDockerStarter.html}"
 export XPE_GRAFANA_URL="${XPE_GRAFANA_URL:-http://127.0.0.1:8082}"
 
 # if app should build a Grafana container during install, set INSTALL_GRAFANA var

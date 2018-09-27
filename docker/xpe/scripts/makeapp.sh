@@ -35,12 +35,14 @@ cd "$startCwd"
 
 XPEINFRAROOT="$XLRINFRADIR/docker/xpe"
 
+# dir structure within app
 CONTENTS="$APP_ABS_PATH/Contents"
 MACOSDIR="$CONTENTS/MacOS"
 LOGS="$CONTENTS/Logs"
 RESOURCES="$CONTENTS/Resources"
 BIN="$RESOURCES/Bin"
-APPGUIDIR="$RESOURCES/gui/xcalar-gui"
+NWJSROOT="$RESOURCES/nwjs_root" # root nwjs manifest here
+SERVERROOT="$RESOURCES/server"
 SCRIPTS="$RESOURCES/scripts"
 DATA="$RESOURCES/Data"
 INSTALLER="$RESOURCES/Installer"
@@ -56,8 +58,9 @@ create_app_structure() {
     mkdir -p "$MACOSDIR"
     mkdir -p "$LOGS"
     mkdir -p "$RESOURCES"
+    mkdir -p "$SERVERROOT"
     mkdir -p "$BIN"
-    mkdir -p "$APPGUIDIR"
+    mkdir -p "$NWJSROOT"
     mkdir -p "$SCRIPTS"
     mkdir -p "$DATA"
     mkdir -p "$INSTALLER"
@@ -86,12 +89,13 @@ requirements.)" >&2
     cp "$APPICON_PATH" "$RESOURCES"
 }
 
-# Copies in GUIs and makes modifications required for app
-setup_app_gui() {
-    cp -r "$GUIBUILD"/* "$APPGUIDIR"
-
-    # config.js so xcalar-gui on host filesystem will communicatee to Xcalar backend in Docker
-    cp "$XPEINFRAROOT/staticfiles/config.js" "$APPGUIDIR/assets/js/"
+# setup express server that app will run on host to handle local api calls
+# during install, etc.
+setup_server() {
+    cp -r "$GUIBUILD"/services/xpeServer/* "$SERVERROOT"
+    # make sure npm install done
+    cd "$SERVERROOT"
+    npm install
 }
 
 setup_installer_assets() {
@@ -101,7 +105,12 @@ setup_installer_assets() {
 }
 
 setup_nwjs() {
-    # setup nwjs
+    setup_nwjs_binary # the actual nwjs binary, to package in app
+    setup_nwjs_root # build root directory for app to point the binary at
+}
+
+setup_nwjs_binary() {
+    # setup nwjs binary
     cd "$BIN"
     curl http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip -O
     unzip -aq nwjs-sdk-v0.29.3-osx-x64.zip
@@ -113,27 +122,60 @@ setup_nwjs() {
     # nwjs icon will dispaly on refresh/quit prompts, even when running Xcalar Design app
     cp "$APPICON_PATH" nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/app.icns
     cp "$APPICON_PATH" nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/document.icns
+}
 
-    # add nwjs's package.json (uses as config file on nwjs start)
-    cp "$XPEINFRAROOT/staticfiles/package.json" "$APPGUIDIR"
+# nwjs binary runs by pointing at a local directory on host; should have a manifest file.
+# the manifest file specifies an entrypoint for nwjs.
+# our entrypoint is a javascript file, which eventually launches windows with GUIs.
+# set up that root directory with the manifest file, the entrypoint, and the
+# dependencies for the entrypoint
+setup_nwjs_root() {
+
+    # manifest file for nwjs (package.json which instructs what entrypoint is
+    # when starting nwjs, browser args, etc.)
+    cp "$XPEINFRAROOT/staticfiles/package.json" "$NWJSROOT"
     # nwjs entrypoint specified by the package.json
-    mv "$APPGUIDIR/assets/js/xpe/starter.js" "$APPGUIDIR"
+    cp "$GUIBUILD/assets/js/xpe/starter.js" "$NWJSROOT"
 
-    # install npm modules required by nwjs' entrypoint
-    # [[- the gui build will not include node_modules dir because everything is
-    # intended to be run in browser context, so needed js files are imported
-    # via <script> tags in the html rather than required.
-    # however, in the app, nwjs will be rooted in the gui build,
-    # and its entrypoint is a js file running in node context which must require
-    # modules in node context prior to any GUI running.
-    # therefore, npm install to get node_modules/<require module> modules for
-    # each such 3rd party module the entrypoint requires.
-    # (can't use package.json for this - it would need to be shared by both
+    # copy in the main guis
+    cp -r "$GUIBUILD/xpe" "$NWJSROOT/guis"
+
+    # copy in the all the dependencies in the gui repo required for all of these
+    # components (the guis, the server, the entrypoint)
+    # retain build structure for now
+    declare -a dependencies=(
+        "3rd/jquery.min.js"
+        "3rd/jquery-ui.js"
+        "3rd/fonts"
+        "assets/fonts"
+        "assets/js/promiseHelper.js"
+        "assets/js/httpStatus.js"
+        "assets/js/shared/util/xcHelper.js"
+        "assets/stylesheets/css/xpe.css"
+        "assets/js/xpe"
+        "assets/images/xdlogo.png"
+        "assets/images/installer-wave.png"
+    )
+    for dependency in "${dependencies[@]}"
+    do
+        # check if it exists if not fail
+        if [ ! -e "$GUIBUILD/$dependency" ]; then
+            echo "$dependency not found in gui build $GUIBUILD!" >&2
+            exit 1
+        fi
+        # get the top level dir of it
+        parentdir="$(dirname "$dependency")"
+        mkdir -p "$NWJSROOT/$parentdir"
+        cp -r "$GUIBUILD/$dependency" "$NWJSROOT/$dependency"
+    done
+
+    # npm install modules required by nwjs' entrypoint which aren't ingui
+    # (can't use package.json - it would need to be shared by both
     # nodejs and nwjs; but package.json for nodejs does not allow capital letters
     # in name field, while nwjs' package.json needs name field to match app's name
     #  (Xcalar Design) else it will generate additional Application Support
     # directories by that name.  So require the modules directly]]
-    cd "$APPGUIDIR"
+    cd "$NWJSROOT/assets"
     npm install jquery
 }
 
@@ -170,7 +212,7 @@ setup_hidden_files() {
 
 create_app_structure
 setup_required_app_files
-setup_app_gui # run before setup_bin
+setup_server
 setup_installer_assets
 setup_bin
 setup_hidden_files
