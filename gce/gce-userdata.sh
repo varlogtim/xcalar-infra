@@ -246,10 +246,13 @@ set +e
 set -x
 grep -v '#' /etc/default/xcalar > /etc/default/xcalar.default
 rm -f /etc/default/xcalar
+
+$sh_c 'service apache2 stop'
+$sh_c 'service httpd stop'
+
 $sh_c "bash -x $WORKDIR/xcalar-installer --noStart --startOnBoot"
 cat /etc/default/xcalar.default | tee -a /etc/default/xcalar
 $sh_c 'service rsyslog restart'
-$sh_c 'service apache2 restart'
 cd ~xcalar || cd /var/tmp
 
 echo "$(get_metadata_value attributes/license)" > /etc/xcalar/temp
