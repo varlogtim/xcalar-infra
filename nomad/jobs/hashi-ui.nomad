@@ -1,37 +1,39 @@
-job "my-vsts-agents" {
+job "hashi-ui-1" {
   datacenters = ["xcalar-sjc"]
+  region      = "global"
 
-  group "vsts" {
-    count = 2
-
-    constraint {
-      distinct_hosts = true
-    }
-
-    constraint {
-      attribute    = "${meta.cluster}"
-      set_contains = "newton"
-    }
-
-    task "vsts-agent" {
+  group "hashi-ui" {
+    task "hashi-ui" {
       driver = "docker"
 
       config {
-        image = "microsoft/vsts-agent:ubuntu-14.04-docker-17.12.0-ce-standard"
+        image = "jippi/hashi-ui"
 
         volumes = [
           "/var/run/docker.sock:/var/run/docker.sock",
         ]
+
+        port_map {
+          http = 3000
+        }
       }
 
       env {
-        VSTS_ACCOUNT = "xcalar"
-        VSTS_TOKEN   = "2tucq3pofi24pjdteaemt57xge7amkrbdyodoxbs6oggtkzkfxaa"
+        CONSUL_ENABLE          = "1"
+        CONSUL_ADDR            = "consul-1.int.xcalar.com:8500"
+        CONSUL_HTTP_SSL_VERIFY = "false"
+
+        NOMAD_ENABLE = "1"
+        NOMAD_ADDR   = "http://nomad-1.int.xcalar.com:4646"
       }
 
       resources {
-        memory = 8192
-        cpu    = 8000
+        memory = 256
+        cpu    = 3000
+
+        network {
+          port "http" {}
+        }
       }
     }
   }

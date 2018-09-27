@@ -336,3 +336,51 @@ Using the role_id (semi-secret) and the secret_id (secret) you can log in as tha
     vault write -field=token auth/approle/login \
         role_id=f693adbb-0f58-c71b-253c-xxxx \
         secret_id=0aa1be8a-4278-53d1-95e4-xxxx
+
+
+## TOTP
+
+Generate a TOTP (Two factor auth, aka Google Authenticator code)
+
+    vault write \
+        totp/keys/test \
+        account_name=mytest \
+        exported=true \
+        name='My test' \
+        skew=1 \
+        generate=true \
+        key_size=16 \
+        issuer='Xcalar, Inc'
+    Key        Value
+    ---        -----
+    barcode    iVBORw0KGgoAAAANSUhEUg...
+    url        otpauth://totp/Xcalar,%20Inc:mytest?algorithm=SHA1&digits=6&issuer=Xcalar%2C+Inc&period=30&secret=BPFLWVX24AWCWFAJEYB3XSV2PE
+
+Now you can scan the barcode into your app by generating a PNG:
+
+    echo 'iVBORw0KGgoAAAANSUhEUg...' | base64 -d > barcode.png
+
+
+Or, use Vault to generate it for you:
+
+    vault read totp/keys/test
+    Key     Value
+    ---     -----
+    code    479506
+
+Now you can enter this code into the application asking for it, or verify within  your app:
+
+    vault write totp/keys/test code=479506
+    Key      Value
+    ---      -----
+    valid    true
+# Vault Database
+
+
+    $ vault secrets enable database
+    $ vault write database/config/my-mssql-database \
+        plugin_name=mssql-database-plugin \
+        connection_url='sqlserver://{{username}}:{{password}}@10.10.5.113:21313' \
+        username="sa" \
+        password="Password10@"
+
