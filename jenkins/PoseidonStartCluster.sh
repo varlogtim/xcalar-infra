@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
 
@@ -74,3 +74,10 @@ if [ "$ret" != "0" ]; then
 fi
 
 clusterSsh $cluster "echo \"XLRDIR=/opt/xcalar\" | sudo tee -a /etc/bashrc"
+
+# Set up defaultAdmin.json
+clientSecret="$XLRDIR/src/bin/sdk/xdp/xcalar/external/client_secret.json"
+xiusername=`cat $clientSecret | jq .xiusername -cr`
+xipassword=`cat $clientSecret | jq .xipassword -cr`
+credArray="`$XLRDIR/pkg/gui-installer/default-admin.py -e 'support@xcalar.com' -u $xiusername -p $xipassword`"
+nodeSsh $cluster "${cluster}-1" 'XLRROOT="$(cat /etc/xcalar/default.cfg | grep XcalarRootCompletePath | cut -d= -f2)"; cfgFile="$XLRROOT/config/defaultAdmin.json"; echo '"'""$credArray""'"' | sudo tee "$cfgFile"; sudo chown xcalar:xcalar "$cfgFile" ; sudo chmod 600 "$cfgFile"'
