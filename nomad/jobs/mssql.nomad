@@ -2,6 +2,11 @@ job "mssql" {
   datacenters = ["xcalar-sjc"]
   type        = "service"
 
+  constraint {
+    attribute = "${meta.cluster}"
+    value     = "newton"
+  }
+
   update {
     max_parallel      = 1
     min_healthy_time  = "10s"

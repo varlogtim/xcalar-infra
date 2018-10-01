@@ -1,40 +1,47 @@
-job "xcalar-1" {
+job "amit-xcalar-1" {
   datacenters = ["xcalar-sjc"]
   type        = "service"
 
-  update {
-    max_parallel      = 1
-    min_healthy_time  = "30s"
-    healthy_deadline  = "10m"
-    progress_deadline = "12m"
-    auto_revert       = false
-    canary            = 0
-  }
+  #  update {
+  #    max_parallel      = 1
+  #    min_healthy_time  = "30s"
+  #    healthy_deadline  = "10m"
+  #    progress_deadline = "12m"
+  #    auto_revert       = false
+  #    canary            = 0
+  #  }
+  #
+  #  migrate {
+  #    max_parallel     = 1
+  #    health_check     = "checks"
+  #    min_healthy_time = "50s"
+  #    healthy_deadline = "5m"
+  #  }
 
-  migrate {
-    max_parallel     = 1
-    health_check     = "checks"
-    min_healthy_time = "50s"
-    healthy_deadline = "5m"
+  constraint {
+    distinct_hosts = true
   }
-
-  group "xcalar" {
-    count = 1
+  constraint {
+    attribute = "${meta.cluster}"
+    value     = "newton"
+  }
+  group "xcalar_cluster" {
+    count = 3
 
     restart {
-      attempts = 2
-      interval = "30m"
+      attempts = 5
+      interval = "2m"
       delay    = "15s"
       mode     = "fail"
     }
 
     ephemeral_disk {
       sticky  = true
-      migrate = true
+      migrate = false
       size    = 8000
     }
 
-    task "xce" {
+    task "xcalar" {
       driver = "docker"
 
       config {
@@ -42,8 +49,9 @@ job "xcalar-1" {
 
         port_map {
           monitor = 8000
-          https   = 8443
+          https   = 443
           api     = 18552
+          comms   = 5000
         }
 
         privileged = true
@@ -61,18 +69,21 @@ job "xcalar-1" {
       }
 
       resources {
-        cpu    = 24000
+        cpu    = 18000
         memory = 16000
 
         network {
-          mbits = 10
+          mbits = 1
+          port  "monitor"{}
           port  "https"{}
+          port  "api" {}
+          port  "comms"{}
         }
       }
 
       service {
         name = "xcalar"
-        tags = ["global", "xcalar"]
+        tags = ["xcalar"]
         port = "https"
 
         check {

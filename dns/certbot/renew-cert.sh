@@ -27,6 +27,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$DOMAIN" in
+    *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53;;
     *.xcalar.rocks | xcalar.rocks) IMAGE=certbot/dns-route53;;
     *.xcalar.io    | xcalar.io) IMAGE=certbot/dns-google;;
     *.xcalar.com   | xcalar.com) IMAGE=certbot/dns-google;;
