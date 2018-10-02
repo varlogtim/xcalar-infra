@@ -80,6 +80,7 @@ export XD_URL="${XD_URL:-index.html}"
 export XPE_INSTALLER_URL="${XPE_INSTALLER_URL:-xpe/xpeInstaller.html}"
 export XPE_UNINSTALLER_URL="${XPE_UNINSTALLER_URL:-xpe/xpeUninstaller.html}"
 export XPE_IMT_URL="${XPE_IMT_URL:-xpe/xpeImageManagementTool.html}"
+export DOCKER_STARTER_URL="${DOCKER_STARTER_URL:-xpe/xpeDockerStarter.html}"
 export XPE_GRAFANA_URL="${XPE_GRAFANA_URL:-http://127.0.0.1:8082}"
 
 # if app should build a Grafana container during install, set INSTALL_GRAFANA var
