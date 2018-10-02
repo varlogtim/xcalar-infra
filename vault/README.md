@@ -374,6 +374,43 @@ Now you can enter this code into the application asking for it, or verify within
     Key      Value
     ---      -----
     valid    true
+
+To use an existing TOTP code, for example when a website (AWS, etc) presents you with s QR code. There
+is usually an option to view the QR code as text, it'll be a secret string, or a URL-like string
+
+    otpauth://totp/BigCorp:abakshi@xcalar.com?secret=O2PN2NHOB5JINRV2HE6P5LJYN3ML"
+
+or they might simply give you a code:
+
+    O2PN2NHOB5JINRV2HE6P5LJYN3ML
+
+In the latter casse, you can make up the first part of the otpath url, replacing the actual secret.
+
+    otpath://totp/Something:an_identifier?secret=SECRET
+
+Armed with the otpath, you can add it to vault to let it generate codes for you (you can still add it to
+your phone as well)
+
+	vault write totp/keys/bigcorp-abakshi url="otpauth://totp/BigCorp:abakshi@xcalar.com?secret=O2PN2NHOB5JINRV2HE6P5LJYN3ML"
+	Success! Data written to: totp/keys/bigcorp-abakshi
+
+Read a code:
+
+	vault read totp/code/bigcorp-abakshi
+	Key     Value
+	---     -----
+	code    874010
+
+If you were consuming these codes, you could verify it within your app using vault
+
+	vault write totp/code/bigcorp-abakshi code=261884
+	Key      Value
+	--      -----
+	valid    true
+
+
+
+
 # Vault Database
 
 

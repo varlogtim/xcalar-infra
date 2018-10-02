@@ -247,39 +247,38 @@ main() {
         -i | --install) INSTALL=true ;;
         --check) vault_sanity ;;
         --account)
-            ACCOUNT="$2"
+            ACCOUNT="$1"
             shift
             ;;
         --role)
-            ROLE="$2"
+            ROLE="$1"
             shift
             ;;
         --type)
-            TYPE="$2"
+            TYPE="$1"
             shift
             ;;
         -c | --clear) CLEAR=true ;;
         -f | --file)
-            FILE="$2"
+            FILE="$1"
             shift
             ;;
         --path)
-            AWSPATH="$2"
+            AWSPATH="$1"
             shift
             ;;
         --export-env) EXPORT_ENV=true ;;
         --export-profile) EXPORT_PROFILE=true ;;
         --profile)
-            PROFILE="$2"
+            PROFILE="$1"
             shift
             ;;
         --ttl)
-            TTL="$2"
+            TTL="$1"
             shift
             ;;
-        --) ;;
-        -*) usage "Unknown argument $cmd" ;;
-        *) break ;;
+        --) break ;;
+        *) usage "Unknown argument $cmd" ;;
         esac
     done
     if [ -n "$FILE" ]; then
