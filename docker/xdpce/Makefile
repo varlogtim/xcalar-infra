@@ -68,6 +68,13 @@ install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
     ifneq ($(XPE),)
 	docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
+	# patch the requirejs that Jupyter relies on, to export require even if it exists
+	# (which it will, when we are running XD in nwjs)
+	docker cp $(CONTAINER_NAME):/opt/xcalar/lib/python3.6/site-packages/notebook/static/components/requirejs/require.js .
+	cp $(XLRINFRADIR)/docker/xpe/staticfiles/require.js.patch .
+	patch < require.js.patch
+	docker cp require.js $(CONTAINER_NAME):/opt/xcalar/lib/python3.6/site-packages/notebook/static/components/requirejs/require.js
+	rm require.js require.js.patch
     endif
 
     ifneq ($(CUSTOM_GUI),)
