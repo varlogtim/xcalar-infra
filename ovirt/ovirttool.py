@@ -412,6 +412,13 @@ def setup_hostname(ip, name):
     run_ssh_cmd(ip, 'systemctl restart network', timeout=500)
     run_ssh_cmd(ip, 'systemctl restart autofs')
 
+def get_hostname(ip):
+
+    info("Get hostname of VM {}".format(ip))
+    status, stdout, stderr = run_ssh_cmd(ip, 'cat /proc/sys/kernel/hostname')
+    info("\tFound hostname: {}".format(stdout))
+    return stdout.strip()
+
 def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_assign_timeout=IP_ASSIGN_TIMEOUT):
 
     vmid = get_vm_id(ip)
@@ -2074,10 +2081,11 @@ def get_access_url(ip):
     caddyInfo = get_caddy_config_info(ip)
     caddyProtocol = caddyInfo[0]
     caddyPort = caddyInfo[1]
+    hostname = get_hostname(ip)
     # if port is default, don't display it
     if (caddyPort == "443" and caddyProtocol == "https") or (caddyPort == "80" and caddyProtocol == "http"):
-        return "{}://{}".format(caddyProtocol, ip)
-    return "{}://{}:{}".format(caddyProtocol, ip, caddyPort)
+        return "{}://{}".format(caddyProtocol, hostname)
+    return "{}://{}:{}".format(caddyProtocol, hostname, caddyPort)
 
 '''
     Returns a summary string with information about vms
@@ -2104,12 +2112,11 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
     created_vms_summary = created_vms_summary + "|\n|\n=====================THE VMS=========================\n|"
     for i, vmid in enumerate(vmids):
         vmip = get_vm_ip(vmid)
-        vmname = get_vm_name(vmid)
+        vmhostname = get_hostname(vmip)
         # if multiple vms put a separator line between them
         if len(vmids) > 1 and i > 0:
             created_vms_summary = created_vms_summary + "\n|      --------------------------------------"
-        created_vms_summary = created_vms_summary + "\n|\t Hostname: " + vmname + "\n" \
-                                        "|\t IP      : " + vmip + "\n" + vm_ssh_creds
+        created_vms_summary = created_vms_summary + "\n|\tHostname: " + vmhostname + "\n" + vm_ssh_creds
         if installer:
             accessUrl = get_access_url(vmip)
             created_vms_summary = created_vms_summary + "\n|\n|\tAccess URL: " + accessUrl + "\n" \
@@ -2140,8 +2147,8 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
         for nodenum in clusternodedata.keys():
             # get the name of the VM
             ip = clusternodedata[nodenum]
-            vmname = get_vm_name(get_vm_id(ip))
-            clussumm = clussumm + "|\n| Cluster Node" + nodenum + " is vm " + vmname + " [ip: " + ip + "]\n"
+            vmhostname = get_hostname(ip)
+            clussumm = clussumm + "|\n| Cluster Node" + nodenum + " is vm " + vmhostname + "]\n"
         clussumm = clussumm + "|\n ------------------------------------------"
     created_vms_summary = created_vms_summary + clussumm
 
@@ -2564,7 +2571,7 @@ if __name__ == "__main__":
 
     #  spin up number of vms requested
     vmids = [] # unique ovirt ids for vms generated
-    vmips = [] # ips assigned to the vms generated
+    hostnames = [] # hostnames assigned to the vms generated
     clustername = None
     if args.count:
         vmids = provision_vms(int(args.count), basename, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
@@ -2577,9 +2584,9 @@ if __name__ == "__main__":
                 clustername = basename
             initialize_xcalar(vmids, licfilepath, installer, createcluster=clustername)
 
-        # get ips to print to stdout
+        # get hostnames to print to stdout
         for vmid in vmids:
-            vmips.append(get_vm_ip(vmid))
+            hostnames.append(get_hostname(get_vm_ip(vmid)))
 
     # get summary of work done, while VMs are still ssh'able by ovirttool
     summary_string = get_summary_string(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername)
@@ -2593,10 +2600,10 @@ if __name__ == "__main__":
     '''
         display a useful summary to user of work done
     '''
-    # print ip of each created vm to stdout for other scripts to consume
+    # print hostnames of each created vm to stdout for other scripts to consume
     # (should be only stdout printed by this tool)
-    for vmip in vmips:
-        info(vmip, level=2) # level 2 is stdout
+    for hostname in hostnames:
+        info(hostname, level=2) # level 2 is stdout
     info(summary_string, level=0) # level 0 means you'll print this even on the shell script wrapper
 
     # close connection
