@@ -164,8 +164,23 @@ class ShellError(Exception):
             errStr += ">> Reason error thrown:\n\t{}".format(self.summary)
         return errStr
 
-def info(string):
-    print(string, file=sys.stderr)
+'''
+    level 0:
+        stderr, but ovirttool.sh shell wrapper will display it
+    level 1:
+        stderr (ovirttool.sh won't display it)
+    level 2:
+        stout
+'''
+def info(string, level=1):
+    if level == 0:
+        # ovirttool.sh shell script wrapper will awk
+        # and print stderr appearing between these SUMMARY START/END strings
+        print("SUMMARY START\n{}\nSUMMARY END".format(string), file=sys.stderr)
+    elif level == 1:
+        print(string, file=sys.stderr)
+    elif level == 2:
+        print(string)
 
 '''
     OVIRT SDK FUNCTIONS
