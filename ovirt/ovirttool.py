@@ -58,6 +58,8 @@ logging.basicConfig(level=logging.DEBUG, filename='example.log')
 
 MAX_VMS_ALLOWED=1024
 
+DEFAULT_SSH_USER='root' # what tool will be ssh'ing as.
+
 DEFAULT_OVIRT_CLUSTER="ovirt-node-1-cluster"
 #DEFAULT_PUPPET_CLUSTER="ovirt"
 DEFAULT_PUPPET_ROLE="jenkins_slave"
@@ -68,6 +70,7 @@ REBOOT_TIMEOUT=500 # seconds to wait before timing out after waiting to be able 
 SHUTDOWN_TIMEOUT = 600 # seconds to wait before timing out on vms to shut down
 POWER_ON_TIMEOUT = 120 # seconds to wait before timing out waiting for a vm to power on
 IP_ASSIGN_TIMEOUT = 800 # seconds to wait before timing out waiting for IP to be assigned to newly powered on VM
+PUPPET_SETUP_TIMEOUT = 2700 # seconds to wait before timing out puppet setup/puppet agent run
 
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
@@ -466,8 +469,13 @@ def setup_puppet(ip, puppet_role, puppet_cluster):
     Run puppet agent -t -v on an IP, with option to do skip setup
     (in case puppet needs to be run multiple times)
     :puppet_role: required if setup True (puppet_cluster optional)
+
+    NOTES:
+     ++ make sure this is done AFTER hostname set up
+     +++ you will NOT be able to SSH in to the VM (via 'run_ssh_cmd' function)
+        once puppet is set up!  ovirt_key pubkey won't be authorized as root anymore
 '''
-def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True):
+def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, puppet_timeout=PUPPET_SETUP_TIMEOUT):
     info("Run puppet agent on {}".format(ip))
     if setup:
         if not puppet_role:
@@ -489,7 +497,33 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True):
         else:
             break
     # still try to run puppet agent; if it fails, it fails...
-    run_ssh_cmd(ip, '/opt/puppetlabs/bin/puppet agent -t -v', timeout=2700, valid_exit_codes=[0, 2])
+    # once puppet is set up, will not be able to ssh with ovirt key any longer
+    run_ssh_cmd(ip, '/opt/puppetlabs/bin/puppet agent -t -v', timeout=puppet_timeout, valid_exit_codes=[0, 2])
+
+'''
+    setup puppet on all nodes in parallel
+'''
+def enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=None, puppet_agent_timeout=PUPPET_SETUP_TIMEOUT):
+
+    info("Setup puppet on all nodes in parallel")
+
+    procs = []
+    sleepBetween = 5
+    sleepOffset = 0
+    for vmid in vmids:
+        ip = get_vm_ip(vmid)
+        proc = multiprocessing.Process(target=run_puppet_agent, args=(ip,), kwargs={
+            'setup': True,
+            'puppet_role': puppet_role,
+            'puppet_cluster': puppet_cluster,
+            'puppet_timeout': puppet_agent_timeout
+        })
+        proc.start()
+        procs.append(proc)
+        sleepOffset+=sleepBetween
+
+    # wait for the processes
+    process_wait(procs)
 
 '''
     Given a list of names of clusters to try and provision n VMs on,
@@ -1212,7 +1246,7 @@ def get_pem_cert():
     :param availableClusters: (list of Strings of names of clusters)
         if fail to make on one of the clusters, try on the others
 '''
-def provision_vm(name, puppet_role, puppet_cluster, ram, cores, availableClusters):
+def provision_vm(name, ram, cores, availableClusters):
 
     info("\nTry to provision VM {} on one of the following clusters: {}".format(name, availableClusters))
 
@@ -1235,8 +1269,6 @@ def provision_vm(name, puppet_role, puppet_cluster, ram, cores, availableCluster
             # set the hostname now (in case they don't want to install Xcalar)
             setup_hostname(ip, name)
             # setup puppet only after hostname is set
-            # going to re-run post-install, temporarily
-            run_puppet_agent(ip, puppet_role=puppet_role, puppet_cluster=puppet_cluster)
 
             return True
         #except ResourceException as err:
@@ -1277,7 +1309,7 @@ def provision_vm(name, puppet_role, puppet_cluster, ram, cores, availableCluster
         (this is distinct from name; its id attr of Type:Vm Object)
 
 '''
-def provision_vms(n, basename, ovirtcluster, puppet_role, puppet_cluster, ram, cores, user=None, tryotherclusters=True):
+def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclusters=True):
 
     if n == 0:
         return None
@@ -1358,7 +1390,7 @@ def provision_vms(n, basename, ovirtcluster, puppet_role, puppet_cluster, ram, c
             nextvmname = "{}-vm{}".format(nextvmname, str(i))
         vmnames.append(nextvmname)
         info("\nFork new process to create a new VM by name {}".format(nextvmname))
-        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, puppet_role, puppet_cluster, ram, cores, availableClusters))
+        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
         #proc = multiprocessing.Process(target=create_vm, args=(newvm, ovirtcluster, template, ram, cores)) # 'cluster' here refers to cluster the VM is on in Ovirt
         # it will fail if you try to create VMs at exact same time so sleep
         proc.start()
@@ -1467,10 +1499,6 @@ def setup_xcalar(ip, licfilepath, installer):
 
     # install using bld requested
     run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=2000)
-
-    # run puppet agent post-install to deal with python version being packaged w installer
-    # already done setup pre-install
-    run_puppet_agent(ip, setup=False)
 
     # start xcalar
     start_xcalar(ip)
@@ -1852,7 +1880,7 @@ def run_ssh_cmds(host, cmds):
                 extraops['valid_exit_codes'] = cmd[2]
         run_ssh_cmd(host, cmd[0], **extraops)
 
-def run_ssh_cmd(host, command, port=22, user='root', bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
+def run_ssh_cmd(host, command, port=22, user=DEFAULT_SSH_USER, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
     # get list of valid codes
     info("\nssh {}@{}".format(user, host))
     client = paramiko.SSHClient()
@@ -1952,31 +1980,39 @@ def run_sh_script(node, path, args=[], timeout=120, redirect=True, debug=True):
 
     :procs: list of multiprocessing.Process objects representing the processes to monitor
     :timeout: how long (seconds) to wait for ALL processees
-        in procs to complete, before timing out
+        in procs to complete, before timing out.  If not supplied, will not
+        timeout and will keep going indefinetely
     :valid_exit_codes: valid exit codes to come back from the process; list of ints
 '''
-def process_wait(procs, timeout=600, valid_exit_codes=[0]):
+def process_wait(procs, timeout=None, valid_exit_codes=[0]):
 
     numProcsStart = len(procs)
 
     # wait for all the processes to complete
-    while procs and timeout:
+    time_remaining = timeout
+    secs_sleep_between = 5
+    while procs:
         info("\t\t:: Check processes... ({} processes remain)".format(len(procs)))
         for i, proc in enumerate(procs):
             if proc.is_alive():
-                time.sleep(1)
-                timeout -= 1
+                time.sleep(secs_sleep_between)
+                if timeout:
+                    time_remaining -= secs_sleep_between
             else:
                 exitcode = proc.exitcode
                 if exitcode not in valid_exit_codes:
-                    raise RuntimeError("Encountered invalid exit code, {} in a forked child process.  Valid exit codes for these processes: {}".format(exitcode, ', '.join(str(x) for x in valid_exit_codes)))
+                    raise RuntimeError("Encountered invalid exit code, {} in " \
+                        "a forked child process.  " \
+                        "Valid exit codes for these processes: " \
+                        "{}".format(exitcode, ', '.join(str(x) for x in valid_exit_codes)))
                 del procs[i]
                 break
 
-    if timeout:
-        info("All processes completed with 0 exit code")
-    else:
-        raise TimeoutError("Timed out waiting for processes to complete! {}/{} processes remain!".format(len(procs), numProcsStart))
+        if timeout and not time_remaining:
+            raise TimeoutError("Timed out waiting for processes to complete! " \
+                "{}/{} processes remain!".format(len(procs), numProcsStart))
+
+    info("All processes completed with valid exit codes")
 
 '''
     User specifies memory size in GB.
@@ -2051,6 +2087,7 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
     notes = []
     created_vms_summary = "\n\n=====================================================\n" \
         "------------ Your Ovirt VMs are ready!!! ------------\n" \
+        "|\n" \
         "|\n| " + str(len(vmids)) + " VMs were created.\n" \
         "|\n| The VMs have the following specs:\n" \
         "|\tRAM (GB)     : " + str(ram) + "\n" \
@@ -2064,7 +2101,7 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
 
     vm_ssh_creds = "|\tssh creds: jenkins/" + JENKINS_USER_PASS
 
-    created_vms_summary = "|\n=====================THE VMS=========================\n|"
+    created_vms_summary = created_vms_summary + "|\n|\n=====================THE VMS=========================\n|"
     for i, vmid in enumerate(vmids):
         vmip = get_vm_ip(vmid)
         vmname = get_vm_name(vmid)
@@ -2122,7 +2159,7 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
     (putting in own function right now so can deal with where to direct output... in here only
     once logging set up ill change
 '''
-def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
+def get_summary_string(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
 
     summary_str = ""
 
@@ -2152,9 +2189,7 @@ def display_summary(vmids, ram, cores, ovirt_cluster, installer=None, clusternam
                     summary_str = summary_str + "\n|\t{}".format(poweredOnVm)
         summary_str = summary_str + "\n|\n================================="
 
-    info("SUMMARY START") # shell script wrapper will grep for this and print stderr what appears between
-    info("{}".format(summary_str))
-    info("\nSUMMARY END")
+    return summary_str
 
 '''
     Check if this node is part of a cluster
@@ -2532,7 +2567,7 @@ if __name__ == "__main__":
     vmips = [] # ips assigned to the vms generated
     clustername = None
     if args.count:
-        vmids = provision_vms(int(args.count), basename, ovirtcluster, args.puppet_role, args.puppet_cluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        vmids = provision_vms(int(args.count), basename, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
             # if you supply a value to 'createcluster' arg of initialize_xcalar,
@@ -2542,23 +2577,27 @@ if __name__ == "__main__":
                 clustername = basename
             initialize_xcalar(vmids, licfilepath, installer, createcluster=clustername)
 
-        # reboot all of the nodes in parallel
-        reboot_nodes(vmids)
-
         # get ips to print to stdout
         for vmid in vmids:
             vmips.append(get_vm_ip(vmid))
 
+    # get summary of work done, while VMs are still ssh'able by ovirttool
+    summary_string = get_summary_string(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername)
+
+    # setup puppet on all the VMs
+    # you can not make any more ssh calls to the VMs after this;
+    # ssh'ing is done in this script with a special ovirt pub key
+    # puppet will remove it from auth users.
+    enable_puppet_on_vms_in_parallel(vmids, args.puppet_role, puppet_cluster=args.puppet_cluster)
+
     '''
         display a useful summary to user of work done
     '''
-    display_summary(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername)
-
     # print ip of each created vm to stdout for other scripts to consume
     # (should be only stdout printed by this tool)
-    info("\n")
     for vmip in vmips:
-        print(vmip)
+        info(vmip, level=2) # level 2 is stdout
+    info(summary_string, level=0) # level 0 means you'll print this even on the shell script wrapper
 
     # close connection
     close_connection(CONN)
