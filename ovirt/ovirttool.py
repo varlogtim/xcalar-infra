@@ -2284,7 +2284,9 @@ def setup():
     # to authenticate.  but if exists not sure if its acceptible perm
     # level, so delete it and copy it back in fresh
     # (todo - when make cleanup remove)
-    cmds = ['cp ' + SCRIPT_DIR + '/' + OVIRT_KEYFILE_SRC + ' ' + OVIRT_KEYFILE_DEST,
+    destDir = os.path.dirname(OVIRT_KEYFILE_DEST)
+    cmds = ['mkdir -p ' + destDir,
+            'cp ' + SCRIPT_DIR + '/' + OVIRT_KEYFILE_SRC + ' ' + OVIRT_KEYFILE_DEST,
             'chmod 400 ' + OVIRT_KEYFILE_DEST]
 
     if os.path.exists(OVIRT_KEYFILE_DEST):
