@@ -5,6 +5,9 @@
 
 Tool to spin up VMs on Ovirt and create Xcalar clusters
 
+@help:
+    python ovirttool.py --help
+
 @examples
 
     create single VM called myvm with all the defaults and Xcalar installed (latest BuildTrunk prod build is default)
@@ -226,6 +229,97 @@ def wait_for_ip(vmid, timeout):
     if not timeout_remaining:
         raise NoIpException("Never got IP (might increase timeout, waited {} " \
             "seconds.  Might try increasing timeout)".format(timeout))
+'''
+    wait for a VM with a locked image state to become unlocked
+'''
+def wait_for_image_unlock(vmid, image_unlock_timeout=100):
+    vm_service = get_vm_service(vmid)
+    name = get_vm_name(vmid)
+    info("\nWait for {}'s image to be unlocked (if locked)".format(name))
+
+    timeout = image_unlock_timeout
+    while timeout:
+        vm = vm_service.get()
+        if vm.status == types.VmStatus.IMAGE_LOCKED:
+            time.sleep(2)
+            timeout-=1
+            info("Stil LOCKED.  Wait.")
+        else:
+            info("Image is NOT locked.")
+            return True
+    if not timeout:
+        raise TimeoutError("Timed out waiting for Image to unlock on {}. " \
+            " (Waited {} seconds)".format(name, image_unlock_timeout))
+
+'''
+    wait for a VM to come up
+'''
+def wait_for_vm_to_come_up(vmid, power_on_timeout=POWER_ON_TIMEOUT):
+    name = get_vm_name(vmid)
+    info("\nWait for {} to come up".format(name))
+    timeout_remaining = power_on_timeout
+    sleep_seconds_between_checks = 5
+    while timeout_remaining:
+        if is_vm_up(vmid):
+            info("\t{} is up!".format(name))
+            break
+        else:
+            time.sleep(sleep_seconds_between_checks)
+            timeout_remaining -= sleep_seconds_between_checks
+    if not timeout_remaining:
+        raise TimeoutError("Started service on {}, but VM never came up!" \
+            " Waited {} seconds".format(name, power_on_timeout))
+
+'''
+    checks if VM is in one of states expected if services
+    has been successfully started
+'''
+def is_vm_in_post_service_start_state(vmid):
+    info("Check if vm is in a 'powering up' state...")
+    vm_service = get_vm_service(vmid)
+    powering_states=[types.VmStatus.UP, types.VmStatus.POWERING_UP, types.VmStatus.WAIT_FOR_LAUNCH]
+    vm = vm_service.get()
+    for power_on_state in powering_states:
+        if vm.status == power_on_state:
+            info("VM in state: {} ; powering up!".format(vm.status))
+            return True
+    return False
+
+'''
+    get vm in a powering on state
+'''
+def start_vm(vmid):
+    vm_service = get_vm_service(vmid)
+    name = get_vm_name(vmid)
+
+    # will error if service start attempted while in powering up state
+    if is_vm_in_post_service_start_state(vmid):
+        return True
+    else:
+        info("\nStart service on {}".format(name))
+        # try to catch memory exception
+        try:
+            # start the vm
+            vm_service.start()
+            info("started service!")
+        except Exception as e:
+            # if the resource excpetion from Ovirt
+            # want to raise that will handle it higher up in
+            # provision_vm function
+            if 'memory' in str(e):
+                info("Throwing memory exception: {}".format(str(e)))
+            raise e
+
+    # wait until state has changed
+    timeout = 10
+    while timeout:
+        if is_vm_in_post_service_start_state(vmid):
+            return True
+        else:
+            time.sleep(1)
+            timeout-=1
+    if not timeout:
+        raise TimeoutError("Powered on {}, but not in powering up state".format(name))
 
 '''
     Start a VM by given ID,
@@ -254,43 +348,10 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
         # the api will throw exception if you try to start and it's in up state already
         info("Vm {} is already up!  I will not start".format(name))
     else:
-        info("\nStart service on {}".format(name))
-        timeout=60
-        # timeout for just being able to issue the start cmd through the api
-        while timeout:
-            try:
-                # start the vm
-                vm_service.start()
-                info("started service!")
-                break
-            except Exception as e:
-                if 'VM is locked' in str(e):
-                    time.sleep(10)
-                    timeout-=1
-                    info("vm is still locked; can't start service yet... try again...")
-                else:
-                    # another exception don't know about - re-raise.  if the resource excpetion from Ovirt
-                    # want to raise that will handle it higher up in the provision_vm function
-                    if 'memory' in str(e):
-                        info("Throwing memory exception: {}".format(str(e)))
-                    raise e
-        if not timeout:
-            raise TimeoutError("Was never able to start service on {}!".format(name))
-
-        info("\nWait for {} to come up".format(name))
-        timeout_remaining = power_on_timeout
-        sleep_seconds_between_checks = 5
-        while timeout_remaining:
-            if is_vm_up(vmid):
-                info("\t{} is up!".format(name))
-                break
-            else:
-                time.sleep(sleep_seconds_between_checks)
-                timeout_remaining -= sleep_seconds_between_checks
-        if not timeout_remaining:
-            raise TimeoutError("Started service on {}, but VM never came up!" \
-                " Waited {} seconds".format(name, power_on_timeout))
-
+        # first make sure image not locked
+        wait_for_image_unlock(vmid)
+        start_vm(vmid)
+        wait_for_vm_to_come_up(vmid, power_on_timeout=power_on_timeout)
     if waitForIP:
         info("\nWait until IP assigned and displaying for {}".format(name))
         assignedIp = wait_for_ip(vmid, ip_assign_timeout)
