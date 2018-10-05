@@ -2099,9 +2099,9 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
         "|\n| " + str(len(vmids)) + " VMs were created.\n" \
         "|\n| The VMs have the following specs:\n" \
         "|\tRAM (GB)     : " + str(ram) + "\n" \
-        "|\t#  Cores     : " + str(cores)
+        "|\t#  Cores     : " + str(cores) + "\n"
     if installer:
-        created_vms_summary = created_vms_summary + "\n|\tInstaller    : " + str(installer)
+        created_vms_summary = created_vms_summary + "|\tInstaller    : " + str(installer) + "\n"
         #created_vms_summary = created_vms_summary + "\n|\tOvirt cluster: {}".format(ovirt_cluster) # it might have gone to another cluster. need to check through sdk
 
     # get the ips from the ids
@@ -2109,22 +2109,22 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
 
     vm_ssh_creds = "|\tssh creds: jenkins/" + JENKINS_USER_PASS
 
-    created_vms_summary = created_vms_summary + "|\n|\n=====================THE VMS=========================\n|"
+    created_vms_summary = created_vms_summary + "|\n=====================THE VMS=========================\n|\n"
     for i, vmid in enumerate(vmids):
         vmip = get_vm_ip(vmid)
         vmhostname = get_hostname(vmip)
         # if multiple vms put a separator line between them
         if len(vmids) > 1 and i > 0:
-            created_vms_summary = created_vms_summary + "\n|      --------------------------------------"
-        created_vms_summary = created_vms_summary + "\n|\tHostname: " + vmhostname + "\n" + vm_ssh_creds
+            created_vms_summary = created_vms_summary + "|\n|      --------------------------------------" + "\n"
+        created_vms_summary = created_vms_summary + "|\tHostname: " + vmhostname + "\n" + vm_ssh_creds + "\n"
         if installer:
             accessUrl = get_access_url(vmip)
-            created_vms_summary = created_vms_summary + "\n|\n|\tAccess URL: " + accessUrl + "\n" \
+            created_vms_summary = created_vms_summary + "|\n|\tAccess URL: " + accessUrl + "\n" \
                 "|\tUsername (login page): " + LOGIN_UNAME + "\n" \
-                "|\tPassword (login page): " + LOGIN_PWORD
+                "|\tPassword (login page): " + LOGIN_PWORD + "\n"
 
     if installer:
-        created_vms_summary = created_vms_summary + "\n|\n| License key * (see note): \n|\n" + LICENSE_KEY
+        created_vms_summary = created_vms_summary + "|\n| License key * (see note): \n|\n" + LICENSE_KEY
         notes.append("LICENSE KEY: This is a dev key and will not work on RC builds")
 
     clussumm = ""
@@ -2149,15 +2149,16 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
             ip = clusternodedata[nodenum]
             vmhostname = get_hostname(ip)
             clussumm = clussumm + "|\n| Cluster Node" + nodenum + " is vm " + vmhostname + "]\n"
-        clussumm = clussumm + "|\n ------------------------------------------"
+        clussumm = clussumm + "|\n ------------------------------------------" + "\n"
     created_vms_summary = created_vms_summary + clussumm
 
     if notes:
-        created_vms_summary = created_vms_summary + "\n|\n=====================================================" \
-            "\n|\n|                  Notes              \n"
+        created_vms_summary = created_vms_summary + "|\n=====================================================\n" \
+            "|\n|                  Notes              \n"
         for note in notes:
             created_vms_summary = created_vms_summary + "|\n| * {}\n".format(note)
-        created_vms_summary = created_vms_summary + "|\n====================================================="
+
+    created_vms_summary = created_vms_summary + "|\n====================================================="
 
     return created_vms_summary
 
