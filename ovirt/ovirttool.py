@@ -42,6 +42,7 @@ import argparse
 import getpass
 import logging
 import random
+import datetime
 import string
 import math
 import multiprocessing
@@ -56,8 +57,6 @@ import subprocess
 import sys
 import time
 import urllib
-
-logging.basicConfig(level=logging.DEBUG, filename='example.log')
 
 MAX_VMS_ALLOWED=1024
 
@@ -176,23 +175,21 @@ class ShellError(Exception):
             errStr += ">> Reason error thrown:\n\t{}".format(self.summary)
         return errStr
 
-'''
-    level 0:
-        stderr, but ovirttool.sh shell wrapper will display it
-    level 1:
-        stderr (ovirttool.sh won't display it)
-    level 2:
-        stout
-'''
-def info(string, level=1):
-    if level == 0:
-        # ovirttool.sh shell script wrapper will awk
-        # and print stderr appearing between these SUMMARY START/END strings
-        print("SUMMARY START\n{}\nSUMMARY END".format(string), file=sys.stderr)
-    elif level == 1:
-        print(string, file=sys.stderr)
-    elif level == 2:
-        print(string)
+''' log methods to use in this script '''
+def debug_log(string):
+    loggit(string, level=1)
+def info_log(string):
+    loggit(string, level=0)
+def warn_log(string):
+    loggit(string, level=2)
+''' don't call this one directly, use the aux methods above '''
+def loggit(string, level=1):
+    level_prefixes={0:"{}",1:"DEBUG: {}",2:"WARN: {}"}
+    # timestamp
+    st = datetime.datetime.utcnow()
+    # split on any newline chars, and print each with the prefix
+    for line in string.split("\n"):
+        print("{} ".format(st) + level_prefixes[level].format(line), file=sys.stdout)
 
 '''
     OVIRT SDK FUNCTIONS
@@ -212,18 +209,18 @@ def info(string, level=1):
     :throws: NoIpException if no valid ip found after timeout
 '''
 def wait_for_ip(vmid, timeout):
-    info("\nWait until IP displaying in Ovirt for a VM")
+    debug_log("Wait until IP displaying in Ovirt for a VM")
     timeout_remaining = timeout
     sleep_seconds_between_checks = 5
     while timeout_remaining:
         try:
-            info("try to get vm ip")
+            debug_log("try to get vm ip")
             assigned_ip = get_vm_ip(vmid)
-            info("\tIP {} assigned!".format(assigned_ip))
+            debug_log("\tIP {} assigned!".format(assigned_ip))
             return assigned_ip
         except NoIpException as e: # let other Exception fail
             # not available yet
-            info("still no ip")
+            debug_log("still no ip")
             time.sleep(sleep_seconds_between_checks)
             timeout_remaining -= sleep_seconds_between_checks
     if not timeout_remaining:
@@ -235,7 +232,7 @@ def wait_for_ip(vmid, timeout):
 def wait_for_image_unlock(vmid, image_unlock_timeout=100):
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
-    info("\nWait for {}'s image to be unlocked (if locked)".format(name))
+    info_log("Wait for image of {} to be unlocked (if locked) (2-3 minutes)".format(name))
 
     timeout = image_unlock_timeout
     while timeout:
@@ -243,9 +240,9 @@ def wait_for_image_unlock(vmid, image_unlock_timeout=100):
         if vm.status == types.VmStatus.IMAGE_LOCKED:
             time.sleep(2)
             timeout-=1
-            info("Stil LOCKED.  Wait.")
+            debug_log("Stil LOCKED.  Wait.")
         else:
-            info("Image is NOT locked.")
+            debug_log("Image is NOT locked.")
             return True
     if not timeout:
         raise TimeoutError("Timed out waiting for Image to unlock on {}. " \
@@ -256,12 +253,12 @@ def wait_for_image_unlock(vmid, image_unlock_timeout=100):
 '''
 def wait_for_vm_to_come_up(vmid, power_on_timeout=POWER_ON_TIMEOUT):
     name = get_vm_name(vmid)
-    info("\nWait for {} to come up".format(name))
+    info_log("Wait for {} to come up (2-3 minutes)".format(name))
     timeout_remaining = power_on_timeout
     sleep_seconds_between_checks = 5
     while timeout_remaining:
         if is_vm_up(vmid):
-            info("\t{} is up!".format(name))
+            debug_log("\t{} is up!".format(name))
             break
         else:
             time.sleep(sleep_seconds_between_checks)
@@ -275,13 +272,13 @@ def wait_for_vm_to_come_up(vmid, power_on_timeout=POWER_ON_TIMEOUT):
     has been successfully started
 '''
 def is_vm_in_post_service_start_state(vmid):
-    info("Check if vm is in a 'powering up' state...")
+    debug_log("Check if vm is in a 'powering up' state...")
     vm_service = get_vm_service(vmid)
     powering_states=[types.VmStatus.UP, types.VmStatus.POWERING_UP, types.VmStatus.WAIT_FOR_LAUNCH]
     vm = vm_service.get()
     for power_on_state in powering_states:
         if vm.status == power_on_state:
-            info("VM in state: {} ; powering up!".format(vm.status))
+            debug_log("VM in state: {} ; powering up!".format(vm.status))
             return True
     return False
 
@@ -296,18 +293,18 @@ def start_vm(vmid):
     if is_vm_in_post_service_start_state(vmid):
         return True
     else:
-        info("\nStart service on {}".format(name))
+        debug_log("\nStart service on {}".format(name))
         # try to catch memory exception
         try:
             # start the vm
             vm_service.start()
-            info("started service!")
+            debug_log("started service!")
         except Exception as e:
             # if the resource excpetion from Ovirt
             # want to raise that will handle it higher up in
             # provision_vm function
             if 'memory' in str(e):
-                info("Throwing memory exception: {}".format(str(e)))
+                warn_log("Throwing memory exception: {}".format(str(e)))
             raise e
 
     # wait until state has changed
@@ -343,18 +340,21 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
 
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
+    debug_log("Bring up VM {}".format(name))
 
     if is_vm_up(vmid):
         # the api will throw exception if you try to start and it's in up state already
-        info("Vm {} is already up!  I will not start".format(name))
+        debug_log("Vm {} is already up!  I will not start".format(name))
     else:
         # first make sure image not locked
         wait_for_image_unlock(vmid)
         start_vm(vmid)
         wait_for_vm_to_come_up(vmid, power_on_timeout=power_on_timeout)
+
     if waitForIP:
-        info("\nWait until IP assigned and displaying for {}".format(name))
+        info_log("Wait until IP has been assigned to {}".format(name))
         assignedIp = wait_for_ip(vmid, ip_assign_timeout)
+        info_log("IP {} has been assigned to {}".format(assignedIp, name))
         return assignedIp
 
 '''
@@ -370,11 +370,12 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
 '''
 def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptries=5):
 
-    info("\nCreate a new VM called: {}\n\tOvirt cluster: {}\n\tTemplate VM  : {}\n\tRAM (bytes)  : {}\n\t# cores      : {}".format(name, cluster, template, ram, cores))
+    info_log("Create a VM called '{}' on {}".format(name, cluster))
+    debug_log("VM specs: {}\n\tOvirt cluster: {}\n\tTemplate VM  : {}\n\tRAM (bytes)  : {}\n\t# cores      : {}".format(name, cluster, template, ram, cores))
 
     # Get the reference to the "vms" service:
     vms_service = CONN.system_service().vms_service()
-    info("got vms service")
+    debug_log("got vms service")
 
     # create the VM Object and add to vms service
     # need a types:Cpu object to define cores
@@ -410,11 +411,11 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
             cpu=vm_cpu,
         )
         vms_service.add(newvmObj)
-        info("VM added...")
+        debug_log("VM added...")
 
         # get id of the newly added vm (can't get from obj you just created.  need to get from vms service)
         vmid = get_vm_id("name=" + name)
-        info("\tid assigned: {}...".format(vmid))
+        debug_log("\tid assigned: {}...".format(vmid))
         # corner case: if they named it starting with a search keyword Ovirt uses,
         # the VM will be added, but get_vm_id will return no results.
         # trying to handle these in param validation but there could be more keywords
@@ -428,7 +429,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
                 " are there any results?  If so, this indicates something is wrong with the API".format(name, name))
 
         # start vm and bring up until IP is displaying in Ovirt
-        info("Bring up {}...".format(vmid))
+        debug_log("Bring up {}...".format(vmid))
         # sometimes IP not coming up first time around.  restart and ty again
         triesleft = iptries
         assignedIp = None
@@ -438,12 +439,12 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
                 assignedIp = bring_up_vm(vmid, waitForIP=True)
                 break
             except NoIpException:
-                info("WARNING: Timed out waiting for IP on new VM... will restart and try again...")
+                debug_log("WARNING: Timed out waiting for IP on new VM... will restart and try again...")
                 triesleft -= 1
                 stop_vm(vmid)
 
         if not assignedIp:
-            raise RuntimeError("\n\nERROR: Never got Ip for {}/[id:{}],\n"
+            raise RuntimeError("ERROR: Never got Ip for {}/[id:{}],\n"
                 " even after {} restarts (dhcp issue?)\n".format(name, vmid, iptries))
 
         # IP came up, but make sure it is actually unique to this new VM for Ovirt (feynman issue)
@@ -451,7 +452,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
         # else just supplying ip would return superstrings of that ip too
         matchingVMs = get_matching_vms("ip=" + assignedIp)
         if len(matchingVMs) > 1:
-            info("\n\n\t --- FEYNMAN ISSUE HIT {} ---:\n\t"
+            debug_log("\t --- FEYNMAN ISSUE HIT {} ---:\n\t"
                 "The IP that got assigned to your new VM, {},"
                 " was re-assigned from an existing VM, but Ovirt associates "
                 " of these VMs with that IP!"
@@ -465,7 +466,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
             break
 
     if feynmanTries:
-        info("\nSuccessfully created VM {}, on {}!!".format(name, cluster))
+        debug_log("Successfully created VM {}, on {}!!".format(name, cluster))
         #\n\tIP: {}\n\tCluster: {}\n\tTemplate {}".format(myvmname, new_ip, cluster, template))
         return vmid
     else:
@@ -475,7 +476,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
 
 def setup_hostname(ip, name):
 
-    info("Set hostname of VM {} to {}".format(ip, name))
+    debug_log("Set hostname of VM {} to {}".format(ip, name))
     fqdn = "{}.int.xcalar.com".format(name)
     run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
     run_ssh_cmd(ip, 'systemctl restart network', timeout=500)
@@ -483,9 +484,9 @@ def setup_hostname(ip, name):
 
 def get_hostname(ip):
 
-    info("Get hostname of VM {}".format(ip))
+    debug_log("Get hostname of VM {}".format(ip))
     status, stdout, stderr = run_ssh_cmd(ip, 'cat /proc/sys/kernel/hostname')
-    info("\tFound hostname: {}".format(stdout))
+    debug_log("\tFound hostname: {}".format(stdout))
     return stdout.strip()
 
 def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_assign_timeout=IP_ASSIGN_TIMEOUT):
@@ -494,10 +495,10 @@ def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_as
     try:
         run_ssh_cmd(ip, 'reboot -h')
     except Exception as e:
-        info("expect to hit exception after the reboot")
+        debug_log("expect to hit exception after the reboot")
 
     if waitForVmToComeUp:
-        info("Wait for {} to come up from reboot...".format(ip))
+        debug_log("Wait for {} to come up from reboot...".format(ip))
         # wait a few seconds before initial ssh; immediately after reboot
         # was able to make the ssh call
         time.sleep(10)
@@ -506,16 +507,16 @@ def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_as
         while timeout_remaining:
             try:
                 run_ssh_cmd(ip, 'echo hello')
-                info("{}is back up!".format(ip))
+                debug_log("{}is back up!".format(ip))
                 break
             except Exception as e:
                 if 'Unable to connect' in str(e):
-                    info("still unable to ssh...")
-                    info(e)
+                    debug_log("still unable to ssh...")
+                    debug_log(e)
                     time.sleep(seconds_to_sleep_between_checks)
                     timeout_remaining-=seconds_to_sleep_between_checks
                 else:
-                    info("Exception thrown waiting for {} to come up " \
+                    debug_log("Exception thrown waiting for {} to come up " \
                         " after reboot, for reason other than " \
                         "'Unable to connect'".format(ip))
                     raise e
@@ -526,14 +527,14 @@ def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_as
         # wait until IP is displaying again in ovirt
         assignedIp = wait_for_ip(vmid, ip_assign_timeout)
         if assignedIp != ip:
-            info("WARNING: node {} came up after reboot, but in Ovirt now is " \
+            debug_log("WARNING: node {} came up after reboot, but in Ovirt now is " \
                 " assigned as IP {}".format(ip, assignedIp))
 
 '''
     setup a node to be able to run puppet
 '''
 def setup_puppet(ip, puppet_role, puppet_cluster):
-    info("Setup puppet to run on {} as role {}".format(ip, puppet_role))
+    debug_log("Setup puppet to run on {} as role {}".format(ip, puppet_role))
     cmds = [
         ['echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role)]
     ]
@@ -552,7 +553,7 @@ def setup_puppet(ip, puppet_role, puppet_cluster):
         once puppet is set up!  ovirt_key pubkey won't be authorized as root anymore
 '''
 def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, puppet_timeout=PUPPET_SETUP_TIMEOUT):
-    info("Run puppet agent on {}".format(ip))
+    info_log("Run puppet agent on {} (10-25 minutes)".format(ip))
     if setup:
         if not puppet_role:
             raise RuntimeError("Specified to setup puppet before running "
@@ -563,7 +564,7 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, pupp
     # wait until 'lock file' is no longer present
     # (if running puppet agent more than once, the puppet service could be running;
     # puppet agent will fail until the service is no longer running)
-    info("(Check if lock file {} present before running "
+    debug_log("(Check if lock file {} present before running "
         " puppet agent...)".format(PUPPET_LOCK_FILE))
     lockfileWait = 100
     while lockfileWait:
@@ -581,7 +582,7 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, pupp
 '''
 def enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=None, puppet_agent_timeout=PUPPET_SETUP_TIMEOUT):
 
-    info("Setup puppet on all nodes in parallel")
+    debug_log("Setup puppet on all nodes in parallel")
 
     procs = []
     sleepBetween = 5
@@ -638,25 +639,25 @@ def enough_memory(n, ram, clusters):
     for i, cluster in enumerate(clusters):
         # see how much memory available in that cluster, and how many VMs it could provision based on
         mem_available_this_cluster = get_cluster_available_memory(cluster)
-        info("{} bytes memory available on cluster {}".format(mem_available_this_cluster, cluster))
+        debug_log("{} bytes memory available on cluster {}".format(mem_available_this_cluster, cluster))
 
         # see how many VMs you could make with that
         consumes = math.floor(mem_available_this_cluster/ram)
-        info("{} vms could be consumed by cluster {}".format(consumes, cluster))
+        debug_log("{} vms could be consumed by cluster {}".format(consumes, cluster))
 
         # if it couldn't create any VMs at all, don't include in list returned
         if consumes:
-            info("Cluster {} could consume {} vms... add to useful clusters".format(cluster, consumes))
+            debug_log("Cluster {} could consume {} vms... add to useful clusters".format(cluster, consumes))
             useful_clusters.append(cluster)
 
         # update how many VMs left in request.
         # if that takes care of rest of VMs, guess is that enough available memory!
         # return list of useful clusters!
         vms_remaining = vms_remaining - consumes
-        info("{} would vms remain in request...".format(vms_remaining))
+        debug_log("{} would vms remain in request...".format(vms_remaining))
         if vms_remaining <= 0:
             # add rest of the clusters in (no harm for more resources)
-            info("Guess is clusters should be able to handle the VM request load (others could be using clusters though)")
+            debug_log("Guess is clusters should be able to handle the VM request load (others could be using clusters though)")
             useful_clusters = useful_clusters + clusters[i+1::]
             return useful_clusters
 
@@ -687,7 +688,7 @@ def get_cluster_available_memory(name):
     hosts = hosts_service.list()
     for host in hosts:
         if host.status != types.HostStatus.UP:
-            info("Host {} is not UP.  Do not figure in to available memory estimates...".format(host.name))
+            debug_log("Host {} is not UP.  Do not figure in to available memory estimates...".format(host.name))
             continue
 
         if host.cluster:
@@ -696,17 +697,17 @@ def get_cluster_available_memory(name):
             # try to get the name
             if cluster.name and cluster.name == name:
                 found_cluster = True
-                info("Host {} is part of requested cluster, {}".format(host.name, cluster.name))
+                debug_log("Host {} is part of requested cluster, {}".format(host.name, cluster.name))
                 # add this hosts available memory to cnt
                 if host.max_scheduling_memory:
-                    info("Host {}'s max scheduling memory (in bytes): {}".format(host.name, str(host.max_scheduling_memory)))
+                    debug_log("Host {}'s max scheduling memory (in bytes): {}".format(host.name, str(host.max_scheduling_memory)))
                     mem_found = mem_found + host.max_scheduling_memory
 
     if found_cluster:
-        info("Available memory found on cluster {}: {} bytes".format(name, mem_found))
+        debug_log("Available memory found on cluster {}: {} bytes".format(name, mem_found))
         return int(mem_found)
     else:
-        raise CantFindClusterError("\n\nTrying to determine available memory "
+        raise CantFindClusterError("Trying to determine available memory "
             "for ovirt cluster '{}', but can not find this cluster on any "
             "'Host' (see 'Host' tab in ovirt and for each row in the table, "
             "look at the 'cluster' column.  Can't find {} in any of those "
@@ -728,7 +729,7 @@ def get_cluster_available_memory(name):
 '''
 def get_matching_vms(identifier):
 
-    info("\nTry to find VMs matching identifier {}".format(identifier))
+    debug_log("Try to find VMs matching identifier {}".format(identifier))
 
     vms_service = CONN.system_service().vms_service()
 
@@ -762,13 +763,13 @@ def pyString(var):
     by searching by both name and ip
 '''
 def find_vm_id_from_identifier(identifier):
-    info("Try to find a unique VMID using identifier {}".format(identifier))
+    debug_log("Try to find a unique VMID using identifier {}".format(identifier))
     nameSearch="name={}".format(identifier)
     ipSearch="ip={}".format(identifier)
-    info("Search by {}".format(nameSearch))
+    debug_log("Search by {}".format(nameSearch))
     vmid = get_vm_id(nameSearch, failOnNoMatches=False)
     if not vmid:
-        info("Search by {}".format(ipSearch))
+        debug_log("Search by {}".format(ipSearch))
         vmid = get_vm_id(ipSearch)
     return vmid
 
@@ -787,11 +788,11 @@ def find_vm_id_from_identifier(identifier):
 '''
 def get_vm_id(identifier, failOnNoMatches=True):
 
-    info("\nTry to find id of VM using identifier: {}".format(identifier))
+    debug_log("Try to find id of VM using identifier: {}".format(identifier))
     matches = get_matching_vms(identifier)
     if matches:
         if len(matches) > 1:
-            raise NotUniqueVmIdentifierException("\n\nERROR: More than one VM matched on identifier {}!  "
+            raise NotUniqueVmIdentifierException("ERROR: More than one VM matched on identifier {}!  "
                 " I can not find a unique VM id for this VM.  "
                 "Be more specific".format(identifier))
         return matches[0].id
@@ -813,24 +814,24 @@ def get_vm_id(identifier, failOnNoMatches=True):
 def get_vm_ip(vmid):
 
     name = get_vm_name(vmid)
-    info("\nGet IP of VM {}".format(name))
+    debug_log("Get IP of VM {}".format(name))
 
     vm_service = get_vm_service(vmid)
-    info("got vm service " + str(vm_service))
+    debug_log("got vm service " + str(vm_service))
 
     devices = vm_service.reported_devices_service().list()
     for device in devices:
-        info("\tFound device: {}".format(device.name))
+        debug_log("\tFound device: {}".format(device.name))
         if device.name == 'eth0':
-            info("is eth0")
+            debug_log("is eth0")
             ips = device.ips
             for ip in ips:
-                info("\tip " + ip.address)
+                debug_log("\tip " + ip.address)
                 # it will return mac address and ip address dont return mac address
                 if ip_address(ip.address):
                     return ip.address
                 else:
-                    info("\t(IP {} is probably a mac address; dont return this one".format(ip.address))
+                    debug_log("\t(IP {} is probably a mac address; dont return this one".format(ip.address))
 
     # never found!
     #return None
@@ -849,7 +850,7 @@ def get_vm_name(vmid):
     vms_service = CONN.system_service().vms_service()
     vm_service = vms_service.vm_service(vmid)
     if not vm_service:
-        raise RuntimeError("\n\nERROR: Attempting to get vm name; "
+        raise RuntimeError("ERROR: Attempting to get vm name; "
             " couldn't retrieve vms service for vm of id: {}\n".format(vmid))
     vm_obj = vm_service.get()
     return vm_obj.name
@@ -872,7 +873,7 @@ def get_vm_service(vmid):
     vms_service = CONN.system_service().vms_service()
     vm_service = vms_service.vm_service(vmid)
     if not vm_service:
-        info("Could not locate a vm service for vm id {}".format(vmid))
+        debug_log("Could not locate a vm service for vm id {}".format(vmid))
     return vm_service
 
 '''
@@ -889,7 +890,7 @@ def is_vm_up(vmid):
     if vm.status == types.VmStatus.UP:
         return True
     else:
-        info("VM status: {}".format(vm.status))
+        debug_log("VM status: {}".format(vm.status))
     return False
 
 '''
@@ -899,9 +900,9 @@ def is_vm_up(vmid):
 def power_down(vmid):
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
-    info("Power down {}".format(name))
+    info_log("Power down {}".format(name))
     if is_vm_up(vmid):
-        info("\nStop VM {}".format(name))
+        debug_log("VM is up; Stop VM {}".format(name))
         timeout=60
         while timeout:
             try:
@@ -910,16 +911,16 @@ def power_down(vmid):
             except Exception as e:
                 timeout-=1
                 time.sleep(5)
-                info("still getting an exception...." + str(e))
+                debug_log("still getting an exception...." + str(e))
         if not timeout:
             raise TimeoutError("Couldn't stop VM {}".format(name))
 
         timeout=60
-        info("\nWait for service to come down")
+        debug_log("\nWait for service to come down")
         while timeout:
             vm = vm_service.get()
             if vm.status == types.VmStatus.DOWN:
-                info("vm status: down!")
+                debug_log("vm status: down!")
                 break
             else:
                 timeout -= 1
@@ -954,14 +955,14 @@ def get_all_vms():
 '''
 def remove_vm(identifier, releaseIP=True):
 
-    info("\nTry to Remove VM {} from Ovirt\n".format(identifier))
+    info_log("Remove VM {} from Ovirt".format(identifier))
     vmid = find_vm_id_from_identifier(identifier)
     if not vmid:
-        info("No VM found to remove, using identifier : {}".format(identifier))
-        raise RuntimeError("\n\nERROR: Could not remove vm of identifier: {}; "
+        debug_log("No VM found to remove, using identifier : {}".format(identifier))
+        raise RuntimeError("ERROR: Could not remove vm of identifier: {}; "
             " VM does not return from search!\n".format(identifier))
     name = get_vm_name(vmid)
-    info("Found VM: {}".format(name))
+    debug_log("Found VM: {}".format(name))
 
     vm_service = get_vm_service(vmid)
 
@@ -972,10 +973,10 @@ def remove_vm(identifier, releaseIP=True):
             If VM down bring up so can get IP.
             Then SSH and release the IP
         '''
-        info("Attempt to release ip before removing {}".format(name))
+        info_log("Attempt to release ip before removing {}".format(name))
 
         if not is_vm_up(vmid):
-            info("\nBring up {} so can get IP...".format(name))
+            debug_log("Bring up {} so can get IP...".format(name))
             bring_up_vm(vmid, waitForIP=True)
 
         # if vm up, wait until ip displaying in case
@@ -984,10 +985,10 @@ def remove_vm(identifier, releaseIP=True):
         try:
             assignedIp = wait_for_ip(vmid, IP_ASSIGN_TIMEOUT)
             if assignedIp is None:
-                raise Exception("\n\nLOGIC ERROR:: wait_for_ip returns without " \
+                raise Exception("LOGIC ERROR:: wait_for_ip returns without " \
                     " NoIpException, but ip returned is none. Please sync code")
             else:
-                info("\nFound IP of VM... Release IP {}".format(assignedIp))
+                info_log("Found IP of VM... Release IP {}".format(assignedIp))
                 cmds = [['dhclient -v -r']] # assuming Centos7... @TODO for other cases?
                 run_ssh_cmds(assignedIp, cmds)
         except NoIpException:
@@ -998,14 +999,14 @@ def remove_vm(identifier, releaseIP=True):
                 So if timed out here,
                 just skip getting the IP.  power down and remove like normal
             '''
-            info("\nWARNING: I could still never get an IP for {}, "
+            warn_log("I could still never get an IP for {}, "
                 " even though it shows as up,"
                 " will just shut down and remove VM without IP release".format(name))
 
     # must power down before removal
     power_down(vmid)
 
-    info("\nRemove VM {} from Ovirt".format(name))
+    info_log("Remove VM {} from Ovirt".format(name))
     timeout = 5
     while timeout:
         try:
@@ -1014,13 +1015,13 @@ def remove_vm(identifier, releaseIP=True):
         except Exception as e:
             time.sleep(5)
             if 'is running' in str(e):
-                info("vm still running... try again...")
+                debug_log("vm still running... try again...")
             else:
                 raise SystemExit("unexepcted error when trying to remve vm, {}".format(str(e)))
     if not timeout:
         raise TimeoutError("Stopped VM {} and service came down, but could not remove from service".format(name))
 
-    info("\nWait for VM to be gone from vms service...")
+    debug_log("Wait for VM to be gone from vms service...")
     timeout = 20
     while timeout:
         try:
@@ -1029,18 +1030,18 @@ def remove_vm(identifier, releaseIP=True):
             # dev check: make sure that function didn't change from throwing exception
             # to returning None
             if not match:
-                raise Exception("\n\nLOGIC ERROR IN CODE: get_vm_id was throwing Exception on not being able to find"
+                raise Exception("LOGIC ERROR IN CODE: get_vm_id was throwing Exception on not being able to find"
                     " vm of given identifier, now it's returning None.  Please sync code\n")
             time.sleep(5)
             timeout -= 1
         except:
-            info("VM {} no longer exists to vms".format(name))
+            debug_log("VM {} no longer exists to vms".format(name))
             break
     if not timeout:
         raise TimeoutError("Stopped VM {} and service came down and removed from service, "
             " but still getting a matching id for this vm!".format(name))
 
-    info("\n\nSuccessfully removed VM: {}".format(name))
+    info_log("Successfully removed VM: {}".format(name))
 
 '''
     remove VMs from ovirt in parallel processes
@@ -1055,7 +1056,7 @@ def remove_vm(identifier, releaseIP=True):
 '''
 def remove_vms(vms, releaseIP=True):
 
-    info("Remove VMs {} in parallel".format(vms))
+    debug_log("Remove VMs {} in parallel".format(vms))
 
     procs = []
     badvmidentifiers = []
@@ -1076,18 +1077,18 @@ def remove_vms(vms, releaseIP=True):
 
     if badvmidentifiers:
         valid_vms = get_all_vms()
-        raise ValueError("\n\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
+        raise ValueError("You supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
             "\n\nCould not find matches in Ovirt for following VMs: {}." \
             "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
 def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
 
-    info("\nTry to shut down VM {} from Ovirt\n".format(identifier))
+    debug_log("Try to shut down VM {} from Ovirt\n".format(identifier))
     # try to get the vm to remove...
     vmid = find_vm_id_from_identifier(identifier)
     if not vmid:
-        info("No VM found to shut down, using identifier : {}".format(identifier))
-        raise RuntimeError("\n\nERROR: Could not shutdown vm of identifier: {}; "
+        debug_log("No VM found to shut down, using identifier : {}".format(identifier))
+        raise RuntimeError("ERROR: Could not shutdown vm of identifier: {}; "
             " VM does not return from search!\n".format(identifier))
     name = get_vm_name(vmid)
 
@@ -1095,19 +1096,19 @@ def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
 
     # shutdown
     if is_vm_up(vmid):
-        info("\nShut down {}".format(name))
+        debug_log("Shut down {}".format(name))
         vm_service.shutdown() # send shutdown signal through vms service
 
     # wait for service to come down outside shutdown block,
     # in case its in the process of shutdown (not up state)
     # when script begins
-    info("\nWait for service to come down")
+    debug_log("Wait for service to come down")
     timeout_remaining=timeout
     sleep_seconds_between_checks = 5
     while timeout:
         vm = vm_service.get()
         if vm.status == types.VmStatus.DOWN:
-            info("vm status: down!")
+            debug_log("vm status: down!")
             break
         else:
             time.sleep(sleep_seconds_between_checks)
@@ -1116,7 +1117,7 @@ def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
         raise TimeoutError("Sent shut down to VM {}, but service never " \
             "came down, even after waiting {} seconds".format(name, timeout))
 
-    info("\n\nSuccessfully shut down {}".format(name))
+    debug_log("Successfully shut down {}".format(name))
 
 '''
     safely power off (shut-down) a list of ovirt vms, in parallel
@@ -1128,7 +1129,7 @@ def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
 '''
 def shutdown_vms(vms):
 
-    info("Shut down VMs {} in parallel".format(vms))
+    debug_log("Shut down VMs {} in parallel".format(vms))
 
     procs = []
     badvmidentifiers = []
@@ -1149,7 +1150,7 @@ def shutdown_vms(vms):
 
     if badvmidentifiers:
         valid_vms = get_all_vms()
-        raise ValueError("\n\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
+        raise ValueError("\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
             "\n\nCould not find matches in Ovirt for following VMs: {}." \
             "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
@@ -1163,7 +1164,7 @@ def shutdown_vms(vms):
 '''
 def power_on_vms(vms):
 
-    info("Power-on VMs {} in parallel".format(vms))
+    info_log("Power-on VMs {} (in parallel)".format(", ".join(vms)))
 
     procs = []
     badvmidentifiers = []
@@ -1189,7 +1190,7 @@ def power_on_vms(vms):
 
     if badvmidentifiers:
         valid_vms = get_all_vms()
-        raise ValueError("\n\nYou supplied some invalid VMs to power on.\nValid VMs:\n\n\t{}" \
+        raise ValueError("\nYou supplied some invalid VMs to power on.\nValid VMs:\n\n\t{}" \
             "\n\nCould not find matches in Ovirt for following VMs: {}." \
             "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
@@ -1198,7 +1199,7 @@ def power_on_vms(vms):
 '''
 def reboot_nodes(vmids, waitForNodesToComeUp=True):
 
-    info("Reboot nodes in parallel")
+    debug_log("Reboot nodes in parallel")
 
     procs = []
     sleepBetween = 5
@@ -1232,7 +1233,7 @@ def stop_vm(vmid, timeout=50):
 
     vm = vm_service.get()
     if vm.status == types.VmStatus.DOWN:
-        info("VM is already down!  No need to stop...")
+        debug_log("VM is already down!  No need to stop...")
         return True
 
     # Call the "stop" method of the service to stop it:
@@ -1243,13 +1244,13 @@ def stop_vm(vmid, timeout=50):
         time.sleep(5)
         vm = vm_service.get()
         if vm.status == types.VmStatus.DOWN:
-            info("VM is now down....")
+            debug_log("VM is now down....")
             return True
         else:
             timeout -= 1
 
     if not timeout:
-        raise TimeoutError("\n\nERROR: Timed out waiting for VM to come down\n")
+        raise TimeoutError("ERROR: Timed out waiting for VM to come down\n")
 
 '''
     Open connection to Ovirt engine.
@@ -1259,7 +1260,7 @@ def stop_vm(vmid, timeout=50):
 '''
 def open_connection(user=None):
 
-    info("\nOpen connection to Ovirt engine...")
+    info_log("Open connection to Ovirt engine...")
 
     # get username if user didn't supply when calling script
     if not user:
@@ -1286,7 +1287,7 @@ def open_connection(user=None):
         try:
             password = getpass.getpass()
         except Exception as err:
-            info("Error:", err)
+            debug_log("Error:", err)
 
     # get the pem certification
     certpath = get_pem_cert()
@@ -1310,7 +1311,7 @@ def open_connection(user=None):
 '''
 def close_connection(conn):
 
-    info("close connection to ovirt engine...")
+    debug_log("close connection to ovirt engine...")
     conn.close()
 
 '''
@@ -1327,7 +1328,6 @@ def get_pem_cert():
 
     # get the pem cert from netstore
     response = requests.get('http://netstore/infra/ovirt/ovirt.int.xcalar.com.pem')
-    #info(response.text)
     # save in a tmp file and return that
     tmpfilename = 'ctmp.pem'
     if not os.path.isdir(TMPDIR_LOCAL):
@@ -1350,7 +1350,7 @@ def get_pem_cert():
 '''
 def provision_vm(name, ram, cores, availableClusters):
 
-    info("\nTry to provision VM {} on one of the following clusters: {}".format(name, availableClusters))
+    debug_log("Try to provision VM {} on one of the following clusters: {}".format(name, availableClusters))
 
     for orderedcluster in availableClusters:
         template = get_template(orderedcluster)
@@ -1358,14 +1358,14 @@ def provision_vm(name, ram, cores, availableClusters):
             vmid = create_vm(name, orderedcluster, template, ram, cores)
 
             if not vmid:
-                raise RuntimeError("\n\nERROR: Ovirt seems to have successfully created VM {}, but no id generated\n".format(name))
+                raise RuntimeError("ERROR: Ovirt seems to have successfully created VM {}, but no id generated\n".format(name))
 
             # set jenkins password before returning
             # do here instead of during installation in case they don't want to install xcalar
             ip = get_vm_ip(vmid)
-            info("Change password for user 'jenkins' on {} ({})".format(name, ip))
+            debug_log("Change password for user 'jenkins' on {} ({})".format(name, ip))
             run_ssh_cmd(ip, 'echo "jenkins:{}" | chpasswd'.format(JENKINS_USER_PASS))
-            info("Set MariaDB timeout to 30 seconds because it sometimes crashes")
+            debug_log("Set MariaDB timeout to 30 seconds because it sometimes crashes")
             run_ssh_cmd(ip, 'sed -i \'s:TimeoutSec=300:TimeoutSec=30:\' /usr/lib/systemd/system/mariadb.service')
 
             # set the hostname now (in case they don't want to install Xcalar)
@@ -1375,14 +1375,14 @@ def provision_vm(name, ram, cores, availableClusters):
             return True
         #except ResourceException as err:
         except Exception as e:
-            info("Exception hit when provisioning VM {}!".format(name))
+            debug_log("Exception hit when provisioning VM {}!".format(name))
             if 'available memory is too low' in str(e):
-                info("Hit memory error!! :"
+                debug_log("Hit memory error!! :"
                     " Not enough memory on {} to create requested VM"
                     "\nTry to delete it and try on next cluster (if any)...".format(orderedcluster))
                 remove_vm(name, releaseIP=False) # set releaseIP as False - else, it's going to try and bring the VM up again to get the IP! and will fail for same reason
             else:
-                info("VM provisioning failed for a reason other than memory too low")
+                debug_log("VM provisioning failed for a reason other than memory too low")
                 raise e
                 #raise Exception("Failed for another reason!: {}".format(str(e)))
 
@@ -1390,7 +1390,7 @@ def provision_vm(name, ram, cores, availableClusters):
     errMsg = "\n\nERROR: There are not enough resources available " \
         " to provision the next VM of {} bytes RAM, {} cores\n" \
         " Tried on clusters: {}".format(ram, cores, availableClusters)
-    info(errMsg)
+    debug_log(errMsg)
     sys.exit(1) # do a sys exit instead of raising exception because then this process will terminate
     # elses if its being called as a subprocess you're going to have to wait for it to time out
     #raise Exception(errMsg)
@@ -1417,7 +1417,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
         return None
 
     if not ram or not cores:
-        raise ValueError("\n\nERROR: No value for ram or cores args to provision_vms\n"
+        raise ValueError("ERROR: No value for ram or cores args to provision_vms\n"
             " (perhaps default values changed for the --ram or --cores options?)\n")
 
     # check if any vms with the basename, if so they need to specify something different
@@ -1440,11 +1440,11 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
     matches = get_matching_vms(basename)
     if matches:
         matches = [x.name for x in matches]
-        raise ValueError("\n\nERROR: The value you specified as the basename for requested VM(s), {},"
+        raise ValueError("ERROR: The value you specified as the basename for requested VM(s), {},"
             " is already in use by Ovirt, for the following VMs:\n\t{}\n"
             "Please re-run and specify a different basename to --vmbasename option\n".format(basename, matches))
 
-    info("\nProvision {} vms on ovirt node {}\n".format(n, ovirtcluster))
+    debug_log("Provision {} vms on ovirt node {}\n".format(n, ovirtcluster))
 
     '''
         get list of cluster we can try to provision the VMs on.
@@ -1455,7 +1455,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
     availableClusters = [ovirtcluster]
     if tryotherclusters:
         availableClusters = get_cluster_priority(prioritize=ovirtcluster)
-    info("\nClusters available to provision the vms on: {}".format(availableClusters))
+    debug_log("Clusters available to provision the vms on: {}".format(availableClusters))
 
     # will check for memory constraints and fail script if determined we can't handle the VM request.
     # bypass if force specified and try to provision anyway
@@ -1470,10 +1470,10 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
             which can provision at least 1 VM in the request.
             this way skip trying on clusters you know it's going to fail on.)
         '''
-        info("\nCheck first if enough memory available...")
+        debug_log("Check first if enough memory available...")
         fullClusList = availableClusters # if fail want to print out the original list of clusters in err message
         availableClusters = enough_memory(n, ram, availableClusters)
-        info("\nClusters determined we can use: {}".format(str(availableClusters)))
+        debug_log("Clusters determined we can use: {}".format(str(availableClusters)))
         if not availableClusters:
             errmsg = "\n\nError: There is not enough memory on cluster(s) {}, " \
                 "to provision the requested VMs\n" \
@@ -1492,7 +1492,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
         if n > 1:
             nextvmname = "{}-vm{}".format(nextvmname, str(i))
         vmnames.append(nextvmname)
-        info("\nFork new process to create a new VM by name {}".format(nextvmname))
+        debug_log("Fork new process to create a new VM by name {}".format(nextvmname))
         proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
         #proc = multiprocessing.Process(target=create_vm, args=(newvm, ovirtcluster, template, ram, cores)) # 'cluster' here refers to cluster the VM is on in Ovirt
         # it will fail if you try to create VMs at exact same time so sleep
@@ -1532,7 +1532,7 @@ def is_xcalar_running(node):
 '''
 def start_xcalar(node):
 
-    info("\nStart Xcalar service on node {}\n".format(node))
+    debug_log("Start Xcalar service on node {}\n".format(node))
     cmds = [['service xcalar start', 600]]
     run_ssh_cmds(node, cmds)
 
@@ -1543,7 +1543,7 @@ def start_xcalar(node):
 '''
 def stop_xcalar(node):
 
-    info("\nStop Xcalar service on node {}\n".format(node))
+    debug_log("Stop Xcalar service on node {}\n".format(node))
     cmds = [['service xcalar stop', 120]]
     run_ssh_cmds(node, cmds)
 
@@ -1554,7 +1554,7 @@ def stop_xcalar(node):
 '''
 def setup_admin_account(node):
 
-    info("\nSetup admin account on {}\n".format(node))
+    info_log("Setup admin account on {}".format(node))
 
     # scp in shell script that sets up default admin account; it looks for
     # defaultAdmin.json at vm's root
@@ -1580,7 +1580,7 @@ def setup_xcalar(ip, licfilepath, installer):
 
     vmname = get_vm_name(get_vm_id("ip=" + ip))
 
-    info("\nInstall Xcalar on {} (IP: {}), using RPM at installer:\n\t{}\n".format(vmname, ip, installer))
+    info_log("Install Xcalar on {}, using RPM installer: {} (5-10 minutes)".format(vmname, installer))
 
     '''
         There is an end-to-end shell script whicho will
@@ -1624,8 +1624,8 @@ def setup_xcalar(ip, licfilepath, installer):
 '''
 def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
 
-    info("installer: " + str(installer))
-    info("\nSetup xcalar on node set and cluster {}".format(createcluster))
+    debug_log("installer: " + str(installer))
+    debug_log("Setup xcalar on node set and cluster {}".format(createcluster))
 
     procs = []
     ips = []
@@ -1636,7 +1636,7 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
         ip = get_vm_ip(vmid)
         name = get_vm_name(vmid)
         ips.append(ip)
-        info("\nStart new process to setup xcalar on {}, {}".format(name, ip))
+        debug_log("Start new process to setup xcalar on {}, {}".format(name, ip))
         proc = multiprocessing.Process(target=setup_xcalar, args=(ip, licfilepath, installer))
         # failing if i dont sleep in between.  think it might just be on when using the SDK, similar operations on the vms service
         procs.append(proc)
@@ -1686,7 +1686,7 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
 def create_cluster(nodeips, clustername):
 
     if not len(nodeips):
-        raise ValueError("\n\nERROR: Empty list of node ips passed to create_cluster;"
+        raise ValueError("ERROR: Empty list of node ips passed to create_cluster;"
             " No nodes  make cluster on!\n")
 
     '''
@@ -1698,11 +1698,11 @@ def create_cluster(nodeips, clustername):
 
     # for each node, generate config file with the nodelist
     # and then bring up the xcalar service
-    info("\nCreate cluster using nodes : {}".format(nodeips))
+    info_log("Create cluster using nodes : {}".format(nodeips))
     procs = []
     sleepBetween = 15
     for ip in nodeips:
-        info("\n\tFork cluster config for {}\n".format(ip))
+        debug_log("\tFork cluster config for {}\n".format(ip))
         '''
         Note: The order of the ips in nodeips list is important!!
         Will be node 0 (root cluster node), node1, etc., in order of list
@@ -1729,7 +1729,9 @@ def create_cluster(nodeips, clustername):
 def create_cluster_dir(remotePath):
 
     # -m 0777 needed because xcalar needs to be owner but can't chown after rootsquash
-    cmds = ['mkdir -p -m 0777 /netstore/' + remotePath]
+    dirPath = '/netstore/' + remotePath
+    info_log("Create shared cluster storage on netstore: {}".format(dirPath))
+    cmds = ['mkdir -p -m 0777 ' + dirPath]
     for cmd in cmds:
         run_system_cmd(cmd)
 
@@ -1754,12 +1756,12 @@ def create_cluster_dir(remotePath):
 '''
 def configure_cluster_node(node, clusternodes, remoteIP, remoteClusterStoragePath):
 
-    info("\nConfigure node {} as part of cluster nodes: {}\n".format(node, clusternodes))
+    debug_log("Configure node {} as part of cluster nodes: {}\n".format(node, clusternodes))
 
-    info("get node's local path to the shared cluster storage directory on netstore, {}".format(remoteClusterStoragePath))
+    debug_log("get node's local path to the shared cluster storage directory on netstore, {}".format(remoteClusterStoragePath))
     local_cluster_storage_dir = setup_cluster_storage(node, remoteIP, remoteClusterStoragePath)
 
-    info("generate cluster template file...")
+    debug_log("generate cluster template file...")
     generate_cluster_template_file(node, clusternodes, local_cluster_storage_dir)
 
 '''
@@ -1778,7 +1780,7 @@ def configure_cluster_node(node, clusternodes, remoteIP, remoteClusterStoragePat
 '''
 def setup_cluster_storage(node, remoteIP, remotePath):
 
-    info("\nDetermine local path VM {} should use for xcalar home "
+    debug_log("Determine local path VM {} should use for xcalar home "
         " (Constants.XcalarRootCompletePath var in  /etc/xcalar/default.cfg".format(node))
 
     # i think this will make the puppet change (which include automounting netstore)
@@ -1796,6 +1798,7 @@ def setup_cluster_storage(node, remoteIP, remotePath):
     possiblePath = netstoreMountDir + "/" + remotePath
     while tries:
         if path_exists_on_node(node, possiblePath):
+            info_log("Shared cluster storage already accessible to node {}, at {}".format(node, possiblePath))
             return possiblePath
         time.sleep(5)
         tries -= 1
@@ -1825,7 +1828,7 @@ def setup_cluster_storage(node, remoteIP, remotePath):
 '''
 def mount_shared_cluster_storage(node, remoteIP, remotePath, mountDir):
 
-    info("\nMount netstore directory {} to {} on {} as shared cluster storage\n"
+    info_log("Mount netstore directory {} to {} on {} as shared cluster storage\n"
         .format(remotePath, mountDir, node))
 
     '''
@@ -1864,7 +1867,7 @@ def mount_shared_cluster_storage(node, remoteIP, remotePath, mountDir):
 '''
 def generate_cluster_template_file(node, clusternodes, xcalarRoot):
 
-    info("\nGenerate /etc/xcalar/default.cfg file for node {}, set with cluster nodes {}\n".format(node, clusternodes))
+    debug_log("Generate /etc/xcalar/default.cfg file for node {}, set with cluster nodes {}\n".format(node, clusternodes))
 
     # there's a shell script for that
     nodeliststr = ' '.join(clusternodes)
@@ -1886,7 +1889,7 @@ def path_exists_on_node(node, path):
         run_ssh_cmd(node, 'ls ' + path, timeout=10)
         return True
     except Exception as e:
-        info("Can't ls to {} on {}: {}".format(path, node, e))
+        debug_log("Can't ls to {} on {}: {}".format(path, node, e))
         return False
 
 '''
@@ -1915,7 +1918,7 @@ def get_cluster_priority(prioritize=None):
         if prioritize in OVIRT_TEMPLATE_MAPPING:
             validClusters.append(prioritize)
         else:
-            raise RuntimeError("\n\nERROR: Trying to prioritize {}, but there "
+            raise RuntimeError("ERROR: Trying to prioritize {}, but there "
                 " is no template for this Cluster. (have you added an entry in "
                 " OVIRT_TEMPLATE_MAPPING for it?)\n".format(prioritize))
     for orderedcluster in clusterPriority:
@@ -1943,7 +1946,7 @@ def get_template(ovirtcluster):
         ## todo - there should be templates for all the possible ram/cores/etc configs
         return OVIRT_TEMPLATE_MAPPING[ovirtcluster]
     else:
-        raise AttributeError("\n\nERROR: No template found for ovirt node {}."
+        raise AttributeError("ERROR: No template found for ovirt node {}."
             "\nValid nodes with templates: {}\n".format(ovirtcluster, ", ".join(OVIRT_TEMPLATE_MAPPING.keys())))
 
 '''
@@ -1959,7 +1962,7 @@ def get_template(ovirtcluster):
 '''
 def scp_file(node, localfilepath, remotefilepath, keyfile=OVIRT_KEYFILE_DEST):
 
-    info("\nSCP: Copy file {} from host, to {}:{}".format(localfilepath, node, remotefilepath))
+    debug_log("SCP: Copy file {} from host, to {}:{}".format(localfilepath, node, remotefilepath))
 
     # adding -i option back in for new employees that dont have vault set up
     # todo : remove the ovirt public key from authorized_keys of generated vms
@@ -1968,7 +1971,7 @@ def scp_file(node, localfilepath, remotefilepath, keyfile=OVIRT_KEYFILE_DEST):
 
 def run_ssh_cmds(host, cmds):
 
-    info("\nSend cmds to {} via SSH.  cmd list: {}".format(host, str(cmds)))
+    debug_log("Send cmds to {} via SSH.  cmd list: {}".format(host, str(cmds)))
 
     # run the cmds one by one.  it will create a new session each time
     errorFound = False
@@ -1985,14 +1988,14 @@ def run_ssh_cmds(host, cmds):
 
 def run_ssh_cmd(host, command, port=22, user=DEFAULT_SSH_USER, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
     # get list of valid codes
-    info("\nssh {}@{}".format(user, host))
+    debug_log("ssh {}@{}".format(user, host))
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(hostname=host, port=port, username=user, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
-    info("connected...".format(host))
+    debug_log("connected...".format(host))
     chan = client.get_transport().open_session()
     chan.settimeout(timeout)
-    info("[{}@{}  ~]# {}".format(user, host, command))
+    debug_log("[{}@{}  ~]# {}".format(user, host, command))
     chan.exec_command(command)
     stdout = chan.makefile('r', bufsize) # opens stdout stream
     stderr = chan.makefile_stderr('rb', bufsize) # opens stderr stream
@@ -2000,10 +2003,10 @@ def run_ssh_cmd(host, command, port=22, user=DEFAULT_SSH_USER, bufsize=-1, keyfi
     stderr_text = stderr.read()
     stdout_formatted_text = stdout_text.decode("utf-8")
     stderr_formatted_text = stderr_text.decode("utf-8")
-    info("stdout:\n\t{}".format(stdout_formatted_text))
-    info("stderr:\n\t{}".format(stderr_formatted_text))
+    debug_log("stdout:\n\t{}".format(stdout_formatted_text))
+    debug_log("stderr:\n\t{}".format(stderr_formatted_text))
     status = int(chan.recv_exit_status())
-    info("status: {}".format(status))
+    debug_log("status: {}".format(status))
     if status not in valid_exit_codes:
         summary = "Encountered invalid exit status {}. Valid codes: {}".format(status, ', '.join(str(x) for x in valid_exit_codes))
         raise ShellError(command, host, status, stdout_formatted_text, stderr_formatted_text, summary)
@@ -2024,14 +2027,14 @@ def run_system_cmd(cmd):
     # subprocess.check_output always throws CalledProcessError for non-0 status
     try:
         #cmdout = subprocess.run(cmd, shell=True)
-        info(" $ {}".format(cmd))
+        debug_log(" $ {}".format(cmd))
         cmdout = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError as e:
-        info("Stderr: {}\n\nGot error when running sys command {}:\n{}".format(str(e.stderr), cmd, str(e.output))) # str on output in case None
+        debug_log("Stderr: {}\n\nGot error when running sys command {}:\n{}".format(str(e.stderr), cmd, str(e.output))) # str on output in case None
         sys.exit(e.returncode)
 
     '''
-    info("~:$ {}".format(cmd))
+    debug_log("~:$ {}".format(cmd))
     os.system(cmd)
     '''
 
@@ -2053,8 +2056,7 @@ def run_system_cmd(cmd):
 '''
 def run_sh_script(node, path, args=[], timeout=120, redirect=True, debug=True):
 
-    info("\nRun shell script {} on node {}...\n".format(path, node))
-
+    debug_log("Run shell script {} on node {}...\n".format(path, node))
 
     bashCall = '/bin/bash'
     if debug:
@@ -2070,7 +2072,7 @@ def run_sh_script(node, path, args=[], timeout=120, redirect=True, debug=True):
     try:
         run_ssh_cmds(node, cmds)
     except ShellError as e:
-        errInfo = "\nHit error running shell script {} on {}".format(path, node)
+        errInfo = "\nHit error running shell script {} on {}.  ERROR: {}".format(path, node, e.summary)
         if outputFile: # no stderr to print to them it was all redirected
             errInfo += "\nLogfile for this shell script @ {} on {}\n".format(outputFile, node)
         else:
@@ -2095,7 +2097,7 @@ def process_wait(procs, timeout=None, valid_exit_codes=[0]):
     time_remaining = timeout
     secs_sleep_between = 5
     while procs:
-        info("\t\t:: Check processes... ({} processes remain)".format(len(procs)))
+        debug_log("\t\t:: Check processes... ({} processes remain)".format(len(procs)))
         for i, proc in enumerate(procs):
             if proc.is_alive():
                 time.sleep(secs_sleep_between)
@@ -2115,7 +2117,7 @@ def process_wait(procs, timeout=None, valid_exit_codes=[0]):
             raise TimeoutError("Timed out waiting for processes to complete! " \
                 "{}/{} processes remain!".format(len(procs), numProcsStart))
 
-    info("All processes completed with valid exit codes")
+    debug_log("All processes completed with valid exit codes")
 
 '''
     User specifies memory size in GB.
@@ -2138,7 +2140,7 @@ def convert_mem_size(sizeGB):
     @returns list:
         [ https|http, <port>]
 '''
-def get_caddy_config_info(ip):
+def get_caddy_config_debug_log(ip):
 
     caddyInfo = []
 
@@ -2150,20 +2152,20 @@ def get_caddy_config_info(ip):
     # in case the next grep commands return no output)
     status, stdout, stderr = run_ssh_cmd(ip, grepCmd)
     if not stdout:
-        raise ValueError("\nCould not get main proxy line from Caddyfile {} on {}" \
+        raise ValueError("Could not get main proxy line from Caddyfile {} on {}" \
             "\n(Used grep cmd: {} - Does it need to be updated?)".format(caddyfilePath, ip, grepCmd))
 
     # determine if http or https by piping in to another grep
     # (doing 2 greps so don't catch http as subset of https)
     status, stdout, stderr = run_ssh_cmd(ip, grepCmd + " | grep -oP '(http:|https:)' | grep -oP '(\w+)'")
     if not stdout:
-        raise ValueError("\nCouldn't determine http vs. https from Caddyfile")
+        raise ValueError("Couldn't determine http vs. https from Caddyfile")
     protocol = stdout.strip()
 
     # now get the port
     status, stdout, stderr = run_ssh_cmd(ip, grepCmd + " | grep -oP ':(\d+)' | grep -oP '(\d+)'")
     if not stdout:
-        raise ValueError("\nCouldn't determine port from Caddyfile")
+        raise ValueError("Couldn't determine port from Caddyfile")
     port = stdout.strip()
 
     caddyInfo = [protocol, port]
@@ -2174,7 +2176,7 @@ def get_caddy_config_info(ip):
     display a correct access URL for that machine based on its Caddy configuration
 '''
 def get_access_url(ip):
-    caddyInfo = get_caddy_config_info(ip)
+    caddyInfo = get_caddy_config_debug_log(ip)
     caddyProtocol = caddyInfo[0]
     caddyPort = caddyInfo[1]
     hostname = get_hostname(ip)
@@ -2184,7 +2186,7 @@ def get_access_url(ip):
     return "{}://{}:{}".format(caddyProtocol, hostname, caddyPort)
 
 '''
-    Returns a summary string with information about vms
+    Returns a summary string with debugrmation about vms
 '''
 def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
 
@@ -2220,13 +2222,13 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
                 "|\tPassword (login page): " + LOGIN_PWORD + "\n"
 
     if installer:
-        created_vms_summary = created_vms_summary + "|\n| License key * (see note): \n|\n" + LICENSE_KEY
+        created_vms_summary = created_vms_summary + "|\n| License key * (see note): \n|\n" + LICENSE_KEY + "\n"
         notes.append("LICENSE KEY: This is a dev key and will not work on RC builds")
 
     clussumm = ""
     if clustername:
         clusternodedata = validate_cluster(vmips)
-        info("node data: " + str(clusternodedata))
+        debug_log("node data: " + str(clusternodedata))
 
         # get node 0 for access URL
         if not '0' in clusternodedata:
@@ -2271,7 +2273,7 @@ def get_summary_string(vmids, ram, cores, ovirt_cluster, installer=None, cluster
     if vmids:
         summary_str = summary_str + summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=installer, clustername=clustername)
 
-    # print info on delete, shutdown, or powered on VMs with this job
+    # print debug on delete, shutdown, or powered on VMs with this job
     if args.delete:
         summary_str = summary_str + "\n\n====================================="\
                         "\n|\n|  The following VMs were deleted:\n|"
@@ -2316,19 +2318,19 @@ def is_cluster_node(ip):
 '''
 def is_cluster_up(ip):
 
-    info("\nCheck if cluster is up from perspective of node {}".format(ip))
+    debug_log("Check if cluster is up from perspective of node {}".format(ip))
 
     cmd = '/opt/xcalar/bin/xccli -c version'
     status, stdout, stderr = run_ssh_cmd(ip, cmd)
-    info("\n\nOUTPUT:\n\n" + stdout)
+    debug_log("OUTPUT:\n\n" + stdout)
     if 'error' in stdout.lower():
-        info("Cluster is not up from perspective of node with ip: {}."
+        debug_log("Cluster is not up from perspective of node with ip: {}."
             "\nOutput of {} "
             "(was used to determine cluster status):\n{}".format(ip, cmd, stdout))
         return False
 
     # right now determining cluster is up if not finding error
-    info("Cluster is up from perspective of node with ip: {}"
+    debug_log("Cluster is up from perspective of node with ip: {}"
         "\n(Used stdout of {} to determine; did not find error string so determined up."
         "\nstdout: {}".format(ip, cmd, stdout))
     return True
@@ -2340,7 +2342,7 @@ def is_cluster_up(ip):
 '''
 def validate_cluster(clusterips):
 
-    info("validate cluster nodes {} ".format(clusterips))
+    debug_log("validate cluster nodes {} ".format(clusterips))
 
     currip = None
     curriplist = None
@@ -2352,13 +2354,13 @@ def validate_cluster(clusterips):
 
         # get list of ips and check against last node's list
         nextiplist = extract_cluster_node_ips(ip)
-        info("\n\nNode ip list for {}:\n{}".format(ip, nextiplist))
+        debug_log("Node ip list for {}:\n{}".format(ip, nextiplist))
         if i > 0:
             # make sure it matches against last
             for nodeidentifier in nextiplist.keys():
                 # make sure same nodenum with ip in last list
                 if curriplist[nodeidentifier] != nextiplist[nodeidentifier]:
-                    raise ValueError("\n\nNode lists among two nodes in the cluster do not match!\n"
+                    raise ValueError("Node lists among two nodes in the cluster do not match!\n"
                         "Node list for {}:\n\t{}\n"
                         "Node list for {}:\n\t{}\n".format(currip, curriplist, ip, nextiplist))
 
@@ -2375,7 +2377,7 @@ def validate_cluster(clusterips):
 def extract_cluster_node_ips(ip):
 
     configfilepath = '/etc/xcalar/default.cfg'
-    info("\nExtract cluster node data from {}  file on {}".format(configfilepath, ip))
+    debug_log("Extract cluster node data from {}  file on {}".format(configfilepath, ip))
 
     status, stdout, stderr = run_ssh_cmd(ip, 'cat ' + configfilepath)
 
@@ -2386,18 +2388,18 @@ def extract_cluster_node_ips(ip):
     nodenumreg = re.compile('.*Node\.NumNodes=(\d+).*', re.DOTALL)
     matchres = nodenumreg.match(stdout)
     if matchres:
-        info("found match")
+        debug_log("found match")
         numnodes = int(matchres.groups()[0])
     else:
-        raise AttributeError("\n\nFound no entry for number of nodes in {} on {}\n".format(configfilepath, ip))
+        raise AttributeError("\nFound no entry for number of nodes in {} on {}\n".format(configfilepath, ip))
 
     # parse all the node data
     nodeipdata = re.compile('.*Node\.(\d+)\.IpAddr=([\d\.]+).*')
     for line in stdout.split('\n'):
-        info("Next line: {}".format(line))
+        debug_log("Next line: {}".format(line))
         matchres = nodeipdata.match(line)
         if matchres:
-            info("Found match of node data on line : {}".format(line))
+            debug_log("Found match of node data on line : {}".format(line))
             # get the node # and ip
             captures = matchres.groups()
             nodenum = captures[0]
@@ -2405,7 +2407,7 @@ def extract_cluster_node_ips(ip):
 
             if nodenum in nodeips:
                 raise AttributeError("Node{} already registered to ip {}".format(nodenum, nodeip))
-            info("add entry {}:{}".format(nodenum, nodeip))
+            debug_log("add entry {}:{}".format(nodenum, nodeip))
             nodeips[nodenum] = nodeip
 
     # make sure same num nodes as what you got for number nodes
@@ -2444,7 +2446,7 @@ def setup():
             'chmod 400 ' + OVIRT_KEYFILE_DEST]
 
     if os.path.exists(OVIRT_KEYFILE_DEST):
-        info("Ovirt key file {} already exists, remove".format(OVIRT_KEYFILE_DEST))
+        debug_log("Ovirt key file {} already exists, remove".format(OVIRT_KEYFILE_DEST))
         cmds.insert(0, 'sudo rm ' + OVIRT_KEYFILE_DEST)
     for cmd in cmds:
         run_system_cmd(cmd)
@@ -2524,12 +2526,12 @@ def validateparams(args):
                 and did not supply lic of pub file options,
                 look in their cwd
             '''
-            info("\nMake sure license keys are present....")
+            debug_log("Make sure license keys are present....")
 
             scriptcwd = os.path.dirname(os.path.realpath(__file__))
             if not licfilepath:
                 licfilepath = SCRIPT_DIR + '/' + LICFILENAME
-                info("\tYou did not supply --licfile option... will look in script's cwd for Xcalar license file...")
+                debug_log("\tYou did not supply --licfile option... will look in script's cwd for Xcalar license file...")
             if not os.path.exists(licfilepath):
                 raise FileNotFoundError("\n\nERROR: File {} does not exist!\n"
                     " (Re-run with --licfile=<path to latest licence file>, or,\n"
@@ -2558,10 +2560,10 @@ def ip_address(string):
 
     try:
         socket.inet_aton(string)
-        info("{} is in valid IP address format".format(string))
+        debug_log("{} is in valid IP address format".format(string))
         return True
     except Exception as e:
-        info("{} not showing as a valid IP address".format(string))
+        debug_log("{} not showing as a valid IP address".format(string))
         return False
 
 '''
@@ -2700,8 +2702,8 @@ if __name__ == "__main__":
     # print hostnames of each created vm to stdout for other scripts to consume
     # (should be only stdout printed by this tool)
     for hostname in hostnames:
-        info(hostname, level=2) # level 2 is stdout
-    info(summary_string, level=0) # level 0 means you'll print this even on the shell script wrapper
+        debug_log(hostname) # level 2 is stdout
+    info_log(summary_string) # level 0 means you'll print this even on the shell script wrapper
 
     # close connection
     close_connection(CONN)
