@@ -136,6 +136,9 @@ class CantFindClusterError(Exception):
 class NoMatchingVmsException(Exception):
     pass
 
+class NotUniqueVmIdentifierException(Exception):
+    pass
+
 class ShellError(Exception):
     def __init__(self, cmd, node, status, stdout, stderr, summary):
         self.cmd = cmd
@@ -694,6 +697,20 @@ def pyString(var):
     return var.strip().encode('utf-8') # strip off formatting so it doesn't get encoded to literals
 
 '''
+	Tries to find a single VM id for a VM matching a given identifier,
+	by searching by both name and ip
+'''
+def find_vm_id_from_identifier(identifier):
+    info("Try to find a unique VMID using identifier {}".format(identifier))
+    nameSearch="name={}".format(identifier)
+    ipSearch="ip={}".format(identifier)
+    info("Search by {}".format(nameSearch))
+    vmid = get_vm_id(nameSearch, failOnNoMatches=False)
+    if not vmid:
+        info("Search by {}".format(ipSearch))
+        return get_vm_id(ipSearch)
+
+'''
     Return the id of VM that matches a given identifier,
     with option to throw exception if no matching VMs found.
 
@@ -712,7 +729,7 @@ def get_vm_id(identifier, failOnNoMatches=True):
     matches = get_matching_vms(identifier)
     if matches:
         if len(matches) > 1:
-            raise ValueError("\n\nERROR: More than one VM matched on identifier {}!  "
+            raise NotUniqueVmIdentifierException("\n\nERROR: More than one VM matched on identifier {}!  "
                 " I can not find a unique VM id for this VM.  "
                 "Be more specific".format(identifier))
         return matches[0].id
@@ -841,13 +858,13 @@ def get_all_vms():
 def remove_vm(identifier, releaseIP=True):
 
     info("\nTry to Remove VM {} from Ovirt\n".format(identifier))
-    # try to get the vm to remove...
-    vmid = get_vm_id(identifier)
+    vmid = find_vm_id_from_identifier(identifier)
     if not vmid:
         info("No VM found to remove, using identifier : {}".format(identifier))
         raise RuntimeError("\n\nERROR: Could not remove vm of identifier: {}; "
             " VM does not return from search!\n".format(identifier))
     name = get_vm_name(vmid)
+    info("Found VM: {}".format(name))
 
     vm_service = get_vm_service(vmid)
 
@@ -996,7 +1013,7 @@ def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
 
     info("\nTry to shut down VM {} from Ovirt\n".format(identifier))
     # try to get the vm to remove...
-    vmid = get_vm_id(identifier)
+    vmid = find_vm_id_from_identifier(identifier)
     if not vmid:
         info("No VM found to shut down, using identifier : {}".format(identifier))
         raise RuntimeError("\n\nERROR: Could not shutdown vm of identifier: {}; "
@@ -1083,7 +1100,7 @@ def power_on_vms(vms):
     sleepOffset = 0
     for vm in vms:
         if get_matching_vms(vm):
-            vmid = get_vm_id(vm)
+            vmid = find_vm_id_from_identifier(vm)
             proc = multiprocessing.Process(target=bring_up_vm, args=(vmid,), kwargs={
                 'waitForIP':True,
                 'power_on_timeout': POWER_ON_TIMEOUT,
