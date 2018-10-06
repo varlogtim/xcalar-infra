@@ -697,8 +697,8 @@ def pyString(var):
     return var.strip().encode('utf-8') # strip off formatting so it doesn't get encoded to literals
 
 '''
-	Tries to find a single VM id for a VM matching a given identifier,
-	by searching by both name and ip
+    Tries to find a single VM id for a VM matching a given identifier,
+    by searching by both name and ip
 '''
 def find_vm_id_from_identifier(identifier):
     info("Try to find a unique VMID using identifier {}".format(identifier))
@@ -708,7 +708,8 @@ def find_vm_id_from_identifier(identifier):
     vmid = get_vm_id(nameSearch, failOnNoMatches=False)
     if not vmid:
         info("Search by {}".format(ipSearch))
-        return get_vm_id(ipSearch)
+        vmid = get_vm_id(ipSearch)
+    return vmid
 
 '''
     Return the id of VM that matches a given identifier,
