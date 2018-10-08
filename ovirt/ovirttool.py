@@ -893,6 +893,41 @@ def is_vm_up(vmid):
     return False
 
 '''
+    Checks if VM is up; if so, brings VM safely in to powered off state
+    and waits for VM service to display as DOWN in ovirt
+'''
+def power_down(vmid):
+    vm_service = get_vm_service(vmid)
+    name = get_vm_name(vmid)
+    info("Power down {}".format(name))
+    if is_vm_up(vmid):
+        info("\nStop VM {}".format(name))
+        timeout=60
+        while timeout:
+            try:
+                vm_service.stop()
+                break
+            except Exception as e:
+                timeout-=1
+                time.sleep(5)
+                info("still getting an exception...." + str(e))
+        if not timeout:
+            raise TimeoutError("Couldn't stop VM {}".format(name))
+
+        timeout=60
+        info("\nWait for service to come down")
+        while timeout:
+            vm = vm_service.get()
+            if vm.status == types.VmStatus.DOWN:
+                info("vm status: down!")
+                break
+            else:
+                timeout -= 1
+                time.sleep(5)
+        if not timeout:
+            raise TimeoutError("Stopped VM {}, but service never came donw".format(name))
+
+'''
     Return list of names of all vms available to vms
 '''
 def get_all_vms():
@@ -968,33 +1003,7 @@ def remove_vm(identifier, releaseIP=True):
                 " will just shut down and remove VM without IP release".format(name))
 
     # must power down before removal
-    if is_vm_up(vmid):
-
-        info("\nStop VM {}".format(name))
-        timeout=60
-        while timeout:
-            try:
-                vm_service.stop()
-                break
-            except Exception as e:
-                timeout-=1
-                time.sleep(5)
-                info("still getting an exception...." + str(e))
-        if not timeout:
-            raise TimeoutError("Couldn't stop VM {}".format(name))
-
-        timeout=60
-        info("\nWait for service to come down")
-        while timeout:
-            vm = vm_service.get()
-            if vm.status == types.VmStatus.DOWN:
-                info("vm status: down!")
-                break
-            else:
-                timeout -= 1
-                time.sleep(5)
-        if not timeout:
-            raise TimeoutError("Stopped VM {}, but service never came donw".format(name))
+    power_down(vmid)
 
     info("\nRemove VM {} from Ovirt".format(name))
     timeout = 5
