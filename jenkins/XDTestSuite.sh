@@ -118,7 +118,7 @@ cd $XLRDIR
 TmpSqlDfLogs=`mktemp SqlDf.XXXXX.log`
 echo "Starting SQLDF"
 mkdir -p src/sqldf/sbt/target
-cp /netstore/users/jerene/xcalar-sqldf.jar src/sqldf/sbt/target/xcalar-sqldf.jar
+tar --wildcards -xOf /netstore/builds/byJob/BuildSqldf/lastSuccessful/archive.tar xcalar-sqldf-*.noarch.rpm | rpm2cpio | cpio --to-stdout -i ./opt/xcalar/lib/xcalar-sqldf.jar >$XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
 
 java -jar src/sqldf/sbt/target/xcalar-sqldf.jar >"$TmpSqlDfLogs" 2>&1 &
 
@@ -163,4 +163,9 @@ kill $serverPid || true
 kill $caddyPid || true
 kill $tailPid || true
 
+if [ $exitCode -ne "0" ]; then
+    mkdir -p /var/log/xcalar/failedLogs || true
+    cp $XLRDIR/$TmpSqlDfLogs /var/log/xcalar/failedLogs/
+    cp $XLRDIR/$TmpCaddyLogs /var/log/xcalar/failedLogs/
+fi
 exit $exitCode
