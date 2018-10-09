@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -e
+
+if [ -z "$XLRINFRADIR" ]; then
+  echo >&2 "Must set XLRINFRADIR"
+  exit 1
+fi
+
+cd $XLRINFRADIR
+
+if ! docker image inspect ovirttool >/dev/null 2>&1; then
+    TMP=$(mktemp -d -t ovirtool.XXXXXX)
+    docker build -t ovirttool -f $XLRINFRADIR/docker/ovirttool.df $TMP
+fi
+cd $XLRINFRADIR
+
+if [ $# -gt 0 ]; then
+    docker run -it -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool ovirt/ovirttool.py "$@"
+else
+    docker run -it -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool
+fi
