@@ -44,6 +44,9 @@ funcstatsd () {
 }
 
 genBuildArtifacts() {
+    # drive on for any errors
+    set +e
+
     mkdir -p ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
     mkdir -p `pwd`/tmpdir
 
