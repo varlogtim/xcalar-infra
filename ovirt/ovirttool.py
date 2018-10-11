@@ -1008,9 +1008,20 @@ def remove_vm(identifier, releaseIP=True):
                 raise Exception("LOGIC ERROR:: wait_for_ip returns without " \
                     " NoIpException, but ip returned is none. Please sync code")
             else:
-                info_log("Found IP of VM... Release IP {}".format(assignedIp))
+                info_log("Found IP of VM: {}".format(assignedIp))
+
+                info_log("Release {}/{} from consul".format(name, assignedIp))
+                # if puppet wasn't set up, might not work, just catch and go on
+                try:
+                    run_ssh_cmd(assignedIp, "consul leave")
+                except Exception as e:
+                    debug_log("consul leave command failed on {}, Reason: {}" \
+                        "; ignoring".format(assignedIp, str(e)))
+
+                info_log("Release IP {}".format(assignedIp))
                 cmds = [['dhclient -v -r']] # assuming Centos7... @TODO for other cases?
                 run_ssh_cmds(assignedIp, cmds)
+
         except NoIpException:
             '''
                 sometimes the IP is not coming up.
