@@ -1019,7 +1019,7 @@ def remove_vm(identifier, releaseIP=True):
                         "; ignoring".format(assignedIp, str(e)))
 
                 info_log("Release IP {}".format(assignedIp))
-                cmds = [['dhclient -v -r']] # assuming Centos7... @TODO for other cases?
+                cmds = [['sudo dhclient -v -r']] # assuming Centos7... @TODO for other cases?
                 run_ssh_cmds(assignedIp, cmds)
 
         except NoIpException:
@@ -1940,16 +1940,48 @@ def run_ssh_cmds(host, cmds):
                 extraops['valid_exit_codes'] = cmd[2]
         run_ssh_cmd(host, cmd[0], **extraops)
 
-def run_ssh_cmd(host, command, port=22, user=DEFAULT_SSH_USER, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
-    # get list of valid codes
-    debug_log("ssh {}@{}".format(user, host))
+'''
+    tryOtherUsers: list of other users to try ssh'ing as, in that order, if 'user' fails
+'''
+def run_ssh_cmd(host, command, port=22, user=DEFAULT_SSH_USER, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None, tryOtherUsers=["root", "jenkins"]):
+
+    ## users to try ssh'ing as;
+    ## prioritize main 'user' arg, maintain order of tryOtherUsers
+    try_users = tryOtherUsers
+    try:
+        try_users.remove(user) # if 'user' in list remove so can prioritize at front
+    except:
+        pass
+    try_users.insert(0, user)
+
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname=host, port=port, username=user, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
-    debug_log("connected...".format(host))
+    connected_user = None # user able to make a connection as
+    last_exception = None # if can't connect any users, will raise most rec. exception
+    for next_user in try_users:
+        debug_log("Connection attempt: ssh {}@{}".format(next_user, host))
+        try:
+            client.connect(hostname=host, port=port, username=next_user, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
+            connected_user = next_user
+            debug_log("connected to ... {} as user {}".format(host, connected_user))
+            break
+        except Exception as e:
+            last_exception = e
+            # if keyfile isn't in authorized_keys of the user you're trying to
+            # ssh as, paramiko will throw a paramiko.ssh_exception.SSHException
+            # with "not a valid OPENSSH private key"
+            # just catch any err in case change on other paramiko versions
+            debug_log("Error connecting to {}: {}; " \
+                " try to attempt other user if available...".format(next_user, str(e)))
+    if not connected_user:
+        info_log("Could not establish ssh connection to {} with " \
+            "any available users: {}; " \
+            "Throwing most recent exception".format(host, ", ".join(try_users)))
+        raise last_exception
+
     chan = client.get_transport().open_session()
     chan.settimeout(timeout)
-    debug_log("[{}@{}  ~]# {}".format(user, host, command))
+    debug_log("[{}@{}  ~]# {}".format(connected_user, host, command))
     chan.exec_command(command)
     stdout = chan.makefile('r', bufsize) # opens stdout stream
     stderr = chan.makefile_stderr('rb', bufsize) # opens stderr stream
