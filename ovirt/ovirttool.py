@@ -757,17 +757,17 @@ def pyString(var):
 
 '''
     Tries to find a single VM id for a VM matching a given identifier,
-    by searching by both name and ip
+    by searching by both name and ip, with option to fail if no matches found
 '''
-def find_vm_id_from_identifier(identifier):
+def find_vm_id_from_identifier(identifier, failOnNoMatches=False):
     debug_log("Try to find a unique VMID using identifier {}".format(identifier))
     nameSearch="name={}".format(identifier)
     ipSearch="ip={}".format(identifier)
     debug_log("Search by {}".format(nameSearch))
-    vmid = get_vm_id(nameSearch, failOnNoMatches=False)
+    vmid = get_vm_id(nameSearch, failOnNoMatches=failOnNoMatches)
     if not vmid:
         debug_log("Search by {}".format(ipSearch))
-        vmid = get_vm_id(ipSearch)
+        vmid = get_vm_id(ipSearch, failOnNoMatches=failOnNoMatches)
     return vmid
 
 '''
