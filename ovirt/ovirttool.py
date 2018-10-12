@@ -715,7 +715,7 @@ def get_cluster_available_memory(name):
 '''
     returns list of VM objects matching a given identifier
     (This is equivalent to logging in to Ovirt, and typing
-    the identifier string in the search bar, and returning a ovirtsdk4.type.Vm
+    this EXACT identifier string in the search bar, and returning a ovirtsdk4.type.Vm
     object for each matching row)
 
     :param identifier: String. search criteria you would type in the Ovirt search bar.
@@ -1073,27 +1073,17 @@ def remove_vms(vms, releaseIP=True):
     debug_log("Remove VMs {} in parallel".format(vms))
 
     procs = []
-    badvmidentifiers = []
     sleepBetween = 5
     sleepOffset = 0
     for vm in vms:
-        if get_matching_vms(vm):
-            proc = multiprocessing.Process(target=remove_vm, args=(vm,), kwargs={'releaseIP':releaseIP})
-            proc.start()
-            procs.append(proc)
-            time.sleep(sleepBetween)
-            sleepOffset += sleepBetween
-        else:
-            badvmidentifiers.append(vm)
+        proc = multiprocessing.Process(target=remove_vm, args=(vm,), kwargs={'releaseIP':releaseIP})
+        proc.start()
+        procs.append(proc)
+        time.sleep(sleepBetween)
+        sleepOffset += sleepBetween
 
     # wait for the processes
     process_wait(procs, timeout=500+sleepOffset)
-
-    if badvmidentifiers:
-        valid_vms = get_all_vms()
-        raise ValueError("You supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
-            "\n\nCould not find matches in Ovirt for following VMs: {}." \
-            "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
 def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
 
@@ -1133,27 +1123,17 @@ def shutdown_vms(vms):
     debug_log("Shut down VMs {} in parallel".format(vms))
 
     procs = []
-    badvmidentifiers = []
     sleepBetween = 5
     sleepOffset = 0
     for vm in vms:
-        if get_matching_vms(vm):
-            proc = multiprocessing.Process(target=shutdown_vm, args=(vm, SHUTDOWN_TIMEOUT))
-            proc.start()
-            procs.append(proc)
-            time.sleep(sleepBetween)
-            sleepOffset += sleepBetween
-        else:
-            badvmidentifiers.append(vm)
+        proc = multiprocessing.Process(target=shutdown_vm, args=(vm, SHUTDOWN_TIMEOUT))
+        proc.start()
+        procs.append(proc)
+        time.sleep(sleepBetween)
+        sleepOffset += sleepBetween
 
     # wait for the processes
     process_wait(procs, timeout=SHUTDOWN_TIMEOUT+sleepOffset)
-
-    if badvmidentifiers:
-        valid_vms = get_all_vms()
-        raise ValueError("\nYou supplied some invalid VMs to remove.\nValid VMs:\n\n\t{}" \
-            "\n\nCould not find matches in Ovirt for following VMs: {}." \
-            "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
 '''
     power on existing VMs in to an up state with IP displaying
@@ -1168,32 +1148,22 @@ def power_on_vms(vms):
     info_log("Power-on VMs {} (in parallel)".format(", ".join(vms)))
 
     procs = []
-    badvmidentifiers = []
     sleepBetween = 5
     sleepOffset = 0
     for vm in vms:
-        if get_matching_vms(vm):
-            vmid = find_vm_id_from_identifier(vm)
-            proc = multiprocessing.Process(target=bring_up_vm, args=(vmid,), kwargs={
-                'waitForIP':True,
-                'power_on_timeout': POWER_ON_TIMEOUT,
-                'ip_assign_timeout': IP_ASSIGN_TIMEOUT
-            })
-            proc.start()
-            procs.append(proc)
-            time.sleep(sleepBetween)
-            sleepOffset += sleepBetween
-        else:
-            badvmidentifiers.append(vm)
+        vmid = find_vm_id_from_identifier(vm)
+        proc = multiprocessing.Process(target=bring_up_vm, args=(vmid,), kwargs={
+            'waitForIP':True,
+            'power_on_timeout': POWER_ON_TIMEOUT,
+            'ip_assign_timeout': IP_ASSIGN_TIMEOUT
+        })
+        proc.start()
+        procs.append(proc)
+        time.sleep(sleepBetween)
+        sleepOffset += sleepBetween
 
     # wait for the processes
     process_wait(procs, timeout=POWER_ON_TIMEOUT + IP_ASSIGN_TIMEOUT +sleepOffset)
-
-    if badvmidentifiers:
-        valid_vms = get_all_vms()
-        raise ValueError("\nYou supplied some invalid VMs to power on.\nValid VMs:\n\n\t{}" \
-            "\n\nCould not find matches in Ovirt for following VMs: {}." \
-            "  See above list for valid VMs\n".format("\n\t".join(valid_vms), ",".join(badvmidentifiers)))
 
 '''
     reboot nodes in parallel.  Optionally wait for all nodes to come up
@@ -2534,16 +2504,43 @@ def ip_address(string):
         return False
 
 '''
+    given a user-supplied value to one of the options which takes a list of VM
+    identifiers (ips, hostnames) to perform an operation on (--shutdown, --delete, --poweron),
+    returns a list of those values and errors out if any of the VMs are not found in Ovirt
+    (note: must have opened connection to Ovirt engine!)
+'''
+def getAndValidateVmListArg(paramName, paramValue):
+    if not CONN:
+        raise Exception("Can't validate VMs before setting up connection to Ovirt engine")
+
+    vmList = getMultiParamValues(paramName, paramValue, errorOnDupes=True)
+    # make sure each is valid
+    invalidIdentifiers = []
+    for vmIdentifier in vmList:
+        if not find_vm_id_from_identifier(vmIdentifier):
+            invalidIdentifiers.append(vmIdentifier)
+    if invalidIdentifiers:
+        valid_vms = get_all_vms()
+        raise ValueError("You supplied VMs which could not be found in Ovirt.\n" \
+            "Valid VMs:\n\n\t{}" \
+            "\n\nError on arg: {} - " \
+            "Could not find matches in Ovirt for following VMs: {}." \
+            " See above list for valid VMs\n"
+            .format("\n\t".join(valid_vms), paramName, ",".join(invalidIdentifiers)))
+    return vmList
+
+'''
     some user-supplied arguments allow multiple values.
     This function splits such values in to a list of values.  Error on dupes.
+    (Gets own function so if delimeter changes, only need to change here)
 
     :paramName: String to display in Error output in dupe case,
          indicating which param is having an issue
-    :param: the param the user supplied
+    :paramValue: the param the user supplied
 
 '''
-def getMultiParamValues(paramName, param, errorOnDupes=True):
-    splitList = param.split(',')
+def getMultiParamValues(paramName, paramValue, errorOnDupes=True):
+    splitList = paramValue.split(',')
     values = {}
     dupes = []
     for arg in splitList:
@@ -2614,21 +2611,24 @@ if __name__ == "__main__":
         remove vms first if requested, to free up resources
     '''
     if args.delete:
-        deletevms = getMultiParamValues("--delete", args.delete)
-        remove_vms(deletevms)
+        # error out early if any of the vms are not valid in Ovirt
+        # gets list from the arg
+        # must call after opening connection to Ovirt
+        deleteVms = getAndValidateVmListArg("--delete", args.delete)
+        remove_vms(deleteVms)
 
     '''
         shut down VMs if requsted, to free up resources
     '''
     if args.shutdown:
-        shutdownVms = getMultiParamValues("--shutdown", args.shutdown)
+        shutdownVms = getAndValidateVmListArg("--shutdown", args.shutdown)
         shutdown_vms(shutdownVms)
 
     '''
         power up existing VMs if requested before creating new ones
     '''
     if args.poweron:
-        powerExistingVms = getMultiParamValues("--poweron", args.poweron)
+        powerExistingVms = getAndValidateVmListArg("--poweron", args.poweron)
         power_on_vms(powerExistingVms)
 
     ''''
