@@ -12,6 +12,8 @@ source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
 set -e
 
+cluster=$CLUSTER
+
 TestsToRun=($TestCases)
 TAP="AllTests.tap"
 
