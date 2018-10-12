@@ -120,9 +120,7 @@ pkill -9 xcmonitor
 pkill -9 xcmgmtd
 sleep 60
 
-find /var/opt/xcalar -type f -not -path "/var/opt/xcalar/support/*" -delete
-rm -rf /var/opt/xcalar/kvs/
-find . -name "core.childnode.*" -type f -delete
+find /var/opt/xcalar -mindepth 1 -name support -prune -o -exec rm -rf {} +
 set -e
 
 sudo -E yum -y remove xcalar
