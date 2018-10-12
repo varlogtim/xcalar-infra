@@ -357,6 +357,8 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
         info_log("IP {} has been assigned to {}".format(assignedIp, name))
         return assignedIp
 
+    info_log("VM {} successfully brought up.".format(name))
+
 '''
     Create a new vm and wait until you can get ip
 
