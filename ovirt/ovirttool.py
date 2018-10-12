@@ -340,7 +340,7 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
 
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
-    debug_log("Bring up VM {}".format(name))
+    info_log("Bring up VM {}".format(name))
 
     if is_vm_up(vmid):
         # the api will throw exception if you try to start and it's in up state already
@@ -452,13 +452,10 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
         # else just supplying ip would return superstrings of that ip too
         matchingVMs = get_matching_vms("ip=" + assignedIp)
         if len(matchingVMs) > 1:
-            debug_log("\t --- FEYNMAN ISSUE HIT {} ---:\n\t"
-                "The IP that got assigned to your new VM, {},"
-                " was re-assigned from an existing VM, but Ovirt associates "
-                " of these VMs with that IP!"
-                "\n(This is probably due to the Feynman outage)\n"
-                "Going to delete this new VM and re-create it, to try "
-                " and get a unique IP".format(assignedIp, name))
+            info_log("IP that got assigned to {}, {}, " \
+                "registered to another VM in Ovirt... " \
+                "(probably due to Feynman outage) " \
+                "going to delete vm and re-try".format(name, assignedIp))
             remove_vm(name, releaseIP=False) # set releaseIP as False -
                 # since it's of no use as the issue is that the IP is being re-assigned!
             continue
@@ -893,15 +890,43 @@ def is_vm_up(vmid):
         debug_log("VM status: {}".format(vm.status))
     return False
 
+def is_vm_down(vmid):
+
+    vm_service = get_vm_service(vmid)
+    vm = vm_service.get()
+    if vm.status == types.VmStatus.DOWN:
+        return True
+    else:
+        debug_log("VM status: {}".format(vm.status))
+    return False
+
+def wait_for_service_to_come_down(vmid, timeout=60):
+    vm_service = get_vm_service(vmid)
+    name = get_vm_name(vmid)
+    time_remaining = timeout
+    sleep_between = 1
+    # if waiting is for a vm stop, it should be quick, but for shut downs
+    # could take several minutes; just give a generic high est time on the log
+    info_log("Wait for service to come down (up to 10 minutes)")
+    while time_remaining:
+        if is_vm_down(vmid):
+            break
+        else:
+            time.sleep(sleep_between)
+            time_remaining -= sleep_between
+    if not time_remaining:
+        raise TimeoutError("Service never came down on {}, " \
+            " after waiting {} seconds".format(name, time_remaining))
+
 '''
     Checks if VM is up; if so, brings VM safely in to powered off state
     and waits for VM service to display as DOWN in ovirt
 '''
-def power_down(vmid):
+def stop_vm(vmid):
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
     info_log("Power down {}".format(name))
-    if is_vm_up(vmid):
+    if not is_vm_down(vmid):
         debug_log("VM is up; Stop VM {}".format(name))
         timeout=60
         while timeout:
@@ -915,18 +940,7 @@ def power_down(vmid):
         if not timeout:
             raise TimeoutError("Couldn't stop VM {}".format(name))
 
-        timeout=60
-        debug_log("\nWait for service to come down")
-        while timeout:
-            vm = vm_service.get()
-            if vm.status == types.VmStatus.DOWN:
-                debug_log("vm status: down!")
-                break
-            else:
-                timeout -= 1
-                time.sleep(5)
-        if not timeout:
-            raise TimeoutError("Stopped VM {}, but service never came donw".format(name))
+    wait_for_service_to_come_down(vmid)
 
 '''
     Return list of names of all vms available to vms
@@ -1004,7 +1018,7 @@ def remove_vm(identifier, releaseIP=True):
                 " will just shut down and remove VM without IP release".format(name))
 
     # must power down before removal
-    power_down(vmid)
+    stop_vm(vmid)
 
     info_log("Remove VM {} from Ovirt".format(name))
     timeout = 5
@@ -1096,28 +1110,15 @@ def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
 
     # shutdown
     if is_vm_up(vmid):
-        debug_log("Shut down {}".format(name))
+        info_log("Shut down {}".format(name))
         vm_service.shutdown() # send shutdown signal through vms service
 
     # wait for service to come down outside shutdown block,
     # in case its in the process of shutdown (not up state)
     # when script begins
-    debug_log("Wait for service to come down")
-    timeout_remaining=timeout
-    sleep_seconds_between_checks = 5
-    while timeout:
-        vm = vm_service.get()
-        if vm.status == types.VmStatus.DOWN:
-            debug_log("vm status: down!")
-            break
-        else:
-            time.sleep(sleep_seconds_between_checks)
-            timeout_remaining -= sleep_seconds_between_checks
-    if not timeout_remaining:
-        raise TimeoutError("Sent shut down to VM {}, but service never " \
-            "came down, even after waiting {} seconds".format(name, timeout))
+    wait_for_service_to_come_down(vmid, timeout)
 
-    debug_log("Successfully shut down {}".format(name))
+    info_log("Successfully shut down {}".format(name))
 
 '''
     safely power off (shut-down) a list of ovirt vms, in parallel
@@ -1217,40 +1218,6 @@ def reboot_nodes(vmids, waitForNodesToComeUp=True):
 
     # wait for the processes
     process_wait(procs, timeout=sleepOffset + REBOOT_TIMEOUT + IP_ASSIGN_TIMEOUT)
-
-'''
-    stop vm and wait for status to be down
-
-    :param vmid: unique id of vm in Ovirt (id attr of type:Vm object)
-
-    :returns True once vm stopped
-    :raises Exception if times out
-'''
-def stop_vm(vmid, timeout=50):
-
-    vms_service = CONN.system_service().vms_service()
-    vm_service = vms_service.vm_service(vmid)
-
-    vm = vm_service.get()
-    if vm.status == types.VmStatus.DOWN:
-        debug_log("VM is already down!  No need to stop...")
-        return True
-
-    # Call the "stop" method of the service to stop it:
-    vm_service.stop()
-
-    # Wait till the virtual machine is down:
-    while timeout:
-        time.sleep(5)
-        vm = vm_service.get()
-        if vm.status == types.VmStatus.DOWN:
-            debug_log("VM is now down....")
-            return True
-        else:
-            timeout -= 1
-
-    if not timeout:
-        raise TimeoutError("ERROR: Timed out waiting for VM to come down\n")
 
 '''
     Open connection to Ovirt engine.
