@@ -293,7 +293,11 @@ def start_vm(vmid):
     if is_vm_in_post_service_start_state(vmid):
         return True
     else:
-        debug_log("\nStart service on {}".format(name))
+        # can't start service if powering down; will fail
+        info_log("Wait for any previous power downs to complete on {}".format(name))
+        wait_for_service_to_come_down(vmid)
+
+        info_log("Start service on {}".format(name))
         # try to catch memory exception
         try:
             # start the vm
@@ -902,7 +906,7 @@ def is_vm_down(vmid):
         debug_log("VM status: {}".format(vm.status))
     return False
 
-def wait_for_service_to_come_down(vmid, timeout=60):
+def wait_for_service_to_come_down(vmid, timeout=SHUTDOWN_TIMEOUT):
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
     time_remaining = timeout
@@ -918,7 +922,7 @@ def wait_for_service_to_come_down(vmid, timeout=60):
             time_remaining -= sleep_between
     if not time_remaining:
         raise TimeoutError("Service never came down on {}, " \
-            " after waiting {} seconds".format(name, time_remaining))
+            " after waiting {} seconds".format(name, timeout))
 
 '''
     Checks if VM is up; if so, brings VM safely in to powered off state
