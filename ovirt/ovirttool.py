@@ -2488,6 +2488,27 @@ def validateparams(args):
     return int(args.ram), int(args.cores), args.ovirtcluster, licfilepath, installer, basename
 
 '''
+    validates lists of vms for param validation.
+    :listOptionMapping: hash where key is name of the cmd arg for that list
+        (so can include it in error msg), and value is the list to validate for that arg
+'''
+def validateVmLists(listOptionMapping):
+    errMsg = ""
+    for cmdArgName in listOptionMapping.keys():
+        # validate list of VMs for that cmd arg
+        invalidIdentifiers = []
+        for vmIdentifier in listOptionMapping[cmdArgName]:
+            if not find_vm_id_from_identifier(vmIdentifier):
+                invalidIdentifiers.append(vmIdentifier)
+        if invalidIdentifiers:
+            errMsg = errMsg + "\nError on {}: " \
+                "invalid VMs specified: {}".format(cmdArgName, ", ".join(invalidIdentifiers))
+    if errMsg:
+        valid_vms = get_all_vms()
+        errMsg = "{}\n{}\n\nPlease see list of valid vms above\n".format("\n\t".join(valid_vms), errMsg)
+        raise ValueError(errMsg)
+
+'''
     Check if a String is in format of ip address
     Does not ping or make sure valid, just checks format
 
@@ -2504,32 +2525,6 @@ def ip_address(string):
     except Exception as e:
         debug_log("{} not showing as a valid IP address".format(string))
         return False
-
-'''
-    given a user-supplied value to one of the options which takes a list of VM
-    identifiers (ips, hostnames) to perform an operation on (--shutdown, --delete, --poweron),
-    returns a list of those values and errors out if any of the VMs are not found in Ovirt
-    (note: must have opened connection to Ovirt engine!)
-'''
-def getAndValidateVmListArg(paramName, paramValue):
-    if not CONN:
-        raise Exception("Can't validate VMs before setting up connection to Ovirt engine")
-
-    vmList = getMultiParamValues(paramName, paramValue, errorOnDupes=True)
-    # make sure each is valid
-    invalidIdentifiers = []
-    for vmIdentifier in vmList:
-        if not find_vm_id_from_identifier(vmIdentifier):
-            invalidIdentifiers.append(vmIdentifier)
-    if invalidIdentifiers:
-        valid_vms = get_all_vms()
-        raise ValueError("You supplied VMs which could not be found in Ovirt.\n" \
-            "Valid VMs:\n\n\t{}" \
-            "\n\nError on arg: {} - " \
-            "Could not find matches in Ovirt for following VMs: {}." \
-            " See above list for valid VMs\n"
-            .format("\n\t".join(valid_vms), paramName, ",".join(invalidIdentifiers)))
-    return vmList
 
 '''
     some user-supplied arguments allow multiple values.
@@ -2609,29 +2604,41 @@ if __name__ == "__main__":
     #open connection to Ovirt server
     CONN = open_connection(user=args.user)
 
+    # validation that requires a connection to the Ovirt engine (validating VMs)
+    #doing all validation before calling any of the operations so can fail out early
+    deleteVms = []
+    shutdownVms = []
+    poweronVms = []
+    if args.delete:
+        deleteVms = getMultiParamValues("--delete", args.delete) # errs on dupes
+    if args.shutdown:
+        shutdownVms = getMultiParamValues("--shutdown", args.shutdown)
+    if args.poweron:
+        poweronVms = getMultiParamValues("--poweron", args.poweron)
+    # validate all the VMs in these lists are valid
+    # validating in one go because want to display list of valid vms
+    # in err msg; don't want to repeat that list for each arg that could have invalid entries
+    validateVmLists({"--delete": deleteVms, "--shutdown": shutdownVms, "--poweron": poweronVms})
+
+    ## DO REQUESTED OPERATIONS ##
+
     '''
         remove vms first if requested, to free up resources
     '''
-    if args.delete:
-        # error out early if any of the vms are not valid in Ovirt
-        # gets list from the arg
-        # must call after opening connection to Ovirt
-        deleteVms = getAndValidateVmListArg("--delete", args.delete)
+    if args.delete and deleteVms: # to be on the safe side check both?
         remove_vms(deleteVms)
 
     '''
         shut down VMs if requsted, to free up resources
     '''
-    if args.shutdown:
-        shutdownVms = getAndValidateVmListArg("--shutdown", args.shutdown)
+    if args.shutdown and shutdownVms:
         shutdown_vms(shutdownVms)
 
     '''
         power up existing VMs if requested before creating new ones
     '''
-    if args.poweron:
-        powerExistingVms = getAndValidateVmListArg("--poweron", args.poweron)
-        power_on_vms(powerExistingVms)
+    if args.poweron and poweronVms:
+        power_on_vms(poweronVms)
 
     ''''
         main driver
