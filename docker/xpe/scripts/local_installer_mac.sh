@@ -43,6 +43,8 @@ LIC_FILENAME=XcalarLic.key # name of file of uncompressed license
 XCALAR_LIC_REL="xpeinstalledlic" # dir rel to XCALAR_ROOT where lic file will go
 LOCALDATASETS="$APPDATA/sampleDatasets"
 
+XCALARCTL_PATH="/opt/xcalar/bin/xcalarctl" # path in Docker container where xcalarctl is
+
 MAINHOSTMNT="$HOME" # path in the Xcalar Docker container to mount user's $HOME dir to
 # will set as Xcalar's Default Data Target path (it must be a path in the container where Xcalar running)
 # this way when user opens file browser they will see contents of their $HOME dir (else will be default container root which won't make sense to user)
@@ -244,7 +246,8 @@ cmd_start_xcalar() {
 
     debug "Start xcalar service inside the docker"
     # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
-    docker exec --user xcalar "$XCALAR_CONTAINER" /opt/xcalar/bin/xcalarctl start
+    docker exec --user xcalar "$XCALAR_CONTAINER" "$XCALARCTL_PATH" start
+    cmd_xcalar_wait
 }
 
 cmd_stop_xcalar() {
@@ -252,7 +255,7 @@ cmd_stop_xcalar() {
 
     debug "Stop xcalar service inside the docker"
     # entrypoint for xcalar startup only hitting on container restart; start xcalar the initial time
-    docker exec --user xcalar "$XCALAR_CONTAINER" /opt/xcalar/bin/xcalarctl stop
+    docker exec --user xcalar "$XCALAR_CONTAINER" "$XCALARCTL_PATH" stop
 }
 
 cmd_compare_against_installer_img() {
@@ -396,6 +399,17 @@ docker_installed() {
     command -v docker >/dev/null 2>&1
 }
 
+xcalar_services_up() {
+    # XD_URL Is being set by the app entrypoint
+    if [ -z "$XD_URL" ]; then
+        echo "No $XD_URL set!  (has app entrypoint changed?)" >&2
+        exit 1
+    fi
+    # endpoint checks services are up and ready
+    expServerServiceCheckEndpoint="$XD_URL/app/service/status"
+    curl -kf "$expServerServiceCheckEndpoint"
+}
+
 # DOCKER UTILS # ##TODO: move in to own util file;
 # and the installer functions above in their own file?
 
@@ -439,10 +453,36 @@ cmd_docker_wait() {
     fi
 }
 
+# wait for Xcalar services to come up
+cmd_xcalar_wait() {
+    local timeout="${1:-120}"
+    local remainingTime="$timeout"
+    local pauseTime=1
+    while [ $remainingTime -gt 0 ]; do
+        if xcalar_services_up; then
+            return 0
+        fi
+        debug "Xcalar services not up yet... $remainingTime"
+        sleep "$pauseTime"
+        remainingTime=$((remainingTime - pauseTime))
+    done
+    echo "Timed out after waiting $timeout seconds for Xcalar services to come up! (is the Xcalar container up?  Is Xcalar set to start on container start?)" >&2
+    exit 1
+}
+
+# bring up XD and Grafana Docker containers, optionally wait for the Xcalar
+# services to come up once the containers have started.
 cmd_bring_up_containers() {
     cmd_ensure_docker_up
+
+    local waitForXcalar="${1:-true}"
     docker start "$XCALAR_CONTAINER"
     docker start "$GRAFANA_CONTAINER" || true
+    # xcalar services will NOT be up yet.  If you run XD in nwjs before all services
+    # are up, will get auth error due to Jupyter require conflict with nwjs require
+    if [ "$waitForXcalar" == true ]; then
+        cmd_xcalar_wait
+    fi
 }
 
 command="$1"
