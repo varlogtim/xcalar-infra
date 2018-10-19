@@ -196,6 +196,25 @@ def loggit(string, level=1):
 '''
 
 '''
+    Generate n names for VMs which are not currently used in Ovirt,
+    given some basename.  Will add random chars to the name to try to avoid
+    re-using old hostnames of deleted VMs which would cause issues in puppet
+    Returns as list
+'''
+def generate_vm_names(basename, n):
+    vmNames = []
+    uniqueBasename = None
+    # keep trying random strings on basename until you hit a combo not in ovirt
+    # don't check for exact equality when checking if in Ovirt - since will
+    # append -vm0, -vm1, etc. to end of this.  this will return if there's any
+    # vm in ovirt with this as a substring
+    while not uniqueBasename or get_matching_vms(uniqueBasename):
+        uniqueBasename = "{}-{}".format(basename, generateRandomString(4))
+    for i in range(n):
+        vmNames.append("{}-vm{}".format(uniqueBasename, n))
+    return vmNames
+
+'''
     wait until Ovirt is showing a valid ip for a vm.
     return the ip.
     (This is useful if you've just created or rebooted a VM,
@@ -1439,13 +1458,9 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
             raise RuntimeError(errmsg)
 
     procs = []
-    vmnames = []
+    vmnames = generate_vm_names(basename, n)
     sleepBetween = 20
-    for i in range(n):
-        nextvmname = basename
-        if n > 1:
-            nextvmname = "{}-vm{}".format(nextvmname, str(i))
-        vmnames.append(nextvmname)
+    for nextvmname in vmnames:
         debug_log("Fork new process to create a new VM by name {}".format(nextvmname))
         proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
         #proc = multiprocessing.Process(target=create_vm, args=(newvm, ovirtcluster, template, ram, cores)) # 'cluster' here refers to cluster the VM is on in Ovirt
