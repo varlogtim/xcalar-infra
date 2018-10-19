@@ -1860,7 +1860,6 @@ def get_cluster_priority(prioritize=None):
     qaClusters = ['node3-cluster', 'node2-cluster', 'node1-cluster']
     clusterPriority = devClusters
     validClusters = []
-    mapping = get_template_mapping() # get the official template mapping
     if prioritize:
         if prioritize in OVIRT_TEMPLATE_MAPPING:
             validClusters.append(prioritize)
