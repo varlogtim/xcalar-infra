@@ -1393,30 +1393,6 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
         raise ValueError("ERROR: No value for ram or cores args to provision_vms\n"
             " (perhaps default values changed for the --ram or --cores options?)\n")
 
-    # check if any vms with the basename, if so they need to specify something different
-
-    # do NOT check name=<basename>, as multi-node clusters will append
-    # to the basename so it won't be an exact match
-
-    '''
-        false negative cornercase!!!
-
-        If the basename you check is one of Ovirts search refining keywords
-        (i.e., a string you can type in the GUI's main search field to refine a search,
-        such as the string 'name')
-        then match will return NO results, even if there ARE vms by that name!
-        (get_matching_vms(<arg>) generates same results as typing <arg> in Ovirt
-        GUI search field;
-        therefore, if <arg> begins wth one of Ovirt's search refining keywords,
-        the search will NOT return results because it's interpreting that value as a search keyword!)
-    '''
-    matches = get_matching_vms(basename)
-    if matches:
-        matches = [x.name for x in matches]
-        raise ValueError("ERROR: The value you specified as the basename for requested VM(s), {},"
-            " is already in use by Ovirt, for the following VMs:\n\t{}\n"
-            "Please re-run and specify a different basename to --vmbasename option\n".format(basename, matches))
-
     debug_log("Provision {} vms on ovirt node {}\n".format(n, ovirtcluster))
 
     '''
