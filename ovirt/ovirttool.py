@@ -202,16 +202,18 @@ def loggit(string, level=1):
     Returns as list
 '''
 def generate_vm_names(basename, n):
-    vmNames = []
     uniqueBasename = None
     # keep trying random strings on basename until you hit a combo not in ovirt
     # don't check for exact equality when checking if in Ovirt - since will
-    # append -vm0, -vm1, etc. to end of this.  this will return if there's any
+    # append -vm0, -vm1, etc. if multiple VMs.  this will return if there's any
     # vm in ovirt with this as a substring
     while not uniqueBasename or get_matching_vms(uniqueBasename):
         uniqueBasename = "{}-{}".format(basename, generateRandomString(4))
+    if n == 1: # if just one VM, dont append counters
+        return [uniqueBasename]
+    vmNames = []
     for i in range(n):
-        vmNames.append("{}-vm{}".format(uniqueBasename, n))
+        vmNames.append("{}-vm{}".format(uniqueBasename, i))
     return vmNames
 
 '''
