@@ -250,9 +250,11 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
             filepath="`pwd`/usrnode.$now"
             retinapath="`pwd`/retina.$now"
             exportpath="`pwd`/export.$now"
+            pubTablepath="`pwd`/pubTable.$now"
             cp /opt/xcalar/bin/usrnode "$filepath"
             cp -r /var/opt/xcalar/dataflows/ "$retinapath"
             cp -r /var/opt/xcalar/export/ "$exportpath"
+            cp -r /var/opt/xcalar/published/ "$pubTablepath"
             # mark the test as failed
             funcstatsd "$Test" "FAIL" "$gitsha"
             echo "not ok ${ii} - $Test" | tee -a $TAP
