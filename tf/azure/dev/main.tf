@@ -21,9 +21,9 @@ module "network" {
 
   allow_ssh_traffic = true
 
-  tags                = {
+  tags = {
     environment = "dev"
     costcenter  = "it"
-    owner   = "autoeng"
+    owner       = "autoeng"
   }
 }

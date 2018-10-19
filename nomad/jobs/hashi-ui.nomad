@@ -1,13 +1,17 @@
-job "hashi-ui-1" {
-  datacenters = ["xcalar-sjc"]
+job "hashiui" {
   region      = "global"
+  datacenters = ["xcalar-sjc"]
+  type        = "service"
 
-  group "hashi-ui" {
+  group "web" {
+    count = 1
+
     task "hashi-ui" {
       driver = "docker"
 
       config {
-        image = "jippi/hashi-ui"
+        image      = "jippi/hashi-ui"
+        force_pull = true
 
         volumes = [
           "/var/run/docker.sock:/var/run/docker.sock",
@@ -20,11 +24,11 @@ job "hashi-ui-1" {
 
       env {
         CONSUL_ENABLE          = "1"
-        CONSUL_ADDR            = "consul-1.int.xcalar.com:8500"
+        CONSUL_ADDR            = "consul.service.consul:8500"
         CONSUL_HTTP_SSL_VERIFY = "false"
 
         NOMAD_ENABLE = "1"
-        NOMAD_ADDR   = "http://nomad-1.int.xcalar.com:4646"
+        NOMAD_ADDR   = "http://nomad.service.consul:4646"
       }
 
       resources {

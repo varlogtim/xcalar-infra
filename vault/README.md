@@ -235,6 +235,7 @@ The public key should be present on the nodes you want to ssh to:
 
 Create the jenkins role created via
 
+    $ vault write ssh/roles/cloud allow_user_certificates=true default_user=azureuser max_ttl=2h ttl=30m key_type=ca key_bits=2048 allowed_users=ec2-user,azureuser,gceuser
     $ vault write ssh/roles/jenkins allow_user_certificates=true default_user=jenkins max_ttl=2h ttl=30m key_type=ca key_bits=2048 allowed_users=jenkins
 
 Now you can  use vault ssh directly to ssh into one of the instances:

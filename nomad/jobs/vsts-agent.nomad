@@ -2,7 +2,7 @@ job "my-vsts-agents" {
   datacenters = ["xcalar-sjc"]
 
   group "vsts" {
-    count = 2
+    count = 1
 
     constraint {
       distinct_hosts = true
