@@ -4,17 +4,19 @@ set -ex
 
 env
 
-get_meta_data () {
+get_meta_data() {
     local http_code=
-    http_code="$(curl -H "Metadata-Flavor:Google" -sSL "http://169.254.169.254/$1" -w '%{http_code}\n' -o /dev/null)"
+    http_code="$(curl -H "Metadata-Flavor:Google" -f -sL "http://169.254.169.254/$1" -w '%{http_code}\n' -o /dev/null)"
     if [ "$http_code" = 200 ]; then
-        curl -H "Metadata-Flavor:Google" -sSL "http://169.254.169.254/$1" && return 0
+        curl -H "Metadata-Flavor:Google" -f -sL "http://169.254.169.254/$1" && return 0
         return 2
+    elif curl -H 'Metadata:True' -f -sL "http://169.254.169.254/metadata/instance/$1?api-version=2018-02-01&format=text"; then
+        return 0
     fi
     return 1
 }
 
-get_cloud_cfg () {
+get_cloud_cfg() {
     # Check for metadata service
     CLOUD= INSTANCE_ID= INSTANCE_TYPE=
     if INSTANCE_ID="$(get_meta_data latest/meta-data/instance-id)"; then
@@ -24,6 +26,9 @@ get_cloud_cfg () {
         CLOUD=gce
         INSTANCE_TYPE="$(get_meta_data computeMetadata/v1/instance/machine-type)"
         INSTANCE_TYPE="${INSTANCE_TYPE##*/}"
+    elif INSTANCE_ID="$(get_meta_data compute/vmId)"; then
+        CLOUD=azure
+        INSTANCE_TYPE="$(get_meta_data compute/vmSize)"
     else
         CLOUD= INSTANCE_ID= INSTANCE_TYPE=
     fi
@@ -32,7 +37,7 @@ get_cloud_cfg () {
     echo INSTANCE_TYPE=$INSTANCE_TYPE
 }
 
-keep_trying () {
+keep_trying() {
     local -i try=0
     for try in {1..20}; do
         if eval "$@"; then
@@ -40,7 +45,7 @@ keep_trying () {
         fi
         echo "Failed to $* .. sleeping"
         sleep 10
-        try=$(($try + 1))
+        try=$((try + 1))
         if [ $try -gt 20 ]; then
             return 1
         fi
@@ -48,17 +53,22 @@ keep_trying () {
     return 0
 }
 
+curl -fsSL http://repo.xcalar.net/scripts/osid -o /usr/bin/osid
+chmod +x /usr/bin/osid
+OSID=$(osid)
 
 if test -e /etc/system-release; then
-    setenforce Permissive || true
-    if test -f /etc/sysconfig/selinux; then
-        sed -i --follow-symlinks 's/^SELINUX=.*$/SELINUX=permissive/g' /etc/sysconfig/selinux
+    if test -f /etc/selinux/config; then
+        setenforce Permissive || true
+        sed -i 's/^SELINUX=.*$/SELINUX=permissive/g' /etc/selinux/config
     fi
     yum clean all
     rm -rf /var/cache/yum/*
+    keep_trying yum remove -y java-1.7.0-openjdk || true
+    keep_trying yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
     keep_trying yum update -y
     EXTRA="bonnie++ xfsprogs bwm-ng cifs-utils"
-    yum install -y -q sudo lvm2 mdadm btrfs-progs yum-utils fuse || true
+    yum install -y -q --enablerepo='xcalar-*' nfs-utils ephemeral-disk ec2tools sudo lvm2 mdadm btrfs-progs yum-utils fuse || true
 else
     export DEBIAN_FRONTEND=noninteractive
     keep_trying apt-get update -q
@@ -67,25 +77,26 @@ else
     apt-get -yqq autoremove
 fi
 
-eval `get_cloud_cfg`
+get_cloud_cfg > /run/cloud.cfg
+eval $(cat /run/cloud.cfg)
+
 if [ "$CLOUD" = gce ]; then
     if [[ -e /etc/redhat-release ]]; then
         yum localinstall -y http://repo.xcalar.net/deps/gce-scripts-1.3.2-1.noarch.rpm
         yum localinstall -y http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm
     fi
 elif [ "$CLOUD" = aws ]; then
-    curl -sSL http://repo.xcalar.net/deps/ec2-tags-v3 > /usr/local/bin/ec2-tags-v3
-    chmod +x /usr/local/bin/ec2-tags-v3
-    ln -sfn ec2-tags-v3 /usr/local/bin/ec2-tags
+    if ! command ec2-tags; then
+        curl -sSL http://repo.xcalar.net/deps/ec2-tags-v3 > /usr/local/bin/ec2-tags-v3
+        chmod +x /usr/local/bin/ec2-tags-v3
+        ln -sfn ec2-tags-v3 /usr/local/bin/ec2-tags
+    fi
+    ephemeral-disk
 fi
 
-
 getent group sudo || groupadd -f -r sudo
+getent group docker || groupadd -f -r docker
 echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-sudo && chmod 0440 /etc/sudoers.d/99-sudo
-getent group docker || groupadd -f -r --non-unique -g 999 docker
-
-curl -sSL http://repo.xcalar.net/scripts/osid > /usr/bin/osid
-chmod +x /usr/bin/osid
 
 if test -n "$BUILD_CONTEXT"; then
     curl -sSL "$BUILD_CONTEXT" | tar zxvf -

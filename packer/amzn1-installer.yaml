@@ -34,7 +34,7 @@ builders:
       owners:
         - '137112412989'
       most_recent: true
-    instance_type: c5.xlarge
+    instance_type: c5d.xlarge
     iam_instance_profile: ec2-default
     ssh_username: ec2-user
     ssh_pty: true

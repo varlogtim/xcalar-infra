@@ -2,6 +2,18 @@
 
 XCE_CONFDIR="${XCE_CONFDIR:-/etc/xcalar}"
 
+if [ -z "$TMPDIR" ]; then
+    if [ -e /ephemeral/data ]; then
+        export TMPDIR=/ephemeral/data/tmp
+    elif [ -e /mnt/resource ]; then
+        export TMPDIR=/mnt/resource/tmp
+    elif [ -e /mnt ]; then
+        export TMPDIR=/mnt/tmp
+    else
+        export TMPDIR=/tmp/installer
+    fi
+    mkdir -m 1777 -p $TMPDIR
+fi
 
 download_file() {
     if [[ $1 =~ ^s3:// ]]; then
@@ -15,6 +27,16 @@ download_file() {
         echo >&2 "!!! $1 -> $2"
         echo >&2 "!!! rc=$rc"
     fi
+    return $rc
+}
+
+aws_s3_from_url() {
+    local clean_url="$(echo "$1" | sed -e 's/\?.*$//g')"
+    clean_url="${clean_url#https://}"
+    if ! [[ $clean_url =~ ^s3 ]]; then
+        return 1
+    fi
+    echo "s3://${clean_url#*/}"
 }
 
 set +e
@@ -22,10 +44,18 @@ set -x
 if [ -n "$INSTALLER_URL" ]; then
     set +e
     set -x
-    INSTALLER_FILE=/tmp/xcalar-installer.sh
-    download_file "$INSTALLER_URL" $INSTALLER_FILE
-    bash -x "${INSTALLER_FILE}" --nostart
+    INSTALLER_FILE=$TMPDIR/xcalar-installer.sh
+    if INSTALLER_S3=$(aws_s3_from_url "$INSTALLER_URL") && [ -n "$INSTALLER_S3" ]; then
+        if ! aws s3 cp $INSTALLER_S3 $INSTALLER_FILE; then
+            rm -f $INSTALLER_FILE
+        fi
+    fi
+    test -f $INSTALLER_FILE || download_file "$INSTALLER_URL" $INSTALLER_FILE
     rc=$?
+    if [ $rc -eq 0 ]; then
+        bash -x "${INSTALLER_FILE}" --nostart
+        rc=$?
+    fi
     if [ $rc -ne 0 ]; then
         echo >&2 "!!! FAILED TO RUN INSTALLER !!!"
         echo >&2 "!!! $INSTALLER_URL -> $INSTALLER_FILE"
@@ -54,7 +84,7 @@ fi
 set +e
 set -x
 if [ -n "$POSTINSTALL_URL" ]; then
-    POSTINSTALL=/tmp/post.sh
+    POSTINSTALL=$TMPDIR/post.sh
     download_file "${POSTINSTALL_URL}" "${POSTINSTALL}"
     rc=$?
     if [ $rc -ne 0 ]; then
