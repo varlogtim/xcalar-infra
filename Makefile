@@ -5,8 +5,7 @@ SHELL=/bin/bash
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
 
-PYTHON = python2
-PYTHON_VERSION = $(shell $(PYTHON) --version 2>&1 | sed -e 's/^P/p/; s/ /-/')
+# PYTHON_VERSION = $(shell $(PYTHON) --version 2>&1 | sed -e 's/^P/p/; s/ /-/')
 
 VIRTUAL_ENV = $(current_dir)/.venv
 
@@ -37,7 +36,7 @@ $(VIRTUAL_ENV):
 	@mkdir -p $@
 	@deactivate 2>/dev/null || true; virtualenv -q --python=$(PYTHON) --prompt=$(shell basename $(current_dir)) $@
 
-$(VIRTUAL_ENV)/.updated: $(VIRTUAL_ENV)
+$(VIRTUAL_ENV)/.updated: requirements.txt
 	@echo "Updating virtualenv in $(VIRTUAL_ENV) with plugins from $(REQUIRES) ..."
 	$(VIRTUAL_ENV)/bin/pip install -q -r $(REQUIRES)
 	@touch $@

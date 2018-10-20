@@ -34,20 +34,19 @@ case "$DOMAIN" in
     *) echo >&2 "Unrecognized domain: ${DOMAIN}"; exit 1;;
 esac
 
-TMP=$(mktemp -p ${TMPDIR:-/tmp} -t .dns.XXXXXX)
+TMP=$(mktemp -t dns.XXXXXX)
+trap "rm -f $TMP" EXIT
 
-trap "srm -f $TMP" EXIT
-
-if [[ $IMAGE = certbot/dns-goole ]]; then
+if [[ $IMAGE = certbot/dns-google ]]; then
     (
-    eval $(vault kv get -field=data secret/service_accounts/gcp/google-dnsadmin)
+    vault kv get -field=data secret/service_accounts/gcp/google-dnsadmin >> $TMP
     set -x
     docker run -it --rm --name certbot \
                 -v "/etc/letsencrypt:/etc/letsencrypt" \
                 -v "/var/lib/letsencrypt:/var/lib/letsencrypt" \
-                -v "$PWD/gdns.json:/etc/gdns.json:ro" \
+                -v "$(readlink -f $TMP):/etc/gdns.json:ro" \
                 $IMAGE certonly --dns-google-credentials /etc/gdns.json \
-                --server https://acme-v02.api.letsencrypt.org/directory -m ${EMAIL} --agree-tos \
+                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos \
                 -d "*.${DOMAIN}" -d $DOMAIN
     )
 elif [[ $IMAGE = certbot/dns-route53 ]]; then
@@ -59,12 +58,14 @@ elif [[ $IMAGE = certbot/dns-route53 ]]; then
                 -v "/var/lib/letsencrypt:/var/lib/letsencrypt" \
                 -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
                 $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 30 \
-                --server https://acme-v02.api.letsencrypt.org/directory -m ${EMAIL} --agree-tos \
+                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos \
                 -d "*.${DOMAIN}" -d $DOMAIN
     )
 fi
 
 echo >&2 "The key is in /etc/letsencrypt/live/${DOMAIN}/privkey.pem and the certificate is in /etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+
+echo >&2 "Storing key and cert into vault: secret/certs/${DOMAIN}/cert.key and cert.crt"
 
 sudo cat /etc/letsencrypt/live/${DOMAIN}/privkey.pem | vault kv put secret/certs/${DOMAIN}/cert.key data=-
 sudo cat /etc/letsencrypt/live/${DOMAIN}/fullchain.pem | vault kv put secret/certs/${DOMAIN}/cert.crt data=-

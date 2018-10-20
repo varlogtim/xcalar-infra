@@ -258,8 +258,9 @@ aws_get_role_iam () {
 }
 
 aws_s3_region() {
+    local bucket=$(aws_s3_bucket_from_s3url "$1")
     local region
-    if ! region=$(aws s3api get-bucket-location --bucket "$1" --query LocationConstraint --output text); then
+    if ! region=$(aws s3api get-bucket-location --bucket "$bucket" --query LocationConstraint --output text); then
         echo >&2 "ERROR: aws_s3_region: $1: Unable to determine bucket region"
         return 1
     fi
@@ -476,7 +477,7 @@ aws_s3_endpoint() {
 }
 
 
-aws_s3_check() {
+aws_s3_head_object() {
     local bucket_key="${1#s3://}"
     local bucket="${bucket_key/\/*/}"
     local key="${bucket_key#$bucket/}"
@@ -491,3 +492,32 @@ aws_s3_sync_public() {
     aws_s3_sync --acl public-read "$@"
 }
 
+aws_s3_from_url() {
+    local clean_url="$(echo "$1" | sed -e 's/\?.*$//g')"
+    clean_url="${clean_url#https://}"
+    if ! [[ $clean_url =~ ^s3 ]]; then
+        return 1
+    fi
+    echo "s3://${clean_url#*/}"
+}
+
+aws_s3_configure() {
+    aws configure set default.s3.signature_version s3v4
+    aws configure set default.s3.addressing_style path
+}
+
+aws_s3_presign() {
+    aws_s3_configure
+    local bucket_and_key=($(echo "${1#s3://}" | sed 's,/, ,'))
+    local region=$(aws_s3_region ${bucket_and_key[0]})
+    aws s3 --region $region presign "$@"
+}
+
+aws_s3_bucket_from_s3url() {
+    local bucket_and_key="${1#s3://}"
+    echo "${bucket_and_key%%/*}"
+}
+aws_s3_key_from_s3url() {
+    local bucket_and_key="${1#s3://}"
+    echo "${bucket_and_key#*/}"
+}

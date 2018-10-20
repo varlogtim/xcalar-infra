@@ -1,16 +1,18 @@
+---
 variables:
-  ssh_username: ec2-user
   uid: '1000'
   osid: 'amzn1'
-  disk_size: '63'
+  disk_size: '8'
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
   aws_image_version: '2018.03'
   today: '{{isotime "20060102"}}'
   image_build_number: '1'
+  build_id: '{{env `BUILD_ID`}}'
   product: xdp-standard
   product_desc: Xcalar Data Platform
+  installer_url: ''
 builders:
   - type: amazon-ebs
     name: amazon-ebs-amzn1
@@ -23,7 +25,6 @@ builders:
     ami_users:
       - '045297022527'
       - '043829555035'
-      - '151528745488'
     source_ami_filter:
       filters:
         virtualization-type: hvm
@@ -37,15 +38,15 @@ builders:
     iam_instance_profile: ec2-default
     ssh_username: ec2-user
     ssh_pty: true
-    ami_name: '{{user `osid` | upper}}-{{user `aws_image_version`}}-HVM-GP2_{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-v{{user `image_build_number`}}'
+    ami_name: '{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-v{{user `image_build_number`}}-{{user `osid` | upper}}-{{user `aws_image_version`}}'
     ena_support: true
     ebs_optimized: true
-    force_deregister: false
-    force_delete_snapshot: false
+    force_deregister: true
+    force_delete_snapshot: true
     shutdown_behavior: terminate
     snapshot_tags:
-      Name: '{{user `osid` | upper}}-{{user `aws_image_version`}}-HVM-GP2_{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-v{{user `image_build_number`}}'
-      BaseOS: '{{user `osid`}}'
+      Name: '{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-v{{user `image_build_number`}}-{{user `osid` | upper}}-{{user `aws_image_version`}}'
+      BaseOS: '{{user `osid` | upper}}-{{user `aws_image_version`}}'
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'
@@ -53,7 +54,7 @@ builders:
       {{user `build_number`}} ({{user `today`}}-v{{user `image_build_number`}})'
     tags:
       Name: '{{user `desc` }} v{{user `version`}} {{user `build_number`}} {{user `osid` | upper}}'
-      BaseOS: '{{user `osid`}}'
+      BaseOS: '{{user `osid` | upper}}-{{user `aws_image_version`}}'
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'

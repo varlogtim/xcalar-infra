@@ -3,6 +3,9 @@
 # Copies an installer to S3/GCS, then provides a signed
 # URL with $EXPIRY seconds validity.
 
+. infra-sh-lib
+. aws-sh-lib
+
 # Links expire in 1 week by default. That's the max setting.
 EXPIRY=${EXPIRY:-604799}
 
@@ -62,6 +65,7 @@ while [ $# -gt 0 ]; do
         ;;
     --use-sha1)
         USE_SHA1=1
+        shift
         ;;
     -d | --dest)
         DEST="$2"
@@ -96,16 +100,9 @@ if test -f "$INSTALLER"; then
         SHA1="$(sha1sum $INSTALLER | awk '{print $1}')"
     fi
     INSTALLER_FNAME="$(basename $INSTALLER)"
-    if [[ $INSTALLER =~ '/debug/' ]]; then
-        DEST_FNAME="debug/$INSTALLER_FNAME"
-    elif [[ $INSTALLER =~ '/prod/' ]]; then
-        DEST_FNAME="prod/$INSTALLER_FNAME"
-    else
-        DEST_FNAME="$INSTALLER_FNAME"
-    fi
+    SUBDIR=$(basename $(dirname $INSTALLER))
+    DEST_FNAME="${SUBDIR}/$INSTALLER_FNAME"
     test -n "$DEST" || DEST=s3
-    SA_BASE=xcrepo/builds
-    #bin/installer-url.sh -d az /netstore/builds/byJob/BuildTrunk/xcalar-latest-gui-installer-prod.sh
 
     case "$DEST" in
     gs)
@@ -113,7 +110,7 @@ if test -f "$INSTALLER"; then
         SA_ACCOUNT="${SA_ACCOUNT:-repo.xcalar.net}"
         ;;
     s3) SA_URI="s3" ;;
-    az) SA_URI="azb" ;;
+    az) SA_URI="az" ;;
     esac
     SA_ACCOUNT="${SA_ACCOUNT:-xcrepo}"
     SA_PREFIX="${SA_PREFIX:-builds}"
@@ -126,10 +123,13 @@ if test -f "$INSTALLER"; then
 
     case "${DEST_URL}" in
     s3://*)
+        export AWS_DEFAULT_REGION=$(aws_s3_region "$DEST_URL")
         URL="$(aws s3 presign --expires-in $EXPIRY "$DEST_URL")"
         if ! check_url "$URL"; then
             say "Uploading $INSTALLER to $DEST_URL"
             aws s3 cp --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' --only-show-errors "$INSTALLER" "$DEST_URL" >&2
+            # S3 eventual consistency at work
+            sleep 5
         fi
         if [ $? -eq 0 ] && check_url "$URL"; then
             echo "$URL"
@@ -148,8 +148,8 @@ if test -f "$INSTALLER"; then
         fi
         echo https://storage.googleapis.com/"${DEST_URL#gs://}"
         ;;
-    azb://*)
-        DEST_URL="${DEST_URL#azb://}"
+    az://*)
+        DEST_URL="${DEST_URL#az://}"
         ACCOUNT="${DEST_URL%%/*}"
         CONTAINER="${DEST_URL#*/}"
         CONTAINER="${CONTAINER%%/*}"
@@ -182,14 +182,7 @@ elif [[ ${INSTALLER} =~ ^http[s]?:// ]]; then
     echo $INSTALLER
     exit 0
 elif [[ ${INSTALLER} =~ ^s3:// ]]; then
-    BUCKET="${INSTALLER#s3://}"
-    BUCKET="${BUCKET%%/*}"
-    LOCATION=$(aws s3api get-bucket-location --bucket $BUCKET --query LocationConstraint --output text)
-    if [ "$LOCATION" = None ]; then
-        export AWS_DEFAULT_REGION=us-east-1
-    else
-        export AWS_DEFAULT_REGION=$LOCATION
-    fi
+    export AWS_DEFAULT_REGION=$(aws_s3_region "$INSTALLER")
     aws s3 presign --expires-in $EXPIRY "${INSTALLER}"
     exit $?
 fi
