@@ -74,6 +74,8 @@ POWER_ON_TIMEOUT = 120 # seconds to wait before timing out waiting for a vm to p
 IP_ASSIGN_TIMEOUT = 800 # seconds to wait before timing out waiting for IP to be assigned to newly powered on VM
 PUPPET_SETUP_TIMEOUT = 2700 # seconds to wait before timing out puppet setup/puppet agent run
 XCALAR_INSTALL_TIMEOUT = 3000 # seconds to wait before timing out on Xcalar install
+XCALAR_START_TIMEOUT = 600 # seconds to wait before timing out on service xcalar start
+XCALAR_STOP_TIMEOUT = 600 # seconds to wait before timing out on service xcalar stop
 
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
@@ -1480,8 +1482,8 @@ def is_xcalar_running(node):
 '''
 def start_xcalar(node):
 
-    debug_log("Start Xcalar service on node {}\n".format(node))
-    cmds = [['service xcalar start', 600]]
+    info_log("Start Xcalar service on {}\n".format(node))
+    cmds = [['service xcalar start', XCALAR_START_TIMEOUT]]
     run_ssh_cmds(node, cmds)
 
 '''
@@ -1491,8 +1493,8 @@ def start_xcalar(node):
 '''
 def stop_xcalar(node):
 
-    debug_log("Stop Xcalar service on node {}\n".format(node))
-    cmds = [['service xcalar stop', 120]]
+    info_log("Stop Xcalar service on {}\n".format(node))
+    cmds = [['service xcalar stop', XCALAR_STOP_TIMEOUT]]
     run_ssh_cmds(node, cmds)
 
 '''
