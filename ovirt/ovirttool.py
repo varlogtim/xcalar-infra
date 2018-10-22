@@ -202,7 +202,7 @@ def loggit(string, level=1):
     Generate n names for VMs which are not currently used in Ovirt,
     given some basename.  Will add random chars to the name to try to avoid
     re-using old hostnames of deleted VMs which would cause issues in puppet
-    Returns as list
+    Returns uniquebasename, list
 '''
 def generate_vm_names(basename, n):
     uniqueBasename = None
@@ -212,12 +212,14 @@ def generate_vm_names(basename, n):
     # vm in ovirt with this as a substring
     while not uniqueBasename or get_matching_vms(uniqueBasename):
         uniqueBasename = "{}-{}".format(basename, generateRandomString(4))
-    if n == 1: # if just one VM, dont append counters
-        return [uniqueBasename]
     vmNames = []
-    for i in range(n):
-        vmNames.append("{}-vm{}".format(uniqueBasename, i))
-    return vmNames
+    # if just 1, don't put counters on it
+    if n == 1:
+        vmNames = [uniqueBasename]
+    else:
+        for i in range(n):
+            vmNames.append("{}-vm{}".format(uniqueBasename, i))
+    return uniqueBasename, vmNames
 
 '''
     wait until Ovirt is showing a valid ip for a vm.
@@ -318,7 +320,8 @@ def start_vm(vmid):
         return True
     else:
         # can't start service if powering down; will fail
-        info_log("Wait for any previous power downs to complete on {}".format(name))
+        info_log("Check and wait for any current power downs to complete " \
+            "on {}, before starting service".format(name))
         wait_for_service_to_come_down(vmid)
 
         info_log("Start service on {}".format(name))
@@ -1378,8 +1381,7 @@ def provision_vm(name, ram, cores, availableClusters):
     waits for all vms to come up with ips displaying
     Return a list of names of vms created in Ovirt
 
-    :param n: (int) number of VMs to create
-    :param basename: name to base vm names on
+    :param vmnames: names to give to the VMs
     :param ovirtcluster: which cluster in Ovirt to create VMs from
     :param ram: (int) memory (in GB) on each VM
     :param cores: (int) num cores on each VM
@@ -1389,16 +1391,17 @@ def provision_vm(name, ram, cores, availableClusters):
         (this is distinct from name; its id attr of Type:Vm Object)
 
 '''
-def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclusters=True):
+def provision_vms(vmnames, ovirtcluster, ram, cores, user=None, tryotherclusters=True):
 
-    if n == 0:
+    if not vmnames: # no vms to create
         return None
 
     if not ram or not cores:
         raise ValueError("ERROR: No value for ram or cores args to provision_vms\n"
             " (perhaps default values changed for the --ram or --cores options?)\n")
 
-    debug_log("Provision {} vms on ovirt node {}\n".format(n, ovirtcluster))
+    info_log("Provision {} vms on ovirt node {} ({}), " \
+        "in parallel".format(len(vmnames), ovirtcluster, ", ".join(vmnames)))
 
     '''
         get list of cluster we can try to provision the VMs on.
@@ -1426,7 +1429,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
         '''
         debug_log("Check first if enough memory available...")
         fullClusList = availableClusters # if fail want to print out the original list of clusters in err message
-        availableClusters = enough_memory(n, ram, availableClusters)
+        availableClusters = enough_memory(len(vmnames), ram, availableClusters)
         debug_log("Clusters determined we can use: {}".format(str(availableClusters)))
         if not availableClusters:
             errmsg = "\n\nError: There is not enough memory on cluster(s) {}, " \
@@ -1439,7 +1442,6 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
             raise RuntimeError(errmsg)
 
     procs = []
-    vmnames = generate_vm_names(basename, n)
     sleepBetween = 20
     for nextvmname in vmnames:
         debug_log("Fork new process to create a new VM by name {}".format(nextvmname))
@@ -1453,7 +1455,7 @@ def provision_vms(n, basename, ovirtcluster, ram, cores, user=None, tryotherclus
     # TODO: Deal with 'image locked' status because of network issue on node
 
     # wait for the processes
-    process_wait(procs, timeout=4000+sleepBetween*n, valid_exit_codes=[0, 2]) # 0 and 2 both valid exit code for puppet which will get set up
+    process_wait(procs, timeout=4000+sleepBetween*len(vmnames), valid_exit_codes=[0, 2]) # 0 and 2 both valid exit code for puppet which will get set up
 
     # get the list of the unique vm ids
     # a good check to make sure these VMs actually existing by these names now
@@ -1482,7 +1484,7 @@ def is_xcalar_running(node):
 '''
 def start_xcalar(node):
 
-    info_log("Start Xcalar service on {}\n".format(node))
+    info_log("Start Xcalar service on {}".format(node))
     cmds = [['service xcalar start', XCALAR_START_TIMEOUT]]
     run_ssh_cmds(node, cmds)
 
@@ -1493,7 +1495,7 @@ def start_xcalar(node):
 '''
 def stop_xcalar(node):
 
-    info_log("Stop Xcalar service on {}\n".format(node))
+    info_log("Stop Xcalar service on {}".format(node))
     cmds = [['service xcalar stop', XCALAR_STOP_TIMEOUT]]
     run_ssh_cmds(node, cmds)
 
@@ -2691,14 +2693,19 @@ if __name__ == "__main__":
     hostnames = [] # hostnames assigned to the vms generated
     clustername = None
     if args.count:
-        vmids = provision_vms(int(args.count), basename, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        # generate names for the VMs.
+        # generate_vm_names will take the basename you supply it,
+        # and genrate another basename from this with randomness, (to avoid old hostnames being resued)
+        # and base the VM names on that.  get that unique basename too, in case creating cluster
+        uniqueGeneratedBasename, vmnames = generate_vm_names(basename, int(args.count))
+        vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
             # if you supply a value to 'createcluster' arg of initialize_xcalar,
             # then once xcalar install compled on all nodes will form the vms in
             # to a cluster by that name
             if not args.nocluster and int(args.count) > 1:
-                clustername = basename
+                clustername = uniqueGeneratedBasename
             initialize_xcalar(vmids, licfilepath, installer, createcluster=clustername)
 
         # get hostnames to print to stdout
