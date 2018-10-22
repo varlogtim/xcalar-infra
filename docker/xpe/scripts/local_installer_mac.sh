@@ -227,7 +227,7 @@ cmd_create_xdpce() {
     --memory-swappiness=10 -e IN_DOCKER=1 \
     -e XLRDIR=/opt/xcalar -e container=docker \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "$HOME":"$MAINHOSTMNT":ro \
+    -v "$HOME":"$MAINHOSTMNT" \
     -e XCE_CUSTOM_DEFAULT_DATA_TARGET_PATH="$MAINHOSTMNT" \
     -v "$LOCALXCEHOME":"$XCALAR_ROOT" \
     -v "$LOCALLOGDIR":/var/log/xcalar \
