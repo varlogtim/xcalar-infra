@@ -2715,10 +2715,9 @@ if __name__ == "__main__":
         display a useful summary to user of work done
     '''
     # print hostnames of each created vm to stdout for other scripts to consume
-    # (should be only stdout printed by this tool)
     for hostname in hostnames:
-        debug_log(hostname) # level 2 is stdout
-    info_log(summary_string) # level 0 means you'll print this even on the shell script wrapper
+        debug_log(hostname)
+    info_log(summary_string)
 
     # close connection
     close_connection(CONN)
