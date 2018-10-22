@@ -73,6 +73,7 @@ SHUTDOWN_TIMEOUT = 600 # seconds to wait before timing out on vms to shut down
 POWER_ON_TIMEOUT = 120 # seconds to wait before timing out waiting for a vm to power on
 IP_ASSIGN_TIMEOUT = 800 # seconds to wait before timing out waiting for IP to be assigned to newly powered on VM
 PUPPET_SETUP_TIMEOUT = 2700 # seconds to wait before timing out puppet setup/puppet agent run
+XCALAR_INSTALL_TIMEOUT = 3000 # seconds to wait before timing out on Xcalar install
 
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
@@ -1548,7 +1549,7 @@ def setup_xcalar(ip, licfilepath, installer):
         scp_file(ip, filedata[0], filedata[1])
 
     # install using bld requested
-    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=2000)
+    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=XCALAR_INSTALL_TIMEOUT)
 
     # start xcalar
     start_xcalar(ip)
