@@ -15,9 +15,5 @@ if ! docker image inspect ovirttool >/dev/null 2>&1; then
 fi
 cd $XLRINFRADIR
 
-if [ $# -gt 0 ]; then
-    # OVIRT_PASSWORD gets set in shell wrapper, allows tool to be non-interactive
-    docker run -it -e OVIRT_PASSWORD -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool ovirt/ovirttool.py "$@"
-else
-    docker run -it -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool
-fi
+# OVIRT_PASSWORD gets set in shell wrapper, allows tool to be non-interactive
+docker run -it -e OVIRT_PASSWORD -v /netstore:/netstore -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool ovirt/ovirttool.py "$@"
