@@ -1,9 +1,9 @@
-job "hashiui" {
+job "hashi-ui" {
   region      = "global"
   datacenters = ["xcalar-sjc"]
   type        = "service"
 
-  group "web" {
+  group "hashi-ui" {
     count = 1
 
     task "hashi-ui" {
@@ -32,8 +32,8 @@ job "hashiui" {
       }
 
       resources {
-        memory = 256
-        cpu    = 3000
+        memory = 500
+        cpu    = 1000
 
         network {
           port "http" {}
@@ -42,29 +42,3 @@ job "hashiui" {
     }
   }
 }
-
-# resources {
-#   memory = 500
-#   network {
-#     port "ipc" {
-#       static = "8020"
-#     }
-#     port "ui" {
-#       static = "50070"
-#     }
-#   }
-# }
-# service {
-#   name = "hdfs"
-#   port = "ipc"
-# }
-# config {
-#   command = "bash"
-#   args = [ "-c", "hdfs namenode -format && exec hdfs namenode -D fs.defaultFS=hdfs://${NOMAD_ADDR_ipc}/ -D dfs.permissions.enabled=false" ]
-#   network_mode = "host"
-#   port_map {
-#     ipc = 8020
-#     ui = 50070
-#   }
-# }
-
