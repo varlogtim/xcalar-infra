@@ -2,12 +2,15 @@
 
 set -e
 
+# test version: http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/ldapConfig.json
+# sso version: http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/sso_login/ldapConfig.json
+: "${LDAP_CONFIG_URL:?Need to set non-empty LDAP_CONFIG_URL}"
+
 # set up admin account
 echo 'This script will set up admin acct' >&2
 ADMIN_USERNAME=${ADMIN_USERNAME:-xdpadmin}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-Welcome1}
 ADMIN_EMAIL=${ADMIN_EMAIL:-support@xcalar.com}
-LDAP_CONFIG_URL=${LDAP_CONFIG_URL:-"http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/ldapConfig.json"}
 
 XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
 if [ ! -e "$XCE_CONFIG" ]; then

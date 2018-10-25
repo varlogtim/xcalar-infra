@@ -103,6 +103,12 @@ LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46
 # (--user arg will take precedence over username env var if both supplied)
 UNAME_ENV="OVIRT_UNAME"
 PASS_ENV="OVIRT_PASSWORD"
+# URLs for ldapConfig files that can be curld in to xcalar root after an install
+# (can specify key to --ldap, and will use that key's value)
+LDAP_CONFIGS = {
+    'test': "http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/ldapConfig.json",
+    'xcalar': "http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/sso/ldapConfig.json" # using this ldapConfig will allow any Xcalar employee to log in with ldap credentials
+}
 
 OVIRT_TEMPLATE_MAPPING = {
     'ovirt-node-03-cluster': 'el7-template-20180816',
@@ -1558,7 +1564,8 @@ def is_xcalar_running(node):
 '''
 def start_xcalar(node):
 
-    startCmd = 'service xcalar start'
+    # sudo in case running after puppet setup, in which case no root ssh
+    startCmd = 'sudo service xcalar start'
     info_log("Start Xcalar service on {} via {}".format(node, startCmd))
     cmds = [[startCmd, XCALAR_START_TIMEOUT]]
     run_ssh_cmds(node, cmds)
@@ -1567,16 +1574,21 @@ def start_xcalar(node):
     Bring down Xcalar service on node
 
     :paran node: (String) ip of node to stop xcalar service on
+    :param stop_supervisor: if True, will stop expServer, too
 '''
-def stop_xcalar(node):
+def stop_xcalar(node, stop_supervisor=False):
 
-    stopCmd = 'service xcalar stop'
-    info_log("Stop Xcalar service on {} via {}".format(node, stopCmd))
-    cmds = [[stopCmd, XCALAR_STOP_TIMEOUT]]
+    # sudo in case running after puppet setup, in which case no root ssh
+    stop_cmd = 'sudo service xcalar stop'
+    # stop-supervisor will bring down expServer too
+    if stop_supervisor:
+        stop_cmd += '-supervisor'
+    info_log("Stop Xcalar service on {} via {}".format(node, stop_cmd))
+    cmds = [[stop_cmd, XCALAR_STOP_TIMEOUT]]
     run_ssh_cmds(node, cmds)
 
-def restart_xcalar(node):
-    stop_xcalar(node)
+def restart_xcalar(node, restart_expserver=False):
+    stop_xcalar(node, stop_supervisor=restart_expserver)
     start_xcalar(node)
 
 
@@ -1595,12 +1607,14 @@ def start_xcalar_in_parallel(nodes):
     # wait
     process_wait(procs, timeout=XCALAR_START_TIMEOUT+sleepBetween*len(nodes))
 
-def stop_xcalar_in_parallel(nodes):
+def stop_xcalar_in_parallel(nodes, stop_supervisor=False):
     debug_log("Stop Xcalar in parallel on the following nodes: {}".format(", ".join(nodes)))
     procs = []
     sleepBetween = 20
     for node in nodes:
-        proc = multiprocessing.Process(target=stop_xcalar, args=(node,)) # need comma because 1-el tuple
+        proc = multiprocessing.Process(target=stop_xcalar, args=(node,), kwargs={
+            'stop_supervisor': stop_supervisor,
+        })
         procs.append(proc)
         proc.start()
         time.sleep(sleepBetween)
@@ -1608,20 +1622,21 @@ def stop_xcalar_in_parallel(nodes):
     # wait
     process_wait(procs, timeout=XCALAR_STOP_TIMEOUT+sleepBetween*len(nodes))
 
-def restart_xcalar_in_parallel(nodes):
+def restart_xcalar_in_parallel(nodes, restart_expserver=False):
 
     info_log("Restart Xcalar in parallel on the following nodes: {}".format(", ".join(nodes)))
-    stop_xcalar_in_parallel(nodes)
+    stop_xcalar_in_parallel(nodes, stop_supervisor=restart_expserver)
     start_xcalar_in_parallel(nodes)
 
 '''
     Setup admin account and ldap on a node
-    Note - ldap changes won't take effect until Xcalar either started,
-    or restarted, if it's started when this runs.
+    Note - if Xcalar was already running, ldap changes won't take effect until
+    Xcalar is restarted.
 
     :param node: (String) ip of node to setup admin account on
+    :param ldap_config_url: (String) curl'able URL for an an ldapConfig.json file to use
 '''
-def setup_admin_account(node):
+def setup_admin_account(node, ldap_config_url):
 
     info_log("Setup admin account on {}".format(node))
 
@@ -1630,7 +1645,7 @@ def setup_admin_account(node):
     scp_file(node, SCRIPT_DIR + '/../docker/xpe/staticfiles/defaultAdmin.json', '/')
     scp_file(node, SCRIPT_DIR + '/' + ADMIN_HELPER_SH_SCRIPT, TMPDIR_VM)
     # run the helper script
-    run_sh_script(node, TMPDIR_VM + '/' + ADMIN_HELPER_SH_SCRIPT)
+    run_sh_script(node, TMPDIR_VM + '/' + ADMIN_HELPER_SH_SCRIPT, scriptvars=["LDAP_CONFIG_URL=" + ldap_config_url])
 
 '''
     Install xcalar on VM of given id
@@ -1688,13 +1703,15 @@ def install_xcalar(ip, licfilepath, installer, startXcalar=True):
         path to License file on local machine executing this script
     :param installer (String)
         curl'able URL to an RPM installer
+    :param ldap_config_url (String)
+        curl'able URL of an ldapConfig.json file to put in xcalar root post-install
     :param createcluster: (optional, String)
         If supplied, then once xcalar setup on the vms, will form them
         in to a cluster by name of String passed in
         If not supplied will leave nodes as individual VMs
 
 '''
-def setup_xcalar(vmids, licfilepath, installer, createcluster=None):
+def setup_xcalar(vmids, licfilepath, installer, ldap_config_url, createcluster=None):
 
     debug_log("installer: " + str(installer))
     debug_log("Setup xcalar on node set and cluster {}".format(createcluster))
@@ -1731,14 +1748,14 @@ def setup_xcalar(vmids, licfilepath, installer, createcluster=None):
     # which would be cluster specific (not node specific)
 
     '''
-        setup admin account.
+        setup admin account and ldap setup.
         (doing here instead of in initial setup, because for cluster nodes,
         cluster needs to be created before admin account can get setup in shared storage)
     '''
     procs = []
     sleepBetween = 20
     for ip in setupAdminAccountOn:
-        proc = multiprocessing.Process(target=setup_admin_account, args=(ip,)) # need comma because 1-el tuple
+        proc = multiprocessing.Process(target=setup_admin_account, args=(ip, ldap_config_url))
         procs.append(proc)
         proc.start()
         time.sleep(sleepBetween)
@@ -2164,7 +2181,9 @@ def run_system_cmd(cmd):
     :param path:
         (String) filepath (on node) of shell script to run
     :param args:
-        (list) list of Strings as positional args to supply to shell script
+        (list) list of Strings as positional args to supply to shell script after
+    :param scriptvars:
+        (list) list of Strings as vars to supply in front of shell script call
     :redirect:
         if True will redirct shell output on node to OVIRT_SHELL_LOGS_DIR
         (if dir does not exist on node will create it)
@@ -2172,14 +2191,14 @@ def run_system_cmd(cmd):
         if True will run bash with -x option
 
 '''
-def run_sh_script(node, path, args=[], timeout=120, redirect=True, debug=True):
+def run_sh_script(node, path, args=[], scriptvars=[], timeout=120, redirect=True, debug=True):
 
     debug_log("Run shell script {} on node {}...\n".format(path, node))
 
     bashCall = '/bin/bash'
     if debug:
         bashCall += ' -x'
-    shellCmd = bashCall + ' ' + path + ' ' + ' '.join(args)
+    shellCmd = " ".join(scriptvars) + " " + bashCall + ' ' + path + ' ' + ' '.join(args)
     cmds = []
     outputFile = None
     if redirect:
@@ -2316,6 +2335,11 @@ jenkins_summary_grep_stop = "~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~
 def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
 
     notes = []
+    # add note and return a (see note) text with corresponding amount of * so itll match in summary
+    def add_note(note):
+        notes.append(note)
+        return "*"*(len(notes)) + " (see note)"
+
     created_vms_summary = solid_line + "\n" \
         "------------ Your Ovirt VMs are ready!!! ------------\n" \
         "|\n" \
@@ -2342,13 +2366,25 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
         created_vms_summary = created_vms_summary + "|\tHostname: " + vmhostname + "\n" + vm_ssh_creds + "\n"
         if installer:
             accessUrl = get_access_url(vmip)
-            created_vms_summary = created_vms_summary + "|\n|\tAccess URL: " + accessUrl + "\n" \
-                "|\tUsername (login page): " + LOGIN_UNAME + "\n" \
-                "|\tPassword (login page): " + LOGIN_PWORD + "\n"
+            # check if 'xcalar' option for --ldap option.  they'll log in with xcalar ldap.
+            #If not, it still could be xcalar config options if they specified a curom ldapConfig file
+            # so maybe at least print a note indicating
+            login_details = "Login page credentials: "
+            if args.ldap == "xcalar":
+                see_note_text_ldap = add_note("You can also log in with your Xcalar LDAP credentials; use '@xcalar.com' in the username")
+                login_details += see_note_text_ldap
+            #else:
+                #omit the note for now since xcalar ldap will be default, dont want to confuse...
+                #see_note_text = add_note("LOGIN PAGE: If you supplied a xcalar ldapConfig via --ldap, you will use your regular xcalar credentials on login page, with '@xcalar.com' as part of the username")
+            login_details += "\n|\t " + LOGIN_UNAME + " / " + LOGIN_PWORD
+            #login_details = LOGIN_UNAME + " / " + LOGIN_PWORD + " " + see_note_text
+
+            login_data = "|\n|\tXD URL: " + accessUrl + "\n|\t" + login_details + "\n"
+            created_vms_summary += login_data
 
     if installer:
-        created_vms_summary = created_vms_summary + "|\n| License key * (see note): \n|\n" + LICENSE_KEY + "\n"
-        notes.append("LICENSE KEY: This is a dev key and will not work on RC builds")
+        see_note_text = add_note("LICENSE KEY: This is a dev key and will not work on RC builds")
+        created_vms_summary = created_vms_summary + "|\n| License key " + see_note_text + ": \n|\n" + LICENSE_KEY + "\n"
 
     clussumm = ""
     if clustername:
@@ -2378,8 +2414,8 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
     if notes:
         created_vms_summary = created_vms_summary + "|\n" + solid_line + "\n" \
             "|\n|                  Notes              \n"
-        for note in notes:
-            created_vms_summary = created_vms_summary + "|\n| * {}\n".format(note)
+        for counter, note in enumerate(notes):
+            created_vms_summary = created_vms_summary + "|\n| " + "*"*(counter+1) + " {}\n".format(note)
 
     created_vms_summary = created_vms_summary + "|\n" + solid_line
 
@@ -2592,6 +2628,7 @@ def validateparams(args):
     installer = args.installer
     basename = args.vmbasename
     puppet_role = args.puppet_role
+    ldap_config_url = args.ldap
 
     # modification operations
     operations = [args.count, args.delete, args.shutdown, args.poweron]
@@ -2694,6 +2731,18 @@ def validateparams(args):
                     " copy the file in to the dir the tool is being run from\n"
                     "Try this::\n\tcp $XLRDIR/src/data/XcalarLic.key {}\n".format(licfilepath, scriptcwd))
 
+        # get ldap.  they supply one of the keys of LDAP_CONFIGS,
+        # or if they supply with http assume they're giving their own custom one
+        if args.ldap:
+            if args.ldap in LDAP_CONFIGS:
+                ldap_config_url = LDAP_CONFIGS[args.ldap]
+            elif args.ldap.startswith("http"):
+                ldap_config_url = args.ldap
+            else:
+                raise ValueError("\n\nERROR: --ldap not a valid type.  "
+                    "Valid values you can supply to --ldap: {}\n" \
+                    "Or, you can supply a curlable URL to your own file\n".format(", ".join(LDAP_CONFIGS.keys())))
+
     else:
         '''
             if not trying to create vms,
@@ -2702,7 +2751,7 @@ def validateparams(args):
         if not args.delete and not args.shutdown and not args.poweron and not args.list:
             raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
 
-    return int(args.ram), int(args.cores), args.ovirtcluster, puppet_role, licfilepath, installer, basename
+    return int(args.ram), int(args.cores), args.ovirtcluster, puppet_role, licfilepath, installer, ldap_config_url, basename
 
 '''
     validates lists of vms for param validation.
@@ -2807,6 +2856,8 @@ if __name__ == "__main__":
         help="Single VM or comma separated String of VMs you want to shut down (could be, IP, VM name, etc).  This will help free up resources while your VM is not in use.")
     parser.add_argument("--poweron", type=str,
         help="Single VM or comma separated String of VMs to power on")
+    parser.add_argument("--ldap", type=str, default='xcalar', # will get filepath from LDAP_CONFIGS hash
+        help="Type of ldapConfig to use if Xcalar is being installed ({}), or, path to an URL you can curl, to a custom ldapConfig.json file".format(", ".join(LDAP_CONFIGS.keys())))
     parser.add_argument("--user", type=str,
         help="Your LDAP username (no '@xcalar.com')")
     parser.add_argument("-nr", "--norand", action="store_true", default=False,
@@ -2817,7 +2868,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # validate user params
-    ram, cores, ovirtcluster, puppet_role, licfilepath, installer, basename = validateparams(args)
+    ram, cores, ovirtcluster, puppet_role, licfilepath, installer, ldap_config_url, basename = validateparams(args)
     FORCE = args.force
 
     # script setup
@@ -2875,6 +2926,7 @@ if __name__ == "__main__":
     #  spin up number of vms requested
     vmids = [] # unique ovirt ids for vms generated
     hostnames = [] # hostnames assigned to the vms generated
+    ips = [] # ips assigned to generated vms
     clustername = None
     if args.count:
         # generate names for the VMs.
@@ -2891,20 +2943,27 @@ if __name__ == "__main__":
             # to a cluster by that name
             if not args.nocluster and int(args.count) > 1:
                 clustername = uniqueGeneratedBasename
-            setup_xcalar(vmids, licfilepath, installer, createcluster=clustername)
+            setup_xcalar(vmids, licfilepath, installer, ldap_config_url, createcluster=clustername)
 
-        # get hostnames to print to stdout
+        # get hostnames to print to stdout, and ips for restart
         for vmid in vmids:
-            hostnames.append(get_hostname(get_vm_ip(vmid)))
+            nextIp = get_vm_ip(vmid)
+            ips.append(nextIp)
+            hostnames.append(get_hostname(nextIp))
 
     # get summary of work done, while VMs are still ssh'able by ovirttool
     summary_string = get_summary_string(vmids, ram, cores, ovirtcluster, installer=installer, clustername=clustername)
 
     # setup puppet on all the VMs
-    # you can not make any more ssh calls to the VMs after this;
+    # you can not make any more root ssh calls to the VMs after this;
     # ssh'ing is done in this script with a special ovirt pub key
     # puppet will remove it from auth users.
     enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=args.puppet_cluster)
+
+    # TEMPORARY: running puppet results in issue with ldapConfig which was set up.
+    # need to restart xcalar service post-puppet install for ldap to take effect.
+    if not args.noinstaller:
+        restart_xcalar_in_parallel(ips, restart_expserver=True)
 
     '''
         display a useful summary to user of work done
