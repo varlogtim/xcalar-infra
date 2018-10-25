@@ -19,9 +19,9 @@
 # bash Xcalar\ Design -a revert     // forces revert tool to open
 # bash Xcalar\ Design -a xd         // forces xd to open
 #
-# ** Having a file named .launched in script dir can also force a particular GUI.
+# ** Having a file named .launch in script dir can also force a particular GUI.
 #    (this is used by the GUIs to restart app to a particular Window)
-#    The content of .launched will instruct which GUI to open:
+#    The content of .launch will instruct which GUI to open:
 #
 # install              // forces installer to open
 # uninstall            // forces uninstaller to open
