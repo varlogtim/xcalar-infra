@@ -82,7 +82,7 @@ class TestEnvironment(object):
         params = {'dbname':self.db, 'dbtype':'PG',
                 'host':self.dbHost, 'port':self.dbPort,
                 'psw_arguments':self.dbPass, 'psw_provider': 'plaintext',
-                'uid': self.dbUser}
+                'uid': self.dbUser, 'auth_mode': 'None'}
         importTargetName = "pgDb_{}_import".format(self.db)
         dbExportTarget = "pgDb_{}_export".format(self.db)
         self.importTarget.add('dsn', importTargetName, params)
