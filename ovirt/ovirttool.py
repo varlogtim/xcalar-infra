@@ -1385,13 +1385,12 @@ def provision_vm(name, ram, cores, availableClusters):
     :param ovirtcluster: which cluster in Ovirt to create VMs from
     :param ram: (int) memory (in GB) on each VM
     :param cores: (int) num cores on each VM
-    :param user: (optional String) name of user.  if given will include in the new VM names
 
     :returns: list of unique vm ids for each VM created
         (this is distinct from name; its id attr of Type:Vm Object)
 
 '''
-def provision_vms(vmnames, ovirtcluster, ram, cores, user=None, tryotherclusters=True):
+def provision_vms(vmnames, ovirtcluster, ram, cores, tryotherclusters=True):
 
     if not vmnames: # no vms to create
         return None
@@ -2698,7 +2697,7 @@ if __name__ == "__main__":
         # and genrate another basename from this with randomness, (to avoid old hostnames being resued)
         # and base the VM names on that.  get that unique basename too, in case creating cluster
         uniqueGeneratedBasename, vmnames = generate_vm_names(basename, int(args.count))
-        vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, user=args.user, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
             # if you supply a value to 'createcluster' arg of initialize_xcalar,
