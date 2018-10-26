@@ -607,6 +607,16 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, pupp
     # once puppet is set up, will not be able to ssh with ovirt key any longer
     run_ssh_cmd(ip, '/opt/puppetlabs/bin/puppet agent -t -v', timeout=puppet_timeout, valid_exit_codes=[0, 2])
 
+    # some follow up commands, to make sure netstore accessible
+    # been going down after puppet agent.  maybe temp issue?
+    follow_up_cmds = [
+        ['systemctl restart autofs'],
+        ['ls /netstore/']
+    ]
+    info_log("Run follow up cmds ({}) to ensure netstore " \
+        "mounted".format(", ".join(item[0] for item in follow_up_cmds)))
+    run_ssh_cmds(ip, follow_up_cmds)
+
 '''
     setup puppet on all nodes in parallel
 '''
