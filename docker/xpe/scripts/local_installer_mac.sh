@@ -134,7 +134,7 @@ cmd_load_packed_images() {
     # else fail early
     if [ ! -z "$INSTALL_GRAFANA" ]; then
         if [ -e "$GRAFANA_TARBALL" ]; then
-            gzip -dc "$GRAFANA_TARBALL" | docker load -q
+            gzip -dc "$GRAFANA_TARBALL" | docker load
         else
             echo "This build marked for Grafana install, but no Grafana image tar was included!" >&2
             exit 1
@@ -158,7 +158,7 @@ cmd_load_packed_images() {
     # (won't happen if re-installing same app, because images its loading have same id as ones currently loaded so won't actually load anything, and
     # won't happen with non-official release tag because 3rd tags would be unique between the two apps - Jenkins bld number)
 
-    gzip -dc "$XDPCE_TARBALL" | docker load -q
+    gzip -dc "$XDPCE_TARBALL" | docker load
 
     # dev check: ensure there is xpdce:lastInstall, and it is now the img id
     # associated with this installer, in case tag names change on build side
