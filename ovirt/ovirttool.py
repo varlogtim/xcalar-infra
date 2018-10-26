@@ -1483,8 +1483,9 @@ def is_xcalar_running(node):
 '''
 def start_xcalar(node):
 
-    info_log("Start Xcalar service on {}".format(node))
-    cmds = [['service xcalar start', XCALAR_START_TIMEOUT]]
+    startCmd = 'service xcalar start'
+    info_log("Start Xcalar service on {} via {}".format(node, startCmd))
+    cmds = [[startCmd, XCALAR_START_TIMEOUT]]
     run_ssh_cmds(node, cmds)
 
 '''
@@ -1494,12 +1495,54 @@ def start_xcalar(node):
 '''
 def stop_xcalar(node):
 
-    info_log("Stop Xcalar service on {}".format(node))
-    cmds = [['service xcalar stop', XCALAR_STOP_TIMEOUT]]
+    stopCmd = 'service xcalar stop'
+    info_log("Stop Xcalar service on {} via {}".format(node, stopCmd))
+    cmds = [[stopCmd, XCALAR_STOP_TIMEOUT]]
     run_ssh_cmds(node, cmds)
 
+def restart_xcalar(node):
+    stop_xcalar(node)
+    start_xcalar(node)
+
+
+''' parallel versions '''
+
+def start_xcalar_in_parallel(nodes):
+    debug_log("Start Xcalar in parallel on the following nodes: {}".format(", ".join(nodes)))
+    procs = []
+    sleepBetween = 20
+    for node in nodes:
+        proc = multiprocessing.Process(target=start_xcalar, args=(node,)) # need comma because 1-el tuple
+        procs.append(proc)
+        proc.start()
+        time.sleep(sleepBetween)
+
+    # wait
+    process_wait(procs, timeout=XCALAR_START_TIMEOUT+sleepBetween*len(nodes))
+
+def stop_xcalar_in_parallel(nodes):
+    debug_log("Stop Xcalar in parallel on the following nodes: {}".format(", ".join(nodes)))
+    procs = []
+    sleepBetween = 20
+    for node in nodes:
+        proc = multiprocessing.Process(target=stop_xcalar, args=(node,)) # need comma because 1-el tuple
+        procs.append(proc)
+        proc.start()
+        time.sleep(sleepBetween)
+
+    # wait
+    process_wait(procs, timeout=XCALAR_STOP_TIMEOUT+sleepBetween*len(nodes))
+
+def restart_xcalar_in_parallel(nodes):
+
+    info_log("Restart Xcalar in parallel on the following nodes: {}".format(", ".join(nodes)))
+    stop_xcalar_in_parallel(nodes)
+    start_xcalar_in_parallel(nodes)
+
 '''
-    Bring up xcalar service on a node and setup admin account
+    Setup admin account and ldap on a node
+    Note - ldap changes won't take effect until Xcalar either started,
+    or restarted, if it's started when this runs.
 
     :param node: (String) ip of node to setup admin account on
 '''
@@ -1525,9 +1568,11 @@ def setup_admin_account(node):
         path on local machine runnign this script, of Xcalar license file
     :param installer: (String)
         URL for an RPM installer on netstore (valid URL user should be able to curl)
+    :param startXcalar (boolean)
+        start Xcalar after the install
 
 '''
-def setup_xcalar(ip, licfilepath, installer):
+def setup_xcalar(ip, licfilepath, installer, startXcalar=True):
 
     vmname = get_vm_name(get_vm_id("ip=" + ip))
 
@@ -1554,8 +1599,9 @@ def setup_xcalar(ip, licfilepath, installer):
     # install using bld requested
     run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=XCALAR_INSTALL_TIMEOUT)
 
-    # start xcalar
-    start_xcalar(ip)
+    if startXcalar:
+        # start xcalar
+        start_xcalar(ip)
 
 '''
     Install and setup Xcalar on a set of nodes.
@@ -1581,6 +1627,8 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
     procs = []
     ips = []
 
+    setupAdminAccountOn = [] # set on all nodes, unless cluster use just one (they'll have shared storage)
+
     sleepBetween = 15
     for vmid in vmids:
         # get ip
@@ -1588,7 +1636,8 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
         name = get_vm_name(vmid)
         ips.append(ip)
         debug_log("Start new process to setup xcalar on {}, {}".format(name, ip))
-        proc = multiprocessing.Process(target=setup_xcalar, args=(ip, licfilepath, installer))
+        # bring up Xcalar only after cluster create and/or admin/ldap setup
+        proc = multiprocessing.Process(target=setup_xcalar, args=(ip, licfilepath, installer), kwargs={'startXcalar': False})
         # failing if i dont sleep in between.  think it might just be on when using the SDK, similar operations on the vms service
         procs.append(proc)
         proc.start()
@@ -1597,18 +1646,23 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
     # wait
     process_wait(procs, timeout=1500+sleepBetween*len(vmids))
 
-    # form the nodes in to a cluster if requested
+    # form the nodes in to a cluster if requested (will need to start Xcalar on nodes to take effect)
+    setupAdminAccountOn = ips
     if createcluster and len(ips) > 1:
         create_cluster(ips, createcluster)
+        setupAdminAccountOn = [ips[0]] # only need set it up on one
+
+    # tasks to be done post-install and post-cluster (if cluster),
+	# which would be cluster specific (not node specific)
 
     '''
-        power up all the nodes in parallel and set up admin account
-        doing here instead of in initial setup, because for cluster nodes,
-        cluster needs to be created before admin account can get setup in shared storage
+        setup admin account.
+        (doing here instead of in initial setup, because for cluster nodes,
+        cluster needs to be created before admin account can get setup in shared storage)
     '''
     procs = []
     sleepBetween = 20
-    for ip in ips:
+    for ip in setupAdminAccountOn:
         proc = multiprocessing.Process(target=setup_admin_account, args=(ip,)) # need comma because 1-el tuple
         procs.append(proc)
         proc.start()
@@ -1616,6 +1670,11 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
 
     # wait for all the processes to complete successfully
     process_wait(procs, timeout=600+sleepBetween*len(ips))
+
+    # start Xcalar in parallel on all the nodes
+    # (if creating cluster bring up as cluster nodes now)
+    # also, so ldap configurations will take effect after setup_admin_account
+    restart_xcalar_in_parallel(ips)
 
 '''
         FOR CLUSTER SETUP
@@ -1633,6 +1692,8 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
 
     @TODO: 'start' boolean param that controls if you start xcalar after cluster configured
         to pass in to child proc
+
+    NOTE: Won't take effect until Xcalar is restarted
 '''
 def create_cluster(nodeips, clustername):
 
