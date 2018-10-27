@@ -1572,7 +1572,7 @@ def setup_admin_account(node):
         start Xcalar after the install
 
 '''
-def setup_xcalar(ip, licfilepath, installer, startXcalar=True):
+def install_xcalar(ip, licfilepath, installer, startXcalar=True):
 
     vmname = get_vm_name(get_vm_id("ip=" + ip))
 
@@ -1619,7 +1619,7 @@ def setup_xcalar(ip, licfilepath, installer, startXcalar=True):
         If not supplied will leave nodes as individual VMs
 
 '''
-def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
+def setup_xcalar(vmids, licfilepath, installer, createcluster=None):
 
     debug_log("installer: " + str(installer))
     debug_log("Setup xcalar on node set and cluster {}".format(createcluster))
@@ -1637,7 +1637,7 @@ def initialize_xcalar(vmids, licfilepath, installer, createcluster=None):
         ips.append(ip)
         debug_log("Start new process to setup xcalar on {}, {}".format(name, ip))
         # bring up Xcalar only after cluster create and/or admin/ldap setup
-        proc = multiprocessing.Process(target=setup_xcalar, args=(ip, licfilepath, installer), kwargs={'startXcalar': False})
+        proc = multiprocessing.Process(target=install_xcalar, args=(ip, licfilepath, installer), kwargs={'startXcalar': False})
         # failing if i dont sleep in between.  think it might just be on when using the SDK, similar operations on the vms service
         procs.append(proc)
         proc.start()
@@ -2761,12 +2761,12 @@ if __name__ == "__main__":
         vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
-            # if you supply a value to 'createcluster' arg of initialize_xcalar,
+            # if you supply a value to 'createcluster' arg of setup_xcalar,
             # then once xcalar install compled on all nodes will form the vms in
             # to a cluster by that name
             if not args.nocluster and int(args.count) > 1:
                 clustername = uniqueGeneratedBasename
-            initialize_xcalar(vmids, licfilepath, installer, createcluster=clustername)
+            setup_xcalar(vmids, licfilepath, installer, createcluster=clustername)
 
         # get hostnames to print to stdout
         for vmid in vmids:
