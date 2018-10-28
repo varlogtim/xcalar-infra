@@ -123,7 +123,10 @@ sleep 60
 find /var/opt/xcalar -mindepth 1 -name support -prune -o -exec rm -rf {} +
 set -e
 
-sudo -E yum -y remove xcalar
+sudo -E yum -y remove xcalar || true
+
+# Prevent installer picking up newer bits than what is included
+sudo -E yum-config-manager --disable xcalar,xcalar-deps,xcalar-deps-common || true
 
 sudo -E $INSTALLER_PATH --noStart
 
