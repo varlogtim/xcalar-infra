@@ -610,7 +610,7 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, pupp
     # some follow up commands, to make sure netstore accessible
     # been going down after puppet agent.  maybe temp issue?
     follow_up_cmds = [
-        ['systemctl restart autofs'],
+        ['sudo systemctl restart autofs'], # won't be able to ssh as root after puppet runs
         ['ls /netstore/']
     ]
     info_log("Run follow up cmds ({}) to ensure netstore " \
