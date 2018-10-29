@@ -1653,7 +1653,7 @@ def setup_xcalar(vmids, licfilepath, installer, createcluster=None):
         setupAdminAccountOn = [ips[0]] # only need set it up on one
 
     # tasks to be done post-install and post-cluster (if cluster),
-	# which would be cluster specific (not node specific)
+    # which would be cluster specific (not node specific)
 
     '''
         setup admin account.
@@ -2536,8 +2536,10 @@ def validateparams(args):
         if args.ovirtcluster:
             # make sure they supplied a valid cluster with a template
             if args.ovirtcluster not in OVIRT_TEMPLATE_MAPPING:
-                raise ValueError("\n\nERROR: --ovirtcluster={}.  No template found for {}.\n"
-                    "Valid clusters that can be selected: {}\n".format(args.ovirtcluster, args.ovirtcluster, ", ".join(OVIRT_TEMPLATE_MAPPING.keys())))
+                raise ValueError("\n\nERROR: --ovirtcluster must be one of " \
+                    "the following: {}\n" \
+                    "(If '{}' is a valid cluster in Ovirt, probably there is no " \
+                    "supported template for it yet in this tool)\n".format(", ".join(OVIRT_TEMPLATE_MAPPING.keys()), args.ovirtcluster))
 
         if args.noinstaller:
             if args.installer:
