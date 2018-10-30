@@ -112,16 +112,18 @@ setup_nwjs() {
 setup_nwjs_binary() {
     # setup nwjs binary
     cd "$BIN"
-    curl http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip -O
-    unzip -aq nwjs-sdk-v0.29.3-osx-x64.zip
-    rm nwjs-sdk-v0.29.3-osx-x64.zip
+    nwjs_zip="nwjs-sdk-v0.29.3-osx-x64.zip"
+    curl http://repo.xcalar.net/deps/"$nwjs_zip" -O
+    unzip -aq "$nwjs_zip"
+    rm "$nwjs_zip"
+    local nwjs_dir="${nwjs_zip%.*}" # name of the unzipped dir
     # must change app metadata to get customized nwjs menus to display app name
     # http://docs.nwjs.io/en/latest/For%20Users/Advanced/Customize%20Menubar/ <- see MacOS section
-    find nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar Design"/g'
+    find "$nwjs_dir"/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar Design"/g'
     # replace nwjs default icon with app icon (hack for now, not getting icon attr to work)
     # nwjs icon will dispaly on refresh/quit prompts, even when running Xcalar Design app
-    cp "$APPICON_PATH" nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/app.icns
-    cp "$APPICON_PATH" nwjs-sdk-v0.29.3-osx-x64/nwjs.app/Contents/Resources/document.icns
+    cp "$APPICON_PATH" "$nwjs_dir"/nwjs.app/Contents/Resources/app.icns
+    cp "$APPICON_PATH" "$nwjs_dir"/nwjs.app/Contents/Resources/document.icns
 }
 
 # nwjs binary runs by pointing at a local directory on host; should have a manifest file.
