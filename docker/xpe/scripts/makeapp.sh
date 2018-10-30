@@ -104,21 +104,23 @@ setup_installer_assets() {
     cp "$INSTALLERTARBALL" "$INSTALLER" # the docker images and other files needed by local_installer_mac.sh
 }
 
-# arg: name of nwjs zip file on repo.xcalar.net/deps to curl and include in app
+# arg: URL to curl nwjs build from to include in app
 setup_nwjs() {
     setup_nwjs_binary "$1" # the actual nwjs binary, to package in app
     setup_nwjs_root # build root directory for app to point the binary at
 }
 
-# arg: name of nwjs zip file on repo.xcalar.net/deps/ to curl and include in app
+# arg: URL to curl nwjs build from to include in app
 setup_nwjs_binary() {
     # setup nwjs binary
-    local nwjs_zip="$1"
+    local nwjs_url="$1"
+    local nwjs_zip=$(basename "$nwjs_url")
+    local nwjs_dir=$(basename "$nwjs_url" .zip) # name of the unzipped dir
+
     cd "$BIN"
-    curl http://repo.xcalar.net/deps/"$nwjs_zip" -O
+    curl "$nwjs_url" -O
     unzip -aq "$nwjs_zip"
     rm "$nwjs_zip"
-    local nwjs_dir="${nwjs_zip%.*}" # name of the unzipped dir
     # must change app metadata to get customized nwjs menus to display app name
     # http://docs.nwjs.io/en/latest/For%20Users/Advanced/Customize%20Menubar/ <- see MacOS section
     find "$nwjs_dir"/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar Design"/g'
@@ -184,7 +186,7 @@ setup_nwjs_root() {
 }
 
 setup_bin() {
-    setup_nwjs "nwjs-sdk-v0.29.3-osx-x64.zip" # zipfile on repo.xcalar.net/deps to setup
+    setup_nwjs "http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip" # nwjs build to curl and include
     # nodejs in to Bin directory
     # make sure you are curling directly in to bin dir
     cd "$BIN" # setup_nwjs will change dir
