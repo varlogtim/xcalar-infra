@@ -48,6 +48,13 @@ DATA="$RESOURCES/Data"
 INSTALLER="$RESOURCES/Installer"
 DMGBIN="$BIN"
 
+# nwjs to curl and include
+# IF YOU CHANGE THIS - make sure you update app executable, <infra>/docker/xpe/scripts/Xcalar\ Design
+NWJS_URL="http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip"
+# nodejs to curl and include
+# IF YOU CHANGE THIS - make sure you update app executable, <infra>/docker/xpe/scripts/Xcalar\ Design
+NODE_URL="http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz"
+
 # icon to use for the app (must be a .icns file; see general MacOS app icon guidelines)
 APPICON_PATH="$GUIBUILD/assets/images/appIcons/AppIcon.icns"
 
@@ -186,11 +193,11 @@ setup_nwjs_root() {
 }
 
 setup_bin() {
-    setup_nwjs "http://repo.xcalar.net/deps/nwjs-sdk-v0.29.3-osx-x64.zip" # nwjs build to curl and include
+    setup_nwjs "$NWJS_URL" # nwjs build to curl and include
     # nodejs in to Bin directory
     # make sure you are curling directly in to bin dir
     cd "$BIN" # setup_nwjs will change dir
-    curl http://repo.xcalar.net/deps/node-v8.11.1-darwin-x64.tar.gz | tar zxf -
+    curl "$NODE_URL" | tar zxf -
 }
 
 # hidden files in the MacOS dir are used on the host at install time, to determine
