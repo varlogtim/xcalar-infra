@@ -104,15 +104,17 @@ setup_installer_assets() {
     cp "$INSTALLERTARBALL" "$INSTALLER" # the docker images and other files needed by local_installer_mac.sh
 }
 
+# arg: name of nwjs zip file on repo.xcalar.net/deps to curl and include in app
 setup_nwjs() {
-    setup_nwjs_binary # the actual nwjs binary, to package in app
+    setup_nwjs_binary "$1" # the actual nwjs binary, to package in app
     setup_nwjs_root # build root directory for app to point the binary at
 }
 
+# arg: name of nwjs zip file on repo.xcalar.net/deps/ to curl and include in app
 setup_nwjs_binary() {
     # setup nwjs binary
+    local nwjs_zip="$1"
     cd "$BIN"
-    nwjs_zip="nwjs-sdk-v0.29.3-osx-x64.zip"
     curl http://repo.xcalar.net/deps/"$nwjs_zip" -O
     unzip -aq "$nwjs_zip"
     rm "$nwjs_zip"
@@ -182,7 +184,7 @@ setup_nwjs_root() {
 }
 
 setup_bin() {
-    setup_nwjs
+    setup_nwjs "nwjs-sdk-v0.29.3-osx-x64.zip" # zipfile on repo.xcalar.net/deps to setup
     # nodejs in to Bin directory
     # make sure you are curling directly in to bin dir
     cd "$BIN" # setup_nwjs will change dir
