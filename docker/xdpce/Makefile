@@ -7,7 +7,9 @@ TARFILE_NAME ?= xdpce.tar.gz
 TZ ?= America/Los_Angeles
 INSTALLER_PATH ?= /netstore/qa/Downloads/ReleaseCandidates/xcalar-1.2.3-RC4/20171024-3c9a47f4/prod/xcalar-1.2.3-1296-installer
 DEFAULT_CFG_PATH ?= default.cfg
-CONFIG_DIR = /var/opt/xcalar/config
+CONFIG_DIR ?= /var/opt/xcalar/config
+CLIENT_SECRET_DIR ?= /opt/xcalar/src/bin/sdk/xdp/xcalar/external
+XPE_STATIC_FILES = $(XLRINFRADIR)/docker/xpe/staticfiles
 
 # temporary for XPE;
 # the gui required in the Docker needs to be built with --product=xdee option
@@ -72,10 +74,14 @@ install: run
 	# patch the requirejs that Jupyter relies on, to export require even if it exists
 	# (which it will, when we are running XD in nwjs)
 	docker cp $(CONTAINER_NAME):/opt/xcalar/lib/python3.6/site-packages/notebook/static/components/requirejs/require.js .
-	cp $(XLRINFRADIR)/docker/xpe/staticfiles/require.js.patch .
+	cp $(XPE_STATIC_FILES)/require.js.patch .
 	patch < require.js.patch
 	docker cp require.js $(CONTAINER_NAME):/opt/xcalar/lib/python3.6/site-packages/notebook/static/components/requirejs/require.js
 	rm require.js require.js.patch
+	# client_secret.json with default admin creds will allow old Jupyter notebooks
+	# to work in app without tokens.
+	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) bash -c "mkdir -p $(CLIENT_SECRET_DIR)"
+	docker cp $(XPE_STATIC_FILES)/client_secret.json $(CONTAINER_NAME):$(CLIENT_SECRET_DIR)/client_secret.json
     endif
 
     ifneq ($(CUSTOM_GUI),)
@@ -95,7 +101,7 @@ install-license: strip-binaries
 createuser: install-license
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) mkdir -p $(CONFIG_DIR)
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 0700 $(CONFIG_DIR)
-	docker cp $(XLRINFRADIR)/docker/xpe/staticfiles/defaultAdmin.json $(CONTAINER_NAME):$(CONFIG_DIR)/defaultAdmin.json
+	docker cp $(XPE_STATIC_FILES)/defaultAdmin.json $(CONTAINER_NAME):$(CONFIG_DIR)/defaultAdmin.json
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 600 $(CONFIG_DIR)/defaultAdmin.json
 
 stop-xcalar:
