@@ -85,7 +85,7 @@ LOGIN_PWORD = "admin"
 LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
 
 OVIRT_TEMPLATE_MAPPING = {
-    'ovirt-node-1-cluster': 'el7-template-20180816',
+    'ovirt-node-03-cluster': 'el7-template-20180816',
     'einstein-cluster2': 'ovirt-tool-einstein-updated',
     'node2-cluster': 'ovirt-cli-tool-node2-template',
     'node3-cluster': 'ovirt-cli-tool-node3-template'
