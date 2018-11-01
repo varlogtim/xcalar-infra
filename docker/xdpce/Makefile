@@ -27,6 +27,7 @@ DOCKER_EXTRA_ARGS ?=
 EXEC_INPUT := $(shell test -t 0 && echo "-i")
 EXEC_TERMINAL ?= -t
 EXEC_ARGS := $(EXEC_TERMINAL) $(EXEC_INPUT)
+XCALARCTL = docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl
 
 CONTAINER_ARGS_COMMON = --cap-add=ALL --cap-drop=MKNOD \
                  --security-opt seccomp:unconfined \
@@ -98,15 +99,15 @@ createuser: install-license
 	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 600 $(CONFIG_DIR)/defaultAdmin.json
 
 stop-xcalar:
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl stop-supervisor
+	$(XCALARCTL) stop-supervisor
 
 start-xcalar:
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl start
+	$(XCALARCTL) start
 
 restart: stop-xcalar start-xcalar
 
 status:
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl status
+	$(XCALARCTL) status
 
 commit:
 	docker commit $(CONTAINER_NAME) $(CONTAINER_NAME)
@@ -148,4 +149,4 @@ docker-image: run install strip-binaries install-license replace-hostname enforc
 run-xcalar: run install strip-binaries install-license replace-hostname createuser restart
 
 run_xdpce:
-	docker run -v /Volumes:/mnt/Volumes -v /Users:/mnt/Users -d -t --user xcalar $(RUN_ARGS) bash && docker exec -it --user xcalar xdpce /opt/xcalar/bin/xcalarctl start
+	docker run -v /Volumes:/mnt/Volumes -v /Users:/mnt/Users -d -t --user xcalar $(RUN_ARGS) bash && $(XCALARCTL) start
