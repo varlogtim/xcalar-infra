@@ -106,6 +106,11 @@ az_rg_vms_do()  {
         error "Must specify at least one resource group"
         return 1
     fi
+    if [ "$action" == "stop" ]; then
+        error "Please don't ever stop instances!! We will still be charged! Use 'deallocate'"
+        return 1
+    fi
+
     shift 2
     ids+=($(az_rg_vms $rg))
     if [ "${#ids[@]}" -eq 0 ]; then
@@ -145,6 +150,10 @@ az_rg_vms_stop_start_all()  {
 
 az_rg_pip()  {
     az resource list -g "$1" --namespace Microsoft.Network --resource-type publicIPAddresses -ojson --query '[].id' -otsv
+}
+
+az_rg_stop()  {
+    az_rg_vms_do deallocate "$@"
 }
 
 az_rg_deallocate()  {
@@ -498,4 +507,15 @@ az_rg_scheduled_shutdown() {
     local vm0="${vms[0]}"
     vm0="${vm0##*/}"
     az group deployment create -n scheduledShutdown-$(date +%Y%m%d%H%M%S) -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json --parameters vmName="${vm0%[0-9]*}" time=${time} timeZoneId='Pacific Standard Time' scaleNumber=$count -ojson --no-wait
+}
+
+az_disk_info () {
+    az disk  list -ojson |  jq -r '[.[]|{id:.id, sku:.sku.name,size:.diskSizeGb}]'
+}
+
+az_disk_update () {
+    local size_gb=$1 disks=''
+    disks=($(az disk list -otsv | grep "$2" | awk '{print $5}'))
+
+    az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids ${disks[@]}
 }

@@ -40,8 +40,8 @@ aws_latest_official_image() {
 
 aws_list_images () { aws ec2 describe-images --output=json --owners "${1:-self}" --filters "Name=name,Values=${2:-*}" "${AWS_AMI_FILTERS[@]}"; }
 aws_list_self_images () { aws_list_images self '*' | aws_format_images; }
-aws_list_rhel6_images () { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-6.?_HVM_GA*' | aws_format_images; }
-aws_list_rhel7_images () { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-7.?_HVM_GA*' | aws_format_images; }
+aws_list_rhel6_images () { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-6.?_HVM_*' | aws_format_images; }
+aws_list_rhel7_images () { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-7.?_HVM_*' | aws_format_images; }
 aws_list_centos6_images () { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 6 x86_64 HVM*' | aws_format_images; }
 aws_list_centos7_images () { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 7 x86_64 HVM*' | aws_format_images; }
 aws_list_el6_images () { aws_list_images self 'EL-6.*' | aws_format_images; }
