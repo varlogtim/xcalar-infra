@@ -78,6 +78,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
                 echo "Checking out $prevSha as the last commit with the matching signature"
                 git checkout HEAD src/include/libapis/LibApisCommon.h
                 git checkout "$prevSha"
+                git submodule update --init --recursive xcalar-idl
                 foundVersion="true"
                 break
             else
