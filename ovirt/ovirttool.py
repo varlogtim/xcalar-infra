@@ -62,7 +62,7 @@ MAX_VMS_ALLOWED=1024
 
 DEFAULT_SSH_USER='root' # what tool will be ssh'ing as.
 
-DEFAULT_OVIRT_CLUSTER="ovirt-node-1-cluster"
+DEFAULT_OVIRT_CLUSTER="ovirt-node-03-cluster"
 #DEFAULT_PUPPET_CLUSTER="ovirt"
 DEFAULT_PUPPET_ROLE="jenkins_slave"
 DEFAULT_CORES=4
