@@ -514,8 +514,8 @@ az_disk_info () {
 }
 
 az_disk_update () {
-    local size_gb=$1 disks=''
-    disks=($(az disk list -otsv | grep "$2" | awk '{print $5}'))
+    local cluster="$1" size_gb="${2:-127}" storage_sku="${3:-StandardSSD_LRS}" disks=''
+    disks=($(az disk list -otsv | grep "$cluster" | awk '{print $5}'))
 
     az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids ${disks[@]}
 }
