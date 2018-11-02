@@ -114,7 +114,7 @@ commit:
 
 save:
     ifneq ($(XPE),)
-	XCALAR_IMAGE_NAME=$(CONTAINER_NAME) bash -x ../xpe/scripts/tagxpe.sh create_xpe_tar $(CONTAINER_IMAGE):latest $(TARFILE_NAME)
+	XCALAR_IMAGE_NAME=$(CONTAINER_IMAGE) bash -x ../xpe/scripts/tagxpe.sh create_xpe_tar $(CONTAINER_IMAGE):latest $(TARFILE_NAME)
     else
 	docker save $(CONTAINER_IMAGE):latest | gzip > $(TARFILE_NAME)
     endif
