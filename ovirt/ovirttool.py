@@ -211,7 +211,9 @@ def generate_vm_names(basename, n):
     # append -vm0, -vm1, etc. if multiple VMs.  this will return if there's any
     # vm in ovirt with this as a substring
     while not uniqueBasename or get_matching_vms(uniqueBasename):
-        uniqueBasename = "{}-{}".format(basename, generateRandomString(4))
+        generatedName = "{}-{}".format(basename, generateRandomString(4))
+        # hostnames need to be lowercase else can cause conflicts with other scripts
+        uniqueBasename = generatedName.lower()
     vmNames = []
     # if just 1, don't put counters on it
     if n == 1:
