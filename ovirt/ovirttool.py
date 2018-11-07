@@ -2706,7 +2706,7 @@ if __name__ == "__main__":
     parser.add_argument("--poweron", type=str,
         help="Single VM or comma separated String of VMs to power on")
     parser.add_argument("--user", type=str,
-        help="Your SSO username (no '@xcalar.com')")
+        help="Your LDAP username (no '@xcalar.com')")
     parser.add_argument("-f", "--force", action="store_true", default=False,
         help="Force certain operations such as provisioning, delete, when script would fail normally")
 
