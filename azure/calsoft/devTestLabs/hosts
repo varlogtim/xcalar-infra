@@ -18,7 +18,7 @@ xcalar-el7-102.westus2.cloudapp.azure.com
 xcalar-el7-103.westus2.cloudapp.azure.com
 xcalar-el7-104.westus2.cloudapp.azure.com
 xcalar-el7-105.westus2.cloudapp.azure.com
-xcalar-el7-106.westus2.cloudapp.azure.com
+#xcalar-el7-106.westus2.cloudapp.azure.com
 
 [netstore]
 netstore.westus2.cloudapp.azure.com     ansible_user=root
