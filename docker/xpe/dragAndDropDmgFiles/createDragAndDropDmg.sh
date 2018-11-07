@@ -1,5 +1,5 @@
 #
-# This script will create will create a drag and drop dmg for the Xcalar Design.
+# This script will create will create a drag and drop dmg for the XPE app.
 # It is a wrapper around npm's 'appdmg' tool.
 # This script will install, and then delete, app dmg, if it is not installed.
 # This must be run on OSX.
@@ -94,7 +94,7 @@ cd "$STAGING_DIR"
 # note: dmgspecifier.json is actually what specifies where the other files are,
 # if things ever stop working/files not exist, check that json file.
 CONFIGFILE="dmgspecifier.json"
-REQ_FILES=("$CONFIGDIR/$CONFIGFILE" "$CONFIGDIR/Xcalar_Design_EE_dmg_bg.png")
+REQ_FILES=("$CONFIGDIR/$CONFIGFILE" "$CONFIGDIR/XPE_dmg_bg.png")
 
 # copy in files required to run appdmg
 echo "Copying required files to staging dir..." >&2
@@ -129,10 +129,10 @@ echo "
 Copying image to final location; please wait... " >&2
 cp "$STAGING_DIR"/"$DMG_BASENAME" "$DMG_DIRNAME"
 
-# check for BLDINFO.txt file in the dir containing the app the dmg was made from;
+# check for BLDINFO.txt in dir containing the app the dmg was made from;
 # if there copy also to final location
 # (if the dir was a Jenkins build dir it should be there, contains useful
-# info about the build such as which installer was used, etc)
+# info about the build such as which installer was used, etc which could be useful for dmg)
 buildDir="$(dirname "$APPTAR")"
 if [ -e "$buildDir/BLDINFO.txt" ]; then
     cp "$buildDir/BLDINFO.txt" "$DMG_DIRNAME"

@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 
-# This is the entrypoint for the 'Xcalar Design' Mac app.
+# This is the entrypoint for the 'Xcalar Desktop Edition' Mac app.
 # When the app is launched, this script is run by the Operating System
 # (note:: older versions of OSX will sometimes pass cmd args in that call)
 #
+# NOTE:::
+# The entrypoint for a MacOS app, must be located in the app's MacOS dir,
+# and must be the same name as the app itself.
+# This is how Mac knows what file to run when the app is double-clicked.
+# To allow changing the name of this app easily, have given this executable
+# a generic name - therefore, if you are trying to build this app manually,
+# make sure to rename this file, to whatever you are calling the app.
+# (makeapp.sh does the rename for you)
+#
+# OVERVIEW OF EXECUTABLE::
 # nwjs is what provides the GUI for the app.
 # This script simply determines which GUI nwjs should open when it starts,
 # and then starts nwjs.

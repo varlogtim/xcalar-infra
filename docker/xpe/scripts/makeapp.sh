@@ -78,18 +78,10 @@ setup_required_app_files() {
     # app essential metadata
     cp "$XPEINFRAROOT/staticfiles/Info.plist" "$CONTENTS"
 
-    # add app entrypoint (executable file in this dir will be run when user
+    # add app entrypoint (executable file in 'MacOS' dir which gets run when user
     # double clicks app); must make exeuctable
     # executable MUST be same name as appbase name (mac requirement)
-    # so check first if this file is in infra, in case we changed the name of the app
-    executablePathInInfra="$XPEINFRAROOT/scripts/$APPBASENAME"
-    if [ ! -f "$executablePathInInfra" ]; then
-        echo "Can't find executable file in infra repo: $executablePathInInfra \
-(The executable file must be the same name as the app, as per MacOS \
-requirements.)" >&2
-        exit 1
-    fi
-    cp "$XPEINFRAROOT/scripts/$APPBASENAME" "$MACOSDIR"
+    cp "$XPEINFRAROOT/scripts/XPE_MAIN_EXECUTABLE" "$MACOSDIR/$APPBASENAME"
     chmod 777 "$MACOSDIR/$APPBASENAME"
 
     # set app icon
@@ -130,7 +122,7 @@ setup_nwjs_binary() {
     rm "$nwjs_zip"
     # must change app metadata to get customized nwjs menus to display app name
     # http://docs.nwjs.io/en/latest/For%20Users/Advanced/Customize%20Menubar/ <- see MacOS section
-    find "$nwjs_dir"/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "Xcalar Design"/g'
+    find "$nwjs_dir"/nwjs.app/Contents/Resources/*.lproj/InfoPlist.strings -type f -print0 | xargs -0 sed -i 's/CFBundleName\s*=\s*"nwjs"/CFBundleName = "'"$APPBASENAME"'"/g'
     # replace nwjs default icon with app icon (hack for now, not getting icon attr to work)
     # nwjs icon will dispaly on refresh/quit prompts, even when running Xcalar Design app
     cp "$APPICON_PATH" "$nwjs_dir"/nwjs.app/Contents/Resources/app.icns
@@ -161,6 +153,7 @@ setup_nwjs_root() {
         "3rd/jquery-ui.js"
         "3rd/fonts"
         "assets/fonts"
+        "assets/lang/en/globalAutogen.js"
         "assets/js/promiseHelper.js"
         "assets/js/httpStatus.js"
         "assets/js/shared/util/xcHelper.js"
