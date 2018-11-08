@@ -363,7 +363,7 @@ aws_s3_upload_public() {
 
 # Call with the tag name (eg, ClusterName) and the name of the cluster (eg, abakshi-cluster-1)
 aws_cluster_members() {
-    aws ec2 describe-instances --filters Name=instance-state-name,Values=running,Name=tag:$1,Values=$2 --query "Reservations[].Instances[].[AmiLaunchIndex,NetworkInterfaces[0].${3:-PrivateIpAddress}]" --output text \
+    aws ec2 describe-instances --filters Name=instance-state-name,Values=running,Name=tag:$1,Values=$2 --query "Reservations[].Instances[].[AmiLaunchIndex,${3:-PrivateIpAddress}]" --output text \
         | sort -n \
         | awk '{print $2}'
 }
