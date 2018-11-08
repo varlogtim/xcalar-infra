@@ -64,7 +64,8 @@ DEFAULT_SSH_USER='root' # what tool will be ssh'ing as.
 
 DEFAULT_OVIRT_CLUSTER="ovirt-node-03-cluster"
 #DEFAULT_PUPPET_CLUSTER="ovirt"
-DEFAULT_PUPPET_ROLE="jenkins_slave"
+DEFAULT_PUPPET_ROLE_INSTALL="xcalar_qa"
+DEFAULT_PUPPET_ROLE_NO_INSTALL="jenkins_slave"
 DEFAULT_CORES=4
 DEFAULT_RAM=8
 
@@ -2510,6 +2511,7 @@ def validateparams(args):
     licfilepath = args.licfile
     installer = args.installer
     basename = args.vmbasename
+    puppet_role = args.puppet_role
 
     if args.count:
         if args.count > MAX_VMS_ALLOWED or args.count <= 0:
@@ -2557,6 +2559,9 @@ def validateparams(args):
                 raise AttributeError("\n\nERROR: You have specified not to install xcalar with the --noinstaller option,\n"
                     "but also provided an installation path with the --installer option.\n"
                     "(Is this what you intended?)\n")
+            # set default puppet role if they didn't pass --puppet_role
+            if not puppet_role:
+                puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
         else:
 
             ''' installer:
@@ -2575,6 +2580,20 @@ def validateparams(args):
                 raise ValueError("\n\nERROR: --installer arg should be an URL for an RPM installer, which you can curl.\n"
                     "(If you know the <path> to the installer on netstore, then the URL to supply would be: --installer=http://netstore/<path>\n"
                     "Example: --installer={})\n".format(defaultinstaller))
+
+            # if they didn't give a puppet role set default for install scenario
+            if not puppet_role:
+                puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
+
+            # check for jenksins_slave puppet role with an install;
+            # Jenkins slaves don't support Xcalar installs.  Will install another
+            # caddy system-wide, among other issues which could cause undesired behavior.
+            jenkins_slave_role = 'jenkins_slave'
+            if puppet_role.lower() == jenkins_slave_role.lower():
+                warn_log("\n\nYou are installing Xcalar, but puppet role " \
+                    " is set as {}!  This could cause conflicts with Caddy.\n" \
+                    "If not desired, re-run with another puppet role, (--puppet_role option), or " \
+                    "--noinstaller option.\n".format(jenkins_slave_role))
 
             '''
                 license files for xcalar.
@@ -2602,7 +2621,7 @@ def validateparams(args):
         if not args.delete and not args.shutdown and not args.poweron:
             raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
 
-    return int(args.ram), int(args.cores), args.ovirtcluster, licfilepath, installer, basename
+    return int(args.ram), int(args.cores), args.ovirtcluster, puppet_role, licfilepath, installer, basename
 
 '''
     validates lists of vms for param validation.
@@ -2695,8 +2714,8 @@ if __name__ == "__main__":
         help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
     parser.add_argument("--licfile", type=str,
         help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
-    parser.add_argument("--puppet_role", type=str, default=DEFAULT_PUPPET_ROLE,
-        help="Role the VM(s) should have (Defaults to {})".format(DEFAULT_PUPPET_ROLE))
+    parser.add_argument("--puppet_role", type=str,
+        help="Role the VM(s) should have (Defaults to {} if Xcalar is installed, and {} for no install)".format(DEFAULT_PUPPET_ROLE_INSTALL, DEFAULT_PUPPET_ROLE_NO_INSTALL))
     parser.add_argument("--puppet_cluster", type=str,
         help="Puppet cluster to enable")
     parser.add_argument("--delete", type=str,
@@ -2712,7 +2731,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    ram, cores, ovirtcluster, licfilepath, installer, basename = validateparams(args)
+    ram, cores, ovirtcluster, puppet_role, licfilepath, installer, basename = validateparams(args)
     FORCE = args.force
 
     # script setup
@@ -2792,7 +2811,7 @@ if __name__ == "__main__":
     # you can not make any more ssh calls to the VMs after this;
     # ssh'ing is done in this script with a special ovirt pub key
     # puppet will remove it from auth users.
-    enable_puppet_on_vms_in_parallel(vmids, args.puppet_role, puppet_cluster=args.puppet_cluster)
+    enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=args.puppet_cluster)
 
     '''
         display a useful summary to user of work done
