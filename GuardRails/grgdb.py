@@ -128,7 +128,9 @@ class GRPrintAddrInfo (gdb.Command):
             return
 
         for i in range(offset, maxFrames + offset):
-            addrInt = int(trace[i])
+            addr = str(trace[i]).split(' ')[0]
+
+            addrInt = int(addr, 0)
             if not addrInt:
                 continue
             sym = str(gdb.execute('info line *' + str(addrInt), to_string=True))
