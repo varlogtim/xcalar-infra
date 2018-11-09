@@ -7,7 +7,7 @@
 . aws-sh-lib
 
 # Links expire in 1 week by default. That's the max setting.
-EXPIRY=${EXPIRY:-604799}
+UPLOAD="gs,az"
 
 if [ "$(uname -s)" = Darwin ]; then
     readlink_f() {
@@ -38,7 +38,7 @@ say() {
 }
 
 check_url() {
-    curl -r 0-8191 -sL -o /dev/null "$1" -w '%{http_code}' | grep -q '^2'
+    curl -r 0-255 -fsL -o /dev/null "$1" -w '%{http_code}' | grep -q '^20'
 }
 
 az_blob() {
@@ -55,7 +55,7 @@ while [ $# -gt 0 ]; do
     cmd="$1"
     case "$cmd" in
     -h | --help)
-        say "Usage: $0 [-d <gs|s3>] [-e expiry-in-seconds (default ${EXPIRY}s) <path/to/installer>"
+        say "Usage: $0 [-d <az|gs|s3>] [-e expiry-in-seconds (default 1w or 4w depending on cloud)] <path/to/installer>"
         say " upload the installer to repo.xcalar.net and print out new http url"
         exit 1
         ;;
@@ -85,11 +85,6 @@ done
 
 INSTALLER="$1"
 
-if [[ $EXPIRY -ge 604800 ]] || [[ $EXPIRY -le 0 ]]; then
-    say "Invalid expiry. Must be one week or less"
-    exit 1
-fi
-
 if test -f "$INSTALLER"; then
     INSTALLER="$(readlink_f "${INSTALLER}")"
     BUILD_SHA="$(dirname ${INSTALLER})/../BUILD_SHA"
@@ -109,7 +104,13 @@ if test -f "$INSTALLER"; then
         SA_URI="gs"
         SA_ACCOUNT="${SA_ACCOUNT:-repo.xcalar.net}"
         ;;
-    s3) SA_URI="s3" ;;
+    s3)
+        SA_URI="s3"
+        case "$AWS_DEFAULT_REGION" in
+            us-east-1) SA_ACCOUNT="${SA_ACCOUNT:-xcrepoe1}";;
+            us-west-2) SA_ACCOUNT="${SA_ACCOUNT:-xcrepo}";;
+        esac
+        ;;
     az) SA_URI="az" ;;
     esac
     SA_ACCOUNT="${SA_ACCOUNT:-xcrepo}"
@@ -124,7 +125,13 @@ if test -f "$INSTALLER"; then
     case "${DEST_URL}" in
     s3://*)
         export AWS_DEFAULT_REGION=$(aws_s3_region "$DEST_URL")
+        EXPIRY=${EXPIRY:-604200}  # 1 week is max on AWS
+        if [[ $EXPIRY -ge 604800 ]] || [[ $EXPIRY -le 0 ]]; then
+            say "Invalid expiry. Must be one week or less"
+            exit 1
+        fi
         URL="$(aws s3 presign --expires-in $EXPIRY "$DEST_URL")"
+
         if ! check_url "$URL"; then
             say "Uploading $INSTALLER to $DEST_URL"
             aws s3 cp --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' --only-show-errors "$INSTALLER" "$DEST_URL" >&2
@@ -154,6 +161,7 @@ if test -f "$INSTALLER"; then
         CONTAINER="${DEST_URL#*/}"
         CONTAINER="${CONTAINER%%/*}"
         BLOB=${DEST_URL#${ACCOUNT}/${CONTAINER}/}
+        EXPIRY=${EXPIRY:-2419200}  # 4 weeks
         EXPIRES="$(date -d "$EXPIRY seconds" '+%Y-%m-%dT%H:%MZ')"
         URL="$(az_blob url -otsv)"
         CODE="$(az_blob generate-sas --permissions r --expiry $EXPIRES -otsv)"
@@ -179,6 +187,7 @@ elif [[ ${INSTALLER} =~ ^http[s]?:// ]]; then
         say "Unable to access ${INSTALLER}"
         exit 1
     fi
+    say "URL Verified OK"
     echo $INSTALLER
     exit 0
 elif [[ ${INSTALLER} =~ ^s3:// ]]; then

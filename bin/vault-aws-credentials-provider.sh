@@ -53,13 +53,19 @@ die() {
 
 if [[ $OSTYPE =~ darwin ]]; then
     please_install() {
-        die "You need to install $1. Try 'brew install $1'"
+        die "You need to install $1. Try brew install"
     }
     date() {
         gdate "$@"
     }
     stat() {
         gstat "$@"
+    }
+    sed() {
+        gsed "$@"
+    }
+    readlink() {
+        greadlink "$@"
     }
 else
     please_install() {
@@ -138,19 +144,24 @@ EOF
 }
 
 vault_sanity() {
-    local -a aws_version
-    aws_version=($(aws --version 2>&1 | sed -E 's@^aws-cli/([0-9\.]+).*$@\1@g' | tr . ' '))
-    if [ ${aws_version[1]} -lt 15 ]; then
-        die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
-    fi
     local progs="jq vault curl" prog
     for prog in $progs; do
         if ! command -v $prog > /dev/null; then
             please_install $prog
         fi
     done
-    if [[ $OSTYPE =~ darwin ]] && ! command -v gdate > /dev/null; then
-        please_install coreutils
+    if [[ $OSTYPE =~ darwin ]]; then
+        progs="gsed gdate greadlink gstat"
+        for prog in $progs; do
+            if ! command -v $prog > /dev/null; then
+                please_install "coreutils or something providing $prog. Could be gnu-${prog#g}"
+            fi
+        done
+    fi
+    local -a aws_version
+    aws_version=($(aws --version 2>&1 | sed -E 's@^aws-cli/([0-9\.]+).*$@\1@g' | tr . ' '))
+    if [ ${aws_version[1]} -lt 15 ]; then
+        die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
     fi
     if [ -z "$VAULT_ADDR" ]; then
         die "VAULT_ADDR not set. Please set 'export VAULT_ADDR=https://yourvaultserver' to your ~/.bashrc or ~/.bash_aliases"
