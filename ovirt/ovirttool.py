@@ -2235,10 +2235,12 @@ def get_access_url(ip):
     caddyProtocol = caddyInfo[0]
     caddyPort = caddyInfo[1]
     hostname = get_hostname(ip)
-    # if port is default, don't display it
-    if (caddyPort == "443" and caddyProtocol == "https") or (caddyPort == "80" and caddyProtocol == "http"):
-        return "{}://{}".format(caddyProtocol, hostname)
-    return "{}://{}:{}".format(caddyProtocol, hostname, caddyPort)
+    accessUrlBase = "{}://{}.int.xcalar.com".format(caddyProtocol, hostname)
+    displayUrl = accessUrlBase
+    # add port to dispaly url if it's not default port
+    if not (caddyPort == "443" and caddyProtocol == "https") and not (caddyPort == "80" and caddyProtocol == "http"):
+        displayUrl = "{}:{}".format(accessUrlBase, caddyPort)
+    return displayUrl
 
 '''
     Returns a summary string with debugrmation about vms
