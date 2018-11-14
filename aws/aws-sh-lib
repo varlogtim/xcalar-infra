@@ -543,3 +543,40 @@ aws_s3_key_from_s3url() {
     local bucket_and_key="${1#s3://}"
     echo "${bucket_and_key#*/}"
 }
+
+aws_r53_findzone() {
+    local dns_name="${1%.}."
+    aws route53 list-hosted-zones-by-name --dns-name $dns_name --query 'HostedZones[?Name==`'$dns_name'`].{Id: Id, PrivateZone: Config.PrivateZone}' --output text
+}
+
+aws_r53_upsert() {
+    local zoneid="$1" # eg, Z1LEYCMTWXY870
+    local name="${2%.}."   # eg, foo.aks.xcalar.io
+    local type="$3"   # eg, A
+    shift 3           # remaining are values eg, IP1, IP2, etc
+    local action='UPSERT'
+    local tmpf=$(mktemp -t r53XXXXXX.json)
+    local yaml="${tmpf}.yaml"
+    cat > $yaml<<EOF
+Comment: 'Updated $(date +%Y%m%d)'
+Changes:
+  - Action: UPSERT
+    ResourceRecordSet:
+      Name: '$name'
+      Type: $type
+      TTL: 60
+      ResourceRecords:
+EOF
+    local val
+    for val in "${@}"; do
+        cat >> $yaml<<EOF
+        - Value: '${val}'
+EOF
+    done
+    cfn-flip < $yaml > $tmpf
+    local rc
+    aws route53 change-resource-record-sets --hosted-zone-id $zoneid --change-batch file://${tmpf} --query 'ChangeInfo.[Id,Status]' --output text
+    rc=$?
+    rm -f $tmpf $yaml
+    return $rc
+}
