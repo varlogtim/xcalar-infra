@@ -13,12 +13,15 @@ cfn-lint
 crcmod
 diceware
 exodus-bundler
+flake8
 jinja2-cli
 ovirt-engine-sdk-python
 paramiko
 pre-commit
 pylint
+pytest
 pyvmomi
 requests
+testinfra
 troposphere
 yamllint
