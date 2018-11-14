@@ -16,4 +16,4 @@ fi
 cd $XLRINFRADIR
 
 # OVIRT_PASSWORD gets set in shell wrapper, allows tool to be non-interactive
-docker run -it -e OVIRT_PASSWORD -v /netstore:/netstore -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool ovirt/ovirttool.py "$@"
+docker run -t -e OVIRT_PASSWORD -v /netstore:/netstore -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool ovirt/ovirttool.py "$@"
