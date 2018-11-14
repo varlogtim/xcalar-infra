@@ -55,8 +55,8 @@ job "mariadb" {
         memory = 1200 # 256MB
 
         network {
-          mbits = 10
-          port  "db"  {}
+          #mbits = 10
+          port "db" {}
         }
       }
 

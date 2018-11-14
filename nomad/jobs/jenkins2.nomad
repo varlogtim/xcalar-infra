@@ -4,6 +4,10 @@ job "jenkins2" {
   type        = "service"
   priority    = 50
 
+  constraint {
+    distinct_hosts = true
+  }
+
   update {
     stagger      = "10s"
     max_parallel = 1
@@ -28,6 +32,7 @@ job "jenkins2" {
         port_map {
           http = 8080
           jnlp = 50000
+          ssh  = 22022
         }
 
         volumes = [
@@ -37,25 +42,34 @@ job "jenkins2" {
       }
 
       service {
-        name = "jenkins-master"
-        tags = ["global", "jenkins", "master"]
+        name = "http"
         port = "http"
+
+        tags = ["global", "jenkins-master"]
 
         check {
           name     = "alive"
           type     = "tcp"
-          interval = "10s"
-          timeout  = "2s"
+          interval = "60s"
+          timeout  = "5s"
         }
+      }
+
+      service {
+        name = "ssh"
+        port = "ssh"
+      }
+
+      service {
+        name = "jnlp"
+        port = "jnlp"
       }
 
       resources {
         cpu    = 8000
-        memory = 4096
+        memory = 8000
 
         network {
-          mbits = 10
-
           port "http" {
             static = 8080
           }
@@ -63,15 +77,18 @@ job "jenkins2" {
           port "jnlp" {
             static = 50000
           }
+
+          port "ssh" {
+            static = 22022
+          }
         }
       }
 
       logs {
-        max_files     = 10
         max_file_size = 15
       }
 
-      kill_timeout = "60s"
+      kill_timeout = "120s"
     }
   }
 }

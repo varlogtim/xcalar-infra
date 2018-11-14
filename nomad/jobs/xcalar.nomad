@@ -2,6 +2,7 @@ job "amit-xcalar-1" {
   region      = "global"
   datacenters = ["xcalar-sjc"]
   type        = "service"
+  all_at_once = true
 
   #  update {
   #    max_parallel      = 1
@@ -26,7 +27,7 @@ job "amit-xcalar-1" {
     attribute = "${meta.cluster}"
     value     = "newton"
   }
-  group "xce" {
+  group "xcalar" {
     count = 3
 
     restart {
@@ -54,7 +55,9 @@ job "amit-xcalar-1" {
           comms   = 5000
         }
 
-        privileged = true
+        shm_size     = 8000000000000
+        privileged   = true
+        network_mode = "host"
 
         ulimit {
           nproc   = "50000"
@@ -62,17 +65,23 @@ job "amit-xcalar-1" {
           memlock = "-1:-1"
         }
 
-        mounts = [
-          {
-            target = "/etc/xcalar/default.cfg"
-            source = "local/default.cfg"
-          },
+        volumes = [
+          "/netstore/cluster/${NOMAD_JOB_NAME}:/mnt/xcalar",
+          "/sys/fs/cgroup:/sys/fs/cgroup:ro",
         ]
+
+        #"local/default.cfg:/etc/xcalar/default.cfg",
       }
 
       env {
         MYSQL_PASSWORD      = "xcalar"
         MYSQL_ROOT_PASSWORD = "xcalar"
+
+        XCE_CONFIG = "/local/default.cfg"
+        XCE_NODEID = "${NOMAD_ALLOC_INDEX}"
+
+        #        XCE_HOME            = "/mnt/xcalar"
+        XCE_NUMNODES = "3"
       }
 
       template {
@@ -90,8 +99,8 @@ job "amit-xcalar-1" {
 // Set to true to enable network compression
 // Constants.NetworkCompression=true
 
-Constants.XcalarRootCompletePath=/var/opt/xcalar
-Constants.TotalSystemMemory=25769803776
+Constants.XcalarRootCompletePath=/mnt/xcalar
+// Constants.TotalSystemMemory=25769803776
 
 Thrift.Port=9090
 Thrift.Host=localhost
@@ -116,9 +125,9 @@ EOH
         memory = 8000
 
         network {
-          mbits = 1
-
-          port "https" {}
+          port "https" {
+            static = "443"
+          }
 
           port "monitor" {
             static = "8000"
