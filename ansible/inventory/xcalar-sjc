@@ -1,5 +1,4 @@
 # vim: ft=ansible_hosts:
-local       ansible_connection=local ansible_become=no
 localhost   ansible_connection=local ansible_become=no
 
 [all:vars]
@@ -9,14 +8,14 @@ ansible_connection=ssh
 jenkins
 
 [jenkins-slave:children]
-ub14-builder
-el7-builder
-el6-builder
+ub14builder
+el7builder
+el6builder
 
-[el6-builder:children]
+[el6builder:children]
 jenkins-slave-el6
 
-[el7-builder:children]
+[el7builder:children]
 jenkins-slave-el7
 customer
 
@@ -36,7 +35,6 @@ node4
 node5
 node9
 
-# Jenkins related
 [customer]
 customer-11-[1:6]
 customer-12-[1:6]
@@ -53,7 +51,7 @@ rhel1
 rhel2
 jenkins-slave-el6-[1:4]
 
-[ub14-builder]
+[ub14builder]
 xcbuilder-0[1:3]
 #jenkins
 #jenkins-slave0
@@ -158,12 +156,19 @@ node9
 #xcbuilder-01
 xcbuilder-02
 #xcbuilder-03
-[consul]
+[consul-servers]
+consul-4                ansible_user=root
+
+[consul-clients]
 consul-1                ansible_user=root
 consul-2
 consul-3
 earhart
 faraday
+
+[consul:children]
+consul-servers
+consul-clients
 
 
 [nomad]
@@ -182,23 +187,25 @@ nomad
 svault
 
 [hashistack:vars]
-ansible_user = root
+ansible_user=root
 
 [newton]
-newton0
-newton1
-newton3
-newton4
+newton6
+newton7
+newton8
+newton9
 
 [newton:vars]
-ansible_user = root
+ansible_user=root
 
 [consul:vars]
-ansible_user = root
+ansible_user=root
 
 [nomad:vars]
-ansible_user = root
+ansible_user=root
 
 [svault:vars]
-ansible_user = root
+ansible_user=root
 
+[calsoftaz]
+xcalar-deps20[0:9].westus2.cloudapp.azure.com       ansible_user=azureuser
