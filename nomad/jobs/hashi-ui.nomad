@@ -39,6 +39,18 @@ job "hashi-ui" {
           port "http" {}
         }
       }
+
+      service {
+        name = "hashi-ui"
+        tags = ["urlprefix-hashi-ui.service.consul/", "http"]
+        port = "http"
+
+        check {
+          type     = "tcp"
+          interval = "30s"
+          timeout  = "10s"
+        }
+      }
     }
   }
 }
