@@ -150,13 +150,23 @@ safe_curl () {
 
 check_url() {
     local code=
-    if code="$(curl -fsL -H 'Range:bytes=0-1'-w '%{http_code}\n' -o /dev/null "$1")"; then
-        if [[ $code =~ ^[23] ]]; then
+    if code="$(curl -sL -H 'Range: bytes=0-1' -w '%{http_code}\n' -o /dev/null "$1")"; then
+        if [[ $code =~ ^20 ]]; then
             return 0
         fi
     fi
     return 1
 }
+
+url_exists() {
+    :
+}
+
+s3_exists() {
+    :
+}
+
+
 
 get_sha1 () {
     shasum $1 | cut -d' ' -f1 | cut -c1-8
