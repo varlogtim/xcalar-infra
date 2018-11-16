@@ -1,7 +1,12 @@
 #!/bin/bash
 # Wrapper around Ovirt Tool
+
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 OVIRT_WRAPPER="$SCRIPTDIR/../bin/ovirttool"
+
+# allow uname/pword as env vars for automation
+UNAME="${OVIRT_UNAME:-""}"
+PASSWORD="${OVIRT_PASSWORD:-""}"
 
 # if help requested, display and exit (else will have to enter credentials just for help)
 if [[ $@ == *"--help"* ]]; then
@@ -12,22 +17,19 @@ fi
 # cmd args to send to ovirttool.py
 cmds="$@"
 
-# if they didn't pass the --user arg,
-# prompt for it and add as cmd to pass
-echo >&2
-if [[ $@ != *"--user="* ]]; then
-  read -p 'Your Xcalar LDAP username: ' uname
-  cmds="$cmds --user=$uname"
+# tool can accept both env var and --user arg for username;
+# --user will take precedence if both supplied
+if [[ $@ != *"--user="* ]] && [ -z "$UNAME" ]; then
+  echo >&2
+  read -p 'Your Xcalar LDAP username: ' UNAME
 fi
-# prompt for password if no env variable
-# (this way can set it when running unit tests)
-password=${OVIRT_PASSWORD}
-if [ -z $password ]; then
-  read -sp 'Your Xcalar LDAP Password: ' password
+export OVIRT_UNAME="$UNAME"
+if [ -z "$PASSWORD" ]; then
+  read -sp 'Your Xcalar LDAP Password: ' PASSWORD
   echo >&2
   echo >&2
-  export OVIRT_PASSWORD=$password
 fi
+export OVIRT_PASSWORD="$PASSWORD"
 
 # will redirect stdout to a logfile
 # log dir is TMPDIR env var so user can direct logs where they want

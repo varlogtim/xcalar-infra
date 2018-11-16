@@ -85,6 +85,11 @@ LOGIN_UNAME = "admin"
 LOGIN_PWORD = "admin"
 LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
 
+# names of env vars that can hold ovirt credentials to make this script non-interactive
+# (--user arg will take precedence over username env var if both supplied)
+UNAME_ENV="OVIRT_UNAME"
+PASS_ENV="OVIRT_PASSWORD"
+
 OVIRT_TEMPLATE_MAPPING = {
     'ovirt-node-03-cluster': 'el7-template-20180816',
     'einstein-cluster2': 'ovirt-tool-einstein-updated',
@@ -1257,8 +1262,15 @@ def open_connection(user=None):
 
     # get username if user didn't supply when calling script
     if not user:
-        # get user name
-        user = input('Username: ')
+        # check if its an env variable
+        if UNAME_ENV in os.environ:
+            user=os.environ.get(UNAME_ENV)
+        else:
+            # get user name
+            user = input('Username: ')
+
+    # take the ldap username and convert to login needed by oivrt specifying profile
+
     # if they gave the full thing just get the uname part
     if '@' in user:
         user = user.split('@')[0]
@@ -1273,9 +1285,8 @@ def open_connection(user=None):
 
     # promopt user for pass
     password=None
-    passenv="OVIRT_PASSWORD"
-    if passenv in os.environ:
-        password=os.environ.get(passenv)
+    if PASS_ENV in os.environ:
+        password=os.environ.get(PASS_ENV)
     else:
         try:
             password = getpass.getpass()
