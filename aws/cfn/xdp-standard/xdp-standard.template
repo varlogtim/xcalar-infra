@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Xcalar Data Platform. This template deploys a XDP Cluster on AWS.'
+Description: Xcalar Data Platform. This template deploys a XDP Cluster on AWS.
 Parameters:
   ClusterAccessSGId:
     Description: Security Group ID of wanting access to the Xcalar Cluster (SSH/HTTPS)
@@ -70,6 +70,7 @@ Parameters:
     MaxLength: '2047'
     ConstraintDescription: Location of the bootstrap script. For example, https://s3.amazonaws.com/xcrepoe1/cfn/prod/v2/scripts/user-data.sh
     Type: String
+    Default: https://s3.amazonaws.com/xcrepoe1/cfn/prod/xdp-standard/v7/scripts/user-data.sh
   CustomScriptUrl:
     MaxLength: '2047'
     ConstraintDescription: Optional. Location of a custom script to run after bootstrap.
@@ -91,17 +92,37 @@ Parameters:
       example, your Bastion host IP address or your Office IP
     Type: String
   AssociatePublicIpAddress:
-    Type: String
     Description: Associate a Public IP address with resources
     Default: 'false'
     AllowedValues:
       - 'false'
       - 'true'
+    Type: String
+  AdminUsername:
+    Description: XD Administrator name
+    Type: String
+    MinLength: '5'
+    MaxLength: '128'
+  AdminPassword:
+    Description: XD Administrator password
+    NoEcho: true
+    Type: String
+    MinLength: '5'
+    MaxLength: '128'
+  AdminEmail:
+    Description: Email of the administrator
+    Type: String
   ClusterSize:
     Description: Sets DesiredCapacity, MinSize, and MaxSize
     MinValue: 1
     MaxValue: 16
     Default: 3
+    Type: Number
+  RootSize:
+    Description: Size of Root Disk
+    MinValue: 32
+    MaxValue: 4095
+    Default: 100
     Type: Number
 Metadata:
   AWS::CloudFormation::Interface:
@@ -112,7 +133,6 @@ Metadata:
           - InstanceType
           - ClusterSize
           - RootSize
-          - SwapSize
       - Label:
           default: Security configuration
         Parameters:
@@ -141,18 +161,14 @@ Metadata:
           - Ec2RetryTagKey
           - Ec2RetryTagValue
     ParameterLabels:
-      #      InstallerUrl:
-      #        default: 'XCE Installer Url:'
-      #      LicenseKey:
-      #        default: 'XCE License Key:'
-      #      InstanceType:
-      #        default: 'Server size:'
-      #      KeyName:
-      #        default: 'Key pair:'
-      #      SSHLocation:
-      #        default: 'SSH CIDR range:'
-      #      HTTPLocation:
-      #        default: 'HTTP CIDR range:'
+      InstallerUrl:
+        default: 'XCE Installer Url:'
+      LicenseKey:
+        default: 'XCE License Key:'
+      InstanceType:
+        default: 'Server size:'
+      KeyName:
+        default: 'Key pair:'
   Version: 1.4.1
   Release: '3'
 Mappings:
@@ -305,6 +321,11 @@ Resources:
         - AWSAMIRegionMap
         - !Ref 'AWS::Region'
         - AMZN1HVM
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref 'RootSize'
+            VolumeType: gp2
       IamInstanceProfile: !Ref 'IamClusterProfile'
       UserData: !Base64
         Fn::Sub:
@@ -313,7 +334,7 @@ Resources:
             yum update -y
             yum install -y curl ca-certificates unzip
             yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
-            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
             if [ "${Ec2RetryTagKey}" == "aws:cloudformation:stack-name" ]; then
               retryTagValue=${AWS::StackName}
             else
@@ -335,9 +356,10 @@ Resources:
                 rc=$?
               fi
             fi
-            /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
             exit $rc
           - EfsMount: !Sub '${EfsSharedRoot}:/'
+            Resource: ClusterLC
   IamClusterRole:
     Type: AWS::IAM::Role
     Properties:
@@ -366,34 +388,6 @@ Resources:
       Path: /
       Roles:
         - !Ref 'IamClusterRole'
-#  XcalarLaunchTemplate:
-#    Type: AWS::EC2::LaunchTemplate
-#    Properties:
-#      LaunchTemplateName: XcalarLaunchTemplate
-#      LaunchTemplateData:
-#        TagSpecifications:
-#          - TagSpecification
-#        UserData: String
-#        InstanceInitiatedShutdownBehavior: String
-#        BlockDeviceMappings:
-#          - BlockDeviceMapping
-#        IamInstanceProfile: IamInstanceProfile
-#        SecurityGroupIds:
-#          - String
-#        KeyName: !Ref 'KeyName'
-#        Placement: !Ref 'XcalarPlacementGroup'
-#        InstanceMarketOptions: InstanceMarketOptions
-#        NetworkInterfaces:
-#          - NetworkInterface
-#        ImageId: String
-#        InstanceType: !Ref 'InstanceType'
-#        ImageId: !FindInMap
-#          - AWSAMIRegionMap
-#          - !Ref 'AWS::Region'
-#          - AMZN1HVM
-#
-
-
 Outputs:
   MountTargetID:
     Description: Mount target ID
@@ -401,5 +395,4 @@ Outputs:
   FileSystemID:
     Description: File system ID
     Value: !Ref 'EfsSharedRoot'
-
 # vim: ft=yaml

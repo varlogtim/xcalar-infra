@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Xcalar Data Platform. This template deploys a single node XDP instance.'
+Description: Xcalar Data Platform. This template deploys a single node XDP instance.
 Parameters:
   InstanceType:
     Type: String
@@ -34,7 +34,7 @@ Parameters:
       - r4.8xlarge
       - r4.16xlarge
     ConstraintDescription: Choose an instance type.
-    Default: c5d.4xlarge
+    Default: m5d.2xlarge
   KeyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
     Type: AWS::EC2::KeyPair::KeyName
@@ -55,14 +55,16 @@ Parameters:
     Type: AWS::EC2::VPC::Id
   SSHLocation:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
-    Description: CIDR Block that should have access SSH access to this cluster. For example, your Bastion host or Office IP.
+    Description: CIDR Block that should have access SSH access to this cluster. For
+      example, your Bastion host or Office IP.
     Type: String
-    Default: '0.0.0.0/0'
+    Default: 0.0.0.0/0
   HTTPLocation:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
-    Description: CIDR Block that should have access HTTP access to this cluster. For example, your office.
+    Description: CIDR Block that should have access HTTP access to this cluster. For
+      example, your office.
     Type: String
-    Default: '0.0.0.0/0'
+    Default: 0.0.0.0/0
   AdminUsername:
     Description: XD Administrator name
     Type: String
@@ -77,6 +79,12 @@ Parameters:
   AdminEmail:
     Description: Email of the administrator
     Type: String
+  RootSize:
+    Description: Size of Root Disk
+    MinValue: 32
+    MaxValue: 4095
+    Default: 100
+    Type: Number
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -153,6 +161,11 @@ Resources:
         - AWSAMIRegionMap
         - !Ref 'AWS::Region'
         - AMZN1HVM
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref 'RootSize'
+            VolumeType: gp2
       UserData: !Base64
         Fn::Sub:
           - |-
@@ -217,22 +230,22 @@ Resources:
             InstallerUrl: ''
             BootstrapUrl: ''
             CustomScriptUrl: ''
-            Ec2RetryTagKey: 'aws:cloudformation:stack-name'
+            Ec2RetryTagKey: aws:cloudformation:stack-name
             Ec2RetryTagValue: ''
 
 
 Outputs:
   InstanceID:
     Description: The Instance ID
-    Value: !Ref EC2Instance
+    Value: !Ref 'EC2Instance'
   PublicURL:
-    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PublicDnsName']]
+    Value: !Sub 'https://${EC2Instance.PublicDnsName}'
     Description: Public address of newly created XD instance
   PrivateURL:
-    Value: !Join ['', ['https://', !GetAtt 'EC2Instance.PrivateDnsName']]
+    Value: !Sub 'https://${EC2Instance.PrivateDnsName}'
     Description: Private address of newly created XD instance
   SSH:
-    Value: !Join ['', ['ssh -i ~/.ssh/', !Ref 'KeyName', '.pem ec2-user@', !GetAtt 'EC2Instance.PublicDnsName']]
+    Value: !Sub 'ssh -i ~/.ssh/${KeyName}.pem ec2-user@${EC2Instance.PublicDnsName}'
     Description: SSH instructions
   UserName:
     Value: !Ref 'AdminUsername'

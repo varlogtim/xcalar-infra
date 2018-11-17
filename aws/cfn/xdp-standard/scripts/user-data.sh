@@ -21,6 +21,9 @@ ec2_find_cluster() {
 
 eval $(ec2-tags -s -i)
 
+NFS_TYPE=nfs
+NFS_OPTS="vers=4.0,_netdev,defaults"
+
 while [ $# -gt 0 ]; do
   cmd="$1"
   shift
@@ -29,6 +32,8 @@ while [ $# -gt 0 ]; do
     NFSMOUNT="$1"
     shift
     ;;
+  --nfs-type) NFS_TYPE="$1"; shift;;
+  --nfs-opts) NFS_OPTS="$1"; shift;;
   --tag-key)
     TAG_KEY="$1"
     shift
@@ -87,7 +92,7 @@ AVZONE=$(curl -sSf http://169.254.169.254/latest/meta-data/placement/availabilit
 INSTANCE_TYPE=$(curl -sSf http://169.254.169.254/latest/meta-data/instance-type)
 export AWS_DEFAULT_REGION="${AVZONE%[a-f]}"
 
-export PATH=/opt/mssql-tools/bin:/opt/xcalar/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin:/opt/aws/bin
+export PATH=/opt/mssql-tools/bin:/opt/xcalar/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/opt/aws/bin:/bin
 echo "export PATH=$PATH" > /etc/profile.d/path.sh
 
 set +e
@@ -95,23 +100,20 @@ if [ -e /etc/ec2.env ]; then
   . /etc/ec2.env
 fi
 
-case "$AWS_DEFAULT_REGION" in
-us-east-1 | us-west-2)
-  test -n "$NFSMOUNT" || NFSMOUNT="netstore.${AWS_DEFAULT_REGION}.aws.xcalar.com:/"
-  ;;
-*)
-  echo >&2 "Region ${AWS_DEFAULT_REGION} is not supported properly!"
-  test -n "$NFSMOUNT" || NFSMOUNT="netstore.${AWS_DEFAULT_REGION}.aws.xcalar.com:/"
-  ;;
-esac
-
-yum clean all --enablerepo='*'
-yum install -y unzip yum-utils epel-release patch
-yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
-yum-config-manager --enable xcalar-deps xcalar-deps-common epel
-yum install -y jq amazon-efs-utils
+if [ -z "$NFS_MOUNT" ]; then
+    case "$AWS_DEFAULT_REGION" in
+        us-east-1 | us-west-2) NFSMOUNT="netstore.${AWS_DEFAULT_REGION}.aws.xcalar.com:/";;
+        *) echo >&2 "Region ${AWS_DEFAULT_REGION} is not supported properly!"; exit 1;;
+    esac
+fi
 
 if ! rpm -q xcalar; then
+  yum clean all --enablerepo='*'
+  yum install -y unzip yum-utils epel-release patch
+  yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
+  yum-config-manager --enable xcalar-deps xcalar-deps-common epel
+  yum install -y jq amazon-efs-utils
+
   mkdir -p -m 0700 /var/lib/xcalar-installer
   cd /var/lib/xcalar-installer
 
@@ -138,7 +140,7 @@ if ! rpm -q xcalar; then
   if [ $? -eq 0 ] && test -s installer.sh; then
     export ACCEPT_EULA=Y
     chmod 0700 installer.sh
-    ./installer.sh --nostart --startonboot 2>&1 | tee -a installer.log
+    ./installer.sh --nostart 2>&1 | tee -a installer.log
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
       echo "Failed to install ${PWD}/installer.sh (from $INSTALLER_URL)"
       exit 1
@@ -147,15 +149,19 @@ if ! rpm -q xcalar; then
 fi
 
 if [ -n "$LICENSE" ]; then
-  echo "$LICENSE" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
+  if [[ $LICENSE =~ ^s3:// ]]; then
+    aws s3 cp $LICENSE - | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
+  else
+    echo "$LICENSE" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
+  fi
 fi
 
 touch /etc/xcalar/XcalarLic.key
 chown xcalar:xcalar /etc/xcalar/XcalarLic.key
 
-mkdir -p /netstore
 if [ -n "$NFSMOUNT" ]; then
-  echo "${NFSMOUNT} /netstore efs defaults,_netdev 0	0" >> /etc/fstab
+  mkdir -p /netstore
+  echo "${NFSMOUNT} /netstore ${NFS_TYPE} ${NFS_OPTS} 0	0" >> /etc/fstab
   mount /netstore
 fi
 
@@ -172,7 +178,6 @@ else
   echo >&2 "No valid tags found"
 fi
 
-XLRROOT=/var/opt/xcalar
 if [ -n "$TAG_VALUE" ]; then
   CLUSTER_ID=$TAG_VALUE
   IPS=()
@@ -192,24 +197,22 @@ if [ $NUM_INSTANCES -gt 1 ]; then
   XLRROOT=/mnt/xcalar
   mkdir -p /netstore/cluster/$CLUSTER_ID
   chown xcalar:xcalar /netstore/cluster/$CLUSTER_ID
-  echo "${NFSMOUNT}cluster/$CLUSTER_ID ${XLRROOT} efs  defaults,_netdev	0	0" >> /etc/fstab
+  echo "${NFSMOUNT}cluster/$CLUSTER_ID ${XLRROOT} ${NFS_TYPE} ${NFS_OPTS} 0	0" >> /etc/fstab
   mkdir -p ${XLRROOT}
   mount ${XLRROOT}
   if ! test -d ${XLRROOT}/jupyterNotebooks; then
     rsync -avzr /var/opt/xcalar/ ${XLRROOT}/
   fi
+  /opt/xcalar/scripts/genConfig.sh /etc/xcalar/template.cfg - ${IPS[@]} | sed 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='${XLRROOT}'@g' | tee /etc/xcalar/default.cfg
 else
   XLRROOT=/var/opt/xcalar
   mkdir -p $XLRROOT
   chown xcalar:xcalar $XLRROOT
+  /opt/xcalar/scripts/genConfig.sh /etc/xcalar/template.cfg - localhost | tee /etc/xcalar/default.cfg
 fi
 
-/opt/xcalar/scripts/genConfig.sh /etc/xcalar/template.cfg - ${IPS[@]} | sed 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='${XLRROOT}'@g' | tee /etc/xcalar/default.cfg
-
-if ! test -e $XLRROOT/config; then
-  mkdir -m 0700 -p $XLRROOT/config
-  chown xcalar:xcalar $XLRROOT $XLRROOT/config
-fi
+mkdir -m 0700 -p $XLRROOT/config
+chown xcalar:xcalar $XLRROOT $XLRROOT/config
 chmod 0700 $XLRROOT/config
 cat > $XLRROOT/config/defaultAdmin.json << EOF
 {
@@ -222,19 +225,21 @@ EOF
 chmod 0600 $XLRROOT/config/defaultAdmin.json
 chown -R xcalar:xcalar $XLRROOT $XLRROOT/config
 
-XCE_XDBSERDESPATH=${XCE_XDBSERDESPATH:-/var/opt/xcalar/serdes}
+XCE_XDBSERDESPATH=${XCE_XDBSERDESPATH:-/var/opt/xcalar/serdes/}
 XCE_CONFIG=${XCE_CONFIG:-/etc/xcalar/default.cfg}
 
 sed -i '/^Constants.XdbLocalSerDesPath=/d' $XCE_CONFIG
 echo "Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH" >> $XCE_CONFIG
 mkdir -p $XCE_XDBSERDESPATH
 chown xcalar:xcalar $XCE_XDBSERDESPATH
-chkconfig xcalar on
-service xcalar start
+/etc/init.d/xcalar start
 rc=$?
+
+chkconfig xcalar on
 
 #aws s3 cp s3://blim-export/queue_handler.py /usr/local/bin/queue_handler.py
 #/opt/xcalar/bin/python3 /usr/local/bin/queue_handler.py  >> /var/log/queue_handler.log 2>&1 </dev/null &
 
 # test_db
-echo >&2 "All done with user-data.sh"
+echo >&2 "All done with user-data.sh (rc=$rc)"
+exit $rc
