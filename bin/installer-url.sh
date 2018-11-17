@@ -3,11 +3,21 @@
 # Copies an installer to S3/GCS, then provides a signed
 # URL with $EXPIRY seconds validity.
 
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -z "$XLRINFRADIR" ]; then
+    export XLRINFRADIR="$(cd "${DIR}/.." && pwd)"
+fi
+export PATH="$XLRINFRADIR/bin:$PATH"
+
 . infra-sh-lib
 . aws-sh-lib
 
 # Links expire in 1 week by default. That's the max setting.
 UPLOAD="gs,az"
+DRYRUN=false
+TESTING=${TESTING:-false}
+FORCE=false
 
 if [ "$(uname -s)" = Darwin ]; then
     readlink_f() {
@@ -29,7 +39,7 @@ if [ "$(uname -s)" = Darwin ]; then
     }
 else
     readlink_f() {
-        readlink -f "$@"
+        readlink -f "$1"
     }
 fi
 
@@ -38,13 +48,64 @@ say() {
 }
 
 check_url() {
-    curl -r 0-255 -fsL -o /dev/null "$1" -w '%{http_code}' | grep -q '^20'
+    curl -r 0-255 -sL -o /dev/null "$1" -w '%{http_code}' | grep -q '^20'
 }
 
 az_blob() {
     local cmd="$1"
     shift
     az storage blob $cmd --account-name "$ACCOUNT" --container-name "$CONTAINER" --name "$BLOB" "$@"
+}
+
+test_self () {
+    export TESTING=true
+    export AWS_DEFAULT_REGION=us-west-2
+    TMPDIR="$(mktemp -d -t uploadXXXXXX)" || exit 1
+    mkdir -p $TMPDIR || exit 1
+    trap "rm -r $TMPDIR" EXIT
+    T=1
+    TARGETS=(${DEST:-az s3 gs})
+    echo "1..$(( ${#TARGETS[@]} * 4 ))"
+    for DEST in ${TARGETS[*]}; do
+        INSTALLER=$TMPDIR/prod/xcalar-1.0.0-1234-installer
+        if ! URL="$(${BASH_SOURCE[0]} -d $DEST $INSTALLER)"; then
+            echo "not ok $T - ${DEST}: Failed to download existing installer"
+            exit 1
+        else
+            echo "ok $T - ${DEST}: Got existing URL ${URL%\?*}"
+        fi
+        T=$((T+1))
+
+        if [ "$(curl -sL "$URL")" != TEST ]; then
+            echo "not ok $T - ${DEST}: Contents of file were not TEST"
+            exit 1
+        else
+            echo "ok $T - ${DEST}: Contents of file were TEST"
+        fi
+        T=$((T+1))
+        mkdir -p ${TMPDIR}/prod
+        INSTALLER=$TMPDIR/prod/xcalar-1.0.0-1236-installer
+        testText="Right now is $(date +%FT%T.%N%z)"
+        echo "$testText" > $INSTALLER
+        if ! URL="$(${BASH_SOURCE[0]} --force --no-cache -d $DEST $INSTALLER 2>${TMPDIR}/output.txt)"; then
+            echo "not ok $T - ${DEST}: Failed to upload $INSTALLER to $DEST. $(cat $TMPDIR/output.txt)"
+            exit 1
+        else
+            echo "ok $T - ${DEST}: Got URL ${URL%\?*}"
+        fi
+        T=$((T+1))
+
+        contents="$(curl -sL "$URL")"
+        if [ "$contents"  != "$testText" ]; then
+            echo "not ok $T - ${DEST}: Contents of file were not \"$testText\", got \"$contents\""
+            exit 1
+        else
+            echo "ok $T - ${DEST}: Contents of file were \"$testText\""
+        fi
+        T=$((T+1))
+    done
+
+    exit 0
 }
 
 if [ $# -eq 0 ]; then
@@ -55,7 +116,7 @@ while [ $# -gt 0 ]; do
     cmd="$1"
     case "$cmd" in
     -h | --help)
-        say "Usage: $0 [-d <az|gs|s3>] [-e expiry-in-seconds (default 1w or 4w depending on cloud)] <path/to/installer>"
+        say "Usage: $0 [-d|--dest <az|gs|s3>] [-e expiry-in-seconds (default 1w or 4w depending on cloud)] [--no-cache] [--force] [-f <path/to/installer>] [-t|-test run self test] [--] installer"
         say " upload the installer to repo.xcalar.net and print out new http url"
         exit 1
         ;;
@@ -63,36 +124,69 @@ while [ $# -gt 0 ]; do
         EXPIRY="$2"
         shift 2
         ;;
+    --no-cache)
+        CACHE_CONTROL="no-cache, no-store, must-revalidate, max-age=0, no-transform"
+        shift
+        ;;
     --use-sha1)
         USE_SHA1=1
+        shift
+        ;;
+    -f | --file)
+        INSTALLER="$2"
+        shift 2
+        ;;
+    --force)
+        FORCE=true
         shift
         ;;
     -d | --dest)
         DEST="$2"
         shift 2
         ;;
-    -*)
-        say "ERROR: Unknown option $1"
-        exit 1
+    -n | --dryrun | --dry-run)
+        DRYRUN=true
+        shift
+        ;;
+    -t | --test)
+        shift
+        test_self
+        exit $?
         ;;
     --)
         shift
         break
         ;;
+    -*)
+        say "ERROR: Unknown option $1"
+        exit 1
+        ;;
     *) break ;;
     esac
 done
 
-INSTALLER="$1"
+if [ $# -gt 0 ]; then
+    if [ -n "$INSTALLER" ]; then
+        say "WARNING: INSTALLER=$INSTALLER has already been specified, but is being overwritten by extra argument $1"
+    fi
+    INSTALLER="$1"
+    shift
+fi
 
-if test -f "$INSTALLER"; then
-    INSTALLER="$(readlink_f "${INSTALLER}")"
+if $TESTING || test -f "$INSTALLER"; then
+    if ! $TESTING; then
+        INSTALLER="$(readlink_f "${INSTALLER}")"
+    fi
     BUILD_SHA="$(dirname ${INSTALLER})/../BUILD_SHA"
     if test -f "$BUILD_SHA"; then
         SHAS=($(awk '{print $(NF)}' "${BUILD_SHA}" | tr -d '()'))
         SHA1="${SHAS[0]}-${SHAS[1]}"
     else
-        SHA1="$(sha1sum $INSTALLER | awk '{print $1}')"
+        if $TESTING; then
+            SHA1="0"
+        else
+            SHA1="$(sha1sum $INSTALLER | awk '{print $1}')"
+        fi
     fi
     INSTALLER_FNAME="$(basename $INSTALLER)"
     SUBDIR=$(basename $(dirname $INSTALLER))
@@ -115,11 +209,11 @@ if test -f "$INSTALLER"; then
     esac
     SA_ACCOUNT="${SA_ACCOUNT:-xcrepo}"
     SA_PREFIX="${SA_PREFIX:-builds}"
-    DEST="${SA_URI}://${SA_ACCOUNT}/${SA_PREFIX}"
+    DEST_URI="${SA_URI}://${SA_ACCOUNT}/${SA_PREFIX}"
     if [ "$USE_SHA1" = 1 ]; then
-        DEST_URL="${DEST}/${SHA1}/${DEST_FNAME}"
+        DEST_URL="${DEST_URI}/${SHA1}/${DEST_FNAME}"
     else
-        DEST_URL="${DEST}/${DEST_FNAME}"
+        DEST_URL="${DEST_URI}/${DEST_FNAME}"
     fi
 
     case "${DEST_URL}" in
@@ -127,33 +221,46 @@ if test -f "$INSTALLER"; then
         export AWS_DEFAULT_REGION=$(aws_s3_region "$DEST_URL")
         EXPIRY=${EXPIRY:-604200}  # 1 week is max on AWS
         if [[ $EXPIRY -ge 604800 ]] || [[ $EXPIRY -le 0 ]]; then
-            say "Invalid expiry. Must be one week or less"
+            say "Invalid expiry. Must be 604800 (one week) or less and greater than 0"
             exit 1
         fi
         URL="$(aws s3 presign --expires-in $EXPIRY "$DEST_URL")"
 
-        if ! check_url "$URL"; then
-            say "Uploading $INSTALLER to $DEST_URL"
-            aws s3 cp --metadata-directive REPLACE --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' --only-show-errors "$INSTALLER" "$DEST_URL" >&2
-            # S3 eventual consistency at work
-            sleep 5
-        fi
-        if [ $? -eq 0 ] && check_url "$URL"; then
+        if ! $FORCE && check_url "$URL"; then
             echo "$URL"
+            exit 0
+        fi
+        say "Uploading $INSTALLER to $DEST_URL"
+        if aws s3 cp --metadata-directive REPLACE ${CACHE_CONTROL+--cache-control "${CACHE_CONTROL}"} --only-show-errors "$INSTALLER" "$DEST_URL" >&2; then
+            # S3 eventual consistency at work
+            sleep 1
         else
-            echo >&2 "Failed to verify $URL"
+            echo >&2 "Failed to upload to $INSTALLER to $DEST_URL"
             exit 1
         fi
+        if check_url "$URL"; then
+            echo "$URL"
+            exit 0
+        fi
+        echo >&2 "Failed to verify $URL"
+        exit 1
         ;;
     gs://*)
-        if ! gsutil ls "$DEST_URL" > /dev/null 2>&1; then
+        URL="https://storage.googleapis.com/${DEST_URL#gs://}"
+        if $FORCE || ! gsutil ls "$DEST_URL" > /dev/null 2>&1; then
             say "Uploading $INSTALLER to $DEST_URL"
             until gsutil -m -o GSUtil:parallel_composite_upload_threshold=100M -q \
                 cp -c "$INSTALLER" "$DEST_URL" >&2; do
                 sleep 1
             done
+            if [ -n "$CACHE_CONTROL" ]; then
+                gsutil setmeta -h "Cache-Control:$CACHE_CONTROL" "$DEST_URL" >&2
+            fi
         fi
-        echo https://storage.googleapis.com/"${DEST_URL#gs://}"
+        if check_url "$URL"; then
+            echo "$URL"
+            exit 0
+        fi
         ;;
     az://*)
         DEST_URL="${DEST_URL#az://}"
@@ -166,14 +273,19 @@ if test -f "$INSTALLER"; then
         URL="$(az_blob url -otsv)"
         CODE="$(az_blob generate-sas --permissions r --expiry $EXPIRES -otsv)"
         URL="${URL}?${CODE}"
-        if ! check_url "$URL"; then
-            az_blob upload -f "$INSTALLER" >&2
-        fi
-        if [ $? -eq 0 ] && check_url "$URL"; then
+        if ! $FORCE && check_url "$URL"; then
             echo "$URL"
             exit 0
         fi
-        say "Failed to upload to $DEST_URL"
+        if ! az_blob upload -f "$INSTALLER" ${CACHE_CONTROL+--content-cache-control "${CACHE_CONTROL}"} >&2; then
+            say "Failed to upload to $DEST_URL"
+            exit 1
+        fi
+        if check_url "$URL"; then
+            echo "$URL"
+            exit 0
+        fi
+        say "Failed to verify $URL"
         exit 1
         ;;
     *)
@@ -181,19 +293,18 @@ if test -f "$INSTALLER"; then
         exit 1
         ;;
     esac
-    exit 0
 elif [[ ${INSTALLER} =~ ^http[s]?:// ]]; then
-    if ! check_url "${INSTALLER}"; then
-        say "Unable to access ${INSTALLER}"
-        exit 1
+    if check_url "${INSTALLER}"; then
+        say "URL Verified OK"
+        echo $INSTALLER
+        exit 0
     fi
-    say "URL Verified OK"
-    echo $INSTALLER
-    exit 0
 elif [[ ${INSTALLER} =~ ^s3:// ]]; then
     export AWS_DEFAULT_REGION=$(aws_s3_region "$INSTALLER")
-    aws s3 presign --expires-in $EXPIRY "${INSTALLER}"
-    exit $?
+    if aws_s3_head_object "${INSTALLER}" >/dev/null; then
+        aws s3 presign --expires-in $EXPIRY "${INSTALLER}"
+        exit $?
+    fi
 fi
 
 say "Unable to locate $INSTALLER as either a valid file or URL"
