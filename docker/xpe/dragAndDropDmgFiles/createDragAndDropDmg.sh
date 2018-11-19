@@ -118,7 +118,7 @@ set +x
 
 # copy dmg to requested output location
 # (if OUTPATH was just a dmg file, output in cwd when script began)
-DMG_DIRNAME=$(dirname "$OUTPATH")
+DMG_DIRNAME="$(dirname "$OUTPATH")"
 if  [[ "$DMG_DIRNAME" == "." ]]; then
     DMG_DIRNAME="$START_CWD"
 fi
@@ -128,6 +128,15 @@ mkdir -p "$DMG_DIRNAME"
 echo "
 Copying image to final location; please wait... " >&2
 cp "$STAGING_DIR"/"$DMG_BASENAME" "$DMG_DIRNAME"
+
+# check for BLDINFO.txt file in the dir containing the app the dmg was made from;
+# if there copy also to final location
+# (if the dir was a Jenkins build dir it should be there, contains useful
+# info about the build such as which installer was used, etc)
+buildDir="$(dirname "$APPTAR")"
+if [ -e "$buildDir/BLDINFO.txt" ]; then
+    cp "$buildDir/BLDINFO.txt" "$DMG_DIRNAME"
+fi
 
 # print a helpful summary to stderr
 dmgFullPath="$DMG_DIRNAME/$DMG_BASENAME"
