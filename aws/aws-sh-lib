@@ -94,7 +94,7 @@ aws_list_instances_info() {
 }
 
 aws_list_instances_info2() {
-    aws ec2 describe-instances | jq -r "
+    aws ec2 describe-instances "$@" --output=json | jq -r "
     .Reservations[].Instances[] |
         [
          .LaunchTime,
@@ -579,4 +579,21 @@ EOF
     rc=$?
     rm -f $tmpf $yaml
     return $rc
+}
+
+
+aws_start_and_ssh() {
+    local curState rc dnsAddress
+    if ! curState=$(aws ec2 start-instances "$@" --query 'StartingInstances[0].CurrentState.Name'); then
+        return 1
+    fi
+    if [ "$curState" != running ]; then
+        aws ec2 wait instance-running "$@"
+        rc=$?
+        [ $rc -eq 0 ] || return $rc
+        dnsAddress=$(aws ec2 describe-instances "$@" --query 'Reservations[].Instances[0].PublicDnsName' --output text)
+        rc=$?
+        [ $rc -eq 0 ] || return $rc
+        ssh ec2-user@${dnsAddress}
+    fi
 }
