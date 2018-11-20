@@ -358,8 +358,8 @@ Resources:
             fi
             /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
             exit $rc
-          - EfsMount: !Sub '${EfsSharedRoot}:/'
-            Resource: ClusterLC
+          - EfsMount: !Sub '${EfsSharedRoot}.efs.${AWS::Region}.amazonaws.com:/'
+            Resource: ClusterASG
   IamClusterRole:
     Type: AWS::IAM::Role
     Properties:

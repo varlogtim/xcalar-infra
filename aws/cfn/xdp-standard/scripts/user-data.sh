@@ -21,17 +21,15 @@ ec2_find_cluster() {
 
 eval $(ec2-tags -s -i)
 
-NFS_TYPE=nfs
-NFS_OPTS="vers=4.0,_netdev,defaults"
+NFS_TYPE=nfs4
+NFS_OPTS="nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport"
+BOOTSTRAP_EXPECT=1
 
 while [ $# -gt 0 ]; do
   cmd="$1"
   shift
   case "$cmd" in
-  --nfs-mount)
-    NFSMOUNT="$1"
-    shift
-    ;;
+  --nfs-mount) NFSMOUNT="$1";shift;;
   --nfs-type) NFS_TYPE="$1"; shift;;
   --nfs-opts) NFS_OPTS="$1"; shift;;
   --tag-key)
@@ -100,12 +98,20 @@ if [ -e /etc/ec2.env ]; then
   . /etc/ec2.env
 fi
 
-if [ -z "$NFS_MOUNT" ]; then
+if [ $BOOTSTRAP_EXPECT -gt 1 ] && [ -z "$NFSMOUNT" ]; then
     case "$AWS_DEFAULT_REGION" in
         us-east-1 | us-west-2) NFSMOUNT="netstore.${AWS_DEFAULT_REGION}.aws.xcalar.com:/";;
         *) echo >&2 "Region ${AWS_DEFAULT_REGION} is not supported properly!"; exit 1;;
     esac
 fi
+
+NFSHOST="${NFSMOUNT%%:*}"
+NFSDIR="${NFSMOUNT#${NFSHOST}:/}"
+
+if [[ $NFSHOST =~ ^fs-[0-9a-f]{8}$ ]]; then
+    NFSHOST="${NFSHOST}.efs.${AWS_DEFAULT_REGION}.amazonaws.com"
+fi
+
 
 if ! rpm -q xcalar; then
   yum clean all --enablerepo='*'
@@ -161,6 +167,7 @@ chown xcalar:xcalar /etc/xcalar/XcalarLic.key
 
 if [ -n "$NFSMOUNT" ]; then
   mkdir -p /netstore
+  sed -i '\@/netstore @d' /etc/fstab
   echo "${NFSMOUNT} /netstore ${NFS_TYPE} ${NFS_OPTS} 0	0" >> /etc/fstab
   mount /netstore
 fi
@@ -197,6 +204,7 @@ if [ $NUM_INSTANCES -gt 1 ]; then
   XLRROOT=/mnt/xcalar
   mkdir -p /netstore/cluster/$CLUSTER_ID
   chown xcalar:xcalar /netstore/cluster/$CLUSTER_ID
+  sed -i '\@'${NFSMOUNT}'@d' /etc/fstab
   echo "${NFSMOUNT}cluster/$CLUSTER_ID ${XLRROOT} ${NFS_TYPE} ${NFS_OPTS} 0	0" >> /etc/fstab
   mkdir -p ${XLRROOT}
   mount ${XLRROOT}
