@@ -68,6 +68,7 @@ DEFAULT_PUPPET_ROLE_INSTALL="xcalar_qa"
 DEFAULT_PUPPET_ROLE_NO_INSTALL="jenkins_slave"
 DEFAULT_CORES=4
 DEFAULT_RAM=8
+DEFAULT_VM_COMMENT="ovirttool-cli"
 
 REBOOT_TIMEOUT=500 # seconds to wait before timing out after waiting to be able to ssh to a VM after 'reboot -h'
 SHUTDOWN_TIMEOUT = 600 # seconds to wait before timing out on vms to shut down
@@ -405,13 +406,15 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
     :param template: name of template to use
     :param ram: (int) memory size (in bytes)
     :param cores: (int) num CPU on the VM
+    :param comment: (String) optional comment to add to the VM
+        (will be visible in official ovirt GUI, in 'comment' col of 'Virtual Machines' tab)
 
     :returns: (String) the unique Ovirt id generated for the new VM
 '''
-def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptries=5):
+def create_vm(name, cluster, template, ram, cores, comment=None, feynmanIssueRetries=4, iptries=5):
 
     info_log("Create a VM called '{}' on {}".format(name, cluster))
-    debug_log("VM specs: {}\n\tOvirt cluster: {}\n\tTemplate VM  : {}\n\tRAM (bytes)  : {}\n\t# cores      : {}".format(name, cluster, template, ram, cores))
+    debug_log("VM specs: {}\n\tOvirt cluster: {}\n\tTemplate VM  : {}\n\tRAM (bytes)  : {}\n\t# cores      : {}\n\tcomment      : {}".format(name, cluster, template, ram, cores, comment))
 
     # Get the reference to the "vms" service:
     vms_service = CONN.system_service().vms_service()
@@ -441,6 +444,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
 
         newvmObj = types.Vm(
             name=name,
+            comment=comment,
             cluster=types.Cluster(
                 name=cluster,
             ),
@@ -1351,15 +1355,17 @@ def get_pem_cert():
     :param cores: (int) number of cores
     :param availableClusters: (list of Strings of names of clusters)
         if fail to make on one of the clusters, try on the others
+    :param comment (String): optional comment to add to the VM
+        (will see it only in official Ovirt GUI)
 '''
-def provision_vm(name, ram, cores, availableClusters):
+def provision_vm(name, ram, cores, availableClusters, comment=None):
 
     debug_log("Try to provision VM {} on one of the following clusters: {}".format(name, availableClusters))
 
     for orderedcluster in availableClusters:
         template = get_template(orderedcluster)
         try:
-            vmid = create_vm(name, orderedcluster, template, ram, cores)
+            vmid = create_vm(name, orderedcluster, template, ram, cores, comment=comment)
 
             if not vmid:
                 raise RuntimeError("ERROR: Ovirt seems to have successfully created VM {}, but no id generated\n".format(name))
@@ -1408,12 +1414,15 @@ def provision_vm(name, ram, cores, availableClusters):
     :param ovirtcluster: which cluster in Ovirt to create VMs from
     :param ram: (int) memory (in GB) on each VM
     :param cores: (int) num cores on each VM
+    :param comment: (string) optional comment to add to the VMs.
+        (will appear in 'Comment' col of 'Virtual Machines' tab in official ovirt GUI,
+        for each VM created)
 
     :returns: list of unique vm ids for each VM created
         (this is distinct from name; its id attr of Type:Vm Object)
 
 '''
-def provision_vms(vmnames, ovirtcluster, ram, cores, tryotherclusters=True):
+def provision_vms(vmnames, ovirtcluster, ram, cores, comment=None, tryotherclusters=True):
 
     if not vmnames: # no vms to create
         return None
@@ -1467,7 +1476,7 @@ def provision_vms(vmnames, ovirtcluster, ram, cores, tryotherclusters=True):
     sleepBetween = 20
     for nextvmname in vmnames:
         debug_log("Fork new process to create a new VM by name {}".format(nextvmname))
-        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
+        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters), kwargs={'comment': comment})
         #proc = multiprocessing.Process(target=create_vm, args=(newvm, ovirtcluster, template, ram, cores)) # 'cluster' here refers to cluster the VM is on in Ovirt
         # it will fail if you try to create VMs at exact same time so sleep
         proc.start()
@@ -2739,6 +2748,8 @@ if __name__ == "__main__":
         help="Single VM or comma separated String of VMs to power on")
     parser.add_argument("--user", type=str,
         help="Your LDAP username (no '@xcalar.com')")
+    parser.add_argument("--comment", type=str, default=DEFAULT_VM_COMMENT,
+        help="An optional comment to add to the VM (it will appear in the official Ovirt GUI, on the 'Virtual Machines' tab, in the 'comment' column for created VMs).  Defaults to: {}".format(DEFAULT_VM_COMMENT))
     parser.add_argument("-f", "--force", action="store_true", default=False,
         help="Force certain operations such as provisioning, delete, when script would fail normally")
 
@@ -2803,7 +2814,7 @@ if __name__ == "__main__":
         # and genrate another basename from this with randomness, (to avoid old hostnames being resued)
         # and base the VM names on that.  get that unique basename too, in case creating cluster
         uniqueGeneratedBasename, vmnames = generate_vm_names(basename, int(args.count))
-        vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, comment=args.comment, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
             # if you supply a value to 'createcluster' arg of setup_xcalar,
