@@ -51,7 +51,7 @@ builders:
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'
     ami_description: '{{user `product_desc`}} ({{user `osid` | upper}} {{user `version`}}
-      {{user `build_number`}} ({{user `today`}}-v{{user `image_build_number`}})'
+      {{user `build_number`}} {{user `today`}}-v{{user `image_build_number`}})'
     tags:
       Name: '{{user `desc` }} v{{user `version`}} {{user `build_number`}} {{user `osid` | upper}}'
       BaseOS: '{{user `osid` | upper}}-{{user `aws_image_version`}}'
