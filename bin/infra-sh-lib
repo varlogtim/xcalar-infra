@@ -227,3 +227,21 @@ urlencode() {
     echo "${encoded}"
     )
 }
+
+vssh() {
+    # try to guess the user's intentions
+    if [[ "$1" =~ ^-mode ]] || [[ "$1" =~ ^-role ]]; then
+        vault ssh "$@"
+    elif [[ "$@" =~ jenkins ]]; then
+        vault ssh -mode=ca -role=jenkins "$@"
+    elif [[ "$@" =~ ec2 ]]; then
+        vault ssh -mode=ca -role=cloud "$@"
+    elif [[ "$@" =~ azure ]]; then
+        vault ssh -mode=ca -role=cloud "$@"
+    elif [[ "$@" =~ root ]]; then
+        vault ssh -mode=ca -role=admin "$@"
+    else
+        echo >&2 "Don't understand your vault ssh command: $*"
+        return 1
+    fi
+}

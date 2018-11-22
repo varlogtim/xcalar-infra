@@ -122,10 +122,10 @@ fi
 . AMI.txt
 
 for TEMPLATE in xdp-standard xdp-single; do
-    if ! test -e ${TEMPLATE}.json;  then
+    if $FORCE || ! test -e ${TEMPLATE}.yaml;  then
         transform ${TEMPLATE} || exit 1
     else
-        echo >&2 "WARNING: Skipping transform to ${TEMPLATE}.json, because it exists"
+        echo >&2 "WARNING: Skipping transform to ${TEMPLATE}.yaml, because it exists. Use --force"
     fi
     echo "${BUCKET_ENDPOINT}/${TARGET}/${TEMPLATE}.yaml"
 done
@@ -140,6 +140,7 @@ done
 
 if $DRY; then
     add_args+=(--dryrun)
+    echo >&2 "WARNING: Dry run only. Pass --doit, to actually copy."
 fi
 
 s3_sync --acl public-read "${add_args[@]}" . "s3://${BUCKET}/${TARGET}/"
