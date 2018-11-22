@@ -1,72 +1,46 @@
-job "jenkins_swarm" {
+job "newton-swarm" {
   datacenters = ["xcalar-sjc"]
   type        = "service"
 
-  update {
-    max_parallel      = 1
-    min_healthy_time  = "10s"
-    healthy_deadline  = "3m"
-    progress_deadline = "10m"
-    auto_revert       = false
-    canary            = 0
+  constraint {
+    attribute    = "${meta.cluster}"
+    set_contains = "newton"
   }
 
-  migrate {
-    max_parallel     = 1
-    health_check     = "checks"
-    min_healthy_time = "10s"
-    healthy_deadline = "5m"
-  }
-
-  group "swarm" {
+  group "jenkins-swarm" {
     count = 2
 
     constraint {
       distinct_hosts = true
     }
 
-    constraint {
-      attribute = "${node_class}"
-      operator  = "set_contains"
-      value     = "jenkins_slave"
-    }
+    #    constraint {
+    #      attribute = "${node_class}"
+    #      operator  = "set_contains"
+    #      value     = "jenkins_slave"
+    #    }
 
     restart {
-      attempts = 3
+      attempts = 10
       interval = "5m"
       delay    = "15s"
       mode     = "fail"
     }
-
-    #    ephemeral_disk {
-    #      sticky  = true
-    #      migrate = true
-    #      size    = 20000
-    #    }
-    #    task "decode" {
-    #      vault {
-    #        policies = ["jenkins_slave"]
-    #      }
-    #
-    #      driver = "exec"
-    #
-    #      config {
-    #        command = "/bin/bash"
-    #        args    = ["-c", "/usr/local/bin/vault kv get -field=password secret/roles/jenkins-slave/swarm > secrets/swarm_pass"]
-    #      }
-    #    }
-    #
-    task "worker" {
+    ephemeral_disk {
+      sticky  = true
+      migrate = false
+    }
+    task "jenkins_slave" {
       driver = "java"
 
       resources {
-        cpu    = 8000  # MHz
-        memory = 16048 # MB
+        cpu    = 8000 # MHz
+        memory = 8000 # MB
       }
 
       config {
         jar_path    = "local/swarm-client-3.14.jar"
-        jvm_options = ["-Xmx1024m", "-Xms256m"]
+        jvm_options = ["-Xmx512m", "-Xms256m"]
 
         args = [
           "-master",
@@ -74,7 +48,7 @@ job "jenkins_swarm" {
           "-sslFingerprints",
           "D7:F9:76:25:B2:7D:E9:00:59:00:9B:CD:CE:6B:5F:97:9E:2F:68:A3:79:13:FE:F6:43:9F:A7:D0:5B:AC:7F:78",
           "-executors",
-          "1",
+          "2",
           "-labels",
           "${SWARM_TAGS}",
           "-mode",
@@ -87,8 +61,21 @@ job "jenkins_swarm" {
       }
 
       env {
-        "SWARM_PASS" = "D7XmxQFAmqiN66vQtnmz6+bt"
         "SWARM_TAGS" = "nomad debug"
+      }
+
+      vault {
+        policies = ["jenkins_slave"]
+        env      = true
+      }
+
+      template {
+        data = <<EOT
+SWARM_PASS={{ with secret "secret/data/roles/jenkins-slave/swarm" }}{{ .Data.data.password }}{{ end }}
+EOT
+
+        destination = "secrets/swarm_pass.env"
+        env         = true
       }
 
       # Specifying an artifact is required with the "java" driver. This is the
