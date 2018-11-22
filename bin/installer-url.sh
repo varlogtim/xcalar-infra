@@ -24,14 +24,14 @@ if [ "$(uname -s)" = Darwin ]; then
         (
             target="$1"
 
-            cd "$(dirname $target)"
-            target="$(basename $target)"
+            cd "$(dirname "$target")"
+            target="$(basename "$target")"
 
             # Iterate down a (possible) chain of symlinks
             while [ -L "$target" ]; do
-                target="$(readlink $target)"
-                cd "$(dirname $target)"
-                target="$(basename $target)"
+                target="$(readlink "$target")"
+                cd "$(dirname "$target")"
+                target="$(basename "$target")"
             done
 
             echo "$(pwd -P)/$target"
@@ -185,11 +185,11 @@ if $TESTING || test -f "$INSTALLER"; then
         if $TESTING; then
             SHA1="0"
         else
-            SHA1="$(sha1sum $INSTALLER | awk '{print $1}')"
+            SHA1="$(sha1sum "$INSTALLER" | awk '{print $1}')"
         fi
     fi
-    INSTALLER_FNAME="$(basename $INSTALLER)"
-    SUBDIR=$(basename $(dirname $INSTALLER))
+    INSTALLER_FNAME="$(basename "$INSTALLER")"
+    SUBDIR="$(basename $(dirname "$INSTALLER"))"
     DEST_FNAME="${SUBDIR}/$INSTALLER_FNAME"
     test -n "$DEST" || DEST=s3
 
