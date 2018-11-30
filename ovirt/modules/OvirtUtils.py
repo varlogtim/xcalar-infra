@@ -16,9 +16,10 @@ ILLEGAL_VMNAME_CHARS = ['.', '_']
 PROTECTED_KEYWORDS = ['cluster', 'host', 'fdqn', 'name']
 
 '''
-Checks if url can be supplied to curl; returns True or False
+Checks if url can be curled.
+Throws ValueError if it can't, else returns True
 '''
-def can_curl(url):
+def _try_curl(url):
     '''
     calls 'check_url' func in bash helper lib, <INFRA>/bin/infra-sh-lib
     will check if url can be curled without downloading.
@@ -30,6 +31,16 @@ def can_curl(url):
         subprocess.check_call(bash_cmd, shell=True)
         return True
     except subprocess.CalledProcessError as e:
+        # TODO: customize error based on return code?
+        # return_code = e.returncode
+        raise ValueError("Can't access this path")
+
+def _is_gui_or_user_installer(installer_url):
+    # make sure they have given the regular RPM installer, not userinstaller
+    filename = os.path.basename(installer_url)
+    if 'gui' in filename or 'userinstaller' in filename:
+        return True
+    else:
         return False
 
 '''
@@ -51,18 +62,22 @@ def validate_hostname(hostname):
             "lower case letters, and may not contain any of "
             "the following chars: {}\n".format(" ".join(ILLEGAL_VMNAME_CHARS)))
 
-        '''
-        if the basename begins with one of Ovirt's search refining keywords
-        (a string you can type in the GUI's search field to refine a search, ex. 'cluster', 'host')
-        then the vms_service.list api will not work.
-        this leads to confusing results which are not immediately obvious what's going on
-        ensure prospective hostname does not begin with any of these words
-        '''
-        for ovirtSearchFilter in PROTECTED_KEYWORDS:
-            if hostname.startswith(ovirtSearchFilter):
-                raise ValueError("VM's basename can not begin with "
-                    "any of the values: {} (These are protected keywords "
-                    "in Ovirt)".format(PROTECTED_KEYWORDS))
+    '''
+    if the basename begins with one of Ovirt's search refining keywords
+    (a string you can type in the GUI's search field to refine a search, ex. 'cluster', 'host')
+    then the vms_service.list api will not work.
+    this leads to confusing results which are not immediately obvious what's going on
+    ensure prospective hostname does not begin with any of these words
+    '''
+    for ovirtSearchFilter in PROTECTED_KEYWORDS:
+        if hostname.startswith(ovirtSearchFilter):
+            raise ValueError("VM's basename can not begin with "
+                "any of the values: {} (These are protected keywords "
+                "in Ovirt)".format(PROTECTED_KEYWORDS))
+
+    # hostname can't begin with a number
+    if hostname[0].isdigit():
+        raise ValueError("VM basename can not begin with a number")
 
 '''
 ensure URL can be curl'd on the local machine,
@@ -70,15 +85,11 @@ and doesn't appear as gui or userinstaller
 '''
 def validate_installer_url(installer_url):
 
-    # make sure they have given the regular RPM installer, not userinstaller
-    filename = os.path.basename(installer_url)
-    if 'gui' in filename or 'userinstaller' in filename:
+    # attempt to detect if they've not supplied an RPM installer
+    if _is_gui_or_user_installer(installer_url):
         raise ValueError("RPM installer required; this looks like a "
             "gui installer or userinstaller")
 
-    # make sure can curl
-    if not can_curl(installer_url):
-        raise ValueError("Can not curl this installer URL.  "
-            "Should be an URL for an RPM installer, in curl format.\n"
-            "(If you know the <path> to the installer on netstore, "
-            " then the URL to supply would be: http://netstore/<path>")
+    # make sure can curl.  Throws value error if curl encounters
+    # a problem so let the error bubble up with its error messgae
+    _try_curl(installer_url)

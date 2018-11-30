@@ -2553,7 +2553,7 @@ def validateparams(args):
             try:
                 modules.OvirtUtils.validate_hostname(args.vmbasename)
             except ValueError as e:
-                raise ValueError("\n\nERROR: --vmbasename: {}".format(str(e)))
+                raise ValueError("\n\nERROR: --vmbasename: {}\n".format(str(e)))
 
         if args.ovirtcluster:
             # make sure they supplied a valid cluster with a template
