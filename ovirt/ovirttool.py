@@ -57,6 +57,7 @@ import subprocess
 import sys
 import time
 import urllib
+import modules.OvirtUtils
 
 MAX_VMS_ALLOWED=1024
 
@@ -138,15 +139,6 @@ TEMPLATE_HELPER_SH_SCRIPT = 'templatehelper.sh'
 ADMIN_HELPER_SH_SCRIPT = 'setupadmin.sh'
 
 FORCE = False # a force option will allow certain operations when script would fail otherwise (use arg)
-
-# Ovirt GUI search bar has search refining keywords
-# if you try to name a VM starting with one of these, vms_service.list api will
-# fail if that name is the identifier.  add these here so can fail on param validation
-# (else the script will fail after provisioning and it is not obvious at all why its failing)
-PROTECTED_KEYWORDS = ['cluster', 'host', 'fdqn', 'name']
-
-# chars that are disallowed in VM names
-ILLEGAL_VMNAME_CHARS = ['.', '_']
 
 class NoIpException(Exception):
     pass
@@ -477,7 +469,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
             raise RuntimeError("VM {} was successfully created, "
                 "but not finding the VM through Ovirt sdk\n"
                 "(Is there any chance the name {} starts with one of Ovirt's search keywords?"
-                " if so, please modify this tool and add to PROTECTED_KEYWORDS so vms of this name"
+                " if so, please modify this tool and add to PROTECTED_KEYWORDS list in modules/OvirtUtils.py so vms of this name"
                 " will not be allowed)\n"
                 "If not - Open ovirt, and try to type this name in the main search bar."
                 " are there any results?  If so, this indicates something is wrong with the API".format(name, name))
@@ -2557,21 +2549,11 @@ def validateparams(args):
                 errmsg = errmsg + "The --vmbasename value will become the name of the created cluster, too.\n"
             raise ValueError(errmsg)
         else:
-            # validate the name they supplied is all lower case and contains no illegal chars (will be setting hostname of the VMs to the VM name)
-            if any(filter(str.isupper, args.vmbasename)) or any(illegal_char in args.vmbasename for illegal_char in ILLEGAL_VMNAME_CHARS):
-                raise ValueError("\n\nERROR: --vmbasename value must be all "
-                    "lower case letters, and may not contain any of "
-                    "the following chars: {}\n".format(" ".join(ILLEGAL_VMNAME_CHARS)))
-
-            '''
-                if the basename begins with one of Ovirt's search refining keywords
-                (a string you can type in the GUI's search field to refine a search, ex. 'cluster', 'host')
-                then the vms_service.list api will not work.
-                this leads to confusing results which are not immediately obvious what's going on
-            '''
-            for ovirtSearchFilter in PROTECTED_KEYWORDS:
-                if args.vmbasename.startswith(ovirtSearchFilter):
-                    raise ValueError("\n\nERROR: --vmbasename can not begin with any of the values: {} (These are protected keywords in Ovirt)".format(PROTECTED_KEYWORDS))
+            # validate hostname is in an allowed format
+            try:
+                modules.OvirtUtils.validate_hostname(args.vmbasename)
+            except ValueError as e:
+                raise ValueError("\n\nERROR: --vmbasename: {}".format(str(e)))
 
         if args.ovirtcluster:
             # make sure they supplied a valid cluster with a template
