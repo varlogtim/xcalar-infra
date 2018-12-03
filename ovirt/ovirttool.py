@@ -190,20 +190,23 @@ class ShellError(Exception):
         return errStr
 
 ''' log methods to use in this script '''
-def debug_log(string):
-    loggit(string, level=1)
-def info_log(string):
-    loggit(string, level=0)
-def warn_log(string):
-    loggit(string, level=2)
+def debug_log(string, timestamp=True):
+    loggit(string, level=1, timestamp=timestamp)
+def info_log(string, timestamp=True):
+    loggit(string, level=0, timestamp=timestamp)
+def warn_log(string, timestamp=True):
+    loggit(string, level=2, timestamp=timestamp)
 ''' don't call this one directly, use the aux methods above '''
-def loggit(string, level=1):
+def loggit(string, level=1, timestamp=True):
     level_prefixes={0:"{}",1:"DEBUG: {}",2:"WARN: {}"}
-    # timestamp
-    st = datetime.datetime.utcnow()
+    # timestamp if requested, else will put nothing there
+    meta_str = ""
+    if timestamp:
+        st = datetime.datetime.utcnow()
+        meta_str = "{} ".format(st)
     # split on any newline chars, and print each with the prefix
     for line in string.split("\n"):
-        print("{} ".format(st) + level_prefixes[level].format(line), file=sys.stdout)
+        print("{}".format(meta_str) + level_prefixes[level].format(line), file=sys.stdout)
 
 '''
     OVIRT SDK FUNCTIONS
@@ -2532,6 +2535,17 @@ def validateparams(args):
     basename = args.vmbasename
     puppet_role = args.puppet_role
 
+    # modification operations
+    operations = [args.count, args.delete, args.shutdown, args.poweron]
+
+    # if trying to list vms, let them know no other options will be done
+    if args.list:
+        print(operations)
+        if any(operations):
+            raise ValueError("\n\nERROR: --list will list all VMs, "
+                "no other operations can be done.  It must be "
+                "specified alone.\n")
+
     if args.count:
         if args.count > MAX_VMS_ALLOWED or args.count <= 0:
             raise ValueError("\n\nERROR: --count argument must be an integer between 1 and {}\n"
@@ -2627,7 +2641,7 @@ def validateparams(args):
             if not trying to create vms,
             make sure at least runing to remove VMs then, else nothing to do
         '''
-        if not args.delete and not args.shutdown and not args.poweron:
+        if not args.delete and not args.shutdown and not args.poweron and not args.list:
             raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
 
     return int(args.ram), int(args.cores), args.ovirtcluster, puppet_role, licfilepath, installer, basename
@@ -2705,6 +2719,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--count", type=int, default=0,
         help="Number of VMs you'd like to create")
+    parser.add_argument("-l", "--list", action='store_true',
+        help="List current VMs on Ovirt")
     parser.add_argument("--vmbasename", type=str,
         help="Basename to use for naming the new VM(s) (If creating a single VM, will name VMBASENAME, if multiple, will name them VMBASENAME-vm0, VMBASENAME-vm1, .., VMBASENAME-vm(n-1) )")
     parser.add_argument("--cores", type=int, default=DEFAULT_CORES,
@@ -2740,6 +2756,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # validate user params
     ram, cores, ovirtcluster, puppet_role, licfilepath, installer, basename = validateparams(args)
     FORCE = args.force
 
@@ -2748,6 +2765,12 @@ if __name__ == "__main__":
 
     #open connection to Ovirt server
     CONN = open_connection(user=args.user)
+
+    # if list requested, list all VMs and quit.
+    if args.list:
+        valid_vms = get_all_vms()
+        info_log("\n\n{}\n".format("\n".join(valid_vms)), timestamp=False)
+        sys.exit(0)
 
     # validation that requires a connection to the Ovirt engine (validating VMs)
     #doing all validation before calling any of the operations so can fail out early
