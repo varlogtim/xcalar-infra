@@ -2,16 +2,16 @@
 
 set -e
 
+SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 if [ -z "$XLRINFRADIR" ]; then
-  echo >&2 "Must set XLRINFRADIR"
-  exit 1
+    export XLRINFRADIR="$(cd $SCRIPTDIR/.. && pwd)"
 fi
-
 cd $XLRINFRADIR
 
 if ! docker image inspect ovirttool >/dev/null 2>&1; then
-    TMP=$(mktemp -d -t ovirtool.XXXXXX)
-    docker build -t ovirttool -f $XLRINFRADIR/docker/ovirttool.df $TMP
+    TMP="$(mktemp -d -t ovirtool.XXXXXX)"
+    docker build -t ovirttool -f "$XLRINFRADIR/docker/ovirttool.df" "$TMP"
+    rmdir "$TMP"
 fi
 cd $XLRINFRADIR
 
