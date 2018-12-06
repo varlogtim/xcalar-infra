@@ -31,6 +31,9 @@ fieldset {
 .msg-good {
     color: green;
 }
+#general-msg {
+    font-size: 20px;
+}
 
 /** LOGIN BLOCK */
 
