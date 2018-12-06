@@ -22,12 +22,18 @@ verifyLicense() {
     echo >&2 -n "Verifying: $2 ..."
     result=$(vault write -field=valid transit/verify/test-license signature="$1" input="$(echo "$2" | base64)")
     echo " $result"
+    echo >&2 ""
     [[ $result == true ]]
 }
 
 
+license="NumNodes=10 MaxUsers=20"
 
-test_sig=$(signLicense "NumNodes=10 MaxUsers=20")
+test_sig=$(signLicense "$license")
+
+echo >&2 "Generated license for '$license'"
+
+echo >&2 "Signature: ${test_sig:0:20}..."
 
 verifyLicense $test_sig "NumNodes=10 MaxUsers=10"
 
