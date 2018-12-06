@@ -57,6 +57,12 @@ fieldset {
     text-align:center;
 }
 
+/** schedule block */
+#vm-schedule-block {
+    max-width: 550px;
+    margin-top: 50px;
+}
+
 /** input field/label/helper text modiciations */
 
 /** needs to be this specific to overwrite materialize */
