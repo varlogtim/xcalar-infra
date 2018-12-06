@@ -113,10 +113,14 @@ Before assuming the role, that same call gave me
         "Arn": "arn:aws:iam::5591664111111:user/abakshi"
     }
 
-### Integration with AWS cli
+### AWS CLI integration
 
-The aws cli can call out to an external process and read back the output as a json containing your credentials. Make a small
-shell script that calls vault with the role you want to assume, say in `~/bin/awscreds.sh`
+Usually the aws cli is configured to use AccessKeys and SecretAccessKeys from (static) values you've provided a while
+back. For convenience the cli saves these static passwords to disk, and it's best practice to rotate them frequently.
+Newer versions of aws cli have a way to call out to an external process and have it provide the credentials. We just
+need a bridge from Vaults format to AWS's format and add some caching, so we don't keep generating new credentials
+from Vault for every aws cli call. The wrapper script in $XLRINFRA/bin/vault-aws-credentials-provider.sh does exactly
+this.
 
 ```sh
 #!/bin/bash
@@ -131,7 +135,7 @@ Now try it out, and you'll see the JSON format that awscli is expecting:
     "Version": 1,
     "AccessKeyId": "ASIAIGOLICJRBBSGBY5A",
     "SecretAccessKey": "CtLN5qbOGxcI4na12bh8lEfn9PM6EbhQs1K+aMWn",
-    "SessionToken": "FQoDYXdzEPL//////////wEaDBG4uny7Vs4mzA2oiCKUAqzVRuRxCycmSksdTodF3A9Hg7MlJlp//lvA5OBBa7npBzBf0mIn+Q+h45dgkxknQEUzFktMgBPfdjVjfj826CeKWLREPgMJvucxCwS/NuMezBGcf3B2JYci9l/0sDl4zlnPjvoiI/ZhUlP6XD3J5nZDAtqarwQLEtth/wZbpQEf0vWFm0wgJc/UFxbo+P4dMzmpZtPi4blZqtdSfdU8vlOImc5Dsts1OQFz0XJNkuVSuazd0Wuf/doxopsXcx7LBpDSIptj0aJsuf8JPErdf8HKCQUOrccpC1lMBA9hPIU5WnenRNXgpzhaZN1PMYZfMg6D3PhX8VTjjluVSoNri3aAapwCM6GLBQjOWVrtjebyPKB3DSie27PWBQ==",
+    "SessionToken": "FQoDYXdzEPL//////////wEaDBG4uny7Vs4mzA2oiCKUAqzVRuR..[snip]..pwCM6GLBQjOWVrtjebyPKB3DSie27PWBQ==",
     "Expiration": "2018-04-10T18:00:13.000Z"
     }
 
@@ -151,6 +155,46 @@ The cli will call your script, retrieve the temporary creds from Vault and log y
 
  $ vault read auth/token/lookup-self
 
+## Vault GCP Integration
+
+ Vault has full GCP secrets engine integration. That means Vault can call out to GCP
+ to generate temporary keys for you to access GCP resources/services.
+
+	$ vault secrets enable gcp
+
+ See `gcp/setup.sh` for the code that sets up the initial secrets engine.
+
+Create a 'roleset', literally a set of roles. These are in the format below,
+specified as a bunch of scopes (eg, entire project, particular service, etc)
+and a set of resources with roles for them. This token scope generated OAuth2
+tokens
+
+    vault write gcp/roleset/my-token-roleset \
+        project="angular-expanse-99923" \
+        secret_type="access_token"  \
+        token_scopes="https://www.googleapis.com/auth/cloud-platform" \
+        bindings=-<<-EOF
+        resource "//cloudresourcemanager.googleapis.com/projects/angular-expanse-99923" {
+            roles = ["roles/viewer"]
+        }
+		EOF
+
+# You can also generate Google Service Accounts. Too powerful and not as flexible as
+#OAuth2
+
+    if false; then
+        vault write gcp/roleset/my-sa-roleset \
+            project="angular-expanse-99923" \
+            secret_type="service_account_key"  \
+            bindings=-<<-EOF
+            resource "//cloudresourcemanager.googleapis.com/projects/angular-expanse-99923" {
+                roles = ["roles/viewer"]
+            }
+			EOF
+    fi
+
+
+# Now we have this my-token-roleset, we can generate credentials for it
 ## Login as a service or as a registered machine
 
 Vault has our Puppet CA registerd as a valid means to auth. This means any node that has a signed puppet certificate can log
