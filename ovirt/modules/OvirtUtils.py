@@ -61,9 +61,9 @@ def validate_hostname(hostname):
     # validate all chars in hostanme are legal
     if (any(filter(str.isupper, hostname)) or
         not all(s.isalnum() or s in final_allowed_vmname_chars for s in hostname)):
-        raise ValueError("VM's basename must only contain "
+        raise ValueError("VM basenames may only contain "
             "lower case letters, numbers, "
-            "or chars {}\n".format(" ".join(final_allowed_vmname_chars)))
+            "or the chars: {}\n".format(" ".join(final_allowed_vmname_chars)))
 
     '''
     if the basename begins with one of Ovirt's search refining keywords
