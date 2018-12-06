@@ -7,7 +7,7 @@ import sys
 # will be calling that shell script directly;
 # make sure <infra>/bin is in system path of machine running this file, else will not work
 INFRA_HELPER_SCRIPT='infra-sh-lib'
-# chars that are disallowed in VM names
+# chars that are disallowed in VM names (due to our internal constraints)
 ILLEGAL_VMNAME_CHARS = ['.', '_']
 # for param validation:
 # protected search keywords in Ovirt GUI to disallow as VM names
@@ -53,14 +53,17 @@ with a message indicating the nature of the error
 
 def validate_hostname(hostname):
 
-    # validate name is all lower case, does not begin with any of
-    # the Ovirt protected keywords,
-    # and contains no chars that will cause issues if its part of hostname
+    # these are the non-alphanumeric chars which Ovirt allows in vm names
+    ovirt_allowed_vmname_chars = ['_', '-']
+    # now do a difference on our disallowed chars to find what we're left with
+    final_allowed_vmname_chars = set(ovirt_allowed_vmname_chars) - set(ILLEGAL_VMNAME_CHARS)
+
+    # validate all chars in hostanme are legal
     if (any(filter(str.isupper, hostname)) or
-        any(illegal_char in hostname for illegal_char in ILLEGAL_VMNAME_CHARS)):
-        raise ValueError("VM's basename must be all "
-            "lower case letters, and may not contain any of "
-            "the following chars: {}\n".format(" ".join(ILLEGAL_VMNAME_CHARS)))
+        not all(s.isalnum() or s in final_allowed_vmname_chars for s in hostname)):
+        raise ValueError("VM's basename must only contain "
+            "lower case letters, numbers, "
+            "or chars {}\n".format(" ".join(final_allowed_vmname_chars)))
 
     '''
     if the basename begins with one of Ovirt's search refining keywords
