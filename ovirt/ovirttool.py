@@ -2853,7 +2853,7 @@ if __name__ == "__main__":
     # print hostnames of each created vm to stdout for other scripts to consume
     for hostname in hostnames:
         debug_log(hostname)
-    info_log(summary_string)
+    info_log(summary_string, timestamp=False)
 
     # close connection
     close_connection(CONN)
