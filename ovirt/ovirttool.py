@@ -2344,7 +2344,7 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
 '''
 def get_summary_string(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
 
-    summary_str = ""
+    summary_str = "-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~" # for Jenkins to grep
 
     # vms were created
     if vmids:
@@ -2371,6 +2371,8 @@ def get_summary_string(vmids, ram, cores, ovirt_cluster, installer=None, cluster
         for poweredOnVm in args.poweron.split(','):
                     summary_str = summary_str + "\n|\t{}".format(poweredOnVm)
         summary_str = summary_str + "\n|\n================================="
+
+    summary_str = summary_str + "\n~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-" # for Jenkins to grep
 
     return summary_str
 
