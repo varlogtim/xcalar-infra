@@ -2262,13 +2262,18 @@ def get_access_url(ip):
         displayUrl = "{}:{}".format(accessUrlBase, caddyPort)
     return displayUrl
 
+solid_line = "====================================================="
+dotted_line = "-----------------------------------------------------"
+jenkins_summary_grep_start = "-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-"
+jenkins_summary_grep_stop = "~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~"
+
 '''
     Returns a summary string with debugrmation about vms
 '''
 def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
 
     notes = []
-    created_vms_summary = "\n\n=====================================================\n" \
+    created_vms_summary = solid_line + "\n" \
         "------------ Your Ovirt VMs are ready!!! ------------\n" \
         "|\n" \
         "|\n| " + str(len(vmids)) + " VMs were created.\n" \
@@ -2290,7 +2295,7 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
         vmhostname = get_hostname(vmip)
         # if multiple vms put a separator line between them
         if len(vmids) > 1 and i > 0:
-            created_vms_summary = created_vms_summary + "|\n|      --------------------------------------" + "\n"
+            created_vms_summary = created_vms_summary + "|\n|      " + dotted_line + "\n"
         created_vms_summary = created_vms_summary + "|\tHostname: " + vmhostname + "\n" + vm_ssh_creds + "\n"
         if installer:
             accessUrl = get_access_url(vmip)
@@ -2318,22 +2323,22 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
             "|\n| Cluster name: " + clustername  + "\n" \
             "| Access URL:\n|\t" + accessUrl + "\n" \
             "|\tLogin page Credentials: " + LOGIN_UNAME + " \ " + LOGIN_PWORD + "\n" \
-            "|\n ------------------------------------------\n"
+            "|\n " + dotted_line + "\n"
         for nodenum in clusternodedata.keys():
             # get the name of the VM
             ip = clusternodedata[nodenum]
             vmhostname = get_hostname(ip)
             clussumm = clussumm + "|\n| Cluster Node" + nodenum + " is vm " + vmhostname + "]\n"
-        clussumm = clussumm + "|\n ------------------------------------------" + "\n"
+        clussumm = clussumm + "|\n " + dotted_line + "\n"
     created_vms_summary = created_vms_summary + clussumm
 
     if notes:
-        created_vms_summary = created_vms_summary + "|\n=====================================================\n" \
+        created_vms_summary = created_vms_summary + "|\n" + solid_line + "\n" \
             "|\n|                  Notes              \n"
         for note in notes:
             created_vms_summary = created_vms_summary + "|\n| * {}\n".format(note)
 
-    created_vms_summary = created_vms_summary + "|\n====================================================="
+    created_vms_summary = created_vms_summary + "|\n" + solid_line
 
     return created_vms_summary
 
@@ -2344,7 +2349,7 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
 '''
 def get_summary_string(vmids, ram, cores, ovirt_cluster, installer=None, clustername=None):
 
-    summary_str = "-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~" # for Jenkins to grep
+    summary_str = ""
 
     # vms were created
     if vmids:
@@ -2352,29 +2357,37 @@ def get_summary_string(vmids, ram, cores, ovirt_cluster, installer=None, cluster
 
     # print debug on delete, shutdown, or powered on VMs with this job
     if args.delete:
-        summary_str = summary_str + "\n\n====================================="\
-                        "\n|\n|  The following VMs were deleted:\n|"
+        if summary_str:
+            summary_str += summary_str + "\n\n"
+        summary_str = summary_str + solid_line + "\n" \
+                        "|\n|  The following VMs were deleted:\n|"
         for deletedVm in args.delete.split(','):
                     summary_str = summary_str + "\n|\t{}".format(deletedVm)
-        summary_str = summary_str + "\n|\n================================="
+        summary_str = summary_str + "\n|\n" + solid_line
 
     if args.shutdown:
-        summary_str = summary_str + "\n\n====================================="\
-                        "\n|\n|  The following VMs have been shut down:\n|"
+        if summary_str:
+            summary_str += "\n\n"
+        summary_str = summary_str + solid_line + "\n" \
+                        "|\n|  The following VMs have been shut down:\n|"
         for shutDownVm in args.shutdown.split(','):
                     summary_str = summary_str + "\n|\t{}".format(shutDownVm)
-        summary_str = summary_str + "\n|\n================================="
+        summary_str = summary_str + "\n|\n" + solid_line
 
     if args.poweron:
-        summary_str = summary_str + "\n\n====================================="\
-                        "\n|\n|  The following VMs are powered on:\n|"
+        if summary_str:
+            summary_str += "\n\n"
+        summary_str = summary_str + solid_line + "\n" \
+                        "|\n|  The following VMs are powered on:\n|"
         for poweredOnVm in args.poweron.split(','):
                     summary_str = summary_str + "\n|\t{}".format(poweredOnVm)
-        summary_str = summary_str + "\n|\n================================="
 
-    summary_str = summary_str + "\n~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-" # for Jenkins to grep
+        summary_str += "\n|\n" + solid_line
 
-    return summary_str
+    # put strings around it for Jenkins to grep in the console log
+    full_str = jenkins_summary_grep_start + "\n" + summary_str + "\n" + jenkins_summary_grep_stop
+
+    return full_str
 
 '''
     Check if this node is part of a cluster
