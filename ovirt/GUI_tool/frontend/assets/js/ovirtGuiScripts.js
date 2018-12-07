@@ -3,6 +3,10 @@ var SERVER_URL = "https://vmshop.int.xcalar.com:4444";
 //var SERVER_URL = "https://komogorov.int.xcalar.com:1224";
 var TEST_API_URL = SERVER_URL + "/flask/";
 
+//  notify these users EVERY job, regardless what's put in the notify input
+//var DEFAULT_NOTIFY = ['jolsen@xcalar.com'];
+var DEFAULT_NOTIFY = ['jolsen@xcalar.com', 'abakshi@xcalar.com'];
+
 // name of Jenkins job which will get triggered to build the VMs, when user
 // submits main schedule form
 var OVIRT_JENKINS_JOB = "OvirtToolBuilder";
@@ -92,6 +96,7 @@ var $clusterCheckboxSection;
 var $clusterCheckbox;
 var $numRamDropdown;
 var $numCoresDropdown;
+var $emailListInput;
 
 var userParam = 'user'; // param string
 var passParam = "password";
@@ -112,8 +117,11 @@ function initializeFields() {
     // RC installer dropdown - default to first in list
 }
 
+var emails = {};
+
 $( document ).ready(function() {
     $vmBasenameInput = $("#vm-basename");
+    $emailListInput = $("#notify-list");
     $loginBlock = $("#login-block");
     $loginForm = $("#login-form");
     $loginButton = $("#login-button");
@@ -188,6 +196,18 @@ $( document ).ready(function() {
         validateVmbasenameInputField(); // checks if user has supplied the vmbasename and if so validates it and sets error messages
     });
 
+    $emailListInput.focusout(function() {
+        console.log("focus out on email list");
+        // this method will return if everything is successful,
+        // and will fail the div if anything fails
+        getValidatedNotifyList();
+    });
+
+    // clear any errors if they change the field
+    $emailListInput.on("keyup", function() {
+        clearInputFieldErrorStatus($emailListInput);
+    });
+
     // clear any errors if they change the field
     $vmBasenameInput.on("keyup", function() {
         clearInputFieldErrorStatus($vmBasenameInput);
@@ -215,12 +235,8 @@ $( document ).ready(function() {
 
     $loginButton.click(tryLogin);
     $scheduleButton.click(function() {
-
         scheduleSubmit();
-
     });
-
-        //$scheduleButton.click(triggerJenkins);
 
     // dynamically set up things like dropdown menu options, etc.
     // make sure to bind materialize ONLY AFTER THIS
@@ -838,6 +854,68 @@ function validateVmbasenameInputField() {
     return deferred.promise();
 }
 
+function getEmailList() {
+    var emailList = $emailListInput.val();
+    // collapse whitespace
+    return emailList.replace(/\s/g,'');
+}
+
+/**
+ * returns a String, which is comma separated list of users the Jenkins
+ * job should notify upon job completion.  This is a list of both, what
+ * user has supplied in the email-notify input, as well as a set of DEFAULT_NOTIFY
+ * users which should always get notified.
+ * Dupes are handled, and email addresses are validated.
+ * If any of the emails fail validation, the input element is failed with proper message.
+ */
+function getValidatedNotifyList() {
+    // dont just get the val, need to replace whitespace
+    var emailList = $emailListInput.val();
+    if (typeof emailList === 'undefined' || emailList.trim() === "") {
+        console.log("nothing here to validate");
+        return;
+    }
+    //split on comma
+    var emailSplit = emailList.split(",");
+    var invalidEmails = [];
+    var notifyHash = {};
+    for (var emailAdd of emailSplit) {
+        if (isEmailValid(emailAdd)) {
+            notifyHash[emailAdd] = "";
+        } else {
+            invalidEmails.push(emailAdd);
+            console.log("in here");
+        }
+    }
+    if (invalidEmails.length > 0) {
+        setFieldErr($emailListInput, "Error on entries: " + invalidEmails.join(", "));
+        return false;
+    } else  {
+        console.log("never get here");
+        console.log("set field ok");
+        setFieldOk($emailListInput);
+        // add in the default mails to it
+        for (var defaultEmailUser of DEFAULT_NOTIFY) {
+            notifyHash[defaultEmailUser] = "";
+        }
+        // get keys and string them comma
+        var notifyKeys = Object.keys(notifyHash);
+        var fullNotifyList = notifyKeys.join(",");
+        return fullNotifyList;
+    }
+}
+
+function isEmailValid(emailAdd) {
+    console.log("email: [" + emailAdd + "]");
+    if (/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(emailAdd)) {
+        console.log("email: " + emailAdd + " is valid");
+        return true;
+      } else {
+        console.log("email : " + emailAdd + " is invalid");
+        return false;
+    }
+}
+
 /** /////////////////////////////////////
  * for handling input validation:
  * set error/success status on field
@@ -957,9 +1035,9 @@ function scheduleSubmit() {
  * Note - it does NOT validate the params - only checks they are actually defined, and
  * not empty where required. (i.e., if noXcalar is False, make sure installer is defined, else doesn't matter
  */
-function checkForMissingJenkinsParams(vmbasename="", num="", ram="", cores="", installer="", noXcalar="", formCluster="") {
+function checkForMissingJenkinsParams(vmbasename="", num="", ram="", cores="", installer="", noXcalar="", formCluster="", emailList="") {
 
-    var mustHave = [vmbasename, num, ram, cores];
+    var mustHave = [vmbasename, num, ram, cores, emailList];
     for (var avar of mustHave) {
         console.log("check avar: "+ avar);
         if (isEmptyOrUndefined(avar)) {
@@ -1021,52 +1099,61 @@ function getValidatedParamsForJenkinsJob() {
         noXcalar = true;
     }
     var formCluster = $clusterCheckbox.prop('checked'); // returns True/False boolean if checked or not
+    var emailList = getEmailList();
 
     try {
         // throws err if any of the params/param combinations are missing
         checkForMissingJenkinsParams(vmbasename=vmbasename, num=numVms,
             ram=numRams, cores=numCores, installer=installerUrl,
-            noXcalar=noXcalar, formCluster=formCluster);
+            noXcalar=noXcalar, formCluster=formCluster, emailList=emailList);
 
-        // validate individual dynamic input fields
-        // ** call wrapper functions of these which fail the divs if validation
-        // fails, since rejects go to a common fail block and need to update
-        // different divs depending on what's being validated
-        validateVmbasenameInputField()
-        .then(function(res) {
-            // if there is an URL to validate
-            if (typeof installerUrl !== 'undefined' && installerUrl !== "") {
-                // 'element' should always be present
-                return fieldValidateInstallerData(installerUrl, installerElementToFail);
-            } else {
-                return dummyPass();
-            }
-        })
-        .then(function(res) {
-            // great everything is here!
-            // send it off
-            // remember - the point of this function ,is to return EXACTLY THE HASH
-            // that 'triggerJenkins' function consumes.  So if you change any params here, you would need to update that function too!
-            // see function doc of 'triggerJenkins' to see what param keys should be
-            var jenkins_job = {
-                'VMBASENAME': vmbasename,
-                'COUNT': numVms,
-                'RPM_INSTALLER_URL': installerUrl,
-                'RAM': numRams,
-                'CORES': numCores,
-                'no_xcalar': noXcalar,
-                'form_cluster': formCluster,
-                'ovirtuser': JENKINS_USER, // Jenkins and Ovirt login are same, use the Jenkins login they provided
-                'ovirtpass': JENKINS_PASS
-            };
-            deferred.resolve(jenkins_job);
-        })
-        .fail(function(err) {
-            // right now do nothing to DOM on failure - just console.  Else we'll suppress form errors.
-            console.log("Failed to get param hash for 'triggerJenkins': Reason:");
-            console.log(err);
-            deferred.reject(err);
-        });
+        // validate email list (will send back array of all, including default emails)
+        var validatedNotifyList = getValidatedNotifyList();
+        if (validatedNotifyList) {
+            // validate individual dynamic input fields
+            // ** call wrapper functions of these which fail the divs if validation
+            // fails, since rejects go to a common fail block and need to update
+            // different divs depending on what's being validated
+            validateVmbasenameInputField()
+            .then(function(res) {
+                // if there is an URL to validate
+                if (typeof installerUrl !== 'undefined' && installerUrl !== "") {
+                    // 'element' should always be present
+                    return fieldValidateInstallerData(installerUrl, installerElementToFail);
+                } else {
+                    return dummyPass();
+                }
+            })
+            .then(function(res) {
+                // great everything is here!
+                // send it off
+                // remember - the point of this function ,is to return EXACTLY THE HASH
+                // that 'triggerJenkins' function consumes.  So if you change any params here, you would need to update that function too!
+                // see function doc of 'triggerJenkins' to see what param keys should be
+                var jenkins_job = {
+                    'VMBASENAME': vmbasename,
+                    'COUNT': numVms,
+                    'RPM_INSTALLER_URL': installerUrl,
+                    'RAM': numRams,
+                    'CORES': numCores,
+                    'no_xcalar': noXcalar,
+                    'form_cluster': formCluster,
+                    'ovirtuser': JENKINS_USER, // Jenkins and Ovirt login are same, use the Jenkins login they provided
+                    'ovirtpass': JENKINS_PASS,
+                    'NOTIFY_LIST': validatedNotifyList
+                };
+                deferred.resolve(jenkins_job);
+            })
+            .fail(function(err) {
+                // right now do nothing to DOM on failure - just console.  Else we'll suppress form errors.
+                console.log("Failed to get param hash for 'triggerJenkins': Reason:");
+                console.log(err);
+                deferred.reject(err);
+            });
+        } else {
+            console.log("failed to validate email list");
+            deferred.reject("falied to validate email list");
+        }
     } catch (e) {
         // there was an issue - some of the params must not be filled in yet.
         console.log(e);
@@ -1131,7 +1218,8 @@ function triggerJenkinsAndUpdateMessages(params) {
  *        'no_xcalar': <boolean install xcalar>,
  *        'form_cluster': <boolean form cluster>,
  *        'ovirtuser': <Ovirt username>, **
- *        'ovirtpass': <Ovirt password>  **
+ *        'ovirtpass': <Ovirt password>,  **
+ *        'NOTIFY_LIST': <comma list of emails>,
  * }
  *        ** note: these Ovirt credentials taht the job requires are same as Jenkins
  *           as its all ldap
@@ -1150,7 +1238,7 @@ function triggerJenkins(params) {
          */
         var paramsReqForJob = ['VMBASENAME', 'COUNT', 'RPM_INSTALLER_URL',
                 'RAM', 'CORES', 'no_xcalar', 'form_cluster',
-                'ovirtuser', 'ovirtpass'];
+                'ovirtuser', 'ovirtpass', 'NOTIFY_LIST'];
         var jobParams = {};
         var missingParams = [];
         for (var reqParam of paramsReqForJob) {
@@ -1200,8 +1288,9 @@ function dummyPass() {
 function openSchedulePage() {
     $scheduleBlock.show();
     // set user name as placeholder in the vmbasename field
-    $vmBasenameInput.val(JENKINS_USER);  // should you set html or text? look in to this!
-    //$vmBasenameInput.attr("placeholder", JENKINS_USER);
+    //$vmBasenameInput.val(JENKINS_USER);  // should you set html or text? look in to this!
+    $vmBasenameInput.attr("placeholder", JENKINS_USER);
+    $emailListInput.attr("placeholder", JENKINS_USER + "@xcalar.com");
 }
 
 // takes a JSON obj, or JSON string, and returns a copy

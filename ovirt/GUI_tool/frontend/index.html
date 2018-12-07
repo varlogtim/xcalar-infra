@@ -54,6 +54,7 @@ Welcome to the VM Shop!
             </div>
           </div>
 
+
           <!-- INSTALLER -->
           <div class="row no-row-bottom">
             <div id="inst-type" class="input-field col s12">
@@ -140,15 +141,17 @@ Welcome to the VM Shop!
             </div>
           </div>
 
-      <!-- email on completion -->
-<!--
-    <div class="row">
-      <div class="input-field col s12">
-        <input type="text" id="email-notify" placeholder="fyi - doesn't work yet" />
-        <label for="email-notify" class="validate tooltipped" data-position="top" data-tooltip="Comma separated list of email addresses to notify with job result." required="required" >Users to email upon job completion</label>
-      </div>
-    </div>
--->
+          <!-- email on completion -->
+          <div class="row">
+            <div class="input-field col s12">
+              <!-- you need to set the placeholder attr to get the materialize label from being stuck before focusing on the element.  Even if you set it dynamically and rebind it doesn't seem to work. js is going to do something else with eithe rplaceholder or fill in the value-->
+
+              <!-- do not add the 'validate' class on this input!  It is preventing invalid class from being updated (i.e., can't fail the div).  This needs to be explored why it only occurs here but for now, removing the class works! -->
+              <input type="text" id="notify-list" class="" placeholder="" required="required" />
+              <label for="notify-list" class="tooltipped" data-position="bottom" data-tooltip="A single email, or comma-separated list of emails, for users you'd like to notify with the result of your VM request." >Notify upon completion</label>
+              <span id="notify-list-label" class="helper-text" for="notify-list" data-error="" data-success=""></span>
+            </div>
+          </div>
 
           <!-- submit button to submit request -->
           <div class="row">
