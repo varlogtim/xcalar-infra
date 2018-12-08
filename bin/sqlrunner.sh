@@ -84,6 +84,9 @@ then
     exit 1
 fi
 
+# GCE requires lower case names
+optClusterName=$(echo "$optClusterName" | tr '[:upper:]' '[:lower:]')
+
 if [ "$IS_RC" = "true" ]; then
     prodLicense=`cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0`
     export XCE_LICENSE="${XCE_LICENSE:-$prodLicense}"
