@@ -86,6 +86,7 @@ fi
 
 # GCE requires lower case names
 optClusterName=$(echo "$optClusterName" | tr '[:upper:]' '[:lower:]')
+clusterLeadName="$optClusterName-1"
 
 if [ "$IS_RC" = "true" ]; then
     prodLicense=`cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0`
@@ -96,7 +97,8 @@ else
 fi
 
 rcmd() {
-    ssh $clusterLeadIp "$@"
+    args="$@"
+    gcloud compute ssh $clusterLeadName --command "$args"
 }
 
 getNodeIp() {
@@ -137,7 +139,6 @@ createCluster() {
         $XLRINFRADIR/gce/gce-cluster.sh "$optXcalarImage" $optNumNodes $optClusterName
     echo "Waiting for Xcalar start on $optNumNodes node cluster $optClusterName"
 
-    clusterLeadIp=$(getNodeIp 1)
     waitCmd "rcmd $optRemoteXlrDir/bin/xccli -c version > /dev/null" $optTimeoutSec
 }
 
@@ -145,11 +146,11 @@ installDeps() {
     rcmd sudo yum install -y tmux nc gcc gcc-c++
     rcmd sudo "$optRemoteXlrDir/bin/pip" install gnureadline multiset jaydebeapi
     rcmd mkdir -p "$optRemotePwd"
-    scp "$XLRDIR/src/sqldf/tests/test_jdbc.py" "$clusterLeadIp:$optRemotePwd"
-    scp "$XLRGUIDIR/assets/test/json/SQLTest.json" "$clusterLeadIp:$optRemotePwd"
+    gcloud compute scp "$XLRDIR/src/sqldf/tests/test_jdbc.py" "$clusterLeadName:$optRemotePwd"
+    gcloud compute scp "$XLRGUIDIR/assets/test/json/SQLTest.json" "$clusterLeadName:$optRemotePwd"
 
-    scp "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" "$clusterLeadIp:/tmp"
-    scp "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" "$clusterLeadIp:/tmp"
+    gcloud compute scp "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" "$clusterLeadName:/tmp"
+    gcloud compute scp "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" "$clusterLeadName:/tmp"
 
     rcmd sudo mv "/tmp/jodbc.xml" "$optRemoteXlrRoot/config"
     rcmd sudo mv "/tmp/supervisor.conf" "/etc/xcalar/"
@@ -164,7 +165,7 @@ runTest() {
     rcmd "XLRDIR=$optRmoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
         -p "$optRemotePwd" -o $results -n "$optNumNodes,$optInstanceType" $optsTestJdbc
 
-    scp "$clusterLeadIp:${results}*.json" "$optResultsPath"
+    gcloud compute scp "$clusterLeadName:${results}*.json" "$optResultsPath"
 }
 
 destroyCluster() {
@@ -180,8 +181,6 @@ if ! $optUseExisting
 then
     createCluster
 fi
-
-clusterLeadIp=$(getNodeIp 1)
 
 installDeps
 
