@@ -1,7 +1,7 @@
 // flask Server
-var SERVER_URL = "https://vmshop.int.xcalar.com:4444";
+var SERVER_URL = "https://vmshop.int.xcalar.com:1224";
 //var SERVER_URL = "https://komogorov.int.xcalar.com:1224";
-var TEST_API_URL = SERVER_URL + "/flask/";
+//var TEST_API_URL = SERVER_URL + "/flask/";
 
 //  notify these users EVERY job, regardless what's put in the notify input
 //var DEFAULT_NOTIFY = ['jolsen@xcalar.com'];
@@ -1174,8 +1174,14 @@ function getValidatedParamsForJenkinsJob() {
 function triggerJenkinsAndUpdateMessages(params) {
     var deferred = jQuery.Deferred();
     triggerJenkins(params)
+    //dummyPass()
     .then(function(res) {
         // not doing anything yet
+        alert("Your job has been scheduled! " +
+            "All users listed in the 'Notify upon completion' field will " +
+            "receive an email once the job completes, with the details " +
+            "of any newly created VMs. The process should take about " +
+            "30 minutes.  Jenkins job URL: " + JOB_URL);
         $scheduleMsgDiv.html("Cool, I think it worked.  go check <a href='" + JOB_URL + "' target='_blank'>" + JOB_URL + "</a> . job should take about 30 mins.");
         $scheduleMsgDiv.addClass("msg-good");
         console.log("success");
