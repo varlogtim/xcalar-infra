@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# XXX: This needs to use clusterCmds.sh
+
 set -e
 
 myName=$(basename $0)
@@ -15,9 +17,10 @@ optRemoteXlrDir="/opt/xcalar"
 optRemoteXlrRoot="/mnt/xcalar"
 optRemotePwd="/tmp/test_jdbc"
 optInstanceType="n1-standard-4"
-optLicensePath=""
 optNoPreempt=0
 optSetupOnly=false
+optResultsPath="."
+optTimeoutSec=$(( 10 * 60 ))
 
 usage()
 {
@@ -43,24 +46,27 @@ usage()
         -n <nodes>      Number of nodes in cluster
         -N              Disable GCE preemption
         -p <wdpath>     Remote working directory
+        -r <results>    Directory to store perf results
         -S              Set up and configure cluster but skip SQL tests
+        -t <timeout>    Cluster startup timeout (seconds)
         -u              Use an existing cluster instead of creating one
         -x <instpath>   Path to Xcalar install directory on cluster
         -X <xlrpath>    Path to Xcalar root on cluster
 EOF
 }
 
-while getopts "c:i:I:kl:n:NpSux:X:" opt; do
+while getopts "c:i:I:kn:Npr:St:ux:X:" opt; do
   case $opt in
       c) optClusterName="$OPTARG";;
       i) optXcalarImage="$OPTARG";;
       I) optInstanceType="$OPTARG";;
       k) optKeep=true;;
-      l) optLicensePath="$OPTARG";;
       n) optNumNodes="$OPTARG";;
       N) optNoPreempt=1;;
       p) optRemotePwd="$OPTARG";;
+      r) optResultsPath="$OPTARG";;
       S) optSetupOnly=true;;
+      t) optTimeoutSec="$OPTARG";;
       u) optUseExisting=true;;
       x) optRemoteXlrDir="$OPTARG";;
       X) optRemoteXlrRoot="$OPTARG";;
@@ -78,6 +84,14 @@ then
     exit 1
 fi
 
+if [ "$IS_RC" = "true" ]; then
+    prodLicense=`cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0`
+    export XCE_LICENSE="${XCE_LICENSE:-$prodLicense}"
+else
+    devLicense=`cat $XLRDIR/src/data/XcalarLic.key | gzip | base64 -w0`
+    export XCE_LICENSE="${XCE_LICENSE:-$devLicense}"
+fi
+
 rcmd() {
     ssh $clusterLeadIp "$@"
 }
@@ -89,6 +103,24 @@ getNodeIp() {
         | python -c 'import sys; print(eval(sys.stdin.readline())[0]);'
 }
 
+waitCmd() {
+    local cmd="$1"
+    local to="$2"
+    local ct=1
+
+    while ! eval $cmd
+    do
+        sleep 1
+        local ct=$(( $ct + 1 ))
+        echo "Waited $ct seconds for: $cmd"
+        if [[ $ct -gt $to ]]
+        then
+            echo "Timed out waiting for: $cmd"
+            exit 1
+        fi
+    done
+}
+
 createCluster() {
     if [[ ! -f "$optXcalarImage" ]]
     then
@@ -97,25 +129,13 @@ createCluster() {
         exit 1
     fi
 
-    if [[ ! -f "$optLicensePath" ]]
-    then
-        echo "    -l <pathToXcalarLicense> required"
-        exit 1
-    fi
-
     echo "Creating $optNumNodes node cluster $optClusterName"
-    IMAGE="rhel-7" INSTANCE_TYPE=$optInstanceType NOTPREEMPTIBLE=$optNoPreempt XCE_LICENSE=$(cat $optLicensePath) \
+    IMAGE="rhel-7" INSTANCE_TYPE=$optInstanceType NOTPREEMPTIBLE=$optNoPreempt \
         $XLRINFRADIR/gce/gce-cluster.sh "$optXcalarImage" $optNumNodes $optClusterName
     echo "Waiting for Xcalar start on $optNumNodes node cluster $optClusterName"
 
     clusterLeadIp=$(getNodeIp 1)
-    local ct=1
-    while ! rcmd $optRemoteXlrDir/bin/xccli -c version > /dev/null
-    do
-        sleep 1
-        echo "Waited $ct seconds for Xcalar to come up"
-        local ct=$(( $ct + 1 ))
-    done
+    waitCmd "rcmd $optRemoteXlrDir/bin/xccli -c version > /dev/null" $optTimeoutSec
 }
 
 installDeps() {
@@ -133,13 +153,7 @@ installDeps() {
     rcmd sudo /opt/xcalar/bin/supervisorctl -s unix:///var/tmp/xcalar-root/supervisor.sock reread || true
     rcmd sudo /opt/xcalar/bin/supervisorctl -s unix:///var/tmp/xcalar-root/supervisor.sock reload || true
     rcmd sudo /opt/xcalar/bin/supervisorctl -s unix:///var/tmp/xcalar-root/supervisor.sock restart xcalar:sqldf || true
-    local ct=1
-    while ! rcmd nc localhost 10000 </dev/null 2>/dev/null
-    do
-        sleep 1
-        echo "Waited $ct seconds for JDBC server to come up"
-        local ct=$(( $ct + 1 ))
-    done
+    waitCmd "rcmd nc localhost 10000 </dev/null 2>/dev/null" $optTimeoutSec
 }
 
 runTest() {
@@ -147,7 +161,7 @@ runTest() {
     rcmd "XLRDIR=$optRmoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
         -p "$optRemotePwd" -o $results -n "$optNumNodes,$optInstanceType" $optsTestJdbc
 
-    scp "$clusterLeadIp:${results}*.json" .
+    scp "$clusterLeadIp:${results}*.json" "$optResultsPath"
 }
 
 destroyCluster() {
