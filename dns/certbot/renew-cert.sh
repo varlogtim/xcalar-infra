@@ -2,9 +2,14 @@
 
 set -e
 
-DOMAIN=${DOMAIN:-xcalar.com}
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CDUP="$(cd "${DIR}/.." && pwd)"
+
+DRYRUN=false
 EMAIL="${EMAIL:-devaccounts@xcalar.com}"
 LE_ENDPOINT=https://acme-v02.api.letsencrypt.org/directory
+LE_DIR="/etc/letsencrypt"
+LE_ACCOUNTS=${CDUP}/letsencrypt-accounts-shared
 IMAGE=certbot/dns-google
 
 usage() {
@@ -14,17 +19,34 @@ usage() {
     exit 1
 }
 
+DOMAIN_ARGS=""
 while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
-        -d | --domain) DOMAIN="$1"; shift;;
+        -d | --domain)
+            if [ -z "$DOMAIN" ]; then
+                DOMAIN="$1"
+            fi
+            DOMAIN_ARGS="$DOMAIN_ARGS -d $1"
+            shift
+            ;;
         -e | --email) EMAIL="$1"; shift;;
-        -n | --dryrun | --dry-run) LE_ENDPOINT=https://acme-staging-v02.api.letsencrypt.org/directory;;
+        -n | --dryrun | --dry-run)
+            DRYRUN=true
+            LE_ENDPOINT=https://acme-staging-v02.api.letsencrypt.org/directory
+            LE_DIR="/etc/letsencrypt-stage"
+            ;;
         -h|--help) usage;;
         *) echo >&2 "ERROR: Unknown argument $cmd"; exit 2;;
     esac
 done
+
+DEXT=${DOMAIN:0:1}
+if [ "${DEXT}" = '*' ]; then
+    DOMAIN=${DOMAIN#*.}
+    DOMAIN_ARGS='-d '${DOMAIN}' -d *.'${DOMAIN}
+fi
 
 case "$DOMAIN" in
     *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53;;
@@ -34,41 +56,49 @@ case "$DOMAIN" in
     *) echo >&2 "Unrecognized domain: ${DOMAIN}"; exit 1;;
 esac
 
+
 TMP=$(mktemp -t dns.XXXXXX)
 trap "rm -f $TMP" EXIT
+
+docker pull $IMAGE
+
+DOCKER_FLAGS="-it --rm --name certbot -v $LE_DIR:/etc/letsencrypt -v $LE_ACCOUNTS:/etc/letsencrypt/accounts -v /var/lib/letsencrypt:/var/lib/letsencrypt --dns 8.8.8.8 --dns 8.8.4.4"
 
 if [[ $IMAGE = certbot/dns-google ]]; then
     (
     vault kv get -field=data secret/service_accounts/gcp/google-dnsadmin >> $TMP
     set -x
-    docker run -it --rm --name certbot \
-                -v "/etc/letsencrypt:/etc/letsencrypt" \
-                -v "/var/lib/letsencrypt:/var/lib/letsencrypt" \
+    docker run  $DOCKER_FLAGS \
                 -v "$(readlink -f $TMP):/etc/gdns.json:ro" \
                 $IMAGE certonly --dns-google-credentials /etc/gdns.json \
-                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos \
-                -d "*.${DOMAIN}" -d $DOMAIN
+                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
+
     )
 elif [[ $IMAGE = certbot/dns-route53 ]]; then
     (
     eval $(vault-aws-credentials-provider.sh --export-env --ttl 15m) || exit 1
     set -x
-    docker run -it --rm --name certbot \
-                -v "/etc/letsencrypt:/etc/letsencrypt" \
-                -v "/var/lib/letsencrypt:/var/lib/letsencrypt" \
+    docker run $DOCKER_FLAGS \
                 -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
                 $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 30 \
-                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos \
-                -d "*.${DOMAIN}" -d $DOMAIN
+                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
     )
 fi
 
-echo >&2 "The key is in /etc/letsencrypt/live/${DOMAIN}/privkey.pem and the certificate is in /etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+echo >&2 "The key is in ${LE_DIR}/live/${DOMAIN}/privkey.pem and the certificate is in ${LE_DIR}/live/${DOMAIN}/fullchain.pem"
 
-echo >&2 "Storing key and cert into vault: secret/certs/${DOMAIN}/cert.key and cert.crt"
+if $DRYRUN; then
+    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/privkey.pem | tee privkey.pem
+    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/fullchain.pem | tee fullchain.pem
+else
+    echo >&2 "Storing key and cert into vault: secret/certs/${DOMAIN}/cert.key and cert.crt"
 
-sudo cat /etc/letsencrypt/live/${DOMAIN}/privkey.pem | vault kv put secret/certs/${DOMAIN}/cert.key data=-
-sudo cat /etc/letsencrypt/live/${DOMAIN}/fullchain.pem | vault kv put secret/certs/${DOMAIN}/cert.crt data=-
+    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/privkey.pem | vault kv put secret/certs/${DOMAIN}/cert.key data=-
+    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/fullchain.pem | vault kv put secret/certs/${DOMAIN}/cert.crt data=-
 
-vault kv get -field=data secret/certs/${DOMAIN}/cert.key
-vault kv get -field=data secret/certs/${DOMAIN}/cert.crt
+    vault kv get -field=data secret/certs/${DOMAIN}/cert.key > $DOMAIN.key
+    vault kv get -field=data secret/certs/${DOMAIN}/cert.crt > $DOMAIN.crt
+    echo >&2 "# Stored certificates:"
+    echo "crt: `pwd`/${DOMAIN}.crt"
+    echo "key: `pwd`/${DOMAIN}.key"
+fi
