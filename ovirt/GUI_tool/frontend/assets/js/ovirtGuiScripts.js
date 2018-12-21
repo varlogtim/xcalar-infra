@@ -1,7 +1,7 @@
 // flask Server
 var SERVER_URL = "https://vmshop.int.xcalar.com:1224";
 //var SERVER_URL = "https://komogorov.int.xcalar.com:1224";
-//var TEST_API_URL = SERVER_URL + "/flask/";
+var TEST_API_URL = SERVER_URL + "/flask/";
 
 //  notify these users EVERY job, regardless what's put in the notify input
 //var DEFAULT_NOTIFY = ['jolsen@xcalar.com'];
