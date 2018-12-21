@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# wrapper for ovirt/ovirttool.py;
+# Deploys it within a ub14 docker container which sets up all of its
+# required py dependencies.
+# Args: whichever args are required for ovirt/ovirttool.py
+# - Example:
+#  ovirttool --vmbasename=name --count=1 --noinstaller
+#    runs the following, in a new ub14 Docker container:
+#  $XLRINFRA/ovirt/ovirttool.py --vmbasename=name --count=1 --noinstaller
+# - See http://wiki.int.xcalar.com/mediawiki/index.php/Ovirttool#Setup for Setup to run this script
+
 set -e
 
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"

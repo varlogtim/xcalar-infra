@@ -1,8 +1,11 @@
 #!/bin/bash
-# Wrapper around Ovirt Tool
+
+# Wrapper for bin/ovirt_docker_wrapper
+# Obtains user credentials to run bin/ovirt_docker_wrapper non-interactively,
+# and sets up logging.
 
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
-OVIRT_WRAPPER="$SCRIPTDIR/../bin/ovirttool"
+OVIRT_WRAPPER="$SCRIPTDIR/../bin/ovirttool_docker_wrapper"
 
 # allow uname/pword as env vars for automation
 UNAME="${OVIRT_UNAME:-""}"
