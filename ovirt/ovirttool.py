@@ -213,20 +213,32 @@ def loggit(string, level=1, timestamp=True):
 '''
 
 '''
-    Generate n names for VMs which are not currently used in Ovirt,
-    given some basename.  Will add random chars to the name to try to avoid
-    re-using old hostnames of deleted VMs which would cause issues in puppet
+    Generate n vm names not currently in use by Ovirt, given some basename.
+    Unless 'noRand' option supplied, will add random chars to basename to try to avoid
+    re-using hostnames of deleted VMs which would cause issues in puppet.  (No database
+    of old names to check against.)
     Returns uniquebasename, list
+
+    @noRand: if True, will not append the random seq. of chars in generated names.
+    use at own risk.
 '''
-def generate_vm_names(basename, n):
+def generate_vm_names(basename, n, noRand=False):
     uniqueBasename = None
-    # keep trying random strings on basename until you hit a combo not in ovirt
-    # don't check for exact equality when checking if in Ovirt - since will
-    # append -vm0, -vm1, etc. if multiple VMs.  this will return if there's any
-    # vm in ovirt with this as a substring
-    while not uniqueBasename or get_matching_vms(uniqueBasename):
-        # hostnames need to be lowercase else can cause conflicts with other scripts
-        uniqueBasename = "{}-{}".format(basename, generateRandomString(4).lower())
+
+    # a uniqueBasename to base all the n vm names from
+    if noRand:
+        uniqueBasename = basename
+    else:
+        # tack random chars on the basename.
+        # keep trying random strings on basename until you hit a combo not in ovirt
+        # don't check for exact equality when checking if in Ovirt - since will
+        # append -vm0, -vm1, etc. if multiple VMs.  this will return if there's any
+        # vm in ovirt with this as a substring
+        while not uniqueBasename or get_matching_vms(uniqueBasename):
+            # hostnames need to be lowercase else can cause conflicts with other scripts
+            uniqueBasename = "{}-{}".format(basename, generateRandomString(4).lower())
+
+    # generate n vm names using the uniqueBasename
     vmNames = []
     # if just 1, don't put counters on it
     if n == 1:
@@ -234,6 +246,19 @@ def generate_vm_names(basename, n):
     else:
         for i in range(n):
             vmNames.append("{}-vm{}".format(uniqueBasename, i))
+
+    # make sure all generated names unique in existing Ovirt
+    # this will NOT check if there are previous VMs by this name which has been deleted
+    # but will make sure no current VMs in Ovirt with any of the assigned names
+    for fullName in vmNames:
+        if get_matching_vms("name=" + fullName):
+            raise ValueError("\n\nOne of the generated VM names is currently in "
+                "use by Ovirt: {}"
+                "\nIf you used -nr/--norand option, please re-run without this option "
+                "or supply a name which is not already in use.  (Note: It should "
+                "be a name which has NEVER been used in Ovirt; even by deleted "
+                "VMs which no longer show up!)"\n".format(fullName))
+
     return uniqueBasename, vmNames
 
 '''
@@ -2766,6 +2791,8 @@ if __name__ == "__main__":
         help="Single VM or comma separated String of VMs to power on")
     parser.add_argument("--user", type=str,
         help="Your LDAP username (no '@xcalar.com')")
+    parser.add_argument("-nr", "--norand", action="store_true", default=False,
+        help="Don't add random chars to vmbasename; use vmbasename exactly. (Use only if you are certain this name has NEVER been used by any VM in Ovirt, even by past deleted VMs, else, you will encounter DNS issues.  Use at your OWN RISK!)")
     parser.add_argument("-f", "--force", action="store_true", default=False,
         help="Force certain operations such as provisioning, delete, when script would fail normally")
 
@@ -2836,7 +2863,7 @@ if __name__ == "__main__":
         # generate_vm_names will take the basename you supply it,
         # and genrate another basename from this with randomness, (to avoid old hostnames being resued)
         # and base the VM names on that.  get that unique basename too, in case creating cluster
-        uniqueGeneratedBasename, vmnames = generate_vm_names(basename, int(args.count))
+        uniqueGeneratedBasename, vmnames = generate_vm_names(basename, int(args.count), noRand=args.norand)
         vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
