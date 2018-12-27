@@ -13,7 +13,7 @@ PASSWORD="${OVIRT_PASSWORD:-""}"
 
 # if help requested, display and exit (else will have to enter credentials just for help)
 if [[ $@ == *"--help"* ]]; then
-  "$OVIRT_WRAPPER" --help | sed -e 's/ovirttool.py/ovirttool.sh/g' >&2
+  "$OVIRT_WRAPPER" --help | sed -e 's/ovirttool.py/ovirttool_cli/g' >&2
   exit 0
 fi
 
