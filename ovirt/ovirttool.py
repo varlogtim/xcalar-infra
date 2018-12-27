@@ -257,7 +257,7 @@ def generate_vm_names(basename, n, noRand=False):
                 "\nIf you used -nr/--norand option, please re-run without this option "
                 "or supply a name which is not already in use.  (Note: It should "
                 "be a name which has NEVER been used in Ovirt; even by deleted "
-                "VMs which no longer show up!)"\n".format(fullName))
+                "VMs which no longer show up!)\n".format(fullName))
 
     return uniqueBasename, vmNames
 
