@@ -125,10 +125,13 @@ OVIRT_KEYFILE_SRC = 'id_ovirt' # this a file to supply during ssh.  need to chmo
 home = os.path.expanduser('~') # '~' gives issues with paramiko; expand to home dir, this swill work cross-platform
 OVIRT_KEYFILE_DEST = home + '/.ssh/id_ovirt'
 
-def generateRandomString(length=5):
-    return ''.join([random.choice(string.ascii_letters + string.digits) for n in range(length)])
+def generate_random_string(length=5, exclude=[]):
+    rand_string = None
+    while not rand_string or any(str(i) in rand_string for i in exclude):
+        rand_string = ''.join([random.choice(string.ascii_letters + string.digits) for n in range(length)])
+    return rand_string
 
-OVIRT_SHELL_LOGS_DIR = '/tmp/ovirtShellScriptLogs_' + generateRandomString() # dir on created VMs to hold redirected shell script output
+OVIRT_SHELL_LOGS_DIR = '/tmp/ovirtShellScriptLogs_' + generate_random_string() # dir on created VMs to hold redirected shell script output
 
 CONN=None
 LICFILENAME='XcalarLic.key'
@@ -216,8 +219,17 @@ def loggit(string, level=1, timestamp=True):
     Generate n vm names not currently in use by Ovirt, given some basename.
     Unless 'noRand' option supplied, will add random chars to basename to try to avoid
     re-using hostnames of deleted VMs which would cause issues in puppet.  (No database
-    of old names to check against.)
-    Returns uniquebasename, list
+    of old names to check against.).  then bases the individual vm names on this.
+    if n > 1, tacks counter on individual vmnames
+
+    @Returns <unique basename the vm names based on>, <list of all the vm names>
+
+    @examples:
+    generate_vm_names("myvm", n=1)
+    could return: "myvm-6qyu", ["myvm-6qyu"]
+
+    generate_vm_names("myvm", n=2)
+    could return: "myvm-a2j4", ["myvm-a2j4-vm0", "myvm-vm1"]
 
     @noRand: if True, will not append the random seq. of chars in generated names.
     use at own risk.
@@ -235,8 +247,10 @@ def generate_vm_names(basename, n, noRand=False):
         # append -vm0, -vm1, etc. if multiple VMs.  this will return if there's any
         # vm in ovirt with this as a substring
         while not uniqueBasename or get_matching_vms(uniqueBasename):
+            # don't use L's or I's, they look same in ovirt console
             # hostnames need to be lowercase else can cause conflicts with other scripts
-            uniqueBasename = "{}-{}".format(basename, generateRandomString(4).lower())
+            rand_seq = generate_random_string(4, exclude=["i","l","I","L"]).lower()
+            uniqueBasename = "{}-{}".format(basename, rand_seq)
 
     # generate n vm names using the uniqueBasename
     vmNames = []
@@ -246,6 +260,10 @@ def generate_vm_names(basename, n, noRand=False):
     else:
         for i in range(n):
             vmNames.append("{}-vm{}".format(uniqueBasename, i))
+
+    # loop through convert everything to lower case just to make sure
+    for i in range(len(vmNames)):
+        vmNames[i] = vmNames[i].lower()
 
     # make sure all generated names unique in existing Ovirt
     # this will NOT check if there are previous VMs by this name which has been deleted
@@ -2861,8 +2879,9 @@ if __name__ == "__main__":
     if args.count:
         # generate names for the VMs.
         # generate_vm_names will take the basename you supply it,
-        # and genrate another basename from this with randomness, (to avoid old hostnames being resued)
-        # and base the VM names on that.  get that unique basename too, in case creating cluster
+        # genrate <another basename> from this with randomness (to avoid old hostnames being resued), then
+        # create --count number of VM names from <another basename>.  It returns those Vm names,
+        # and <another basename> (if creating cluster, will name the cluster <another basename>)
         uniqueGeneratedBasename, vmnames = generate_vm_names(basename, int(args.count), noRand=args.norand)
         vmids = provision_vms(vmnames, ovirtcluster, convert_mem_size(ram), cores, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
