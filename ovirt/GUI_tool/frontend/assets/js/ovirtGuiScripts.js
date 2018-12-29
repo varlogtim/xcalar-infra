@@ -554,7 +554,10 @@ function tryLogin() {
     console.log("got user");
     if ($("#user").val()) {
         console.log("user available");
-        JENKINS_USER = $user.val();
+        var userVal = $user.val();
+        // split on '@' in case they supplied their full xcalar email
+        var strSplit = userVal.split("@");
+        JENKINS_USER = strSplit[0];
         JENKINS_PASS = $p.val();
         sendRequest("POST", SERVER_URL + "/flask/login", {'user': JENKINS_USER, 'password': JENKINS_PASS})
         .then(function(res) {
