@@ -2635,7 +2635,6 @@ def validateparams(args):
 
     # if trying to list vms, let them know no other options will be done
     if args.list:
-        print(operations)
         if any(operations):
             raise ValueError("\n\nERROR: --list will list all VMs, "
                 "no other operations can be done.  It must be "
