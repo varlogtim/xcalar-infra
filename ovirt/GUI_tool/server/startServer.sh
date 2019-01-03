@@ -22,7 +22,7 @@ trap cleanup EXIT SIGTERM SIGINT # Jenkins sends SIGTERM on abort
 deactivate 2>/dev/null || true
 VIRTUAL_ENV="$SCRIPT_DIR/.venv"
 if [ ! -d "$VIRTUAL_ENV" ]; then
-	virtualenv "$VIRTUAL_ENV"
+    virtualenv -p /opt/xcalar/bin/python3 "$VIRTUAL_ENV"
 fi
 source "$VIRTUAL_ENV"/bin/activate
 
