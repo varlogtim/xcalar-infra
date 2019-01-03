@@ -31,11 +31,68 @@ STATUS_NOT_FOUND = 404
 STATUS_AUTH_ERR = 401
 STATUS_ERR = 500
 
+# common keys in API returns
+ERROR = "error" # main resp JSON key to return in case of server errors only
+RESULT = "result" # main resp JSON key to return non-error data to caller
+
+'''
+usage:
+
+ raise InvalidCredentialsError(<error message>, status_code=<status code>)
+
+@returns:
+ {'error': <error message>,
+  'status_code': 500 || <status code>
+ }
+'''
 class InvalidCredentialsError(Exception):
+    status_code = STATUS_AUTH_ERR
+
+    def __init__(self, message, status_code=None, payload=None):
+        Exception.__init__(self)
+        self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+
+    def to_dict(self):
+        rv = dict(self.payload or ())
+        rv[ERROR] = self.message
+        return rv
     pass
 
+'''
+usage:
+
+ raise MissingRequiredParamsException(<error message>, status_code=<status code>)
+
+@returns:
+ {'error': <error message>,
+  'status_code': 500 || <status code>
+ }
+'''
 class MissingRequiredParamsException(Exception):
+    status_code = STATUS_ERR
+
+    def __init__(self, message, status_code=None, payload=None):
+        Exception.__init__(self)
+        self.message = message
+        if status_code is not None:
+            self.status_code = status_code
+        self.payload = payload
+
+    def to_dict(self):
+        rv = dict(self.payload or ())
+        rv[ERROR] = self.message
+        return rv
     pass
+
+@app.errorhandler(InvalidCredentialsError)
+@app.errorhandler(MissingRequiredParamsException)
+def handle_invalid_usage(error):
+    response = jsonify(error.to_dict())
+    response.status_code = error.status_code
+    return response
 
 '''
 @level arg: optional int
@@ -106,34 +163,29 @@ be curled by the server.
 params for this API:
     'url' (required): URL you'd like to validate
 
-Returns:
+Returns (success case):
 {'result': <result>}
 
 where <result> = True if URL passes validation
 and if not, an error string explaining the nature of the error
 (@TODO: numbered results?)
+
+@throws: MissingRequiredParamException
 '''
 @app.route("/validate/url", methods = ['POST'])
 def check_url():
-    api_params = {}
-    try:
-        api_params = extract_request_params(request, required=['url'])
-        url = api_params['url']
-    except MissingRequiredParamsException as e:
-        # throws error indicating which param is missing
-        resp = jsonify({'error': str(e)})
-        resp.status_code = STATUS_ERR
-        return resp
+    api_params = extract_request_params(request, required=['url'])
+    url = api_params['url']
 
-    responseJson = {'status': None}
+    responseJson = {RESULT: None}
     # validate_installer_url throws ValueError if url validation
     # fails, else returns True
     try:
         modules.OvirtUtils.validate_installer_url(url)
-        responseJson['status'] = True
+        responseJson[RESULT] = True
     except ValueError as e:
-        # throws Value Error if its invalid
-        responseJson['status'] = str(e)
+        # throws ValueError if URL invalid, but still valid server response
+        responseJson[RESULT] = str(e)
     resp = jsonify(responseJson)
     resp.status_code = STATUS_OK
     return resp
@@ -144,31 +196,26 @@ Checks if a prospective hostname for a VM is valid.
 params for this API:
     'hostname' (required): prospective hostname for a VM, to validate
 
-Returns:
+Returns (success case):
 {'status': <status>}
   where <status> = True if hosetanme is valid,
   and if invalid, an error String explaining the reason
+
+@throws: MissingRequiredParamException
 '''
 @app.route("/validate/hostname", methods = ['POST'])
 def check_hostname():
-    api_params = {}
-    try:
-        api_params = extract_request_params(request, required=['hostname'])
-        hostname = api_params['hostname']
-        print_wrap("hostname to validate: {}".format(hostname))
-    except MissingRequiredParamsException as e:
-        # throws error indicating which param is missing
-        resp = jsonify({'error': str(e)})
-        resp.status_code = STATUS_ERR
-        return resp
+    api_params = extract_request_params(request, required=['hostname'])
+    hostname = api_params['hostname']
+    print_wrap("hostname to validate: {}".format(hostname))
 
-    responseJson = {'status': None}
+    responseJson = {RESULT: None}
     try:
         modules.OvirtUtils.validate_hostname(hostname)
-        responseJson['status'] = True
+        responseJson[RESULT] = True
     except ValueError as e:
-        # throws Value Error if its invalid
-        responseJson['status'] = str(e)
+        # throws ValueError if hostname invalid, but this is still valid server response
+        responseJson[RESULT] = str(e)
     resp = jsonify(responseJson)
     resp.status_code = STATUS_OK
     return resp
@@ -186,31 +233,14 @@ required API params:
 def tryLogin():
     jenkins_user = None
     jenkins_pass = None
-    api_params = {}
-    try:
-        api_params = extract_request_params(request, required=['user', 'password'])
-        ## DO NOT PRINT 'request' data!!  User's password is in here in plaintext
-        jenkins_user = api_params['user']
-        jenkins_pass = api_params['password']
-        print_wrap("/login: retrieved user: {}".format(jenkins_user))
-    # only catch and print internal MissingRequiredParamsException,
-    # not general unhandled exception, to avoid it containing the auth details
-    except MissingRequiredParamsException as e:
-        # throws error indicating which param is missing
-        resp = jsonify({'error': str(e)})
-        resp.status_code = STATUS_ERR
-        return resp
-
-    try:
-        authenticated = login(jenkins_user, jenkins_pass)
-        resp = jsonify("Welcome to Jenkins :)")
-        resp.status_code = STATUS_OK
-        return resp
-    except InvalidCredentialsError as e:
-        print_wrap("Bad password!") # log somewhere?
-        resp = jsonify("The password/username combination was invalid to log in to Jenkins")
-        resp.status_code = STATUS_AUTH_ERR
-        return resp
+    api_params = extract_request_params(request, required=['user', 'password'])
+    ## DO NOT PRINT 'request' data!!  User's password is in here in plaintext
+    jenkins_user = api_params['user']
+    jenkins_pass = api_params['password']
+    authenticated = login(jenkins_user, jenkins_pass)
+    resp = jsonify("Welcome to Jenkins :)")
+    resp.status_code = STATUS_OK
+    return resp
 
 '''
 Trigger a paramaterized job in Jenkins.
@@ -232,23 +262,13 @@ def triggerParameterizedJob(job):
 
     jenkins_user = None
     jenkins_pass = None
-    api_params = {}
     jenkins_params = {}
-    try:
-        api_params = extract_request_params(request, required=['user', 'password'], optional=['job-params'])
-        jenkins_user = api_params['user']
-        jenkins_pass = api_params['password']
-        if 'job-params' in api_params:
-            jenkins_params = api_params['job-params']
-        ## DO NOT PRINT 'request' data!!  User's password is in here in plaintext
-        print_wrap("/login: retrieved user: {}".format(jenkins_user))
-    # only catch and print internal MissingRequiredParamsException,
-    # not general unhandled exception, to avoid it containing the auth details
-    except MissingRequiredParamsException as e:
-        # throws error indicating which param is missing
-        resp = jsonify({'error': str(e)})
-        resp.status_code = STATUS_ERR
-        return resp
+    api_params = extract_request_params(request, required=['user', 'password'], optional=['job-params'])
+    jenkins_user = api_params['user']
+    jenkins_pass = api_params['password']
+    if 'job-params' in api_params:
+        jenkins_params = api_params['job-params']
+    ## DO NOT PRINT 'request' data!!  User's password is in here in plaintext
 
     # can send params to Jenkins job either with query string on the URL (use requests' 'data' arg)
     # or as post data; going to send password as param so dont use URL string for now
@@ -304,7 +324,7 @@ If it is invalid, raise InvalidCredentialsError
 def login(user, password):
     response = requests.get("{}/login".format(JENKINS_URL), auth=(user,password), verify=False)
     if response.status_code == STATUS_AUTH_ERR:
-        raise InvalidCredentialsError
+        raise InvalidCredentialsError("Invalid credentials logging in to Jenkins")
     return True
 
 def dumpResponse(response):

@@ -773,10 +773,9 @@ function isInstallerUrlValid(url) {
     sendRequest("POST", SERVER_URL + "/flask/validate/url", {"url": url})
     .then(function(res) {
         console.log("returned from api call successfully");
-        // returns a 'status' json key
-       if (res.hasOwnProperty("status")) {
-            var resMsg = res.status;
-            //alert(urlResult);
+        // returns a 'result' json key
+       if (res.hasOwnProperty("result")) {
+            var resMsg = res.result;
             if (resMsg === true) {
                 console.log("installer url ok");
                 deferred.resolve("ok");
@@ -811,10 +810,9 @@ function isHostnameValid(hostname) {
     sendRequest("POST", SERVER_URL + "/flask/validate/hostname", {"hostname": hostname})
     .then(function(res) {
         console.log("returned from api call successfully");
-        // returns a 'status' json key
-        if (res.hasOwnProperty("status")) {
-            var resMsg = res.status;
-            //alert(urlResult);
+        // returns a 'result' json key
+       if (res.hasOwnProperty("result")) {
+            var resMsg = res.result;
             if (resMsg === true) {
                 console.log("hostname ok");
                 deferred.resolve("ok");
