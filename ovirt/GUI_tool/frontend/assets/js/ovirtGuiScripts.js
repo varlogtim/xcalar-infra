@@ -748,41 +748,56 @@ function fieldValidateInstallerData(url, errEl) {
     }
     var deferred = jQuery.Deferred();
     console.log("call api to validate installer url");
-    validateInstallerUrl(url)
+    isInstallerUrlValid(url)
     .then(function(res) {
+        // everything ok. clear out any errors
+        setFieldOk(errEl);
+        deferred.resolve("installer URL is a-ok!");
+    })
+    .fail(function(err) {
+        // there's an error - get it and set here
+        console.log("did not pass validation of installer val");
+        console.log("call set field error with " + err);
+        //$("#help-test").attr("data-error", res);
+        setFieldErr(errEl, err);
+        deferred.reject("installer url wasn't valid :(");
+    });
+    return deferred.promise();
+}
+
+// pass an URL to validate; rejects if server can not access or has error,
+// resolves if server can access the URL
+function isInstallerUrlValid(url) {
+    console.log("call api to validate installer url");
+    var deferred = jQuery.Deferred();
+    sendRequest("POST", SERVER_URL + "/flask/validate/url", {"url": url})
+    .then(function(res) {
+        console.log("returned from api call successfully");
         // returns a 'status' json key
        if (res.hasOwnProperty("status")) {
-            var urlResult = res.status;
+            var resMsg = res.status;
             //alert(urlResult);
-            if (urlResult === true) {
-                console.log("valid installer url");
-                setFieldOk(errEl);
-                deferred.resolve("great!  great installer url!");
+            if (resMsg === true) {
+                console.log("installer url ok");
+                deferred.resolve("ok");
             } else {
-                console.log("returned : " + urlResult);
-                setFieldErr(errEl, urlResult);
-                deferred.reject(urlResult);
+                // get the error
+                console.log("installer url invalid");
+                deferred.reject(resMsg);
             }
         } else {
-            var err = "Server didn't return 'status' when validating url " + url;
-            console.log(err);
-            deferred.reject(err);
+            var errMsg = "isInstallerUrlValid: missingexpect 'status' attr from api return";
+            console.log(errMsg);
+            deferred.reject(errMsg);
         }
     })
     .fail(function(err) {
-        var errMsg = "Something went wrong when trying to validate URL!";
+        var rejectString = getRejectMessage(err);
+        var errMsg = "Something went wrong when checking if installer URL is valid! " + rejectString;
         console.log(errMsg);
-        console.log(err);
-        deferred.reject(err);
+        deferred.reject(errMsg);
     });
     return deferred.promise();
-
-}
-
-// Verify an installer URL is valid
-function validateInstallerUrl(url) {
-    console.log("call api to validate installer url");
-    return sendRequest("POST", SERVER_URL + "/flask/validate/url", {"url": url});
 }
 
 /** ////////////////////////////
@@ -791,14 +806,13 @@ function validateInstallerUrl(url) {
 
 // calls Server to pass prospective hostname to see if it's valid
 function isHostnameValid(hostname) {
-
     console.log("prepare to call api to validate hostname");
     var deferred = jQuery.Deferred();
     sendRequest("POST", SERVER_URL + "/flask/validate/hostname", {"hostname": hostname})
     .then(function(res) {
         console.log("returned from api call successfully");
         // returns a 'status' json key
-       if (res.hasOwnProperty("status")) {
+        if (res.hasOwnProperty("status")) {
             var resMsg = res.status;
             //alert(urlResult);
             if (resMsg === true) {
@@ -816,8 +830,10 @@ function isHostnameValid(hostname) {
         }
     })
     .fail(function(err) {
-            console.log("failed validation api")
-        deferred.reject(err);
+        var rejectString = getRejectMessage(err);
+        var errMsg = "Something went wrong when checking if hostname is valid! " + rejectString;
+        console.log(errMsg);
+        deferred.reject(errMsg);
     });
     return deferred.promise();
 }
@@ -831,25 +847,25 @@ function getVmbasename() {
 
 function validateVmbasenameInputField() {
     var deferred = jQuery.Deferred();
-        // get the value
-        var currVmname = getVmbasename();
-        console.log("HOSTNAME: " + currVmname + ", validate it");
-        if (currVmname) {
-            console.log("got curr vmanme: " + currVmname);
-            isHostnameValid(currVmname)
-            .then(function(res) {
-                // everything ok. clear out any errors
-                setFieldOk($vmBasenameInput);
-                deferred.resolve("hostame is a-ok!");
-            })
-            .fail(function(res) {
-                // there's an error - get it and set here
-                console.log("did not pass validation of hostname val");
-                console.log("call set field error with " + res);
-                //$("#help-test").attr("data-error", res);
-                setFieldErr($vmBasenameInput, res);
-                deferred.reject("hostanme wasn't valid :(");
-            });
+    // get the value
+    var currVmname = getVmbasename();
+    console.log("HOSTNAME: " + currVmname + ", validate it");
+    if (currVmname) {
+        console.log("got curr vmanme: " + currVmname);
+        isHostnameValid(currVmname)
+        .then(function(res) {
+            // everything ok. clear out any errors
+            setFieldOk($vmBasenameInput);
+            deferred.resolve("hostame is a-ok!");
+        })
+        .fail(function(err) {
+            // there's an error - get it and set here
+            console.log("did not pass validation of hostname val");
+            console.log("call set field error with " + err);
+            //$("#help-test").attr("data-error", res);
+            setFieldErr($vmBasenameInput, err);
+            deferred.reject("hostanme wasn't valid :(");
+        });
     } else {
         console.log("User hasn't yet supplied anything for the hostname field");
         deferred.resolve("user hasn't supplied hostname yet");
@@ -1198,12 +1214,9 @@ function triggerJenkinsAndUpdateMessages(params) {
         // about updating msg div and suppressing form empty errors
         console.log("Hit failure when calling 'triggerJenkins'");
         console.log(err);
-        var errMsg = "Failed trying to process VM request";
-        if (err.hasOwnProperty("error")) {
-            errMsg += ".  Reason detected (possibly from server response) - '" + err.error + "'";
-        } else {
-            errMsg += err;
-        }
+        var rejectMessage = getRejectMessage(err);
+        var errMsg = "Failed trying to process VM request.  " +
+            "Reason detected (possibly from server): " + rejectMessage;
         console.log(errMsg);
         $scheduleMsgDiv.html(errMsg);
         $scheduleMsgDiv.addClass("msg-error");
@@ -1341,6 +1354,28 @@ function blurPassword(data) {
 }
 
 /**
+ * converts a rejected promise from sendRequest to a useful String.
+ * If can't find a specific error, stringifies the json
+ */
+function getRejectMessage(res) {
+    if (typeof res === 'string' || res instanceof String) {
+        console.log("reject message is already a string! " +
+            "(Should not happen; sendRequest likely out of sync): " + res);
+        return res;
+    } else {
+        // this key would be set in sendRequest - NOT the actual API.
+        // sendRequest handles API return JSOn and creates a new JSON
+        if (res.hasOwnProperty("error")) {
+            console.log("has error property");
+            return res.error;
+        } else {
+            console.log("none of the common vars... just return this...");
+            return JSON.stringify(res);
+        }
+    }
+}
+
+/**
  * make ajax call
  * @action: type of call (GET, POST, DELETE, etc)
  * @url: endpoint valid for the server
@@ -1409,7 +1444,7 @@ function sendRequest(action, url, data={}, timeout=0) {
     } catch (e) {
         deferred.reject({
             "status": httpStatus.InternalServerError,
-            "errorLog": "Caught exception running api call to " +
+            "error": "Caught exception making ajax call to " +
                 url + ": " + e
         });
     }
