@@ -20,3 +20,5 @@ azure/xdp-standard/temp
 .lego
 *.rpm
 tmp
+tdhtest
+*.qcow2

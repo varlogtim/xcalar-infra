@@ -42,12 +42,12 @@ job "hashi-ui" {
 
       service {
         name = "hashi-ui"
-        tags = ["urlprefix-hashi-ui.service.consul/", "http"]
+        tags = ["urlprefix-hashi-ui.nomad:9999/", "urlprefix-hashi-ui.service.consul:9999/", "webapp"]
         port = "http"
 
         check {
           type     = "tcp"
-          interval = "30s"
+          interval = "20s"
           timeout  = "10s"
         }
       }

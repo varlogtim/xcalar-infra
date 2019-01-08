@@ -333,17 +333,19 @@ Now you can ssh into any instance that has the TrustedUserCAKey set in sshd_conf
 ## Vault as a CA for SSL certs
 
 
-Get help on the PKI path:
-
-    $ vault path-help pki/issue/int-xcalar-dot-com
-
 Configure it:
 
-    $ vault write pki/roles/int-xcalar-dot-com allowed_domains="int.xcalar.com" allow_subdomains="true" max_ttl="72h"
+    $ vault write xcalar_ca/roles/int-xcalar-dot-com allowed_domains="int.xcalar.com" allow_subdomains="true" max_ttl="72h"
+    $ vault write xcalar_ca_old/roles/admin ou=AdminRole allow_bare_domains=true allow_localhost=true allow_subdomains=true allow_ip_sans=true s=true allowed_domains=local,localdomain,int.xcalar.com ttl=604800
 
-Request a cert:
+Get help on the PKI path:
 
-    $ vault write xcalar_ca/issue/web_server common_name=myhost.int.xcalar.com alt_name="myhost" ip="10.10.4.4" | tee ssl.json
+    $ vault path-help xcalar_ca/issue/int-xcalar-dot-com
+
+
+Request cert:
+
+    $ vault write -format=json xcalar_ca/issue/web_server common_name=myhost.int.xcalar.com alt_name="myhost" ip="10.10.4.4" | tee ssl.json
     {
     "request_id": "08faf5f0-7f18-5709-301d-7fc8ea812e94",
     "lease_id": "",

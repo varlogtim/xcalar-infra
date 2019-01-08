@@ -42,10 +42,10 @@ job "jenkins2" {
       }
 
       service {
-        name = "http"
+        name = "jenkins2"
         port = "http"
 
-        tags = ["global", "jenkins-master"]
+        tags = ["jenkins2", "http", "urlprefix-jenkins2.service.consul:9999/", "urlprefix-jenkins2.nomad:9999/", "urlprefix-jenkins2.int.xcalar.com:9999/", "urlprefix-jenkins2:9999/"]
 
         check {
           name     = "alive"
@@ -56,13 +56,31 @@ job "jenkins2" {
       }
 
       service {
-        name = "ssh"
+        name = "jenkins-ssh"
         port = "ssh"
+
+        tags = ["ssh"] #, "urlprefix-:22022 proto=tcp"]
+
+        check {
+          name     = "alive"
+          type     = "tcp"
+          interval = "30s"
+          timeout  = "5s"
+        }
       }
 
       service {
-        name = "jnlp"
+        name = "jenkins-jnlp"
         port = "jnlp"
+
+        tags = ["jnlp"] #, "urlprefix-:22022 proto=tcp"]
+
+        check {
+          name     = "alive"
+          type     = "tcp"
+          interval = "30s"
+          timeout  = "5s"
+        }
       }
 
       resources {

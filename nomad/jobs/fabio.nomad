@@ -2,34 +2,30 @@ job "fabio" {
   datacenters = ["xcalar-sjc"]
   type        = "system"
 
+  update {
+    stagger      = "5s"
+    max_parallel = 1
+  }
+
   group "fabio" {
-    count = 1
-
     task "fabio" {
-      driver = "raw_exec"
-
-      artifact {
-        source = "https://storage.googleapis.com/repo.xcalar.net/deps/fabio-1.5.10-go1.11.1-linux_amd64"
-
-        options {
-          checksum = "sha256:9d9385372ae893c494ebe609681f90f36edf0a7af7042c17237e2c2ec6abc0c2"
-        }
-      }
+      driver = "docker"
 
       config {
-        command = "fabio-1.5.10-go1.11.1-linux_amd64"
+        image        = "fabiolb/fabio"
+        network_mode = "host"
       }
 
       resources {
-        cpu    = 100 # 500 MHz
-        memory = 128 # 256MB
+        cpu    = 200
+        memory = 100
 
         network {
-          port "http" {
+          port "lb" {
             static = 9999
           }
 
-          port "admin" {
+          port "ui" {
             static = 9998
           }
         }

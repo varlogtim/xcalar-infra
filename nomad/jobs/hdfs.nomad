@@ -2,7 +2,7 @@ job "hdfs" {
   datacenters = ["xcalar-sjc"]
 
   group "NameNode" {
-    count = 2
+    count = 3
 
     constraint {
       operator = "distinct_hosts"
@@ -25,7 +25,7 @@ job "hdfs" {
       }
 
       resources {
-        memory = 500
+        memory = 1000
 
         network {
           port "ipc" {
@@ -46,7 +46,7 @@ job "hdfs" {
   }
 
   group "DataNode" {
-    count = 8
+    count = 6
 
     constraint {
       operator = "distinct_hosts"
@@ -77,7 +77,7 @@ job "hdfs" {
       }
 
       resources {
-        memory = 500
+        memory = 1000
 
         network {
           port "data" {

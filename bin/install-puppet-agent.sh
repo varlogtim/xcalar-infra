@@ -5,6 +5,7 @@ INSTALL_ONLY=false
 PUPPETCONF=/etc/puppetlabs/puppet/puppet.conf
 CERTNAME=
 SERVER=
+CHECK_HOSTNAME=true
 
 if [ $(id -u) -ne 0 ]; then
     echo >&2 "Must run as root"
@@ -24,6 +25,7 @@ set_hostname() {
     echo >&2 "Setting hostname to $1"
     if command -v hostnamectl >/dev/null; then
         hostnamectl set-hostname "$1"
+        export HOSTNAME="${1%%.*}"
     else
         export HOSTNAME="${1%%.*}"
         hostname $HOSTNAME
@@ -101,6 +103,7 @@ while [ $# -gt 0 ]; do
             ENVIRONMENT="$1"
             shift
             ;;
+        --no-check-hostname) CHECK_HOSTNAME=false ;;
         -h | --help) usage ;;
         *)
             echo >&2 "ERROR: Unknown argument: $cmd"
@@ -108,16 +111,6 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
-
-HOSTNAME_F="$(hostname -f 2>/dev/null)"
-HOSTNAME_S="$(hostname -s 2>/dev/null)"
-HOSTNAME="$(hostname 2>/dev/null)"
-
-if [[ $HOSTNAME =~ ^localhost ]] || test -z "$HOSTNAME" || test -z "$HOSTNAME_S" || test -z "$HOSTNAME_F" || [[ $HOSTNAME_S =~ int.xcalar.com$ ]]; then
-    echo >&2 "Invalid hostname: HOSTNAME=$HOSTNAME, HOSTNAME_S=$HOSTNAME_S, HOSTNAME_F=$HOSTNAME_F"
-    echo >&2 "Please specify a short hostname on the command line"
-    exit 1
-fi
 
 if test -n "$ELVERSION"; then
     yum install -y epel-release
@@ -140,6 +133,22 @@ else
         cat $release_file
     done
     exit 1
+fi
+
+if [ "$INSTALL_ONLY" = true ]; then
+    exit 0
+fi
+
+if $CHECK_HOSTNAME; then
+    HOSTNAME_F="$(hostname -f 2>/dev/null)"
+    HOSTNAME_S="$(hostname -s 2>/dev/null)"
+    HOSTNAME="$(hostname 2>/dev/null)"
+
+    if [[ $HOSTNAME =~ ^localhost ]] || test -z "$HOSTNAME" || test -z "$HOSTNAME_S" || test -z "$HOSTNAME_F" || [[ $HOSTNAME_S =~ int.xcalar.com$ ]]; then
+        echo >&2 "Invalid hostname: HOSTNAME=$HOSTNAME, HOSTNAME_S=$HOSTNAME_S, HOSTNAME_F=$HOSTNAME_F"
+        echo >&2 "Please specify a short hostname on the command line"
+        exit 1
+    fi
 fi
 
 if ! test -e $PUPPETCONF; then
@@ -171,10 +180,6 @@ else
     elif command -v update-rc.d; then
         update-rc.d puppet enable
     fi
-fi
-
-if [ "$INSTALL_ONLY" = true ]; then
-    exit 0
 fi
 
 set +e

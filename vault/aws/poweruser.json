@@ -44,7 +44,7 @@
                 "kms:DescribeKey"
             ],
             "Resource": [
-                "arn:aws:kms:*:559166403383:key/*"
+                "arn:aws:kms:*:*:key/*"
             ]
         },
         {

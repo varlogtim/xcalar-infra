@@ -3,23 +3,23 @@
 #
 #
 
-YELLOW='\e[33m'
-RESET='\e[0m'
-RED='\e[31m'
+if [ -z "$XLRINFRADIR" ]; then
+    export XLRINFRADIR="$(cd $(dirname ${BASH_SOURCE[0]})/.. && pwd)"
+    export PATH=$XLRINFRADIR/bin:$PATH
+fi
 
+XREGISTRY="${XREGISTRY:-https://registry.int.xcalar.com}"
 
 # When a script is sourced, you can use this function to get the caller / origin
 env_script_file()  {
     echo "${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}"
 }
 
-XDIR="$(env_script_file)"
-
 say () {
     echo >&2 "$*"
 }
 
-debug () {
+debug_run () {
     test "${DEBUG-1}" = "1" && say "debug: $*" || :
     "$@"
     local rc=$?
@@ -27,8 +27,14 @@ debug () {
     return $rc
 }
 
+debug () {
+    test "${DEBUG-1}" = "1" && say "debug: $*" || :
+}
+
 warn() {
     if test -t 2; then
+        YELLOW='\e[33m'
+        RESET='\e[0m'
         echo -ne "${YELLOW}WARNING${RESET}: " >&2
         say "$1"
     else
@@ -38,6 +44,8 @@ warn() {
 
 error () {
     if test -t 2; then
+        RED='\e[31m'
+        RESET='\e[0m'
         echo -ne "${RED}ERROR${RESET}: " >&2
         say "$1"
     else
@@ -145,13 +153,13 @@ preflight () {
 }
 
 safe_curl () {
-    debug curl -4 --location --retry 20 --retry-delay 5 --retry-max-time 60 "$@"
+    debug_run curl -4 --location --retry 20 --retry-delay 5 --retry-max-time 60 "$@"
 }
 
 check_url() {
-    local code=
-    if code="$(curl -sL -H 'Range: bytes=0-1' -w '%{http_code}\n' -o /dev/null "$1")"; then
-        if [[ $code =~ ^20 ]]; then
+    local http_code=
+    if http_code="$(curl -sL -H 'Range: bytes=0-1' -w '%{http_code}\n' -o /dev/null "$1")"; then
+        if [[ $http_code =~ ^20 ]]; then
             return 0
         fi
     fi
@@ -159,14 +167,24 @@ check_url() {
 }
 
 url_exists() {
-    :
+    local tmpf=$(mktemp) http_code
+    if http_code=$(curl -fsL -w '%{http_code}\n' -o $tmpf -I "$1"); then
+        if [[ $http_code =~ ^20 ]]; then
+            cat $tmpf
+            rm $tmpf
+            return 0
+        fi
+    fi
+    rm $tmpf
+    return 1
 }
 
 s3_exists() {
-    :
+    local bucket_key="${1#s3://}"
+    local bucket="${bucket_key%%/*}"
+    local key="${bucket_key#*/}"
+    aws s3api head-object --bucket $bucket --key $key
 }
-
-
 
 get_sha1 () {
     shasum $1 | cut -d' ' -f1 | cut -c1-8
@@ -230,6 +248,8 @@ urlencode() {
 
 vssh() {
     # try to guess the user's intentions
+    (
+    unset SSH_AUTH_SOCK
     if [[ "$1" =~ ^-mode ]] || [[ "$1" =~ ^-role ]]; then
         vault ssh "$@"
     elif [[ "$@" =~ jenkins ]]; then
@@ -244,4 +264,70 @@ vssh() {
         echo >&2 "Don't understand your vault ssh command: $*"
         return 1
     fi
+    )
+}
+
+consul_session() {
+    if [ $# -lt 2 ]; then
+        say "ERROR: Must specify session name"
+        return 1
+    fi
+    echo '{"Node": "'$(hostname -s)'", "Name":"'${1}'","TTL":"'${2:-60s}'"}' |
+        curl -fsS --request PUT --data @- http://127.0.0.1:8500/v1/session/create | \
+        jq -r .ID
+}
+
+CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR-http://127.0.0.1:8500}
+
+acquire_lock() {
+    local session_id=$1 task_name=$2 result
+    echo "Trying to acquire the lock..."
+    result=$(curl -s -XPUT "${CONSUL_HTTP_ADDR}/v1/kv/locks/${task_name}/.lock?acquire=${session_id}")
+    [ "${result}" == "true" ] && echo "Lock acquired"
+}
+
+
+release_lock() {
+    local session_id=$1 task_name=$2 result
+    echo "Releasing the lock..."
+    result=$(curl -s -XPUT "${CONSUL_HTTP_ADDR}/v1/kv/locks/${task_name}/.lock?release=${session_id}")
+    [ "${result}" == "true" ] && echo "Lock released"
+}
+
+destroy_session () {
+    local session_id=$1 result
+    echo "Destroying the session..."
+    result=$(curl -s -XPUT "${CONSUL_HTTP_ADDR}/v1/session/destroy/${session_id}")
+    [ "${result}" == "true" ] && echo "Session destroyed"
+}
+
+with_lock () {
+    local session_id task_name="$1"
+    shift
+    session_id=$(curl -s -XPUT "${CONSUL_HTTP_ADDR}/v1/session/create" -d "{\"Name\": \"${task_name}\"}"  | jq -r '.ID')
+    if ! acquire_lock "${session_id}"; then
+        destroy_session "${session_id}"
+        echo "Unable to acquire the lock."
+        echo "The job is probably already running on an other server."
+        return
+    fi
+
+    eval "$@"
+    release_lock "${session_id}"
+    destroy_session "${session_id}"
+}
+
+##
+## Docker registry API
+##
+
+registry_repos() {
+    curl -s ${XREGISTRY}/v2/_catalog  | jq -r '.repositories[]'
+}
+
+registry_repo_tags() {
+    local repo
+    for repo in $(registry_repos); do
+        curl -s ${XREGISTRY}/v2/${repo}/tags/list | jq -r .
+    done | jq -s -r '.'
 }

@@ -39,7 +39,7 @@ job "newton-swarm" {
       }
 
       config {
-        jar_path    = "local/swarm-client-3.14.jar"
+        jar_path    = "local/swarm-client-3.15.jar"
         jvm_options = ["-Xmx512m", "-Xms256m"]
 
         args = [
@@ -81,10 +81,10 @@ EOT
       # Specifying an artifact is required with the "java" driver. This is the
       # mechanism to ship the Jar to be run.
       artifact {
-        source = "https://storage.googleapis.com/repo.xcalar.net/deps/swarm-client-3.14.jar"
+        source = "https://storage.googleapis.com/repo.xcalar.net/deps/swarm-client-3.15.jar"
 
         options {
-          checksum = "sha256:d3bdef93feda423b4271e6b03cd018d1d26a45e3c2527d631828223a5e5a21fc"
+          checksum = "sha256:6812e86a220d2d6c4d3fffabd646b7bb19a4144693958b2a943fa6b845f081b1"
         }
       }
     }

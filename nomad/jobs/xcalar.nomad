@@ -50,7 +50,7 @@ job "amit-xcalar-1" {
 
         port_map {
           monitor = 8000
-          https   = 443
+          https   = 8443
           api     = 18552
           comms   = 5000
         }
@@ -145,7 +145,7 @@ EOH
 
         network {
           port "https" {
-            static = "443"
+            static = "8443"
           }
 
           port "monitor" {

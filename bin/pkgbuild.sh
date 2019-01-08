@@ -1,5 +1,4 @@
 #!/bin/bash
-
 #
 # Based on Arch pacman/pkgbuild, and very similar to
 # how an RPM spec works. The data is defined externally
@@ -10,7 +9,7 @@
 
 DEBUG=${DEBUG:-0}
 NOW=$(date +%s)
-PREFIX=/usr
+#PREFIX=/usr
 
 die() {
     echo >&2 "$1"
@@ -20,6 +19,12 @@ die() {
 debug() {
     if [ "$DEBUG" = "1" ]; then
         echo >&2 "pkgbuild: debug: $*"
+    fi
+}
+
+run() {
+    if [ "$DEBUG" = "1" ]; then
+        echo >&2 "pkgbuild: run: $*"
     fi
     "$@"
 }
@@ -44,19 +49,45 @@ prepare() {
 }
 
 build() {
-    cd "$pkgname-$pkgver"
-    ./configure --prefix=${PREFIX}
-    make -j -s
+    debug "source: $source"
+    debug "sources ${sources[*]}"
+    if [ -z "$source" ]; then
+        source="${sources[0]}"
+    fi
+
+    export PREFIX=${prefix:-/usr}
+
+    debug "ls -al: $(ls -al)"
+    if [ -d "$srcpkgdir" ]; then
+        run cd "$srcpkgdir"
+    fi
+    if [ -e configure ]; then
+        run ./configure --prefix=${PREFIX}
+    fi
+    if [ -e Makefile ]; then
+        run make -j -s
+    fi
 }
 
 check() {
-    cd "$pkgname-$pkgver"
-    make -k check
+    if [ -d "$srcpkgdir" ]; then
+        run cd "$srcpkgdir"
+    fi
+    if [ -e Makefile ]; then
+        run make -k check
+    fi
 }
 
 package() {
-    cd "$pkgname-$pkgver"
-    make install DESTDIR=$pkgdir
+
+    export PREFIX=${prefix:-/usr}
+    if [ -e Makefile ]; then
+        run make install DESTDIR=$pkgdir PREFIX=${prefix:-/usr}
+    else
+        tool=$(basename "${sources[0]}")
+        tool="${tool%%.*}"
+        install -v -D ${pkgname}-${pkgver}*/${pkgname}-${pkgver} $pkgdir/usr/bin/${pkgname}
+    fi
 }
 
 pkgusage() {
@@ -74,10 +105,10 @@ fetch() {
     local json="${cache}/${dir}/${file}.json"
     mkdir -p "$(dirname $json)"
     if ! test -e "$json" || [ $((NOW - $(stat -c %Y $json))) -gt 600 ]; then
-        if ! curl -fsSL "$1" | jq -r . > "$json"; then
-            rm -f "$json"
+        if ! curl -fsSL "$1" | jq -r . > "${json}.tmp"; then
             return 1
         fi
+        mv "${json}.tmp" "$json"
     fi
     echo "$json"
 }
@@ -87,44 +118,49 @@ download() {
     local cache="${HOME}/.cache/pkgbuild/sources/${path}"
     if ! test -e "$cache"; then
         info "cache-miss: downloading $1 to $cache"
-        curl -fsSL --create-dirs -o "$cache" "$1" || die "Failed to download $1 to $cache"
+        curl -fsSL --create-dirs -o "${cache}.tmp" "$1" || die "Failed to download $1 to $cache"
+        mv "${cache}.tmp" "$cache"
     else
         info "cache-hit: $1 is in $cache"
     fi
-    echo $cache
+    echo "$cache"
 }
 
 pkggenerate() {
     local pkg="${1#https://}"
+    url="https://$pkg"
     case "$pkg" in
         github.com/*) ;;
-        *) die "Don't know how to generate code for $pkg" ;;
+        *) die "Don't know how to generate code for $1. Please use a github.com URL" ;;
     esac
     local repo="${pkg#github.com/}"
-    local api="https://api.github.com/repos/$repo"
-    local api_json=$(fetch "$api")
-    local latest="${api}/releases/latest"
-    local latest_json=$(fetch $latest)
+    local api="https://api.github.com/repos/$repo" api_json=
+    local latest="${api}/releases/latest" latest_json=
     pkgname="${pkgname:-$(basename $pkg)}"
-    if [ -z "$pkgver" ]; then
-        pkgver="$(jq -r .tag_name $latest_json)"
-    fi
-    pkgver="${pkgver#v}"
-    pkgdesc="$(jq -r .description $api_json)"
-    pkgrel="${pkgrel:-1}"
 
-    local sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'linux' | grep -E '(amd64|x86_64|x64)' | head -1))
-    if [ ${#sources[@]} -eq 0 ]; then
-        sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'amd64' | grep -Ev '(.asc$|SHA)' | head -1))
-    fi
-    url="https://$pkg"
-    license="$(jq -r .license.spdx_id $api_json)"
-    local sha256sums=() source=
-    for source in "${sources[@]}"; do
-        local cache="$(download $source)"
-        sha256sums+=($(sha256sum $cache | awk '{print $1}'))
-    done
-    cat << EOF
+    if api_json=$(fetch "$api") && latest_json=$(fetch $latest); then
+        if [ -z "$pkgver" ]; then
+            pkgver="$(jq -r .tag_name $latest_json)"
+        fi
+        pkgver="${pkgver#v}"
+        pkgdesc="$(jq -r .description $api_json)"
+        pkgrel="${pkgrel:-1}"
+
+        local sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'linux' | grep -E '(amd64|x86_64|x64)' | grep -Ev '\.(deb|rpm)$' | head -1))
+        if [ ${#sources[@]} -eq 0 ]; then
+            sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'amd64' | grep -Ev '(.asc$|SHA)' | head -1))
+        fi
+        license="$(jq -r .license.name $api_json)"
+        local sha256sums=() source=
+        for source in "${sources[@]}"; do
+            if [ -n "$source" ]; then
+                local cache="$(download $source)"
+                sha256sums+=($(sha256sum $cache | awk '{print $1}'))
+            else
+                sha256sums+=('')
+            fi
+        done
+        cat << EOF
 pkgname='$pkgname'
 pkgver='$pkgver'
 pkgdesc='$pkgdesc'
@@ -136,12 +172,6 @@ sha256sums=("${sha256sums[@]}")
 prepare() { :; }
 build() { :; }
 check() { :; }
-package() {
-    set -e
-    local source0=\$(basename \${sources[0]})
-    local tool="\${source0%%.*}"
-    install -v -D \$tool \$pkgdir/usr/bin/\$pkgname
-}
 
 # This is the default package function. Feel free to modify or
 # completely replace it. When you enter in this function you are
@@ -160,7 +190,7 @@ package() {
     esac
     if ! [ -e "\$tool" ]; then
         local found_tool=false
-        for tool in \$(find -maxdepth 1 -mindepth 1 -type f); do
+        for tool in \$(find -maxdepth 5 -mindepth 1 -type f); do
             if file "\$tool" | grep -q ELF; then
                 found_tool=true
                 break
@@ -174,10 +204,14 @@ package() {
 }
 # vim: ft=sh
 EOF
+    fi
 }
 
 pkgmain() {
     CURDIR=$(pwd)
+    if [ $# -eq 0 ]; then
+        set -- -b PKGBUILD
+    fi
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -185,7 +219,7 @@ pkgmain() {
             -d | --debug) DEBUG=1 ;;
             --no-debug) DEBUG=0 ;;
             --prefix)
-                PREFIX="$1"
+                prefix="$1"
                 shift
                 ;;
             -b | --build)
@@ -194,15 +228,16 @@ pkgmain() {
                 ;;
             -h | --help) pkgusage ;;
             -g | --generate)
-                PKGBUILD="${PKGBUILD:-$(basename $CURDIR).pkgbuild}"
+                PKGBUILD="${PKGBUILD:-PKGBUILD}"
                 pkggenerate "$1"
                 exit $?
                 ;;
             -gb)
                 PKG="$1"
                 shift
-                PKGBUILD="${PKGBUILD:-$(basename $CURDIR).pkgbuild}"
-                pkggenerate "$PKG" > $PKGBUILD || die "Failed to generate PKGBUILD"
+                PKGBUILD="${PKGBUILD:-PKGBUILD}"
+                pkggenerate "$PKG" > ${PKGBUILD}.$$ || die "Failed to generate PKGBUILD"
+                mv ${PKGBUILD}.$$ ${PKGBUILD}
                 ;;
             -f | --force)
                 FORCE=-f;;
@@ -223,18 +258,29 @@ pkgmain() {
     srcdir="${TMPDIR}/srcdir"
     rm -rf $TMPDIR
     mkdir -p $pkgdir $srcdir
-    cp * $srcdir/
-    cd $srcdir
+    sources+=($source)
     local nsources=${#sources[@]}
     for ii in $(seq 0 $((nsources - 1))); do
+        cd $srcdir
         local filen=$(basename ${sources[$ii]}) cache=
-        if ! cache="$(download ${sources[$ii]})"; then
-            die "Failed to download ${sources[$ii]}"
+        if [ -z "$filen" ]; then
+            echo >&2 "WARNING: Empty source decleration in sources[$ii]"
+            continue
         fi
-        cp "$cache" "$filen"
+        if ! test -e "${PKGBUILDdir}/$filen"; then
+            if ! cache="$(download ${sources[$ii]})"; then
+                die "Failed to download ${sources[$ii]}"
+            fi
+            cp "$cache" "${PKGBUILDdir}/$filen"
+        fi
+        cp "${PKGBUILDdir}/$filen" "$filen"
         sha256=$(sha256sum $filen | awk '{print $1}')
-        if [ "${sha256sums[$ii]}" = "" ]; then
+        if [ "${sha256sums[$ii]}" = SKIP ]; then
+            echo >&2 "Skipping checksum for ${sources[$ii]}. Please add a valid checksum!"
+        elif [ "${sha256sums[$ii]}" = "" ]; then
             echo >&2 "WARNING: Missing checksum for ${sources[$ii]}. It should be $sha256"
+        elif [ "${sha256sums[$ii]}" = "0" ]; then
+            info "Skipping checksum verification for ${sources[$ii]}"
         elif [ "$sha256" != "${sha256sums[$ii]}" ]; then
             echo >&2 "SHA256($filen) = $sha256"
             info "Removing $cache"
@@ -243,33 +289,62 @@ pkgmain() {
         fi
         case "$filen" in
             *.tar.gz) tar zxf "$filen" ;;
-            *.tar.bz2) tar Jxf "$filen" ;;
+            *.tar.bz2) tar xf "$filen" ;;
             *.tar) tar xf "$filen" ;;
-            *.zip) unzip -q -o -k "$filen" ;;
+            *.zip) unzip -qo "$filen" ;;
             *.gz) gzip -dc "$filen" > "$(basename $filen .gz)" ;;
             *.bz2) bzip2 -dc "$filen" > "$(basename $filen .bz2)" ;;
         esac
     done
 
+    if [ -z "$srcpkgdir" ]; then
+        srcpkgdir="${pkgname}-${pkgver}"
+    fi
+    if [ "${srcpkgdir:0:1}" != / ]; then
+        srcpkgdir="${srcdir}/$srcpkgdir"
+    fi
+    if test -d "$srcpkgdir"; then
+        info "Found package subdir (srcpkgdir=$srcpkgdir)"
+    else
+        info "Not found package subdir (srcpkgdir=$srcpkgdir). Using $srcdir."
+        srcpkgdir=$srcdir
+    fi
+
     if type -t prepare > /dev/null; then
-        cd $srcdir
-        prepare || die "Failed to prepare"
+        info "Calling prepare ..."
+        (
+            set -e
+            cd $srcpkgdir
+            prepare
+        ) || die "Failed to prepare"
     fi
     if type -t build > /dev/null; then
-        cd $srcdir
-        build || die "Failed to build"
+        info "Calling build ..."
+        (
+            set -e
+            cd $srcpkgdir
+            build
+        ) || die "Failed to build"
     fi
     if type -t check > /dev/null; then
-        cd $srcdir
-        check || die "Failed to check"
+        info "Calling check ..."
+        (
+        set -e
+        cd $srcpkgdir
+        check
+        ) || die "Failed to check"
     fi
     if type -t package > /dev/null; then
-        cd $srcdir
-        package || die "Failed to package"
+        info "Calling package ..."
+        (
+        cd $srcpkgdir
+        package
+        ) || die "Failed to package"
     fi
     cd $CURDIR
     FPM_COMMON=(-s dir --name ${pkgname} \
         --version ${pkgver#v} \
+        ${prefix+--prefix $prefix} \
         ${pkgrel+--iteration $pkgrel} \
         ${license+--license "$license"} \
         ${arch+--architecture $arch} \
@@ -277,16 +352,21 @@ pkgmain() {
         --url "${url}")
     for script in after-install after-remove after-upgrade before-install before-remove before-upgrade; do
         if test -x ${script}.sh; then
+            info "adding --${script} ${script}.sh"
             FPM_COMMON+=(--${script} ${script}.sh)
         fi
     done
-    FPM_COMMON+=(${FORCE} -C "$pkgdir")
+    FPM_COMMON+=(${FORCE} -C "$pkgdir${prefix}")
     info "building $pkgname rpm ..."
-    debug fpm -t rpm "${FPM_COMMON[@]}"
+    run fpm -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
     info "building $pkgname deb ..."
-    debug fpm -t deb --deb-no-default-config-files "${FPM_COMMON[@]}"
+    run fpm -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}"
 
-    rm -rf $TMPDIR
+    if ((DEBUG)); then
+        info "Build remenants in $TMPDIR"
+    else
+        rm -rf $TMPDIR
+    fi
 }
 
 pkgmain "$@"

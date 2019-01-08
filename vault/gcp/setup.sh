@@ -35,6 +35,19 @@ roles = ["roles/viewer"]
 }
 EOF
 
+vault write gcp/roleset/gcsadmin \
+    project="angular-expanse-99923" \
+    secret_type="service_account_key"  \
+    bindings=-<<EOF
+resource "//cloudresourcemanager.googleapis.com/projects/angular-expanse-99923" {
+roles = ["roles/storage.objectAdmin"]
+}
+EOF
+
+# Now we have this my-token-roleset, we can generate credentials for it
+vault read gcp/token/gcsadmin
+
+
 
 # Now we have this my-token-roleset, we can generate credentials for it
 vault read gcp/token/my-token-roleset

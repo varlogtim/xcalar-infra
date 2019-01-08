@@ -1,7 +1,18 @@
 #!/bin/bash
 #
+# Script to manage AWS credentials generated in Vault. Supports multiple profiles,
+# caching, and is a plugin to the awscli.
 #
+# In the awscli credentials configuration, ~/.aws/credentials, you can specify keys
+# directly, or you can specify a credentials provider as an external script that is
+# responsible for providing awscli with valid credentials. This is such a script.
 #
+# ; from ~/.aws/credentials
+# [vault]  ; <-- or any other profile name
+# credential_process=/home/abakshi/bin/vault-aws-credentials-provider.sh --path aws-xcalar/sts/poweruser
+#
+# From then on when calling `awscli --profile vault`, this script is called, which
+# in turn calls vault
 
 # <-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------``````````````````````````````````````````````````````````````
 # Vault gives us this format:
@@ -30,30 +41,85 @@
 # }
 
 FILE=""
-TTL=8h
-ACCOUNT="aws-xcalar"
+VAULTCACHE_BASE="$HOME/.aws/cache"
+TTL=4h
+ACCOUNT="${ACCOUNT:-$(cat ${VAULTCACHE_BASE}/account 2>/dev/null || echo xcalar)}"
 TYPE="sts"
-ROLE="poweruser"
+ROLE="${ROLE:-$(cat ${VAULTCACHE_BASE}/role 2>/dev/null || echo poweruser)}"
+PROFILE="${PROFILE:-$(cat ${VAULTCACHE_BASE}/profile 2>/dev/null || echo vault)}"
 CLEAR=false
 EXPORT_ENV=false
 EXPORT_PROFILE=false
 INSTALL=false
-PROFILE=vault
+UNMET_DEPS=()
+AWS_SHARED_CREDENTIALS_FILE="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+
+usage() {
+    cat <<EOF >&2
+
+     $(basename $0) [--account ACCOUNT] [--role ROLE]
+        [--install] [--profile PROFILE] [--ttl NUM] [--clear]
+
+    --account  ACCOUNT   AWS Account to use (default $ACCOUNT (xcalar, xcalar-poc, test, prod)
+    --role     ROLE      AWS Role (default: $ROLE)
+    --install            Install into ~/.aws/credentials to have awscli automatically retrieve keys
+    --ttl      TTL       TTL for token, min is 15m, max is 12h (default: $TTL)
+    --profile  PROFILE   AWS CLI Profile to populate from ~/.aws/credentials (default: $PROFILE)
+
+    -c|--clear           Clear all existing token (if any)
+
+    Advanced options ...
+      [--check] [--path PATH] [-e|--export-env] [--export-profile]
+        [-f|--file FILE|-]
+
+    --check              Sanity check your installation
+    --path     PATH      Complete vault path to use (default: $ACCOUNT/$TYPE/$ROLE)
+    -f|--file    FILE|-  Read existing credentials from FILE or - (stdin)
+    -e|--export-env      Show AWS environment variables that you can use for auth
+    --export-profile     Print credentials in AWS format credential format
+EOF
+    say "$*"
+    exit 2
+}
 
 say() {
     echo >&2 "$1"
 }
 
 die() {
-    say
+    if [ -z "$1" ]; then
+        exit 1
+    fi
     say "ERROR: $1"
+    say
+    say "For more information and detailed instructions see the Vault Wiki:"
+    say "http://wiki.int.xcalar.com/mediawiki/index.php/Vault"
     say
     exit ${2:-1}
 }
 
 if [[ $OSTYPE =~ darwin ]]; then
     please_install() {
-        die "You need to install $1. Try brew install"
+        say
+        say "You need '$1'. The easiest way to install '$1' is via 'brew'"
+        if ! command -v brew >/dev/null && [ "$brew_warn" != true ]; then
+            brew_warn=true
+            say "Alas, you need to install 'brew', a package manager for OSX"
+            say
+            echo >&2 '  /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"'
+            say
+            say "For more information and detailed instructions on Brew see:"
+            say "http://wiki.int.xcalar.com/mediawiki/index.php/Homebrew"
+            say
+            say "Once you have it, run:"
+
+        else
+            say "Try running the following:"
+        fi
+
+        say
+        say " brew update"
+        say " brew install ${2:-$1}"
     }
     date() {
         gdate "$@"
@@ -69,37 +135,41 @@ if [[ $OSTYPE =~ darwin ]]; then
     }
 else
     please_install() {
-        die "You need to install $1. Try 'apt-get install $1' or 'yum install --enablerepo='xcalar-*' $1'"
+        say
+        if command -v apt-get >/dev/null; then
+            say "You need to install $1. Try 'apt-get install ${2:-$1}'"
+        else
+            say "You need to install $1. Try 'yum install --enablerepo=\"xcalar-*\" ${2:-$1}'"
+        fi
     }
 fi
 
-usage() {
-    cat << EOF >&2
-    usage: $0 [--account ACCOUNT] [--type TYPE] [--role ROLE] [--path PATH] [--ttl TTL] [--install [--profile PROFILE]]
-              [-c|--clear] [-e|--export-env] [--export-profile] [-f|--file FILE|-] [--check]
+please_have() {
+    if ! command -v "$1" >/dev/null; then
+        please_install "$@"
+        UNMET_DEPS+=($1)
+        return 1
+    fi
+}
 
-    --account  ACCOUNT   AWS Account to use (default $ACCOUNT)
-    --type     TYPE      AWS Credentials type (default: $TYPE)
-    --role     ROLE      AWS Role (default: $ROLE)
-    --path     PATH      Complete ACCOUNT/TYPE/ROLE (default: $ACCOUNT/$TYPE/$ROLE)
-    --ttl      TTL       TTL for token, min is 15m, max is 12h (default: $TTL)
-    --install            Install this script into ~/.aws/credentials to automatically retrieve AWS keys for you
-    --profile  PROFILE   AWS CLI Profile to populate from ~/.aws/credentials (default: $PROFILE)
-
-    --check              Sanity check your installation
-    -f|--file    FILE|-  Read existing credentials from FILE or - (stdin)
-    -e|--export-env      Print out AWS environment variables for AWS access
-    --export-profile     Print credentials format key
-    -c|--clear           Clear all existing token
-EOF
-    die "$1"
+cvault() {
+    if [ -z "$VAULT_TOKEN" ]; then
+        if test -e "$HOME/.vault-token"; then
+            export VAULT_TOKEN="$(cat ~/.vault-token)"
+        else
+            die "Failed to find VAULT_TOKEN environment or ~/.vault-token file. Are you logged in?"
+        fi
+    fi
+    local uri="$1"
+    shift
+    curl -sS -H "X-Vault-Token: $VAULT_TOKEN" "${VAULT_ADDR}/v1/${uri}" "$@"
 }
 
 vault_status() {
     local status
     if status="$(
         set -o pipefail
-        vault status -format=json | jq -r .sealed
+        cvault sys/health | jq -r .sealed
     )" && [ "$status" = false ]; then
         return 0
     fi
@@ -117,67 +187,107 @@ aws_configure() {
 
 vault_install_credential_helper() {
     vault_sanity
-    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-west-2}"
+    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
     aws_configure default.region $AWS_DEFAULT_REGION
     aws_configure default.s3.signature_version s3v4
     aws_configure default.s3.addressing_style path
 
-    touch ~/.aws/credentials
-    sed -i.bak '/^\['$PROFILE'\]/,+2 d' ~/.aws/credentials
-    cat >> ~/.aws/credentials << EOF
+    local dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+    local filen="$(basename "${BASH_SOURCE[0]}")"
+
+    touch ${AWS_SHARED_CREDENTIALS_FILE}
+    sed -i.bak '/^\['$PROFILE'\]/,/^$/d' ${AWS_SHARED_CREDENTIALS_FILE}
+    cat >>${AWS_SHARED_CREDENTIALS_FILE} <<EOF
 [$PROFILE]
-credential_process = $(readlink -f ${BASH_SOURCE[0]}) --path $AWSPATH
+credential_process = "${dir}/${filen}" --path $AWSPATH
 
 EOF
+    unset AWS_SECRET_ACCESS_KEY
+    unset AWS_SESSION_TOKEN
+    unset AWS_ACCESS_KEY_ID
+    if ! aws --profile "$PROFILE" sts get-caller-identity --output json; then
+        die "Failed to get your identity from AWS :("
+    fi
+
     say "SUCCESS"
+    say
     if [ "$PROFILE" = default ]; then
-        say "Use 'aws <cmd>' as normal"
+        say "   aws <cmd>"
+        say ""
     else
-        say "Please use:"
         say "   aws --profile $PROFILE <cmd>"
         say ""
-        say "To avoid having to add '--profile $PROFILE' to every awscli command, add:"
+        say "To avoid having to add '--profile $PROFILE' to every awscli command, add the following to your ~/.bashrc"
         say "   export AWS_PROFILE=$PROFILE"
-        say ""
-        say "to your ~/.bashrc or ~/.bash_aliases."
     fi
+    echo "$ACCOUNT" >"${VAULTCACHE_BASE}/account"
+    echo "$ROLE" >"${VAULTCACHE_BASE}/role"
+    echo "$PROFILE" >"${VAULTCACHE_BASE}/profile"
 }
 
 vault_sanity() {
+    say "Sanity checking your vault installation ..."
     local progs="jq vault curl" prog
     for prog in $progs; do
-        if ! command -v $prog > /dev/null; then
-            please_install $prog
-        fi
+        please_have $prog
     done
     if [[ $OSTYPE =~ darwin ]]; then
         progs="gsed gdate greadlink gstat"
         for prog in $progs; do
-            if ! command -v $prog > /dev/null; then
-                please_install "coreutils or something providing $prog. Could be gnu-${prog#g}"
-            fi
+            please_have $prog "coreutils"
         done
     fi
+    echo "1..6"
+    if [ ${#UNMET_DEPS[@]} -gt 0 ]; then
+        echo "not ok    1  - missing dependencies ${UNMET_DEPS[*]}"
+        die "You have unmet dependencies: ${UNMET_DEPS[*]}"
+    fi
+    echo "ok    1  - have all dependencies"
     local -a aws_version
-    aws_version=($(aws --version 2>&1 | sed -E 's@^aws-cli/([0-9\.]+).*$@\1@g' | tr . ' '))
-    if [ ${aws_version[1]} -lt 15 ]; then
+    if ! aws_version=($(
+        set -o pipefail
+        aws --version 2>&1 | sed -E 's@^aws-cli/([0-9\.]+).*$@\1@g' | tr . ' '
+    )); then
+        echo "not ok    2  - awscli 15.40 or higher"
         die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
     fi
-    if [ -z "$VAULT_ADDR" ]; then
-        die "VAULT_ADDR not set. Please set 'export VAULT_ADDR=https://yourvaultserver' to your ~/.bashrc or ~/.bash_aliases"
+    if [ ${aws_version[1]} -lt 15 ]; then
+        echo "not ok    2  - awscli 15.40 or higher"
+        echo "ok    2  - awscli 15.40 or higher"
+    elif [ ${aws_version[1]} -eq 15 ] && [ ${aws_version[2]} -lt 40 ]; then
+        echo "not ok    2  - awscli 15.40 or higher"
+        die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
     fi
-    if ! curl -o /dev/null -s "$VAULT_ADDR"; then
+    echo "ok    2  - awscli 15.40 or higher"
+
+    if [ -z "$VAULT_ADDR" ]; then
+        echo "not ok    3  - VAULT_ADDR is set"
+        die "VAULT_ADDR not set. Please set 'export VAULT_ADDR=https://vault.service.consul:8200' to your ~/.bashrc or ~/.bash_profile"
+    fi
+    echo "ok    3  - VAULT_ADDR is set"
+    if ! curl -o /dev/null -k -fsS "$VAULT_ADDR"; then
+        echo "not ok    4  - failed to connect to vault"
+        die "Failed to connect to VAULT_ADDR=$VAULT_ADDR"
+    fi
+    if ! curl -o /dev/null -fsS "$VAULT_ADDR"; then
+        echo "not ok    4  - failed to securely connect to vault"
         die "Failed to connect to VAULT_ADDR=$VAULT_ADDR in a secure fashion. Please check http://wiki.int.xcalar.com/mediawiki/index.php/Xcalar_Root_CA"
     fi
-    if ! vault_status; then
-        die "Failed to get 'vault status', or vault is sealed"
-    fi
-    if ! AUTH_TOKEN=$(
+    echo "ok    4  - connected to vault"
+    local display_name
+    if ! display_name=$(
         set -o pipefail
-        vault read -format=json -field=data auth/token/lookup-self | jq -r .id
+        cvault auth/token/lookup-self | jq -r .data.display_name
     ); then
+        echo "not ok    5  - failed to look up your token"
         die "Failed to look you up. Are you logged into vault? Try 'vault login -method=ldap username=jdoe'. Your username is your LDAP username (usually the part before @xcalar.com in your email)"
     fi
+    echo "ok    5  - verified your token with vault (display_name: $display_name)"
+    if ! vault_status; then
+        echo "not ok    6  - checked vault status"
+        die "Failed to get 'vault status', or vault is sealed"
+    fi
+    echo "ok    6  - checked vault status"
 }
 
 iso2unix() {
@@ -196,6 +306,20 @@ expiration_ts() {
 
 expiration_json() {
     jq -r .expiration "$@"
+}
+
+vault_update_expiration() {
+    local lease_duration expiration
+    if ! lease_duration=$(jq -r .lease_duration "$1"); then
+        return 1
+    fi
+    if [ -z "$lease_duration" ]; then
+        return 1
+    fi
+    if ! expiration=$(date -d "$lease_duration seconds" +%s); then
+        return 1
+    fi
+    jq -r '. + { expiration: '$expiration'}' "$1"
 }
 
 vault2aws() {
@@ -228,8 +352,8 @@ vault2aws() {
 vault_render_file() {
     local file="$1" tmp
     if [ -z "$file" ] || [ "$file" = - ]; then
-        tmp=$(mktemp -t vaultXXXXXX.json)
-        cat - > "$tmp"
+        tmp=$(mktemp ${TMPDIR}/vaultXXXXXX.json)
+        cat - >"$tmp"
         file="$tmp"
     fi
     if $EXPORT_ENV; then
@@ -238,9 +362,9 @@ vault_render_file() {
         echo "export AWS_SESSION_TOKEN=\"$(jq -r .data.security_token $file)\""
     elif $EXPORT_PROFILE; then
         echo "[$PROFILE]"
-        echo aws_access_key_id = $(jq -r .data.access_key $file)
-        echo aws_secret_access_key = $(jq -r .data.secret_key $file)
-        echo aws_session_token = $(jq -r .data.security_token $file)
+        echo "aws_access_key_id = $(jq -r .data.access_key $file)"
+        echo "aws_secret_access_key = $(jq -r .data.secret_key $file)"
+        echo "aws_session_token = $(jq -r .data.security_token $file)"
         echo
     else
         vault2aws "$file"
@@ -254,50 +378,55 @@ main() {
         local cmd="$1"
         shift
         case "$cmd" in
-        -h | --help) usage ;;
-        -i | --install) INSTALL=true ;;
-        --check) vault_sanity ;;
-        --account)
-            ACCOUNT="$1"
-            shift
-            ;;
-        --role)
-            ROLE="$1"
-            shift
-            ;;
-        --type)
-            TYPE="$1"
-            shift
-            ;;
-        -c | --clear) CLEAR=true ;;
-        -f | --file)
-            FILE="$1"
-            shift
-            ;;
-        --path)
-            AWSPATH="$1"
-            shift
-            ;;
-        --export-env) EXPORT_ENV=true ;;
-        --export-profile) EXPORT_PROFILE=true ;;
-        --profile)
-            PROFILE="$1"
-            shift
-            ;;
-        --ttl)
-            TTL="$1"
-            shift
-            ;;
-        --) break ;;
-        *) usage "Unknown argument $cmd" ;;
+            -h | --help) usage ;;
+            -i | --install) INSTALL=true ;;
+            --check)
+                vault_sanity
+                exit $?
+                ;;
+            --account)
+                ACCOUNT="${1#aws-}"
+                ACCOUNT="aws-${ACCOUNT}"
+                shift
+                ;;
+            --role)
+                ROLE="$1"
+                shift
+                ;;
+            --type)
+                TYPE="$1"
+                shift
+                ;;
+            -c | --clear) CLEAR=true ;;
+            -f | --file)
+                FILE="$1"
+                shift
+                ;;
+            --path)
+                AWSPATH="$1"
+                shift
+                ;;
+            -e | --export-env) EXPORT_ENV=true ;;
+            --export-profile) EXPORT_PROFILE=true ;;
+            --profile)
+                PROFILE="$1"
+                shift
+                ;;
+            --ttl)
+                TTL="$1"
+                shift
+                ;;
+            --) break ;;
+            *) usage "Unknown argument $cmd" ;;
         esac
     done
+    ACCOUNT="${ACCOUNT#aws-}"
+    ACCOUNT="aws-${ACCOUNT}"
     if [ -n "$FILE" ]; then
         vault_render_file "$FILE"
         exit $?
     fi
-    test -e $HOME/.aws || mkdir -m 0700 $HOME/.aws
-    test -e $HOME/.aws/credentials || touch $HOME/.aws/credentials
+    test -e "$(dirname ${AWS_SHARED_CREDENTIALS_FILE})" || mkdir -m 0700 "$(dirname ${AWS_SHARED_CREDENTIALS_FILE})"
     if [ -z "$AWSPATH" ]; then
         AWSPATH="$ACCOUNT/$TYPE/$ROLE"
     fi
@@ -305,16 +434,16 @@ main() {
         vault_install_credential_helper
         exit $?
     fi
-    VAULTCACHE="$HOME/.aws/cache/${AWSPATH}.json"
+    VAULTCACHE="${VAULTCACHE_BASE}/${AWSPATH}.json"
     if $CLEAR; then
         say "Clearing cached credentials for $AWSPATH .."
         rm -f -- "$VAULTCACHE"
         exit $?
     fi
-    mkdir -m 0700 -p $(dirname $VAULTCACHE)
-    export TMPDIR=$HOME/.aws/tmp
-    mkdir -m 0700 -p $TMPDIR
-    TMP=$(mktemp -t vaultXXXXXX.json)
+    mkdir -m 0700 -p "$(dirname $VAULTCACHE)"
+    export TMPDIR="$HOME/.aws/tmp"
+    mkdir -m 0700 -p "$TMPDIR"
+    TMP="$(mktemp ${TMPDIR}/vaultXXXXXX.json)"
     trap "rm -f $TMP" EXIT
     if [ -s "$VAULTCACHE" ]; then
         NOW=$(date +%s)
@@ -326,10 +455,10 @@ main() {
     fi
     rm -f -- "$VAULTCACHE"
 
-    case "$AWSPATH" in
-    */sts/*) vault write -format=json "$AWSPATH" ttl=$TTL > "$TMP" ;;
-    */creds/*) vault read -format=json "$AWSPATH" ttl=$TTL > "$TMP" ;;
-    *) die "Unknown type of path $AWSPATH" ;;
+    case "$TYPE" in
+        sts) cvault "$AWSPATH" -d '{"ttl": "'$TTL'"}' -X POST >"$TMP" ;;
+        creds) cvault "$AWSPATH" -d '{"ttl": "'$TTL'"}' -X GET >"$TMP" ;;
+        *) die "Unknown type of path $AWSPATH" ;;
     esac
     if [ $? -ne 0 ]; then
         echo >&2 "ERROR: Failed to get valid vault creds for $AWSPATH"
@@ -338,16 +467,20 @@ main() {
         exit 1
     fi
 
-    LEASE_DURATION=$(jq -r .lease_duration "$TMP")
-    if [ $? -eq 0 ] && [ -n "$LEASE_DURATION" ]; then
-        EXPIRATION=$(date -d "$LEASE_DURATION seconds" +%s)
-        jq -r '. + { expiration: '$EXPIRATION'}' "$TMP" > "${TMP}.2" \
-            || die "Failed to save converted vault credentials"
+    if vault_update_expiration "$TMP" > "${TMP}.2"; then
         mv "${TMP}.2" "$TMP"
     fi
-    mv "$TMP" "$VAULTCACHE"
 
-    vault_render_file "$VAULTCACHE"
+#    LEASE_DURATION=$(jq -r .lease_duration "$TMP")
+#    if [ $? -eq 0 ] && [ -n "$LEASE_DURATION" ]; then
+#        EXPIRATION=$(date -d "$LEASE_DURATION seconds" +%s)
+#        jq -r '. + { expiration: '$EXPIRATION'}' "$TMP" >"${TMP}.2" \
+#            || die "Failed to save converted vault credentials"
+#        mv "${TMP}.2" "$TMP"
+#    fi
+
+    vault_render_file "$TMP"
+    mv "$TMP" "$VAULTCACHE"
 }
 
 main "$@"

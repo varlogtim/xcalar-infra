@@ -64,12 +64,12 @@ function update_certificate_store {
   log_info "Adding CA public key $cert_file_path to OS certificate store"
 
   if $(command_exists "update-ca-certificates"); then
-    cp "$cert_file_path" "$UPDATE_CA_CERTS_PATH/$dest_file_name"
-    update-ca-certificates
+    sudo cp "$cert_file_path" "$UPDATE_CA_CERTS_PATH/$dest_file_name"
+    sudo update-ca-certificates -f
   elif $(command_exists "update-ca-trust"); then
-    update-ca-trust enable
-    cp "$cert_file_path" "$UPDATE_CA_TRUST_PATH/$dest_file_name"
-    update-ca-trust extract
+    sudo update-ca-trust enable
+    sudo cp "$cert_file_path" "$UPDATE_CA_TRUST_PATH/$dest_file_name"
+    sudo update-ca-trust extract
   else
     log_warn "Did not find the update-ca-certificates or update-ca-trust commands. Cannot update OS certificate store."
   fi
