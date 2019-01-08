@@ -111,7 +111,7 @@ LDAP_CONFIGS = {
 }
 
 OVIRT_TEMPLATE_MAPPING = {
-    'ovirt-node-03-cluster': 'el7-template-20180816',
+    'ovirt-node-03-cluster': 'el7-test-template-node-03-1',
     'einstein-cluster2': 'ovirt-tool-einstein-updated',
     'node2-cluster': 'ovirt-cli-tool-node2-template',
     'node3-cluster': 'ovirt-cli-tool-node3-template'
