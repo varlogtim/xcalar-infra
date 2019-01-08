@@ -253,9 +253,9 @@ def generate_vm_names(basename, n, no_rand=False):
         # append -vm0, -vm1, etc. if multiple VMs.  this will return if there's any
         # vm in ovirt with this as a substring
         while not unique_basename or get_matching_vms(unique_basename):
-            # don't use L's or I's, they look same in ovirt console
+            # don't use L's or I's; they look same in ovirt console; zero will look like 'O'
             # hostnames need to be lowercase else can cause conflicts with other scripts
-            rand_seq = generate_random_string(4, exclude=["i","l","I","L"]).lower()
+            rand_seq = generate_random_string(4, exclude=["i","l","I","L","0"]).lower()
             unique_basename = "{}-{}".format(basename, rand_seq)
 
     # generate n vm names using the unique_basename
