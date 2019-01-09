@@ -25,7 +25,7 @@ done
 
 shift $(($OPTIND - 1))
 ITER="$1"
-VERSION=${2:-"0.2"}
+VERSION=${2:-"1.0"}
 
 if [[ -z "$ITER" ]]; then
     echo "Missing iteration number"
@@ -37,13 +37,13 @@ trap onExit EXIT
 TMPDIR=$(mktemp --tmpdir -d sqldfpub.XXXXXX)
 cd "$TMPDIR"
 
-wget https://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
+wget https://jenkins.int.xcalar.com/job/BuildSqldf-with-spark-branch/${ITER}/artifact/xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
 $XLRDIR/bin/reposync.sh rpmcommon -- xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
 
-wget https://jenkins.int.xcalar.com/job/BuildSqldf/${ITER}/artifact/xcalar-sqldf_${VERSION}-${ITER}_all.deb
+wget https://jenkins.int.xcalar.com/job/BuildSqldf-with-spark-branch/${ITER}/artifact/xcalar-sqldf_${VERSION}-${ITER}_all.deb
 $XLRDIR/bin/apt-includedeb.sh -d all xcalar-sqldf_${VERSION}-${ITER}_all.deb
 
-tar -xOf /netstore/builds/byJob/BuildSqldf/${ITER}/archive.tar xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm | rpm2cpio | cpio -i --to-stdout ./opt/xcalar/lib/xcalar-sqldf.jar > xcalar-sqldf-${VERSION}.jar
+tar -xOf /netstore/builds/byJob/BuildSqldf-with-spark-branch/${ITER}/archive.tar xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm | rpm2cpio | cpio -i --to-stdout ./opt/xcalar/lib/xcalar-sqldf.jar > xcalar-sqldf-${VERSION}.jar
 gsutil cp ./xcalar-sqldf-${VERSION}.jar gs://repo.xcalar.net/deps
 echo "# Please update SQLDF_VERSION in xcalar/bin/build-user-installer.sh to use version ${VERSION} for non-RPM builds #"
 
