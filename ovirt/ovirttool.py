@@ -1051,16 +1051,41 @@ def stop_vm(vmid):
     wait_for_service_to_come_down(vmid)
 
 '''
-    Return list of names of all vms available to vms
+    Return list of strings containing data of each VM in Ovirt
+    :parm verbose:
+        if True, each line formatted with hostname, ip, status
+         (can take a long depending on how many VMs are in Ovirt)
+        if False, each line just contains vm hostname (quick)
 '''
-def get_all_vms():
+def get_all_vms(verbose=False):
 
     vms_service = CONN.system_service().vms_service()
     vms = vms_service.list()
-    vm_names = []
+    vm_list = []
+    max_name_length = -1
+    # format col for hostnames to width of longest vm name
+    # (only do in verbose case since regular only contains one col)
+    if verbose:
+        for vm in vms:
+            max_name_length = max(max_name_length, len(vm.name))
     for vm in vms:
-        vm_names.append(vm.name)
-    return vm_names
+        vm_name = vm.name
+        vm_line = ""
+        # getting all IPs can take a long time... make it optional
+        if verbose:
+            vm_id = vm.id
+            vm_ip = "" # if None, print formatting will fail
+            try:
+                vm_ip = get_vm_ip(vm_id)
+            except NoIpException:
+                pass
+            vm_status = vm.status
+            max_name_length = max(max_name_length, len(vm_name))
+            vm_line = '{:<{}} {:<20} {:<10}'.format(vm_name, max_name_length, vm_ip, vm_status)
+        else:
+            vm_line = vm_name
+        vm_list.append(vm_line)
+    return vm_list
 
 '''
     Remove a vm of a given name.
@@ -2634,11 +2659,13 @@ def validateparams(args):
     operations = [args.count, args.delete, args.shutdown, args.poweron]
 
     # if trying to list vms, let them know no other options will be done
-    if args.list:
+    if args.list or args.listv:
         if any(operations):
             raise ValueError("\n\nERROR: --list will list all VMs, "
                 "no other operations can be done.  It must be "
                 "specified alone.\n")
+        if args.list and args.listv:
+            raise ValueError("\n\nERROR: Can't specify both --list and --listv")
 
     if args.count:
         if args.count > MAX_VMS_ALLOWED or args.count <= 0:
@@ -2747,7 +2774,7 @@ def validateparams(args):
             if not trying to create vms,
             make sure at least runing to remove VMs then, else nothing to do
         '''
-        if not args.delete and not args.shutdown and not args.poweron and not args.list:
+        if not args.delete and not args.shutdown and not args.poweron and not args.list and not args.listv:
             raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
 
     return int(args.ram), int(args.cores), args.ovirtcluster, puppet_role, licfilepath, installer, ldap_config_url, basename
@@ -2827,6 +2854,8 @@ if __name__ == "__main__":
         help="Number of VMs you'd like to create")
     parser.add_argument("-l", "--list", action='store_true',
         help="List current VMs on Ovirt")
+    parser.add_argument("-lv", "--listv", action='store_true',
+        help="Verbose listing of all VMs on Ovirt, including available IPs (Takes longer to return)")
     parser.add_argument("--vmbasename", type=str,
         help="Basename to use for naming the new VM(s) (If creating a single VM, will name VMBASENAME, if multiple, will name them VMBASENAME-vm0, VMBASENAME-vm1, .., VMBASENAME-vm(n-1) )")
     parser.add_argument("--cores", type=int, default=DEFAULT_CORES,
@@ -2877,8 +2906,11 @@ if __name__ == "__main__":
     CONN = open_connection(user=args.user)
 
     # if list requested, list all VMs and quit.
-    if args.list:
-        valid_vms = get_all_vms()
+    if args.list or args.listv:
+        verbose=False
+        if args.listv:
+            verbose=True
+        valid_vms = get_all_vms(verbose=verbose)
         info_log("\n\n{}\n".format("\n".join(valid_vms)), timestamp=False)
         sys.exit(0)
 
