@@ -26,23 +26,16 @@ cmBuild qa
 installer=$INSTALLER_PATH
 cluster=$CLUSTER
 
-if [ "$VmProvider" = "GCE" ]; then
-    ret=`gcloud compute instances list | grep $cluster`
-
-    if [ "$NOTPREEMPTIBLE" != "1" ]; then
-        ips=($(awk '/RUNNING/ {print $6":18552"}' <<< "$ret"))
+# get comma sep list of ip:port for each host in cluster, for runTest.py
+node_arg=""
+for node in $(getNodeIps "$cluster"); do
+    ip_port="$node:18552"
+    if [ ! -z "$node_arg" ]; then
+        node_arg="$node_arg,$ip_port"
     else
-        ips=($(awk '/RUNNING/ {print $5":18552"}' <<< "$ret"))
+        node_arg="$ip_port"
     fi
-elif [ "$VmProvider" = "Azure" ]; then
-    ret=`getNodes "$cluster"`
-    ips=($(awk '{print $0":18552"}' <<< "$ret"))
-else
-    echo 2>&1 "Unknown VmProvider $VmProvider"
-    exit 1
-fi
-
-echo "${ips[*]}"
+done
 
 funcstatsd() {
     local name="${1//::/_}"
@@ -68,21 +61,18 @@ cloudXccli "$cluster" -c "version"
 gitsha=`cloudXccli "$cluster" -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
-# remove when bug 2670 fixed
-hosts=$( IFS=$','; echo "${ips[*]}" )
-
 echo "1..$NUM_ITERATIONS" | tee "$TAP"
 set +e
 for ii in `seq 1 $NUM_ITERATIONS`; do
     Test="$SYSTEM_TEST_CONFIG-$NUM_USERS"
-    python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n $NUM_USERS -i $hosts -t $SYSTEM_TEST_CONFIG -w -c $XLRDIR/bin
+    python "$XLRDIR/src/bin/tests/systemTests/runTest.py" -n $NUM_USERS -i "$node_arg" -t $SYSTEM_TEST_CONFIG -w -c $XLRDIR/bin
     ret="$?"
     if [ "$ret" = "0" ]; then
         echo "Passed '$Test' at `date`"
         funcstatsd "$Test" "PASS" "$gitsha"
         echo "ok ${ii} - $Test-$ii"  | tee -a $TAP
     else
-        genSupport
+        genSupport "$cluster"
         funcstatsd "$Test" "FAIL" "$gitsha"
         echo "not ok ${ii} - $Test-$ii" | tee -a $TAP
         exit $ret

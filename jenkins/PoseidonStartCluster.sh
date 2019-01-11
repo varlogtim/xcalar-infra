@@ -16,17 +16,14 @@ installer="$INSTALLER_PATH"
 
 cluster="$CLUSTER"
 
-ips=""
 startCluster "$installer" "$NUM_INSTANCES" "$cluster"
 ret=$?
 if [ "$ret" != "0" ]; then
     exit $ret
 fi
 
-echo "$ips"
-
 try=0
-while ! startupDone ; do
+until startupDone "$cluster" ; do
     echo "Waited $try seconds for Xcalar to come up"
     sleep 1
     try=$(( $try + 1 ))
@@ -36,11 +33,11 @@ while ! startupDone ; do
      fi
 done
 
-stopXcalar
+stopXcalar "$cluster"
 
-clusterSsh $cluster "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
+clusterSsh "$cluster" "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
 
-clusterSsh $cluster "sudo yum install -y gcc-c++ wget texinfo screen emacs python-devel"
+clusterSsh "$cluster" "sudo yum install -y gcc-c++ wget texinfo screen emacs python-devel"
 
 # Install gdb-8.0
 if [ "$InstallGdb8" = "true" ]; then
@@ -59,25 +56,27 @@ fi
 #clusterSsh $cluster "sudo umount /mnt/xcalar"
 #clusterSsh $cluster "sudo mount -o noac /mnt/xcalar"
 
-clusterSsh $cluster "sudo sed -ie 's/Constants.XcMonSlaveMasterTimeout=.*/Constants.XcMonSlaveMasterTimeout=$XcMonSlaveMasterTimeout/' /etc/xcalar/default.cfg"
-clusterSsh $cluster "sudo sed -ie 's/Constants.XcMonMasterSlaveTimeout=.*/Constants.XcMonMasterSlaveTimeout=$XcMonMasterSlaveTimeout/' /etc/xcalar/default.cfg"
-clusterSsh $cluster "echo \"$FuncTestParam\" | sudo tee -a /etc/xcalar/default.cfg"
+clusterSsh "$cluster" "sudo sed -ie 's/Constants.XcMonSlaveMasterTimeout=.*/Constants.XcMonSlaveMasterTimeout=$XcMonSlaveMasterTimeout/' /etc/xcalar/default.cfg"
+clusterSsh "$cluster" "sudo sed -ie 's/Constants.XcMonMasterSlaveTimeout=.*/Constants.XcMonMasterSlaveTimeout=$XcMonMasterSlaveTimeout/' /etc/xcalar/default.cfg"
+clusterSsh "$cluster" "echo \"$FuncTestParam\" | sudo tee -a /etc/xcalar/default.cfg"
 
-clusterSsh $cluster "echo \"vm.min_free_kbytes=$KernelMinFreeKbytes\" | sudo tee -a /etc/sysctl.conf"
-clusterSsh $cluster "sudo sysctl -p"
+clusterSsh "$cluster" "echo \"vm.min_free_kbytes=$KernelMinFreeKbytes\" | sudo tee -a /etc/sysctl.conf"
+clusterSsh "$cluster" "sudo sysctl -p"
 
-restartXcalar
+restartXcalar "$cluster"
 ret=$?
 if [ "$ret" != "0" ]; then
     echo "Failed to bring Xcalar up"
     exit $ret
 fi
 
-clusterSsh $cluster "echo \"XLRDIR=/opt/xcalar\" | sudo tee -a /etc/bashrc"
+clusterSsh "$cluster" "echo \"XLRDIR=/opt/xcalar\" | sudo tee -a /etc/bashrc"
 
 # Set up defaultAdmin.json
 clientSecret="$XLRDIR/src/bin/sdk/xdp/xcalar/external/client_secret.json"
 xiusername=`cat $clientSecret | jq .xiusername -cr`
 xipassword=`cat $clientSecret | jq .xipassword -cr`
 credArray="`$XLRDIR/pkg/gui-installer/default-admin.py -e 'support@xcalar.com' -u $xiusername -p $xipassword`"
-nodeSsh $cluster "${cluster}-1" 'XLRROOT="$(cat /etc/xcalar/default.cfg | grep XcalarRootCompletePath | cut -d= -f2)"; cfgFile="$XLRROOT/config/defaultAdmin.json"; echo '"'""$credArray""'"' | sudo tee "$cfgFile"; sudo chown xcalar:xcalar "$cfgFile" ; sudo chmod 600 "$cfgFile"'
+# only want to send cmd to one node in the cluster
+node=$(getSingleNodeFromCluster "$cluster")
+nodeSsh "$cluster" "$node" 'XLRROOT="$(cat /etc/xcalar/default.cfg | grep XcalarRootCompletePath | cut -d= -f2)"; cfgFile="$XLRROOT/config/defaultAdmin.json"; echo '"'""$credArray""'"' | sudo tee "$cfgFile"; sudo chown xcalar:xcalar "$cfgFile" ; sudo chmod 600 "$cfgFile"'

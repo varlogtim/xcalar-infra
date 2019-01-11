@@ -40,10 +40,10 @@ sudo yum install -y nc
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
-gitsha=`cloudXccli "$CLUSTER" -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
+gitsha=`cloudXccli "$cluster" -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
 echo "GIT SHA: $gitsha"
 
-AllTests="$(cloudXccli "$CLUSTER" -c 'functests list' | tail -n+2)"
+AllTests="$(cloudXccli "$cluster" -c 'functests list' | tail -n+2)"
 NumTests="${#TestsToRun[@]}"
 hostname=`hostname -f`
 
@@ -57,20 +57,20 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
     for Test in "${TestsToRun[@]}"; do
         logfile="$TMPDIR/${hostname//./_}_${Test//::/_}_$ii.log"
 
-        echo "Running $Test on $CLUSTER ..."
-        if cloudXccli "$CLUSTER" -c version 2>&1 | grep 'Error'; then
-           genSupport
-           echo "$CLUSTER Crashed"
+        echo "Running $Test on $cluster ..."
+        if cloudXccli "$cluster" -c version 2>&1 | grep 'Error'; then
+           genSupport "$cluster"
+           echo "$cluster Crashed"
            exit 1
         elif [ $anyfailed -eq 1 ]
         then
             # cluster is up but got non zero return code. This means that
             # the ssh connection is lost. In such cases, just drive on with the
             # next test after restarting the cluster
-            restartXcalar
+            restartXcalar "$cluster"
             anyfailed=0
         fi
-        time cloudXccli "$CLUSTER" -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
+        time cloudXccli "$cluster" -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
         rc=${PIPESTATUS[0]}
         if [ $rc -ne 0 ]; then
             funcstatsd "$Test" "FAIL" "$gitsha"

@@ -7,13 +7,16 @@ if test -z "$XLRINFRADIR"; then
 fi
 
 export VmProvider=${VmProvider:-GCE}
-if [ "$IS_RC" = "true" ]; then
-    prodLicense=`cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0`
-    export XCE_LICENSE="${XCE_LICENSE:-$prodLicense}"
-else
-    devLicense=`cat $XLRDIR/src/data/XcalarLic.key | gzip | base64 -w0`
-    export XCE_LICENSE="${XCE_LICENSE:-$devLicense}"
+# XCE_LICENSE is Jenkins param to PoseidonStartCluster
+# if not supplied, base on if it was checked as IS_RC in parent job SystemTestStart
+if [ -z "$XCE_LICENSE" ]; then
+    if [ "$IS_RC" = "true" ]; then
+        XCE_LICENSE=$(cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0)
+    else
+        XCE_LICENSE=$(cat $XLRDIR/src/data/XcalarLic.key | gzip | base64 -w0)
+    fi
 fi
+export XCE_LICENSE="$XCE_LICENSE"
 
 initClusterCmds() {
     if [ "$VmProvider" = "GCE" ]; then
@@ -32,35 +35,12 @@ startCluster() {
     local clusterName="$3"
 
     if [ "$VmProvider" = "GCE" ]; then
-        local rawOutput=`$XLRINFRADIR/gce/gce-cluster.sh "$installer" "$numInstances" "$clusterName"`
-        local ret=$?
-
-        if [ "$NOTPREEMPTIBLE" != "1" ]; then
-            ips=($(awk '/RUNNING/ {print $6":18552"}' <<< "$rawOutput"))
-        else
-            ips=($(awk '/RUNNING/ {print $5":18552"}' <<< "$rawOutput"))
-        fi
-
-        return $ret
+        # gce-cluster.sh will based xcalar license on an XCE_LICENSE env variable
+        $XLRINFRADIR/gce/gce-cluster.sh "$installer" "$numInstances" "$clusterName"
+        return $?
     elif [ "$VmProvider" = "Azure" ]; then
+        # azure-cluster.sh bases xcalar license on what you supply to -k option
         $XLRINFRADIR/azure/azure-cluster.sh -i "$installer" -c "$numInstances" -n "$clusterName" -t "$INSTANCE_TYPE" -k "$XCE_LICENSE"
-        local ret=$?
-        local rawOutput=`$XLRINFRADIR/azure/azure-cluster-info.sh "$clusterName"`
-        ips=($(awk '{print $0":18552"}' <<< "$rawOutput"))
-        return $ret
-    fi
-
-    return 1
-}
-
-getNodes() {
-    local cluster="$1"
-    shift
-    if [ "$VmProvider" = "GCE" ]; then
-        gcloud compute instances list | grep $cluster | cut -d \  -f 1
-        return ${PIPESTATUS[0]}
-    else
-        $XLRINFRADIR/azure/azure-cluster-info.sh "$cluster"
         return $?
     fi
 
@@ -68,7 +48,64 @@ getNodes() {
     return 1
 }
 
+# print hostname of each node in a cluster to stdout
+# one line per node
+getNodes() {
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to getNodes" >&2
+        exit 1
+    fi
+    local cluster="$1"
+    if [ "$VmProvider" = "GCE" ]; then
+        gcloud compute instances list | grep $cluster | cut -d \  -f 1
+        return ${PIPESTATUS[0]}
+    elif [ "$VmProvider" = "Azure" ]; then
+        $XLRINFRADIR/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}' # goal here: should just be hostname
+        return ${PIPESTATUS[0]}
+    fi
+
+    echo 2>&1 "Unknown VmProvider $VmProvider"
+    return 1
+}
+
+# print IPs of each node in a cluster to stdout
+getNodeIps() {
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to getNodeIps" >&2
+        exit 1
+    fi
+    local cluster="$1"
+    if [ "$VmProvider" = "GCE" ]; then
+        # NOTPREEMPTIBLE Is Jenkins param in SystemStartTest; GCE vms created
+        # with preemptible option have additional col in output
+        if [ "$NOTPREEMPTIBLE" != "1" ]; then
+            gcloud compute instances list | grep $cluster | awk '/RUNNING/ {print $6}'
+            return ${PIPESTATUS[0]}
+        else
+            gcloud compute instances list | grep $cluster | awk '/RUNNING/ {print $5}'
+            return ${PIPESTATUS[0]}
+        fi
+    elif [ "$VmProvider" = "Azure" ]; then
+        # @TODO - Azure case to get IPs - what's below is for printing hostname
+        $XLRINFRADIR/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}' # goal here: col w/ IPs
+        return ${PIPESTATUS[0]}
+    fi
+
+    echo 2>&1 "Unknown VmProvider $VmProvider"
+    return 1
+
+}
+
 nodeSsh() {
+    # cluster arg only required for Azure case
+    if [ "$VmProvider" = "Azure" ] && [ -z "$1" ]; then
+        echo "Must provide a cluster to nodeSsh for the Azure case" >&2
+        exit 1
+    fi
+    if [ -z "$2" ]; then
+        echo "Must provide a node as second arg to nodeSsh" >&2
+        exit 1
+    fi
     local cluster="$1"
     local node="$2"
     shift 2
@@ -86,6 +123,10 @@ nodeSsh() {
 
 # send ssh cmd to all nodes in a cluster
 clusterSsh() {
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to clusterSsh" >&2
+        exit 1
+    fi
     local cluster="$1"
     shift
     if [ "$VmProvider" = "GCE" ]; then
@@ -101,15 +142,24 @@ clusterSsh() {
 }
 
 stopXcalar() {
-    clusterSsh $cluster "sudo service xcalar stop-supervisor"
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to stopXcalar" >&2
+        exit 1
+    fi
+    clusterSsh "$1" "sudo service xcalar stop-supervisor"
 }
 
 restartXcalar() {
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to restartXcalar" >&2
+        exit 1
+    fi
+    local cluster="$1"
     set +e
-    stopXcalar
+    stopXcalar "$cluster"
     clusterSsh $cluster "sudo service xcalar start"
-    for ii in $(seq 1 $NUM_INSTANCES ) ; do
-        local host="${cluster}-${ii}"
+    local host
+    for host in $(getNodes "$cluster"); do
         nodeSsh "$cluster" "$host" "sudo service xcalar status" 2>&1 | grep -q  "Usrnodes started"
         local ret=$?
         local numRetries=3600
@@ -131,13 +181,23 @@ restartXcalar() {
 }
 
 genSupport() {
-    clusterSsh $cluster "sudo /opt/xcalar/scripts/support-generate.sh"
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to genSupport" >&2
+        exit 1
+    fi
+    clusterSsh "$1" "sudo /opt/xcalar/scripts/support-generate.sh"
 }
 
 startupDone() {
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to startupDone" >&2
+        exit 1
+    fi
+    local cluster="$1"
     if [ "$VmProvider" = "GCE" ]; then
-        for node in `getNodes "$cluster"`; do
-            nodeSsh "$cluster" "$node" "sudo journalctl -r" | grep -q "Startup finished";
+        local node
+        for node in $(getNodes "$cluster"); do
+            nodeSsh "$cluster" "$node" "sudo journalctl -r" | grep -q "Startup finished"
             ret=$?
             if [ "$ret" != "0" ]; then
                 return $ret
@@ -154,9 +214,11 @@ startupDone() {
 }
 
 clusterDelete() {
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to clusterDelete" >&2
+        exit 1
+    fi
     local cluster="$1"
-    shift
-
     if [ "$VmProvider" = "GCE" ]; then
         $XLRINFRADIR/gce/gce-cluster-delete.sh "$cluster"
     elif [ "$VmProvider" = "Azure" ]; then
@@ -167,11 +229,28 @@ clusterDelete() {
     fi
 }
 
+# print to stdout, the hostname of just the first node in <cluster>,
+# from the list of getNodes <cluster>
+getSingleNodeFromCluster() {
+    if [ -z "$1" ]; then
+        echo "Must specify cluster to getSingleNodeFromCluster" >&2
+        exit 1
+    fi
+    echo $(getNodes "$1") | head -1
+}
+
 cloudXccli() {
+    if [ -z "$1" ]; then
+        echo "Must specify cluster to cloudXccli" >&2
+        exit 1
+    fi
     local cluster="$1"
     shift
 
-    cmd="nodeSsh $cluster $cluster-1 \"/opt/xcalar/bin/xccli\""
+    # only want to send to one node in the cluster
+    local node=$(getSingleNodeFromCluster $cluster)
+    local cmd="nodeSsh $cluster $node \"/opt/xcalar/bin/xccli\""
+    local arg
     for arg in "$@"; do
         arg="${arg//\\/\\\\}"
         arg="${arg//\"/\\\"}"
