@@ -86,6 +86,7 @@ nodeSsh() {
     return 1
 }
 
+# send ssh cmd to all nodes in a cluster
 clusterSsh() {
     local cluster="$1"
     shift
@@ -172,7 +173,7 @@ cloudXccli() {
     local cluster="$1"
     shift
 
-    cmd="nodeSsh $cluster $cluster-1 -- \"/opt/xcalar/bin/xccli\""
+    cmd="nodeSsh $cluster $cluster-1 \"/opt/xcalar/bin/xccli\""
     for arg in "$@"; do
         arg="${arg//\\/\\\\}"
         arg="${arg//\"/\\\"}"

@@ -38,26 +38,26 @@ done
 
 stopXcalar
 
-clusterSsh $cluster -- "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
+clusterSsh $cluster "sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100"
 
-clusterSsh $cluster -- "sudo yum install -y gcc-c++ wget texinfo screen emacs python-devel"
+clusterSsh $cluster "sudo yum install -y gcc-c++ wget texinfo screen emacs python-devel"
 
 # Install gdb-8.0
 if [ "$InstallGdb8" = "true" ]; then
-    clusterSsh "$cluster" -- "sudo curl http://storage.googleapis.com/repo.xcalar.net/rpm-deps/xcalar-deps.repo -o /etc/yum.repos.d/xcalar-deps.repo"
-    clusterSsh "$cluster" -- "sudo yum install -y optgdb8"
-    clusterSsh "$cluster" -- "sudo ln -sfn /opt/gdb8/bin/gdb /usr/local/bin/gdb"
-    clusterSsh "$cluster" -- "sudo ln -sfn /opt/gdb8/bin/gdb /usr/bin/gdb"
+    clusterSsh "$cluster" "sudo curl http://storage.googleapis.com/repo.xcalar.net/rpm-deps/xcalar-deps.repo -o /etc/yum.repos.d/xcalar-deps.repo"
+    clusterSsh "$cluster" "sudo yum install -y optgdb8"
+    clusterSsh "$cluster" "sudo ln -sfn /opt/gdb8/bin/gdb /usr/local/bin/gdb"
+    clusterSsh "$cluster" "sudo ln -sfn /opt/gdb8/bin/gdb /usr/bin/gdb"
 fi
 
 # Set up SerDes
-#clusterSsh $cluster -- "mkdir -p $XdbLocalSerDesPath"
-#clusterSsh $cluster -- "chmod +w $XdbLocalSerDesPath"
-#clusterSsh $cluster -- "sudo chown -R xcalar:xcalar $XdbLocalSerDesPath"
+#clusterSsh $cluster "mkdir -p $XdbLocalSerDesPath"
+#clusterSsh $cluster "chmod +w $XdbLocalSerDesPath"
+#clusterSsh $cluster "sudo chown -R xcalar:xcalar $XdbLocalSerDesPath"
 
 # Remount xcalar with noac for liblog stress
-#clusterSsh $cluster -- "sudo umount /mnt/xcalar"
-#clusterSsh $cluster -- "sudo mount -o noac /mnt/xcalar"
+#clusterSsh $cluster "sudo umount /mnt/xcalar"
+#clusterSsh $cluster "sudo mount -o noac /mnt/xcalar"
 
 clusterSsh $cluster "sudo sed -ie 's/Constants.XcMonSlaveMasterTimeout=.*/Constants.XcMonSlaveMasterTimeout=$XcMonSlaveMasterTimeout/' /etc/xcalar/default.cfg"
 clusterSsh $cluster "sudo sed -ie 's/Constants.XcMonMasterSlaveTimeout=.*/Constants.XcMonMasterSlaveTimeout=$XcMonMasterSlaveTimeout/' /etc/xcalar/default.cfg"

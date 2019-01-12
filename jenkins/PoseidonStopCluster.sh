@@ -24,8 +24,10 @@ else
     clusterDelete "$cluster"
 fi
 
+# in GCE case, remove dir for this cluster from the graphite VM stored on GC
+# ignore cluster arg when calling nodeSsh; want the cmd sent to the graphite VM
 if [ "$cluster" != "" ]; then
     if [ "$VmProvider" = "GCE" ]; then
-        nodeSsh "" "graphite" -- "sudo rm -rf /srv/grafana-graphite/data/whisper/collectd/$cluster"
+        nodeSsh "" "graphite" "sudo rm -rf /srv/grafana-graphite/data/whisper/collectd/$cluster"
     fi
 fi
