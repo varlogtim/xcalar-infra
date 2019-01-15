@@ -1,16 +1,16 @@
 #!/bin/bash -x
 
+set -e
+
 DIR="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
 
 if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
-set +e
 chown jenkins:jenkins /home/jenkins/.config
 source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
-set -e
 
 installer="$INSTALLER_PATH"
 

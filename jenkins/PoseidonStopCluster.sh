@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$PATH"
 
@@ -9,10 +11,8 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
-set +e
 source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
-set -e
 
 set -x
 

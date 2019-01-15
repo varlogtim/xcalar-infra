@@ -1,5 +1,7 @@
 #!/bin/bash -x
 
+set -e
+
 git clean -fxd
 
 export XLRDIR=`pwd`
@@ -12,11 +14,9 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
-set +e
 sudo chown jenkins:jenkins /home/jenkins/.config
 source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
-set -e
 
 # We need to build for xccli which is used by the systemTest
 cmBuild clean
