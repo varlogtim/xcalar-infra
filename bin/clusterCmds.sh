@@ -24,8 +24,6 @@ initClusterCmds() {
         echo "Unknown VmProvider $VmProvider"
         exit 1
     fi
-
-    pip install -U awscli
 }
 
 startCluster() {
