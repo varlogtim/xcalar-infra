@@ -1,6 +1,6 @@
 # clusterwise operations for VMs on Ovirt.
 #
-# Usage: ovirtcluster-ssh.sh --cluster clustername [--ssh sshcmd] [--list] [--help]
+# Usage: ovirtcluster-ssh.sh --cluster clustername [--ssh sshcmd] [--list] [--verbose] [--help]
 #
 # Note: clustername supplied to required --cluster arg should be the
 # basename of the cluster nodes.  i.e., if you have a cluster of nodes:
@@ -26,14 +26,17 @@ trap "{ rm -r $TMP_DIR ; }" EXIT
 
 # echo usage string to stderr
 usage() {
-    local script_name=`basename "$0"`
+    local script_name=$(basename "$0")
     local usagestr="
 Usage: $script_name --cluster clustername [--ssh sshcmd] [--list] [--help]
 
     --cluster clustername
         cluster to do operations on
     --list
-        list all nodes in the cluster 'clustername'
+        list hostnames of all nodes in the cluster 'clustername'
+    --verbose
+        when --list specified: in addition to hostnames, also displays IP and status of each node
+        THIS CAN TAKE MUCH LONGER, depending on number of VMs are on Ovirt.
     --ssh sshcmd
         send ssmcmd to all nodes in the cluster 'clustername'
         ENCAPSULATE IN QUOTES! i.e., --ssh 'echo hello'
@@ -64,16 +67,14 @@ Host $1
 
 # send an ssh cmd to all nodes of a given cluster.
 cluster_ssh() {
-    local cluster="$1"
-    local ssh_cmd="$2"
-    if [ -z "$cluster" ] || [ -z "$ssh_cmd" ]; then
+    if [ -z "$1" ] || [ -z "$2" ]; then
         echo "Must specify cluster and sshcmd as 1,2 positional args to cluster_ssh" >&2
         exit 1
     fi
     # create an ssh_config file, holding info for each of the nodes in the cluster
     local ssh_config_file="$TMP_DIR/ssh_config"
     rm "$ssh_config_file" >/dev/null 2>&1 || true # rm if exists from previous run; appending during for loop
-    local cluster_nodes=$(get_cluster_node_hostnames $cluster)
+    local cluster_nodes=$(get_cluster_node_info "$1")
     echo "$cluster_nodes" | while read hostname; do
         local node_config=$(ssh_config_file_contents $hostname)
         echo "$node_config" >> "$ssh_config_file"
@@ -81,18 +82,32 @@ cluster_ssh() {
 
     # send ssh cmds to each of the nodes, supplying the ssh_config file created
     echo "$cluster_nodes" | while read hostname; do
-        echo "$ssh_cmd" | ssh -q -F "$ssh_config_file" jenkins@$hostname
+        echo "$2" | ssh -q -F "$ssh_config_file" jenkins@$hostname
     done
 }
 
-# prints to stdout, hostname of each VM in Ovirt beginning with a certain string.
-# ex: if there's vms test1-vm0 and test1-vm1 in Ovirt,
-# get_cluster_node_hostname test1 prints following to stdout:
+# prints line of data for each node in a cluster to stdout, one line per node
+# -mandatory 1st arg: name of cluster
+# - if optional 2nd arg passed, each data line contains hostname, ip, status (takes MUCH LONGER)
+#   if no 2nd arg passed, each data line contains only hostname
+# ex: suppose there's vms test1-vm0 and test1-vm1 in Ovirt,
+# get_cluster_node_hostname test1 prints to stdout:
 # test1-vm0
 # test1-vm1
-get_cluster_node_hostnames() {
-    local cluster="$1"
-    local hostname_list=`"$OVIRTTOOL_DOCKER_WRAPPER" --list | grep -v DEBUG | grep "^$cluster" | awk '{ print $1 }'`
+# get_cluster_node_hostname test1 verbose prints to stdout:
+# test1-vm0 10.10.2.154 UP
+# test1-vm1 10.10.2.155 DOWN
+get_cluster_node_info() {
+    if [ -z "$1" ]; then
+        echo "Must specify cluster to get_cluster_node_info" >&2
+        exit 1
+    fi
+    local list_arg="--list"
+    if [ ! -z "$2" ]; then
+        list_arg="$list_arg --verbose"
+    fi
+    local hostname_list=$("$OVIRTTOOL_DOCKER_WRAPPER" $list_arg | grep -v DEBUG | grep "^$1")
+    # want to get return code so can fail if script fails, but also save output as local variable...
     echo "$hostname_list" | while read hostname; do
         local strip_carriage=$(echo "$hostname" | sed -e 's/\r//g')
         echo "$strip_carriage"
@@ -102,6 +117,10 @@ get_cluster_node_hostnames() {
 # check a value obtained for a cmd arg to script is not empty
 # usage: check_has_value <arg name> <value to check>
 check_has_value() {
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo "Must specify <arg name> <value to check> as 1st and 2nd args to check_as_value" >&2
+        exit 1
+    fi
     local arg_name="$1"
     local check_val="$2"
     # checking -- because shifting to get arg values, if they didn't supply
@@ -115,6 +134,10 @@ check_has_value() {
 # check a given cmd param is present in script args
 # usage: check_required <req arg> <list of args sent to bash script>
 check_required() {
+    if [ -z "$1" ]; then
+        echo "Must specify cmd arg to check, to check_required" >&2
+        exit 1
+    fi
     local check_var="$1"
     shift
     if [[ "'$@'" != *"$check_var"* ]]; then
@@ -142,6 +165,9 @@ while [ $# -gt 0 ]; do
         --list)
             LIST=$cmd
             ;;
+        --verbose)
+            VERBOSE=$cmd
+            ;;
         --cluster)
             CLUSTER_NAME="$1"
             check_has_value --cluster "$CLUSTER_NAME"
@@ -153,18 +179,21 @@ done
 check_required --cluster "$script_args"
 # make sure operations specified appropriately, then run request...
 if [ -z "$LIST" ] && [ -z "$SSH_CMD" ]; then
-    echo "Must specify at least one of the options: --list, --ssh sshcmd" >&2
+    echo "Must specify at least one of the options: --list, or --ssh sshcmd" >&2
     exit 1
 else
     if [ ! -z "$LIST" ] && [ ! -z "$SSH_CMD" ]; then
-        echo "Specify one or the other, not both: --ssh --list" >&2
+        echo "Specify one or the other, not both: --ssh, --list" >&2
+        exit 1
+    elif [ ! -z "$SSH_CMD" ] && [ ! -z "$VERBOSE" ]; then
+        echo "--verbose option only works for --list (lists more data)" >&2
         exit 1
     else
         # run requested operation
 
         # list all nodes in the cluster
         if [ ! -z "$LIST" ]; then
-            get_cluster_node_hostnames "$CLUSTER_NAME"
+            get_cluster_node_info "$CLUSTER_NAME" "$VERBOSE"
         fi
 
         # send ssh cmd to all nodes in the cluster
