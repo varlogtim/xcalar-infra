@@ -1053,35 +1053,43 @@ def stop_vm(vmid):
 '''
     Return list of strings containing data of each VM in Ovirt
     :parm verbose:
-        if True, each line formatted with hostname, ip, status
-         (can take a long depending on how many VMs are in Ovirt)
+        if True: each line formatted with hostname, ip, status
+            (takes much longer, depending on how many VMs are in Ovirt)
+            for VMs without an IP, prints '-'
         if False, each line just contains vm hostname (quick)
+    :param formatted:
+        if True, pretty-prints so cols are aligned
 '''
-def get_all_vms(verbose=False):
+def get_all_vms(verbose=False, formatted=False):
 
     vms_service = CONN.system_service().vms_service()
     vms = vms_service.list()
     vm_list = []
-    max_name_length = -1
-    # format col for hostnames to width of longest vm name
+    # col widths get set if formatted past; they expand if width longer then specified
+    name_col_w = 0
+    ip_col_w = 0
+    status_col_w = 0
+    # set col widths if formatting
     # (only do in verbose case since regular only contains one col)
-    if verbose:
+    if verbose and formatted:
+        ip_col_w = 20
+        status_col_w = 10
+        # name width make length of longest hostname
         for vm in vms:
-            max_name_length = max(max_name_length, len(vm.name))
+            name_col_w = max(name_col_w, len(vm.name))
     for vm in vms:
         vm_name = vm.name
         vm_line = ""
         # getting all IPs can take a long time... make it optional
         if verbose:
             vm_id = vm.id
-            vm_ip = "" # if None, print formatting will fail
+            vm_ip = "-" # if None, print formatting will fail
             try:
                 vm_ip = get_vm_ip(vm_id)
             except NoIpException:
                 pass
             vm_status = vm.status
-            max_name_length = max(max_name_length, len(vm_name))
-            vm_line = '{:<{}} {:<20} {:<10}'.format(vm_name, max_name_length, vm_ip, vm_status)
+            vm_line = '{:<{}} {:<{}} {:<{}}'.format(vm_name, name_col_w, vm_ip, ip_col_w, vm_status, status_col_w)
         else:
             vm_line = vm_name
         vm_list.append(vm_line)
@@ -2659,13 +2667,16 @@ def validateparams(args):
     operations = [args.count, args.delete, args.shutdown, args.poweron]
 
     # if trying to list vms, let them know no other options will be done
-    if args.list or args.listv:
+    if args.list:
         if any(operations):
             raise ValueError("\n\nERROR: --list will list all VMs, "
                 "no other operations can be done.  It must be "
                 "specified alone.\n")
-        if args.list and args.listv:
-            raise ValueError("\n\nERROR: Can't specify both --list and --listv")
+    else:
+        if args.formatted or args.verbose:
+            raise ValueError("\n\nERROR: --verbose and --formatted are only used "
+                "when --list is specified (Display more data, and pretty-print, "
+                "respectively)\n")
 
     if args.count:
         if args.count > MAX_VMS_ALLOWED or args.count <= 0:
@@ -2854,8 +2865,10 @@ if __name__ == "__main__":
         help="Number of VMs you'd like to create")
     parser.add_argument("-l", "--list", action='store_true',
         help="List current VMs on Ovirt")
-    parser.add_argument("-lv", "--listv", action='store_true',
-        help="Verbose listing of all VMs on Ovirt, including available IPs (Takes longer to return)")
+    parser.add_argument("--verbose", action='store_true',
+        help="Display additional data per VM when using --list : hostname, ip, status (Takes longer)")
+    parser.add_argument("--formatted", action='store_true',
+        help="Format/pretty-print the --list data")
     parser.add_argument("--vmbasename", type=str,
         help="Basename to use for naming the new VM(s) (If creating a single VM, will name VMBASENAME, if multiple, will name them VMBASENAME-vm0, VMBASENAME-vm1, .., VMBASENAME-vm(n-1) )")
     parser.add_argument("--cores", type=int, default=DEFAULT_CORES,
@@ -2906,11 +2919,8 @@ if __name__ == "__main__":
     CONN = open_connection(user=args.user)
 
     # if list requested, list all VMs and quit.
-    if args.list or args.listv:
-        verbose=False
-        if args.listv:
-            verbose=True
-        valid_vms = get_all_vms(verbose=verbose)
+    if args.list:
+        valid_vms = get_all_vms(verbose=args.verbose, formatted=args.formatted)
         info_log("\n\n{}\n".format("\n".join(valid_vms)), timestamp=False)
         sys.exit(0)
 
