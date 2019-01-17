@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# This job should always pass
-# it's just cleanup, don't affect overall outcome of Release Test suite
-set +e
-
+set -e
 export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$PATH"
 
@@ -33,6 +30,3 @@ if [ "$cluster" != "" ]; then
         nodeSsh "" "graphite" "sudo rm -rf /srv/grafana-graphite/data/whisper/collectd/$cluster"
     fi
 fi
-
-# always pass this cleanup script
-exit 0
