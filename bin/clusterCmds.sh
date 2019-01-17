@@ -239,6 +239,17 @@ getSingleNodeFromCluster() {
     echo $(getNodes "$1") | head -1
 }
 
+# prints git sha of Xcalar version installed on cluster, to stdout
+gitSha() {
+    if [ -z "$1" ]; then
+        echo "Must supply a cluster name to clusterCmds:gitSha" >&2
+        exit 1
+    fi
+    local version
+    version=$(cloudXccli "$1" -c version)
+    echo "$version" | head -n1 | cut -d\  -f3 | cut -d- -f5
+}
+
 cloudXccli() {
     if [ -z "$1" ]; then
         echo "Must specify cluster to cloudXccli" >&2
@@ -258,4 +269,3 @@ cloudXccli() {
     done
     $cmd
 }
-

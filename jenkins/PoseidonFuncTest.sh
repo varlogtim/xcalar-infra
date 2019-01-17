@@ -40,8 +40,7 @@ sudo yum install -y nc
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
-gitsha=`cloudXccli "$cluster" -c "version" | head -n1 | cut -d\  -f3 | cut -d- -f5`
-echo "GIT SHA: $gitsha"
+gitsha=$(gitSha "$CLUSTER")
 
 AllTests="$(cloudXccli "$cluster" -c 'functests list' | tail -n+2)"
 NumTests="${#TestsToRun[@]}"
