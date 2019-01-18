@@ -221,8 +221,10 @@ clusterDelete() {
     local cluster="$1"
     if [ "$VmProvider" = "GCE" ]; then
         "$XLRINFRADIR"/gce/gce-cluster-delete.sh "$cluster"
+        exit $?
     elif [ "$VmProvider" = "Azure" ]; then
         "$XLRINFRADIR"/azure/azure-cluster-delete.sh "$cluster"
+        exit $?
     else
         echo 2>&1 "Unknown VmProvider $VmProvider"
         exit 1
