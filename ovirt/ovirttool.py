@@ -98,6 +98,7 @@ JENKINS_USER_PASS = "jenkins" # password to set for user 'jenkins' on provisione
 LOGIN_UNAME = "admin"
 LOGIN_PWORD = "admin"
 LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
+DEFAULT_CFG_PATH="/etc/xcalar/default.cfg"
 
 # names of env vars that can hold ovirt credentials to make this script non-interactive
 # (--user arg will take precedence over username env var if both supplied)
@@ -1691,11 +1692,16 @@ def setup_admin_account(node, ldap_config_url):
         path on local machine runnign this script, of Xcalar license file
     :param installer: (String)
         URL for an RPM installer on netstore (valid URL user should be able to curl)
+    :param node_0_val (String)
+        Val to set for default.cfg Node.0.IpAddr (gets overiwrriten if this becomes a cluster)
+        (Use "localhost" if you don't care about listening to outside requests,
+        will always work regardless of Ovirt DNS; use the vm's hostname (short version
+        without .int.xcalar.com) if you need to listen to outside requets)
     :param startXcalar (boolean)
         start Xcalar after the install
 
 '''
-def install_xcalar(ip, licfilepath, installer, startXcalar=True):
+def install_xcalar(ip, licfilepath, installer, node_0_val, startXcalar=True):
 
     vmname = get_vm_name(get_vm_id("ip=" + ip))
 
@@ -1722,6 +1728,20 @@ def install_xcalar(ip, licfilepath, installer, startXcalar=True):
     # install using bld requested
     run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=XCALAR_INSTALL_TIMEOUT)
 
+    # set Node.0.IpAddr val in default.cfg::
+    # In default.cfg, default val of Node.0.IpAddr in SINGLE NODE case is
+    #'localhost' (can't listen to outside requests but doesn't depend on DNS working.)
+    # if set as Vm's hostname, can listen to outside requests but will depend on Ovirt DNS to work.
+    # waant to listen in some scenarios (release tests running on Ovirt: Jenkins slaves will
+    # use xccli to query the provisioned Ovirt VM if Xcalar is up), but not majority
+    # therefore, make it configuraable, as 'localhost' will always work
+    # cluster creation will overwrite this but happens after install_xcalar
+    node_param="Node.0.IpAddr"
+    sed_cmd="sudo sed -i 's@^{}=.*$@{}={}@g' {}".format(node_param, node_param, node_0_val, DEFAULT_CFG_PATH)
+    debug_log("Set {} in {} as: {}, using sed cmd: {} (will get reset if " \
+        "node becomes part of cluster)".format(node_param, DEFAULT_CFG_PATH, node_0_val, sed_cmd))
+    run_ssh_cmd(ip, sed_cmd)
+
     if startXcalar:
         # start xcalar
         start_xcalar(ip)
@@ -1738,13 +1758,18 @@ def install_xcalar(ip, licfilepath, installer, startXcalar=True):
         curl'able URL to an RPM installer
     :param ldap_config_url (String)
         curl'able URL of an ldapConfig.json file to put in xcalar root post-install
+    :param listen (boolean)
+        if True: Node.0.IpAddr gets set to hostname on single node VMs
+            (works as long as Ovirt DNS works, and allows listening to outside requests)
+        if False: stays as "localhost"
+            (works regardless of Ovirt DNS, but can't listen to outside requests)
     :param createcluster: (optional, String)
         If supplied, then once xcalar setup on the vms, will form them
         in to a cluster by name of String passed in
         If not supplied will leave nodes as individual VMs
 
 '''
-def setup_xcalar(vmids, licfilepath, installer, ldap_config_url, createcluster=None):
+def setup_xcalar(vmids, licfilepath, installer, ldap_config_url, listen, createcluster=None):
 
     debug_log("installer: " + str(installer))
     debug_log("Setup xcalar on node set and cluster {}".format(createcluster))
@@ -1761,8 +1786,15 @@ def setup_xcalar(vmids, licfilepath, installer, ldap_config_url, createcluster=N
         name = get_vm_name(vmid)
         ips.append(ip)
         debug_log("Start new process to setup xcalar on {}, {}".format(name, ip))
+        # val to set for Node.0.IpAddr in default.cfg; "localhost" will always work
+        # but won't be able to listen to outside requests so make it optional to set
+        node_0_val = "localhost"
+        if listen:
+            node_0_val = name
         # bring up Xcalar only after cluster create and/or admin/ldap setup
-        proc = multiprocessing.Process(target=install_xcalar, args=(ip, licfilepath, installer), kwargs={'startXcalar': False})
+        proc = multiprocessing.Process(target=install_xcalar, args=(ip, licfilepath, installer, node_0_val), kwargs={
+            'startXcalar': False
+        })
         # failing if i dont sleep in between.  think it might just be on when using the SDK, similar operations on the vms service
         procs.append(proc)
         proc.start()
@@ -1918,7 +1950,7 @@ def configure_cluster_node(node, clusternodes, remote_IP, remoteClusterStoragePa
 def setup_cluster_storage(node, remote_IP, remote_path):
 
     debug_log("Determine local path VM {} should use for xcalar home "
-        " (Constants.XcalarRootCompletePath var in  /etc/xcalar/default.cfg".format(node))
+        " (Constants.XcalarRootCompletePath var in {}".format(node, DEFAULT_CFG_PATH))
 
     # i think this will make the puppet change (which include automounting netstore)
     # take effect?
@@ -2004,7 +2036,7 @@ def mount_shared_cluster_storage(node, remote_IP, remote_path, mount_dir):
 '''
 def generate_cluster_template_file(node, clusternodes, xcalar_root):
 
-    debug_log("Generate /etc/xcalar/default.cfg file for node {}, set with cluster nodes {}\n".format(node, clusternodes))
+    debug_log("Generate {} file for node {}, set with cluster nodes {}\n".format(DEFAULT_CFG_PATH, node, clusternodes))
 
     # there's a shell script for that
     nodeliststr = ' '.join(clusternodes)
@@ -2580,10 +2612,9 @@ def validate_cluster(clusterips):
 '''
 def extract_cluster_node_ips(ip):
 
-    configfilepath = '/etc/xcalar/default.cfg'
-    debug_log("Extract cluster node data from {}  file on {}".format(configfilepath, ip))
+    debug_log("Extract cluster node data from {}  file on {}".format(DEFAULT_CFG_PATH, ip))
 
-    status, stdout, stderr = run_ssh_cmd(ip, 'cat ' + configfilepath)
+    status, stdout, stderr = run_ssh_cmd(ip, 'cat ' + DEFAULT_CFG_PATH)
 
     nodeips = {}
 
@@ -2595,7 +2626,7 @@ def extract_cluster_node_ips(ip):
         debug_log("found match")
         numnodes = int(matchres.groups()[0])
     else:
-        raise AttributeError("\nFound no entry for number of nodes in {} on {}\n".format(configfilepath, ip))
+        raise AttributeError("\nFound no entry for number of nodes in {} on {}\n".format(DEFAULT_CFG_PATH, ip))
 
     # parse all the node data
     nodeipdata = re.compile('.*Node\.(\d+)\.IpAddr=([\d\.]+).*')
@@ -2682,6 +2713,10 @@ def validateparams(args):
         if args.count > MAX_VMS_ALLOWED or args.count <= 0:
             raise ValueError("\n\nERROR: --count argument must be an integer between 1 and {}\n"
                 "(The ovirt tool will provision that number of new VMs for you)".format(MAX_VMS_ALLOWED))
+
+        if args.listen and args.count > 1 and not args.nocluster:
+            raise ValueError("\n\n--listen is only for single node cases; "
+                "multi-node clusters will listen outside localhost by default\n")
 
         # validate the basename they gave for the cluster
         if not basename:
@@ -2899,6 +2934,8 @@ if __name__ == "__main__":
         help="Single VM or comma separated String of VMs to power on")
     parser.add_argument("--ldap", type=str, default='xcalar', # will get filepath from LDAP_CONFIGS hash
         help="Type of ldapConfig to use if Xcalar is being installed ({}), or, path to an URL you can curl, to a custom ldapConfig.json file".format(", ".join(LDAP_CONFIGS.keys())))
+    parser.add_argument("--listen", action='store_true',
+        help="For single node clusters, sets Node.0.IpAddr in /etc/xcalar/default.cfg to VM's hostname; (Will be able to listen to incoming requests, but relies on Ovirt DNS to work properly)")
     parser.add_argument("--user", type=str,
         help="Your LDAP username (no '@xcalar.com')")
     parser.add_argument("-nr", "--norand", action="store_true", default=False,
@@ -2984,7 +3021,7 @@ if __name__ == "__main__":
             # to a cluster by that name
             if not args.nocluster and int(args.count) > 1:
                 cluster_name = unique_generated_basename
-            setup_xcalar(vmids, licfilepath, installer, ldap_config_url, createcluster=cluster_name)
+            setup_xcalar(vmids, licfilepath, installer, ldap_config_url, args.listen, createcluster=cluster_name)
 
         # get hostnames to print to stdout, and ips for restart
         for vmid in vmids:
