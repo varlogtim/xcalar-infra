@@ -24,6 +24,8 @@ job "hdfs" {
         }
       }
 
+      tags = ["urlprefix-hdfs:9999/"]
+
       resources {
         memory = 1000
 
