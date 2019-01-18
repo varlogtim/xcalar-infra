@@ -236,7 +236,9 @@ getSingleNodeFromCluster() {
         echo "Must specify cluster to getSingleNodeFromCluster" >&2
         exit 1
     fi
-    echo $(getNodes "$1") | head -1
+    local nodes_list
+    nodes_list=$(getNodes "$1")
+    echo "$nodes_list" | head -1
 }
 
 # prints git sha of Xcalar version installed on cluster, to stdout
