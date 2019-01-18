@@ -47,7 +47,7 @@ fi
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER" > "$TMPDIR/hosts.txt"
 ii=1
 while read hostname; do
-    echo "Host $CLUSTER-$ii"
+    echo "Host $CLUSTER-$ii $hostname"
     echo "  Hostname $hostname"
     echo "  User azureuser"
     echo "  ForwardAgent yes"
