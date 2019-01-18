@@ -53,7 +53,8 @@ while getopts "hi:c:t:n:l:k:s:" opt "$@"; do
 done
 
 # Check if S3_BOOTSTRAP exists
-if ! aws s3 cp "$S3_BOOTSTRAP" - >/dev/null 2>&1; then
+http_code=
+if ! http_code="$(curl -f -o /dev/null -s -L -w '%{http_code}\n' -I "${BOOTSTRAP_URL}")" || [ "$http_code" != 200 ]; then
     echo "$S3_BOOTSTRAP does not exists. Uploading $BOOTSTRAP"
     aws s3 cp --acl public-read "$BOOTSTRAP" "$S3_BOOTSTRAP"
 fi
