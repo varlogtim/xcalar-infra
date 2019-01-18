@@ -59,3 +59,8 @@ all:
 
 clean:
 	test -d $(BUILD) && rm -r $(BUILD) || true
+
+
+portal:
+	aws --profile=vtest s3 cp portal-1234.html s3://portalbucketanduser-portalbucket-6xwvqoasv799/
+	#aws --profile=vtest s3 cp s3://portalbucketanduser-portalbucket-6xwvqoasv799/

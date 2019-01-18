@@ -125,8 +125,8 @@ Parameters:
     Type: Number
   ImageId:
     Description: AMI to use for Ec2 instances
-    Default: 'ami-087100299fde90092'
-    Type: String
+    Default: ami-06728a4245fcf36b6
+    Type: AWS::EC2::Image::Id
   S3Bucket:
     Description: Existing S3 Bucket for Lambda
     Type: String
@@ -181,6 +181,13 @@ Metadata:
   Version: 1.4.1
   Release: '3'
 Resources:
+  #  lambdaauthorizerbasicauth:
+  #    Type: AWS::Serverless::Application
+  #    Properties:
+  #      Location:
+  #        ApplicationId: arn:aws:serverlessrepo:us-east-1:560348900601:applications/lambda-authorizer-basic-auth
+  #        SemanticVersion: 0.2.0
+  #
   OnDemandFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -207,7 +214,6 @@ Resources:
                 - ec2:StopInstances
                 - 'autoscaling:Describe*'
               Resource: '*'
-          Statement:
             - Effect: Allow
               Action:
                 - s3:GetObject
