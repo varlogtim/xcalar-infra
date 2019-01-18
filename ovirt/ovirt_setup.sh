@@ -1,6 +1,7 @@
 #!/bin/bash
-# automates environment setup required so ovirt_docker_wrapper can be run
-# Setup: http://wiki.int.xcalar.com/mediawiki/index.php/Ovirttool#Setup
+# automates setup required for ovirt_docker_wrapper to run
+# http://wiki.int.xcalar.com/mediawiki/index.php/Ovirttool#Setup
+
 : "${XLRDIR:?Need to set non-empty XLRDIR}"
 if [ -z "$XLRINFRADIR" ]; then
     export XLRINFRADIR="$(cd $SCRIPTDIR/.. && pwd)"

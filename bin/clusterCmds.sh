@@ -7,22 +7,26 @@ if test -z "$XLRINFRADIR"; then
 fi
 
 export VmProvider=${VmProvider:-GCE}
-# XCE_LICENSE is Jenkins param to PoseidonStartCluster
-# if not supplied, base on if it was checked as IS_RC in parent job SystemTestStart
-if [ -z "$XCE_LICENSE" ]; then
-    if [ "$IS_RC" = "true" ]; then
-        XCE_LICENSE=$(cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0)
-    else
-        XCE_LICENSE=$(cat $XLRDIR/src/data/XcalarLic.key | gzip | base64 -w0)
-    fi
+
+XCE_FILE=""
+if [ "$IS_RC" = "true" ]; then
+    XCE_FILE="$XLRDIR"/src/data/XcalarLic.key.prod
+else
+    XCE_FILE="$XLRDIR"/src/data/XcalarLic.key
 fi
-export XCE_LICENSE="$XCE_LICENSE"
+XCE_LICENSE=$(cat "$XCE_FILE" | gzip | base64 -w0)
+export XCE_LICENSE="$XCE_LICENSE" # only GCE needs this as an env var
+
+OVIRTTOOL_DOCKER_WRAPPER="$XLRINFRADIR"/bin/ovirttool_docker_wrapper
+OVIRTTOOL_CLUSTER_OPS="$XLRINFRADIR"/ovirt/ovirtcluster-operations.sh
 
 initClusterCmds() {
     if [ "$VmProvider" = "GCE" ]; then
         bash /netstore/users/jenkins/slave/setup.sh
     elif [ "$VmProvider" = "Azure" ]; then
         az login --service-principal -u http://Xcalar/Jenkins/SP -p /netstore/infra/jenkins/jenkins-sp.pem --tenant 7bbd3477-af8b-483b-bb48-92976a1f9dfb
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        bash -x "$XLRINFRADIR/ovirt/ovirt_setup.sh"
     else
         echo "Unknown VmProvider $VmProvider"
         exit 1
@@ -41,6 +45,16 @@ startCluster() {
     elif [ "$VmProvider" = "Azure" ]; then
         # azure-cluster.sh bases xcalar license on what you supply to -k option
         "$XLRINFRADIR"/azure/azure-cluster.sh -i "$installer" -c "$numInstances" -n "$clusterName" -t "$INSTANCE_TYPE" -k "$XCE_LICENSE"
+        return $?
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        # if you don't pass ovirttool --licfile option, it will look for lic file
+        # in $XLRINFRA/ovirt for XcalarLic.key;
+        # hack is putting it there for now (args which take arbitrary files paths,
+        # need to be mounted in Docker container that ovirttool_docker_wrapper sets up)
+        local lic_file_dest="$XLRINFRADIR"/ovirt/XcalarLic.key
+        cp "$XCE_FILE" "$lic_file_dest"
+        # --listen in case its single node; will set node.0.ipAddr to hostname so jenkins slave can query it;
+        "$XLRINFRADIR"/bin/ovirttool_docker_wrapper --count 1 --vmbasename "$clusterName" --installer http:/"$installer" --norand --listen --ram 16
         return $?
     fi
 
@@ -62,8 +76,10 @@ getNodes() {
     elif [ "$VmProvider" = "Azure" ]; then
         "$XLRINFRADIR"/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}'
         return ${PIPESTATUS[0]}
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        bash "$OVIRTTOOL_CLUSTER_OPS" --cluster "$cluster" --list
+        return $?
     fi
-
     echo 2>&1 "Unknown VmProvider $VmProvider"
     return 1
 }
@@ -86,14 +102,31 @@ getRealNodeNames() {
             return ${PIPESTATUS[0]}
         fi
     elif [ "$VmProvider" = "Azure" ]; then
-        # @TODO - Azure case to get IPs - what's below is for printing hostname
         "$XLRINFRADIR"/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}'
         return ${PIPESTATUS[0]}
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        bash "$OVIRTTOOL_CLUSTER_OPS" --cluster "$cluster" --list --verbose | awk '{print $2}'
+        return ${PIPESTATUS[0]}
     fi
-
     echo 2>&1 "Unknown VmProvider $VmProvider"
     return 1
 
+}
+
+# send an ssh cmd to all nodes beginning with a given string in Ovirt
+# (so for cluster: send cluster basename, for a single node - even one withint a cluster,
+# just send that node's exact vm name)
+# (@TODO: If cluster basename sent, verify all nodes matching are in same cluster)
+ovirtSsh() {
+    if [ -z "$1" ]; then
+        echo "Must supply cluster to send ssh cmd to" >&2
+        exit 1
+    fi
+    local cluster="$1"
+    shift
+    local tool_cmd="bash $OVIRTTOOL_CLUSTER_OPS --cluster $cluster --ssh '$@'"
+    eval "$tool_cmd"
+    return $?
 }
 
 nodeSsh() {
@@ -115,6 +148,9 @@ nodeSsh() {
     elif [ "$VmProvider" = "Azure" ]; then
         "$XLRINFRADIR"/azure/azure-cluster-ssh.sh -c "$cluster" -n "$node" -- "$@"
         return $?
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        ovirtSsh "$cluster" "$@"
+        return $?
     fi
 
     echo 2>&1 "Unknown VmProvider $VmProvider"
@@ -134,6 +170,9 @@ clusterSsh() {
         return $?
     elif [ "$VmProvider" = "Azure" ]; then
         "$XLRINFRADIR"/azure/azure-cluster-ssh.sh -c "$cluster" -- "$@"
+        return $?
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        ovirtSsh "$cluster" "$@"
         return $?
     fi
 
@@ -207,6 +246,9 @@ startupDone() {
     elif [ "$VmProvider" = "Azure" ]; then
         # azure-cluster.sh is synchronous. When it returns, either it has run to completion or failed
         return 0
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        # nothing yet
+        return 0
     fi
 
     echo "Unknown VmProvider $VmProvider"
@@ -221,10 +263,13 @@ clusterDelete() {
     local cluster="$1"
     if [ "$VmProvider" = "GCE" ]; then
         "$XLRINFRADIR"/gce/gce-cluster-delete.sh "$cluster"
-        return $?
     elif [ "$VmProvider" = "Azure" ]; then
         "$XLRINFRADIR"/azure/azure-cluster-delete.sh "$cluster"
-        return $?
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        # get hostnames of nodes in the cluster, in comma sep list
+        local nodes_list
+        local nodes_list=$(getNodes "$cluster" | paste -sd "," -)
+        "$OVIRTTOOL_DOCKER_WRAPPER" --delete "$nodes_list"
     else
         echo 2>&1 "Unknown VmProvider $VmProvider"
         exit 1
