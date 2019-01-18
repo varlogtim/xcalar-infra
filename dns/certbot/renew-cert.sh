@@ -37,6 +37,10 @@ while [ $# -gt 0 ]; do
             LE_ENDPOINT=https://acme-staging-v02.api.letsencrypt.org/directory
             LE_DIR="/etc/letsencrypt-stage"
             ;;
+        -i| --image)
+            IMAGE="$1"
+            shift
+            ;;
         -h|--help) usage;;
         *) echo >&2 "ERROR: Unknown argument $cmd"; exit 2;;
     esac
@@ -48,14 +52,15 @@ if [ "${DEXT}" = '*' ]; then
     DOMAIN_ARGS='-d '${DOMAIN}' -d *.'${DOMAIN}
 fi
 
-case "$DOMAIN" in
-    *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53;;
-    *.xcalar.rocks | xcalar.rocks) IMAGE=certbot/dns-route53;;
-    *.xcalar.io    | xcalar.io) IMAGE=certbot/dns-google;;
-    *.xcalar.com   | xcalar.com) IMAGE=certbot/dns-google;;
-    *) echo >&2 "Unrecognized domain: ${DOMAIN}"; exit 1;;
-esac
-
+if [ -z "$IMAGE" ]; then
+    case "$DOMAIN" in
+        *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53;;
+        *.xcalar.rocks | xcalar.rocks) IMAGE=certbot/dns-route53;;
+        *.xcalar.io    | xcalar.io) IMAGE=certbot/dns-google;;
+        *.xcalar.com   | xcalar.com) IMAGE=certbot/dns-google;;
+        *) echo >&2 "Unrecognized domain: ${DOMAIN}"; exit 1;;
+    esac
+fi
 
 TMP=$(mktemp -t dns.XXXXXX)
 trap "rm -f $TMP" EXIT
