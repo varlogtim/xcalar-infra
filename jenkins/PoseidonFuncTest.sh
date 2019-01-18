@@ -26,13 +26,13 @@ funcstatsd() {
     local status="$2"
     local gitsha="$3"
     if [ "$status" = "PASS" ]; then
-        echo "prod.tests.${gitsha}.functests.${name}.${CLUSTER//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${CLUSTER//./_}.numPass:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${CLUSTER//./_}.status:0|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numPass:1|c" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:0|g" | nc -w 1 -u $GRAPHITE 8125
     elif [ "$status" = "FAIL" ]; then
-        echo "prod.tests.${gitsha}.functests.${name}.${CLUSTER//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${CLUSTER//./_}.numFail:1|c" | nc -w 1 -u $GRAPHITE 8125
-        echo "prod.tests.${gitsha}.functests.${name}.${CLUSTER//./_}.status:1|g" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numRun:1|c" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.numFail:1|c" | nc -w 1 -u $GRAPHITE 8125
+        echo "prod.tests.${gitsha}.functests.${name}.${cluster//./_}.status:1|g" | nc -w 1 -u $GRAPHITE 8125
     fi
 }
 
@@ -40,7 +40,7 @@ sudo yum install -y nc
 
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
-gitsha=$(gitSha "$CLUSTER")
+gitsha=$(gitSha "$cluster")
 
 AllTests="$(cloudXccli "$cluster" -c 'functests list' | tail -n+2)"
 NumTests="${#TestsToRun[@]}"
