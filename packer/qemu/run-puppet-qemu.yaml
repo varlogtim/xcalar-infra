@@ -1,0 +1,71 @@
+variables:
+  today: '{{ isotime "20060102" }}'
+  http_proxy: '{{ env `http_proxy` }}'
+  https_proxy: '{{ env `https_proxy` }}'
+  no_proxy: '{{ env `no_proxy` }}'
+  cluster: jenkins-slave
+  role: jenkins_slave
+  datacenter: xcalar-sjc
+  ts: '{{ timestamp }}'
+  osid: el7
+  cacher_ip: '{{ env `CACHER_IP` }}'
+  iso_url: file://el7-base-qemu/tdhtest
+  iso_checksum: '7a3074551d1df46eca492d6808863095'
+  puppet_src: null
+builders:
+  - type: qemu
+    name: "{{user `osid`}}-puppet-qemu"
+    accelerator: kvm
+    iso_url: "{{user `iso_url`}}"
+    iso_checksum: "{{user `iso_checksum`}}"
+    iso_checksum_type: md5
+    output_directory: "{{ build_name }}"
+    shutdown_command: shutdown -P now
+    disk_size: 25000
+    disk_image: true
+    use_backing_file: true
+    format: qcow2
+    headless: true
+    http_directory: httpdir
+    http_port_min: 10082
+    http_port_max: 10089
+    ssh_host_port_min: 2222
+    ssh_host_port_max: 2229
+    ssh_username: root
+    ssh_password: Welcome1
+    ssh_port: 22
+    ssh_wait_timeout: 900s
+    vm_name: tdhtest
+    net_device: virtio-net
+    disk_interface: virtio
+provisioners:
+  - type: shell-local
+    inline:
+      - cd {{ user `puppet_src` }} && make puppet.tar.gz
+      - cp {{ user `puppet_src` }}/puppet.tar.gz {{ template_dir }}/../scripts/
+  - type: file
+    source: "{{ template_dir }}/../scripts"
+    destination: /tmp
+    #  - type: file
+    #    source: /etc/yum.repos.d/CentOS-Base.repo
+    #    destination: /etc/yum.repos.d/CentOS-Base.repo
+  - type: shell
+    environment_vars:
+      - http_proxy={{user `http_proxy`}}
+      - https_proxy={{user `https_proxy`}}
+      - no_proxy={{user `no_proxy`}}
+      - FACTER_role={{user `role`}}
+      - FACTER_cluster={{user `cluster`}}
+      - FACTER_override=offline
+      - FACTER_packer=1
+      - FACTER_datacenter={{user `datacenter`}}
+      - CACHER_IP={{user `cacher_ip`}}
+      - MYHOSTNAME={{user `cluster`}}-{{user `osid`}}
+      - OSID={{user `osid`}}
+      - PUPPET_TAR=/tmp/scripts/puppet.tar.gz
+    execute_command: chmod +x {{ .Path }}; {{ .Vars }} {{.Path}}
+    expect_disconnect: true
+    script: run-puppet.sh
+  - type: shell
+    inline:
+      - rm -rf /tmp/scripts

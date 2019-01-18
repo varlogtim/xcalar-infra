@@ -10,9 +10,9 @@ supported_version_check(){
         6*) echo "EL 6 is supported" ;;
         7*) echo "EL 7 is supported" ;;
         201*) echo "AMZN 1 is supported" ;;
-        2.*) echo "AMZN 2 is supported" ;;
+        2*) echo "AMZN 2 is supported" ;;
         *)
-            echo "Unsupported OS version"
+            echo "Unsupported OS version ${RELEASE}"
             exit 1
             ;;
     esac
@@ -21,12 +21,13 @@ supported_version_check(){
 centos_install_epel(){
     # CentOS has epel release in the extras repo
     if ! yum -y -q install epel-release; then \
-       case "${RELEASE}" in
-         201*) ELVERSION=6;;
-         2.*) ELVERSION=7;;
-	 6*) ELVERSION=6;;
-	 7*) ELVERSION=7;;
-       esac
+        case "${RELEASE}" in
+            201*) ELVERSION=6;;
+            2*) ELVERSION=7;;
+            6*) ELVERSION=6;;
+            7*) ELVERSION=7;;
+        esac
+        yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-${ELVERSION}.noarch.rpm
     fi
     import_epel_key
 }
@@ -35,7 +36,7 @@ rhel_install_epel(){
     # NOTE: Use our repo as a backup because we've seen fedoraproject.org be down
     case ${RELEASE} in
         201*) yum -y -q install epel-release || yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-6-8.noarch.rpm;;
-        2.*) yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-7-8.noarch.rpm;;
+        2*) amazon-linux-extras install -y epel;;
         6*) yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-6-8.noarch.rpm;;
         7*) yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-7-9.noarch.rpm;;
     esac
@@ -76,7 +77,7 @@ install_epel() {
         case ${RELEASE_RPM} in
             centos*)
                 echo "detected CentOS ${RELEASE}"
-                upported_version_check
+                supported_version_check
                 centos_install_epel
                 centos_install_ius
                 ;;
@@ -89,15 +90,14 @@ install_epel() {
             system-release*)
                 echo "detected AMZN ${RELEASE}"
                 supported_version_check
-                centos_install_epel
+                rhel_install_epel
                 ;;
             *)
                 echo "unknown EL clone"
                 exit 1
                 ;;
         esac
-        test -e /etc/yum.repos.d/ius.repo && sed -i -E -e 's/enabled=.*$/enabled=1\nexclude=httpd24u\*,mariadb\*,mysql\*/' /etc/yum.repos.d/ius.repo || true
-
+        # test -e /etc/yum.repos.d/ius.repo && sed -i -E -e 's/enabled=.*$/enabled=1\nexclude=httpd24u\*,mariadb\*,mysql\*/' /etc/yum.repos.d/ius.repo || true
     else
         echo "not an EL distro"
         exit 0

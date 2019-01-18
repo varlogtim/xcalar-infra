@@ -7,13 +7,17 @@ set -e
 packer_do() {
     local cmd="$1"
     shift
+    if [ -e $HOME/.packer-vars ]; then
+        USER_VARS="$HOME/.packer-vars"
+    fi
     packer $cmd \
         -var "product=$PRODUCT" \
         -var "version=$INSTALLER_VERSION" \
         -var "build_number=$INSTALLER_BUILD_NUMBER" \
         -var "image_build_number=$IMAGE_BUILD_NUMBER" \
         -var "installer_url=$INSTALLER_URL" \
-        -var-file=$HOME/.packer-vars "$@"
+        ${USER_VARS+-var-file $USER_VARS} \
+        ${VAR_FILE+-var-file $VAR_FILE} "$@"
 }
 
 filename_from_url() {
@@ -53,6 +57,10 @@ check_or_upload_installer() {
 while [ $# -gt 0 ]; do
     cmd="$1"
     case "$cmd" in
+    --osid)
+        OSID="$2"
+        shift 2
+        ;;
     --installer)
         INSTALLER="$2"
         shift 2
@@ -65,6 +73,10 @@ while [ $# -gt 0 ]; do
         TEMPLATE="$2"
         shift 2
         ;;
+    --var-file)
+        VAR_FILE="$2"
+        shift 2
+        ;;
     --)
         shift
         break
@@ -74,16 +86,27 @@ while [ $# -gt 0 ]; do
         exit 1
         ;;
     -*) break ;;
+    *) if test -e "$1"; then
+        TEMPLATE="$1"
+        shift
+       else
+         echo >&2 "ERROR: Don't understand $cmd ..."
+         exit 1
+       fi
+       ;;
     esac
 done
 
+TMPDIR=$(mktemp -d -t packerXXXXXX)
+trap "rm -rf $TMPDIR" exit
+
 if [ -n "$TEMPLATE" ]; then
     if [[ $TEMPLATE =~ .yaml$ ]] || [[ $TEMPLATE =~ .yml$ ]]; then
-        TMP=$(mktemp packerXXXXXX.json)
-        trap "rm $TMP" exit
-        cfn-flip < "$TEMPLATE" > $TMP
-        TEMPLATE=$TMP
+        cfn-flip < "$TEMPLATE" > $TMPDIR/template.json
+        TEMPLATE="$TMPDIR/template.json"
     fi
+    cat $VAR_FILE  vars/shared.yaml | cfn-flip > $TMPDIR/vars.json
+    VAR_FILE=$TMPDIR/vars.json
     set -- "$@" "$TEMPLATE"
 fi
 
@@ -96,5 +119,11 @@ INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$IN
 INSTALLER_VERSION="${INSTALLER_VERSION_BUILD[0]}"
 INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
 
-packer_do validate ${*/-color=*/}
-packer_do build "$@"
+set +e
+packer_do validate ${*/-color=*/} \
+    && packer_do build "$@"
+if [ $? -ne 0 ]; then
+    trap - EXIT
+    echo "Failed! See $TMPDIR"
+    exit 1
+fi

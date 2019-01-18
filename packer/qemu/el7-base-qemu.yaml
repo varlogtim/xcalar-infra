@@ -1,0 +1,60 @@
+variables:
+  today: '{{ isotime "20060102" }}'
+  build_number: '{{ env `BUILD_NUMBER` }}'
+  http_proxy: '{{ env `http_proxy` }}'
+  https_proxy: '{{ env `https_proxy` }}'
+  no_proxy: '{{ env `no_proxy` }}'
+  osid: el7
+  iso_url: http://netstore/isos/CentOS_ISO/CentOS-7-x86_64-Minimal-1810.iso
+  iso_checksum: bd43d41e01c2a46b3cb23eb9139dce4b
+  iso_checksum_type: md5
+builders:
+  - type: qemu
+    name: '{{ user `osid` }}-base-qemu'
+    accelerator: kvm
+    iso_url: '{{ user `iso_url` }}'
+    iso_checksum: '{{ user `iso_checksum` }}'
+    iso_checksum_type: '{{ user `iso_checksum_type` }}'
+    output_directory: '{{ build_name }}'
+    shutdown_command: shutdown -P now
+    disk_size: 25000
+    format: qcow2
+    headless: true
+    use_default_display: true
+    accelerator: kvm
+    http_directory: '{{template_dir}}/../httpdir'
+    http_port_min: 10082
+    http_port_max: 10089
+    ssh_host_port_min: 2222
+    ssh_host_port_max: 2229
+    ssh_username: root
+    ssh_password: Welcome1
+    ssh_port: 22
+    ssh_wait_timeout: 900s
+    vm_name: tdhtest
+    net_device: virtio-net
+    disk_interface: virtio
+    qemuargs:
+      - - "-m"
+        - "2048M"
+      - - "-smp"
+        - "2"
+      - - "-serial"
+        - "mon:stdio"
+    boot_wait: 5s
+    boot_command:
+      - '<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks7.cfg<enter><wait>'
+provisioners:
+  - type: file
+    source: "{{ template_dir }}/../scripts"
+    destination: /tmp
+  - type: shell
+    environment_vars:
+      - http_proxy={{user `http_proxy`}}
+      - https_proxy={{user `https_proxy`}}
+      - no_proxy={{user `no_proxy`}}
+    execute_command: chmod +x {{ .Path }}; {{ .Vars }} sudo -E bash -x {{ .Path }}
+    expect_disconnect: true
+    inline:
+      - /tmp/scripts/fixup-eth0.sh
+    inline_shebang: /bin/bash -x

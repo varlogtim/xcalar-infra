@@ -59,16 +59,15 @@ OSID=$(osid)
 
 if test -e /etc/system-release; then
     if test -f /etc/selinux/config; then
-        setenforce Permissive || true
-        sed -i 's/^SELINUX=.*$/SELINUX=permissive/g' /etc/selinux/config
+        setenforce 0 || true
+        sed -i 's/^SELINUX=.*$/SELINUX=disabled/g' /etc/selinux/config
     fi
-    yum clean all
+    yum clean all --enablerepo='*'
     rm -rf /var/cache/yum/*
-    keep_trying yum remove -y java-1.7.0-openjdk || true
-    keep_trying yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
+    yum remove -y java java-1.7.0-openjdk || true
     keep_trying yum update -y
-    EXTRA="bonnie++ xfsprogs bwm-ng cifs-utils"
-    yum install -y -q --enablerepo='xcalar-*' nfs-utils ephemeral-disk ec2tools sudo lvm2 mdadm btrfs-progs yum-utils fuse || true
+    keep_trying yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
+    yum install -y -q --enablerepo='xcalar-*' nfs-utils xfsprogs sudo lvm2 mdadm btrfs-progs yum-utils fuse || true
 else
     export DEBIAN_FRONTEND=noninteractive
     keep_trying apt-get update -q
@@ -77,8 +76,7 @@ else
     apt-get -yqq autoremove
 fi
 
-get_cloud_cfg > /run/cloud.cfg
-eval $(cat /run/cloud.cfg)
+eval $(get_cloud_cfg)
 
 if [ "$CLOUD" = gce ]; then
     if [[ -e /etc/redhat-release ]]; then
@@ -86,16 +84,17 @@ if [ "$CLOUD" = gce ]; then
         yum localinstall -y http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm
     fi
 elif [ "$CLOUD" = aws ]; then
-    if ! command ec2-tags; then
-        curl -sSL http://repo.xcalar.net/deps/ec2-tags-v3 > /usr/local/bin/ec2-tags-v3
+    if ! command -v ec2-tags; then
+        curl -fsSL http://repo.xcalar.net/deps/ec2-tags-v3 > /usr/local/bin/ec2-tags-v3
         chmod +x /usr/local/bin/ec2-tags-v3
         ln -sfn ec2-tags-v3 /usr/local/bin/ec2-tags
     fi
-    ephemeral-disk
+elif [ "$CLOUD" = azure ]; then
+    :
 fi
 
+getent group docker || groupadd -f -r -o -g 999 docker
 getent group sudo || groupadd -f -r sudo
-getent group docker || groupadd -f -r docker
 echo '%sudo ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-sudo && chmod 0440 /etc/sudoers.d/99-sudo
 
 if test -n "$BUILD_CONTEXT"; then

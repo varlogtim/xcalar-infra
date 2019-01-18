@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin:/opt/aws/bin:$HOME/bin
+
 XCE_CONFDIR="${XCE_CONFDIR:-/etc/xcalar}"
 
 if [ -z "$TMPDIR" ]; then
@@ -45,7 +47,11 @@ if [ -n "$INSTALLER_URL" ]; then
     set +e
     set -x
     INSTALLER_FILE=$TMPDIR/xcalar-installer.sh
-    if INSTALLER_S3=$(aws_s3_from_url "$INSTALLER_URL") && [ -n "$INSTALLER_S3" ]; then
+    if [[ $INSTALLER_URL =~ ^s3:// ]]; then
+        if ! aws s3 cp $INSTALLER_URL $INSTALLER_FILE; then
+            rm -f $INSTALLER_FILE
+        fi
+    elif INSTALLER_S3=$(aws_s3_from_url "$INSTALLER_URL") && [ -n "$INSTALLER_S3" ]; then
         if ! aws s3 cp $INSTALLER_S3 $INSTALLER_FILE; then
             rm -f $INSTALLER_FILE
         fi
@@ -107,6 +113,6 @@ if [ -n "${POSTINSTALL}" ]; then
     fi
 fi
 
-sed -i '/# Provides:/a# Should-Start: cloud-config' /etc/init.d/xcalar
+sed -i '/# Provides:/a# Should-Start: cloud-final' /etc/init.d/xcalar
 
 exit 0
