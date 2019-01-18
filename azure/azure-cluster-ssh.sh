@@ -60,7 +60,7 @@ while read hostname; do
     ii=$(( $ii + 1 ))
 done < "$TMPDIR/hosts.txt" > "$TMPDIR/ssh_config"
 
-declare -a HOSTS=($(awk '/^Host/{print $2}' "$TMPDIR/ssh_config"))
+declare -a HOSTS=($(awk '/^Host/{print $3}' "$TMPDIR/ssh_config"))
 
 test "${#HOSTS[@]}" -gt 0 || die "No RUNNING hosts found matching ${CLUSTER}-\\d+"
 
