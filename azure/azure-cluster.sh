@@ -8,14 +8,12 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
-INSTALLER="${INSTALLER:-/netstore/qa/Downloads/byJob/BuildTrunk/xcalar-latest-installer-prod}"
-INSTALLER_URL=""
+#INSTALLER="${INSTALLER:-/netstore/qa/Downloads/byJob/BuildTrunk/xcalar-latest-installer-prod}"
 COUNT=1
 INSTANCE_TYPE="Standard_E8s_v3"
 CLUSTER="`id -un`-xcalar"
 LOCATION="westus2"
 TEMPLATE="$XLRINFRADIR/azure/xdp-standard/devTemplate.json"
-LICENSE=""
 
 BUCKET="${BUCKET:-xcrepo}"
 CUSTOM_SCRIPT_NAME="devBootstrap.sh"
@@ -24,18 +22,22 @@ BOOTSTRAP="${BOOTSTRAP:-$XLRINFRADIR/azure/bootstrap/$CUSTOM_SCRIPT_NAME}"
 BOOTSTRAP_SHA=`sha1sum "$BOOTSTRAP" | awk '{print $1}'`
 S3_BOOTSTRAP_KEY="bysha1/$BOOTSTRAP_SHA/`basename $BOOTSTRAP`"
 S3_BOOTSTRAP="s3://$BUCKET/$S3_BOOTSTRAP_KEY"
-PARAMETERS_DEFAULTS="${PARAMETERS_DEFAULTS:-$XLRINFRADIR/azure/xdp-standard/parameters.json.defaults}"
+PARAMETERS_DEFAULTS="${PARAMETERS_DEFAULTS:-$XLRINFRADIR/azure/xdp-standard/defaults.json}"
 BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://s3-us-west-2.amazonaws.com/$BUCKET/$S3_BOOTSTRAP_KEY}"
+
+# Netstore in xcalardev-net vNET. Avoid having to query DNS for this on boot.
+SHARE_NAME="10.11.1.5:/data/nfs"
 
 usage () {
     cat << EOF
-    usage: $0 [-i installer (default: $INSTALLER)] [-t instance-type (default: $INSTANCE_TYPE)] [-c count (default: $COUNT)] [-n clusterName (default: $CLUSTER)] [-l location (default: $LOCATION)] [-k licenseKey]
+    usage: $0 [-i installer (default: $INSTALLER)] [-t instance-type (default: $INSTANCE_TYPE)] [-c count (default: $COUNT)] [-n clusterName (default: $CLUSTER)]
+            [-l location (default: $LOCATION)] [-k licenseKey] [-s server:/share  (default: $SHARE_NAME)]
 
 EOF
     exit 1
 }
 
-while getopts "hi:c:t:n:l:k:" opt "$@"; do
+while getopts "hi:c:t:n:l:k:s:" opt "$@"; do
     case "$opt" in
         h) usage;;
         i) INSTALLER="$OPTARG";;
@@ -44,25 +46,21 @@ while getopts "hi:c:t:n:l:k:" opt "$@"; do
         n) CLUSTER="$OPTARG";;
         l) LOCATION="$OPTARG";;
         k) LICENSE="$OPTARG";;
+        s) SHARE_NAME="$OPTARG";;
         --) break;;
         *) echo >&2 "Unknown option $opt"; usage;;
     esac
 done
 
 # Check if S3_BOOTSTRAP exists
-aws s3 cp "$S3_BOOTSTRAP" - >/dev/null 2>&1
-ret=$?
-if [ "$ret" != "0" ]; then
+if ! aws s3 cp "$S3_BOOTSTRAP" - >/dev/null 2>&1; then
     echo "$S3_BOOTSTRAP does not exists. Uploading $BOOTSTRAP"
-    aws s3 cp "$BOOTSTRAP" "$S3_BOOTSTRAP"
-    aws s3api put-object-acl --acl public-read --bucket "$BUCKET" --key "$S3_BOOTSTRAP_KEY"
+    aws s3 cp --acl public-read "$BOOTSTRAP" "$S3_BOOTSTRAP"
 fi
 
-if ! test "`az group exists --name "$CLUSTER" --output tsv`" = true; then 
-    az group create --name "$CLUSTER" --location "$LOCATION"; 
-fi
+az group create --name "$CLUSTER" --location "$LOCATION" --tags adminEmail=$(git config user.email)  owner="$(git config user.name)" deployHost="$(hostname -s)"
 
-if [ -z "$INSTALLER_URL" ]; then
+if [ -n "$INSTALLER" ] && [ -z "$INSTALLER_URL" ]; then
     if [ "$INSTALLER" = "none" ]; then
         INSTALLER_URL="http://none"
     elif [[ "$INSTALLER" =~ ^s3:// ]]; then
@@ -74,25 +72,50 @@ if [ -z "$INSTALLER_URL" ]; then
     elif [[ "$INSTALLER" =~ ^http[s]?:// ]]; then
         INSTALLER_URL="$INSTALLER"
     else
-        if ! INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d s3 "$INSTALLER")"; then
+        if ! INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d az "$INSTALLER")"; then
             echo >&2 "Failed to upload or generate a url for $INSTALLER"
             exit 1
         fi
     fi
 fi
 
-DEPLOY="$CLUSTER-deploy"
+if [ -n "$INSTALLER_URL" ]; then
+    INSTALLER_SAS_TOKEN="${INSTALLER_URL#*\?}"
+    if [ -n "$INSTALLER_SAS_TOKEN" ]; then
+        INSTALLER_SAS_TOKEN='?'"$INSTALLER_SAS_TOKEN"
+        INSTALLER_URL="${INSTALLER_URL%\?*}"
+    fi
+fi
+
+DEPLOY_COUNT=$(az group  deployment list -g $CLUSTER -otsv | wc -l)
+NOW=$(date +%Y%m%d%H%M)
+if [ $DEPLOY_COUNT -eq 0 ]; then
+    DEPLOY="$CLUSTER-deploy"
+else
+    DEPLOY="$CLUSTER-deploy-${NOW}-$DEPLOY_COUNT"
+fi
 EMAIL="`id -un`@xcalar.com"
-az group deployment create --resource-group "$CLUSTER" --name "$DEPLOY" --template-file "$TEMPLATE" --parameters "`jq -r '.parameters + { domainNameLabel: {value:"'$CLUSTER'"},\
-                                      customScriptName: {value:"'$CUSTOM_SCRIPT_NAME'"},\
-                                      installerUrl: {value:"'$INSTALLER_URL'"},\
-                                      bootstrapUrl: {value:"'$BOOTSTRAP_URL'"},\
-                                      licenseKey: {value:"'$LICENSE'"},\
-                                      adminEmail: {value:"'$EMAIL'"},\
-                                      scaleNumber: {value:'$COUNT'},\
-                                      appName: {value:"'$CLUSTER'"},\
-                                      appUsername: {value:"admin"},\
-                                      appPassword: {value:"Welcome1"},\
-                                      vmSize: {value:"'$INSTANCE_TYPE'"}
-                                    }|tojson' $PARAMETERS_DEFAULTS`"
+set -e
+for op in validate create; do
+    deploy_name=
+    if [ "$op" = create ]; then
+        deploy_name="--name ${DEPLOY}"
+    fi
+    az group deployment $op --resource-group "$CLUSTER" $deploy_name --template-file "$TEMPLATE" \
+        --parameters \
+        @${PARAMETERS_DEFAULTS} \
+        ${INSTALLER_URL+installerUrl="$INSTALLER_URL"} \
+        ${INSTALLER_SAS_TOKEN+installUrlSasToken="$INSTALLER_SAS_TOKEN"} \
+        ${LICENSE+licenseKey="$LICENSE"} \
+        domainNameLabel="$CLUSTER" \
+        customScriptName="$CUSTOM_SCRIPT_NAME" \
+        bootstrapUrl="$BOOTSTRAP_URL" \
+        adminEmail=$EMAIL \
+        ${SHARE_NAME+shareName="$SHARE_NAME"} \
+        scaleNumber=$COUNT \
+        appName=$CLUSTER \
+        appUsername="xdpadmin" \
+        appPassword="Welcome1" \
+        vmSize="$INSTANCE_TYPE"
+done
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"

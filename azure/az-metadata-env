@@ -7,27 +7,27 @@ az_metadata_env() {
   set -eo pipefail
   curl -fsSL --connect-timeout 1 -H Metadata:true 'http://169.254.169.254/metadata/instance?api-version=2017-12-01&format=json' | \
     jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | \
-    sed -re 's/^([^=]+)=/AZURE_\U\1 /g' | \
+    sed -re 's/^([^=]+)=/AZ_\U\1 /g' | \
     while read KEY VALUE;
       do echo "${KEY//-/_}=\"${VALUE}\""
     done | tee $tmp
 
   . $tmp
 
-  if [ -n "$AZURE_TAGS" ]; then
-    echo "$AZURE_TAGS" | tr ';' '\n' | sed -r 's/^([^:]+):/AZURE_TAG_\U\1 /g' | while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""; done | tee -a $tmp
+  if [ -n "$AZ_TAGS" ]; then
+    echo "$AZ_TAGS" | tr ';' '\n' | sed -r 's/^([^:]+):/AZ_TAG_\U\1 /g' | while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""; done | tee -a $tmp
   fi
 
   curl -fsSL --connect-timeout 1 -H Metadata:true 'http://169.254.169.254/metadata/instance?api-version=2017-12-01&format=json' | \
     jq -r '.network.interface[0].ipv4.ipAddress[0]|[.privateIpAddress,.publicIpAddress]|@tsv' | \
     while read LOCALIP4 PUBLICIPV4; do
-        echo "AZURE_LOCALIPV4=${LOCALIP4}"
-        test -z "$PUBLICIPV4" || echo "AZURE_PUBLICIPV4=${PUBLICIPV4}"
+        echo "AZ_LOCALIPV4=${LOCALIP4}"
+        test -z "$PUBLICIPV4" || echo "AZ_PUBLICIPV4=${PUBLICIPV4}"
     done | tee -a $tmp
 
   . $tmp
 
-  test -z "$AZURE_PUBLICIPV4" || echo "AZURE_DNSLABEL=${AZURE_NAME}.${AZURE_LOCATION}.cloudapp.azure.com"
+  test -z "$AZ_PUBLICIPV4" || echo "AZ_DNSLABEL=${AZ_NAME}.${AZ_LOCATION}.cloudapp.azure.com"
   )
   local rc=$?
   rm -f $tmp

@@ -38,6 +38,13 @@
         "description": "Custom installer URL"
       }
     },
+    "installerUrlSasToken": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Custom installer URL SAS Token"
+      }
+    },
     "licenseKey": {
       "type": "securestring",
       "defaultValue": "",
@@ -111,9 +118,10 @@
     },
     "vmDiskType": {
       "type": "string",
-      "defaultValue": "Premium_LRS",
+      "defaultValue": "StandardSSD_LRS",
       "allowedValues": [
         "Premium_LRS",
+        "StandardSSD_LRS",
         "Standard_LRS"
       ],
       "metadata": {
@@ -150,6 +158,57 @@
       "defaultValue": "[concat(parameters('appName'),'-pip')]",
       "metadata": {
         "description": "IP Address to use"
+      }
+    },
+    "virtualNetworkNewOrExisting": {
+      "type": "string",
+      "defaultValue": "new",
+      "metadata": {
+        "description": "Determines whether or not a new virtual network should be provisioned."
+      }
+    },
+    "virtualNetworkName": {
+      "type": "string",
+      "defaultValue": "VirtualNetwork",
+      "metadata": {
+        "description": "Name of the virtual network"
+      }
+    },
+    "addressPrefixes": {
+      "type": "array",
+      "defaultValue": [
+        "10.0.0.0/16"
+      ],
+      "metadata": {
+        "description": "Address prefix of the virtual network"
+      }
+    },
+    "subnetName": {
+      "type": "string",
+      "defaultValue": "subnet1",
+      "metadata": {
+        "description": "Name of the subnet"
+      }
+    },
+    "subnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.",
+      "metadata": {
+        "description": "Subnet prefix of the virtual network"
+      }
+    },
+    "subnetPrefixCIDR": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/24",
+      "metadata": {
+        "description": "Subnet prefix of the virtual network"
+      }
+    },
+    "virtualNetworkResourceGroupName": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Name of the resource group for the existing virtual network"
       }
     },
     "storageAccountNewOrExisting": {
@@ -200,13 +259,13 @@
   "variables": {
     "vmName": "[concat(toLower(parameters('appName')), '-vm')]",
     "nicName": "[concat(parameters('appName'), '-nic')]",
-    "virtualNetworkName": "[concat(parameters('appName'), '-vnet')]",
-    "vnetAddressPrefix": "10.0.0.0/16",
-    "vnetID": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
-    "subnet1Name": "[concat(variables('virtualNetworkName'),'-subnet-1')]",
-    "subnet1Prefix": "10.0.0.0/24",
-    "subnet1Ref": "[concat(variables('vnetID'),'/subnets/', variables('subnet1Name'))]",
     "networkSecurityGroupName": "[concat(parameters('appName'),'-nsg')]",
+    "vnetLookup": {
+      "new": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
+      "existing": "[resourceId(parameters('virtualNetworkResourceGroupName'), 'Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+    },
+    "vnetID": "[variables('vnetLookup')[parameters('virtualNetworkNewOrExisting')]]",
+    "subnetRef": "[concat(variables('vnetID'),'/subnets/', parameters('subnetName'))]",
     "publicIPAddressLookup": {
       "new": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]",
       "existing": "[resourceId(parameters('publicIpAddressRG'),'Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]"
@@ -218,13 +277,96 @@
       "new": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
       "existing": "[resourceId(parameters('storageAccountRG'),'Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
     },
+    "sizesWithAcceleratedNetworking": [
+      "Standard_F8s_v2",
+      "Standard_F16s_v2",
+      "Standard_F32s_v2",
+      "Standard_F64s_v2",
+      "Standard_F72s_v2",
+      "Standard_D4_v2",
+      "Standard_D5_v2",
+      "Standard_D13_v2",
+      "Standard_D14_v2",
+      "Standard_D15_v2",
+      "Standard_D4_v2_Promo",
+      "Standard_D5_v2_Promo",
+      "Standard_D13_v2_Promo",
+      "Standard_D14_v2_Promo",
+      "Standard_F8",
+      "Standard_F16",
+      "Standard_DS4_v2",
+      "Standard_DS5_v2",
+      "Standard_DS13-2_v2",
+      "Standard_DS13-4_v2",
+      "Standard_DS13_v2",
+      "Standard_DS14-4_v2",
+      "Standard_DS14-8_v2",
+      "Standard_DS14_v2",
+      "Standard_DS15_v2",
+      "Standard_DS4_v2_Promo",
+      "Standard_DS5_v2_Promo",
+      "Standard_DS13_v2_Promo",
+      "Standard_DS14_v2_Promo",
+      "Standard_F8s",
+      "Standard_F16s",
+      "Standard_D16_v3",
+      "Standard_D32_v3",
+      "Standard_D4s_v3",
+      "Standard_D4_v3",
+      "Standard_D8s_v3",
+      "Standard_D8_v3",
+      "Standard_D16s_v3",
+      "Standard_D32s_v3",
+      "Standard_M32-8ms",
+      "Standard_M32-16ms",
+      "Standard_M32ls",
+      "Standard_M32ms",
+      "Standard_M32ts",
+      "Standard_M64-16ms",
+      "Standard_M64-32ms",
+      "Standard_M64ls",
+      "Standard_M64ms",
+      "Standard_M64s",
+      "Standard_M128-32ms",
+      "Standard_M128-64ms",
+      "Standard_M128ms",
+      "Standard_M128s",
+      "Standard_M64",
+      "Standard_M64m",
+      "Standard_M128",
+      "Standard_M128m",
+      "Standard_D64_v3",
+      "Standard_D64s_v3",
+      "Standard_E4_v3",
+      "Standard_E8_v3",
+      "Standard_E16_v3",
+      "Standard_E32_v3",
+      "Standard_E64i_v3",
+      "Standard_E64_v3",
+      "Standard_E4s_v3",
+      "Standard_E8-2s_v3",
+      "Standard_E8-4s_v3",
+      "Standard_E8s_v3",
+      "Standard_E16-4s_v3",
+      "Standard_E16-8s_v3",
+      "Standard_E16s_v3",
+      "Standard_E32-8s_v3",
+      "Standard_E32-16s_v3",
+      "Standard_E32s_v3",
+      "Standard_E64-16s_v3",
+      "Standard_E64-32s_v3",
+      "Standard_E64is_v3",
+      "Standard_E64s_v3"
+    ],
+    "enableAcceleratedNetworking": "[contains(variables('sizesWithAcceleratedNetworking'),parameters('vmSize'))]",
     "storageAccountId": "[variables('storageAccountLookup')[parameters('storageAccountNewOrExisting')]]",
     "customScriptFilePath": "[concat(parameters('_artifactsLocation'),'/bootstrap.sh', parameters('_artifactsLocationSasToken'))]",
     "payloadFilePath": "[concat(parameters('_artifactsLocation'),'/payload.tar.gz', parameters('_artifactsLocationSasToken'))]",
     "customScriptCommandToExecute": "/bin/bash bootstrap.sh ",
+    "Reader": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
-    "imageSKU": "7.4",
+    "imageSKU": "7.5",
     "shareName": "[concat('xcalar-', toLower(resourceGroup().name))]",
     "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
     "linuxConfiguration": {
@@ -245,7 +387,7 @@
   },
   "resources": [
     {
-      "apiVersion": "2017-10-01",
+      "apiVersion": "2018-07-01",
       "type": "Microsoft.Storage/storageAccounts",
       "name": "[parameters('storageAccountName')]",
       "condition": "[equals(parameters('storageAccountNewOrExisting'),'new')]",
@@ -263,14 +405,15 @@
       }
     },
     {
-      "apiVersion": "2017-09-01",
+      "apiVersion": "2018-08-01",
       "type": "Microsoft.Network/publicIPAddresses",
       "name": "[parameters('publicIPAddressName')]",
       "condition": "[equals(parameters('publicIpAddressNewOrExisting'), 'new')]",
       "location": "[parameters('location')]",
       "tags": {
         "appName": "[parameters('appName')]",
-        "adminEmail": "[parameters('adminEmail')]"
+        "adminEmail": "[parameters('adminEmail')]",
+        "nodeId": "0"
       },
       "properties": {
         "publicIPAllocationMethod": "Dynamic",
@@ -280,10 +423,11 @@
       }
     },
     {
-      "apiVersion": "2015-06-15",
+      "apiVersion": "2018-08-01",
       "type": "Microsoft.Network/networkSecurityGroups",
       "name": "[variables('networkSecurityGroupName')]",
       "location": "[parameters('location')]",
+      "condition": "[equals(parameters('virtualNetworkNewOrExisting'), 'new')]",
       "tags": {
         "appName": "[parameters('appName')]",
         "adminEmail": "[parameters('adminEmail')]"
@@ -336,9 +480,10 @@
       }
     },
     {
-      "apiVersion": "2017-09-01",
+      "condition": "[equals(parameters('virtualNetworkNewOrExisting'), 'new')]",
+      "apiVersion": "2018-08-01",
       "type": "Microsoft.Network/virtualNetworks",
-      "name": "[variables('virtualNetworkName')]",
+      "name": "[parameters('virtualNetworkName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
@@ -349,15 +494,13 @@
       },
       "properties": {
         "addressSpace": {
-          "addressPrefixes": [
-            "[variables('vnetAddressPrefix')]"
-          ]
+          "addressPrefixes": "[parameters('addressPrefixes')]"
         },
         "subnets": [
           {
-            "name": "[variables('subnet1Name')]",
+            "name": "[parameters('subnetName')]",
             "properties": {
-              "addressPrefix": "[variables('subnet1Prefix')]",
+              "addressPrefix": "[parameters('subnetPrefixCIDR')]",
               "networkSecurityGroup": {
                 "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
               }
@@ -367,7 +510,7 @@
       }
     },
     {
-      "apiVersion": "2017-09-01",
+      "apiVersion": "2018-08-01",
       "type": "Microsoft.Network/networkInterfaces",
       "name": "[concat(variables('nicName'), copyIndex())]",
       "location": "[parameters('location')]",
@@ -382,18 +525,20 @@
       },
       "dependsOn": [
         "[variables('publicIpAddress').id]",
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]"
+        "[parameters('virtualNetworkName')]"
       ],
       "properties": {
+        "primary": true,
+        "enableAcceleratedNetworking": "[variables('enableAcceleratedNetworking')]",
         "ipConfigurations": [
           {
             "name": "ipconfig1",
             "properties": {
               "privateIPAllocationMethod": "Static",
-              "privateIPAddress": "[concat('10.0.0.', copyIndex(4))]",
+              "privateIPAddress": "[concat(parameters('subnetPrefix'), copyIndex(4))]",
               "publicIPAddress": "[if(equals(copyIndex(), 0), variables('publicIPAddress'), json('null'))]",
               "subnet": {
-                "id": "[variables('subnet1Ref')]"
+                "id": "[variables('subnetRef')]"
               }
             }
           }
@@ -401,7 +546,7 @@
       }
     },
     {
-      "apiVersion": "2017-12-01",
+      "apiVersion": "2018-10-01",
       "type": "Microsoft.Compute/virtualMachines",
       "name": "[concat(variables('vmName'), copyIndex())]",
       "location": "[parameters('location')]",
@@ -418,6 +563,9 @@
         "[concat('Microsoft.Storage/storageAccounts/', parameters('storageAccountName'))]",
         "[concat('Microsoft.Network/networkInterfaces/',variables('nicName'), copyIndex())]"
       ],
+      "identity": {
+        "type": "SystemAssigned"
+      },
       "properties": {
         "hardwareProfile": {
           "vmSize": "[parameters('vmSize')]"
@@ -461,7 +609,7 @@
       }
     },
     {
-      "apiVersion": "2017-12-01",
+      "apiVersion": "2018-10-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "name": "[concat(variables('vmName'), copyIndex(), '/bootstrap')]",
       "location": "[parameters('location')]",
@@ -489,7 +637,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', variables('shareName'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -c ', variables('vmName'),' -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'),'\"')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', variables('shareName'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -c ', variables('vmName'),' -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'), parameters('installerUrlSasToken'), '\"')]"
         }
       }
     }

@@ -10,6 +10,14 @@ set -x
 
 echo "Starting bootstrap at `date`"
 
+genDefaultAdmin() {
+    local crypted=$(/opt/xcalar/bin/node -e "var crypto=require(\"crypto\"); var hmac=crypto.createHmac(\"sha256\", \"xcalar-salt\").update(\"${ADMIN_PASSWORD}\").digest(\"hex\"); process.stdout.write(hmac+\"\n\")")
+    cat <<EOF
+{"username": "${ADMIN_USERNAME}", "password": "$crypted", "email": "${ADMIN_EMAIL}", "defaultAdminEnabled": true}
+EOF
+}
+
+
 # API Services
 INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/installer"
 LICENSE_SERVER="https://x3xjvoyc6f.execute-api.us-west-2.amazonaws.com/production/license/api/v1.0/marketplacedeploy"
@@ -31,8 +39,6 @@ CASERVER="$CASTAGING"
 log () {
     logger --id -t $(basename ${BASH_SOURCE[0]}) -s "$@"
 }
-
-MYPATH="$0"
 
 while getopts "a:b:c:d:e:f:g:i:j:n:l:u:r:p:s:t:v:w:x:y:z:" optarg; do
     case "$optarg" in
@@ -63,7 +69,8 @@ while getopts "a:b:c:d:e:f:g:i:j:n:l:u:r:p:s:t:v:w:x:y:z:" optarg; do
 done
 shift $((OPTIND-1))
 
-CLUSTER="${CLUSTER:-${HOSTNAME%%[0-9]*}}"
+CLUSTER="${CLUSTER:-${HOSTNAME%-vm[0-9]*}}"
+VMBASE="${CLUSTER}-vm"
 
 XLRDIR=/opt/xcalar
 
@@ -186,26 +193,26 @@ mount_device () {
     mount $MOUNT
 }
 
-# extract "$MYPATH" | tee "payload.tar.gz"
-
 setenforce Permissive
 sed -i -e 's/^SELINUX=enforcing.*$/SELINUX=permissive/g' /etc/selinux/config
+yum clean all --enablerepo='*'
+rm -rf /var/cache/yum/*
 
 # AzureCLI (ref: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest)
 rpm --import https://packages.microsoft.com/keys/microsoft.asc
 echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo
 
+VERS="$(rpm -q $(rpm -qf /etc/redhat-release) --qf '%{VERSION}')"
+VERS="${VERS:0:1}"
 if ! rpm -q epel-release; then
-    VERS="$(rpm -q $(rpm -qf /etc/redhat-release) --qf '%{VERSION}')"
-    VERS="${VERS:0:1}"
     case "$(rpm -qf /etc/redhat-release)" in
-        centos*) EPEL=epel-release;;
-        *) EPEL=https://dl.fedoraproject.org/pub/epel/epel-release-latest-${VERS}.noarch.rpm;;
+        redhat*) EPEL=https://dl.fedoraproject.org/pub/epel/epel-release-latest-${VERS}.noarch.rpm;;
+        *) EPEL=epel-release;;
     esac
     yum install -y $EPEL
 fi
 
-yum makecache fast
+yum install -y http://repo.xcalar.net/xcalar-release-el${VERS}.rpm
 
 yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart
 yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
@@ -259,6 +266,9 @@ grow_partition $(readlink -f /dev/disk/azure/root) 2
 setup_instancestore "$(readlink -f /dev/disk/azure/resource)" /ephemeral/data
 run_playload
 
+export TMPDIR=/ephemeral/data/tmp
+mkdir -m 1777 $TMPDIR
+
 pip install -U jinja2
 test -n "$HTML" && safe_curl -sSL "$HTML" > html.tar.gz
 tar -zxvf html.tar.gz
@@ -297,15 +307,14 @@ if [ -z "$SHARE" ]; then
     if [ -z "$NFSHOST" ] && [ "$COUNT" = 1 ]; then
         SHARE="${HOSTNAME}:/srv/share"
     else
-        SHARE="${CLUSTER}0:/srv/share"
+        SHARE="${VMBASE}0:/srv/share"
     fi
-
     MOUNT_TYPE=nfs
     NFSHOST="${SHARE%%:*}"
     NFSSHARE="${SHARE##*:}"
-elif echo "$SHARE" | grep -qE '^(//[a-z][a-z0-9]{2,24}|[a-zA-Z][a-zA-Z0-9_-]+$)'; then
+elif echo "$SHARE" | grep -qE '^(//[a-z][a-z0-9]{2,24}|[a-zA-Z0-9_-]+$)'; then
     MOUNT_TYPE=cifs
-elif echo "$SHARE" | grep -qE '^[a-z][a-z0-9\.-]*:/[A-Za-z][A-Za-z0-9\._-]+'; then
+elif echo "$SHARE" | grep -qE '^[a-z0-9\.-]*:/[A-Za-z0-9\._-]+'; then
     MOUNT_TYPE=nfs
     NFSHOST="${SHARE%%:*}"
     NFSSHARE="${SHARE##*:}"
@@ -318,17 +327,17 @@ XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
 XCE_LICENSEDIR="${XCE_LICENSEDIR:-/etc/xcalar}"
 
 # Download the installer as soon as we can
-rm -f installer.sh
+rm -f $TMPDIR/installer.sh
 for retry in $(seq 10); do
-    safe_curl "$INSTALLER_URL" -o installer.sh
+    safe_curl -f "$INSTALLER_URL" -o $TMPDIR/installer.sh
     rc=$?
-    if [ $rc -eq 0 ] && test -s installer.sh; then
+    if [ $rc -eq 0 ] && test -s $TMPDIR/installer.sh; then
         break
     fi
     sleep 10
 done
 
-if [ $rc -ne 0 ] || ! test -s installer.sh; then
+if [ $rc -ne 0 ] || ! test -s $TMPDIR/installer.sh; then
     echo >&2 "ERROR: Error downloading installer"
     serveError "Error downloading installer"
     exit 1
@@ -383,38 +392,46 @@ for DEV in /dev/sdc /dev/sdd; do
 done
 
 # Node 0 will host NFS shared storage for the cluster
-if [ "$MOUNT_TYPE" = nfs ] && [ "$HOSTNAME" = "$NFSHOST" ]; then
-    mkdir -p "${LOCALSTORE}/share" "$NFSSHARE"
-    clean_fstab "${LOCALSTORE}/share"
-    echo "${LOCALSTORE}/share    $NFSSHARE   none   bind   0 0" | tee -a /etc/fstab
-    mountpoint -q $NFSSHARE || mount $NFSSHARE
-    # Ensure NFS is running
-    systemctl enable rpcbind
-    systemctl enable nfs-server
-    systemctl enable nfs-lock
-    systemctl enable nfs-idmap
-    systemctl start rpcbind
-    systemctl start nfs-server
-    systemctl start nfs-lock
-    systemctl start nfs-idmap
+if [ "$MOUNT_TYPE" = nfs ]; then
+    if [ "$HOSTNAME" = "$NFSHOST" ]; then
+        mkdir -p "${LOCALSTORE}/share" "$NFSSHARE"
+        clean_fstab "${LOCALSTORE}/share"
+        echo "${LOCALSTORE}/share    $NFSSHARE   none   bind   0 0" | tee -a /etc/fstab
+        mountpoint -q $NFSSHARE || mount $NFSSHARE
+        # Ensure NFS is running
+        systemctl enable rpcbind
+        systemctl enable nfs-server
+        systemctl enable nfs-lock
+        systemctl enable nfs-idmap
+        systemctl start rpcbind
+        systemctl start nfs-server
+        systemctl start nfs-lock
+        systemctl start nfs-idmap
 
-    # Export the share to everyone in our CIDR block and mark it
-    # as world r/w
-    mkdir -p "${NFSSHARE}/xcalar"
-    chmod 0777 "${NFSSHARE}/xcalar"
-    echo "${NFSSHARE}/xcalar      ${NETWORK}/${MASK}(rw,sync,no_root_squash,no_all_squash)" | tee /etc/exports
-    systemctl restart nfs-server
-    if firewall-cmd --state; then
-        firewall-cmd --permanent --zone=public --add-service=nfs
-        firewall-cmd --reload
+        # Export the share to everyone in our CIDR block and mark it
+        # as world r/w
+        mkdir -p "${NFSSHARE}/xcalar"
+        chmod 0777 "${NFSSHARE}/xcalar"
+        echo "${NFSSHARE}/xcalar      ${NETWORK}/${MASK}(rw,sync,no_root_squash,no_all_squash)" | tee /etc/exports
+        systemctl restart nfs-server
+        if firewall-cmd --state; then
+            firewall-cmd --permanent --zone=public --add-service=nfs
+            firewall-cmd --reload
+        fi
+    else
+        mkdir -p /mnt/tmp
+        mount -t nfs -o defaults ${NFSHOST}:${NFSSHARE} /mnt/tmp
+        mkdir -p /mnt/tmp/cluster/${CLUSTER}
+        chown xcalar:xcalar /mnt/tmp/cluster/${CLUSTER}
+        umount /mnt/tmp
     fi
 fi
 
 
 ### Install Xcalar
-if [ -s "installer.sh" ]; then
+if [ -s "$TMPDIR/installer.sh" ]; then
     # We install our own systemd unit for xcalar in the payload so don't need --startonboot
-    if ! bash -x installer.sh --stop --nostart --caddy; then
+    if ! bash -x $TMPDIR/installer.sh --nostart; then
         echo >&2 "ERROR: Failed to run installer"
         serveError "Failed to run installer" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
         exit 1
@@ -529,7 +546,7 @@ fi
 DOMAIN="$(dnsdomainname)"
 MEMBERS=()
 for ii in $(seq 0 $((COUNT-1))); do
-    MEMBERS+=("${CLUSTER}${ii}")
+    MEMBERS+=("${VMBASE}${ii}")
 done
 
 # Register domain
@@ -616,8 +633,8 @@ mkdir -p "$XCE_HOME"
 clean_fstab $XCE_HOME
 case "$MOUNT_TYPE" in
     nfs)
-        MOUNT_OPTS='noauto,_netdev,x-systemd.automount,nfs'
-        MOUNT_WHAT="${NFSHOST}:${NFSSHARE}/xcalar"
+        MOUNT_OPTS='_netdev,defaults'
+        MOUNT_WHAT="${NFSHOST}:${NFSSHARE}/cluster/${CLUSTER}"
         ;;
     cifs)
         mkdir -p /etc/credentials.d
@@ -638,32 +655,38 @@ case "$MOUNT_TYPE" in
 esac
 
 if [ "$MOUNT_TYPE" != local ]; then
-    cat > /etc/systemd/system/mnt-xcalar.mount <<-EOF
-	[Mount]
-	What=$MOUNT_WHAT
-	Where=$XCE_HOME
-	SloppyOptions=on
-	DirectoryMode=0777
-	Type=$MOUNT_TYPE
-	Options=$MOUNT_OPTS
-	EOF
-    cat > /etc/systemd/system/mnt-xcalar.automount <<-EOF
-	[Unit]
-	DefaultDependencies=no
-	Wants=remote-fs-pre.target
-	After=remote-fs-pre.target
-	Conflicts=umount.target
-	Before=umount.target
-	[Automount]
-	Where=$XCE_HOME
-	TimeoutIdleSec=0
-	DirectoryMode=0777
-	[Install]
-	WantedBy=remote-fs.target
-	EOF
-    systemctl daemon-reload
-    systemctl enable mnt-xcalar.automount
-    systemctl start mnt-xcalar.automount
+    mkdir -p $XCE_HOME
+    echo "$MOUNT_WHAT   $XCE_HOME   $MOUNT_TYPE     $MOUNT_OPTS     0   0" | tee -a /etc/fstab
+    mount $XCE_HOME
+    chown -R xcalar:xcalar  $XCE_HOME
+
+
+#    cat > /etc/systemd/system/mnt-xcalar.mount <<-EOF
+#	[Mount]
+#	What=$MOUNT_WHAT
+#	Where=$XCE_HOME
+#	SloppyOptions=on
+#	DirectoryMode=0777
+#	Type=$MOUNT_TYPE
+#	Options=$MOUNT_OPTS
+#	EOF
+#    cat > /etc/systemd/system/mnt-xcalar.automount <<-EOF
+#	[Unit]
+#	DefaultDependencies=no
+#	Wants=remote-fs-pre.target
+#	After=remote-fs-pre.target
+#	Conflicts=umount.target
+#	Before=umount.target
+#	[Automount]
+#	Where=$XCE_HOME
+#	TimeoutIdleSec=0
+#	DirectoryMode=0777
+#	[Install]
+#	WantedBy=remote-fs.target
+#	EOF
+#    systemctl daemon-reload
+#    systemctl enable mnt-xcalar.automount
+#    systemctl start mnt-xcalar.automount
     ls $XCE_HOME  # Force mount of shared dir
     # Wait for share to fully come up. Often times the other nodes get to this point before node0 has
     # even begun
@@ -671,6 +694,7 @@ if [ "$MOUNT_TYPE" != local ]; then
         echo >&2 "Sleeping ... waiting $XCE_HOME"
         sleep 5
     done
+    chown -R xcalar:xcalar "$XCE_HOME"
 fi
 
 until mkdir -p "${XCE_HOME}/members"; do
@@ -688,6 +712,7 @@ while :; do
     echo >&2 "Sleeping ... waiting for nodes"
     sleep 5
 done
+chown -R xcalar:xcalar "$XCE_HOME"
 
 # Populate the local host keys with those of the members so we can SSH into them without
 # the hostkey check warning
@@ -710,11 +735,14 @@ systemctl start xcalar
 # Add in the default admin user into Xcalar
 if [ -n "$ADMIN_USERNAME" ]; then
     mkdir -p $XCE_HOME/config
+    genDefaultAdmin > $XCE_HOME/config/defaultAdmin.json
+    chmod 0600 $XCE_HOME/config/defaultAdmin.json
     chown -R xcalar:xcalar $XCE_HOME/config /etc/xcalar
+    ## Doesn't seem to work anymore
     jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"$ADMIN_USERNAME\", \"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\" }"
     echo "Creating default admin user $ADMIN_USERNAME ($ADMIN_EMAIL)"
     # Don't fail the deploy if this curl doesn't work
-    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set" || true
+    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/setup" || true
     echo
 else
     echo "ADMIN_USERNAME is not specified"

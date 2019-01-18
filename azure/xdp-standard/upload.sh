@@ -65,7 +65,7 @@ dns_rand() {
 }
 
 artifacts () {
-    echo "https://${AZURE_PUBLIC_ACCOUNT}.blob.core.windows.net/${AZURE_PUBLIC_CONTAINER}/$1"
+    echo "https://${AZ_PUBLIC_ACCOUNT}.blob.core.windows.net/${AZ_PUBLIC_CONTAINER}/$1"
 }
 
 rawurlencode() {

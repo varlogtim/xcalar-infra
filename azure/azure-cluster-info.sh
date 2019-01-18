@@ -8,10 +8,21 @@ else
 fi
 
 DEPLOY="$CLUSTER-deploy"
+DEPLOY=$(az group deployment list -g ${CLUSTER} -otsv | head -1 | awk '{print $3}')
 
-count=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.scaleNumber.value' --output tsv`
-domainNameLabel=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.domainNameLabel.value' --output tsv`
-location=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.location.value' --output tsv`
+DEPLOY_JSON=$(az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json)
+provisioningState=$(jq -r .properties.provisioningState <<< $DEPLOY_JSON)
+if [ "$provisioningState" != Succeeded ]; then
+    echo >&2 "ERROR: $DEPLOY failed"
+    exit 1
+fi
+count=$(jq -r .properties.outputs.scaleNumber.value <<< $DEPLOY_JSON)
+domainNameLabel=$(jq -r .properties.outputs.domainNameLabel.value <<< $DEPLOY_JSON)
+location=$(jq -r .properties.outputs.location.value <<< $DEPLOY_JSON)
+
+#count=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.scaleNumber.value' --output tsv`
+#domainNameLabel=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.domainNameLabel.value' --output tsv`
+#location=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.location.value' --output tsv`
 for ii in `seq 0 $(( $count - 1 ))`; do
     echo "${domainNameLabel}-${ii}.${location}.cloudapp.azure.com"
 done

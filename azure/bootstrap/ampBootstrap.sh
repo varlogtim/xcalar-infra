@@ -62,7 +62,8 @@ while getopts "a:b:c:d:e:f:g:i:j:n:l:u:r:p:s:t:v:w:x:y:z:" optarg; do
 done
 shift $((OPTIND-1))
 
-CLUSTER="${CLUSTER:-${HOSTNAME%%[0-9]*}}"
+CLUSTER="${CLUSTER:-${HOSTNAME%-vm[0-9]*}}"
+VMBASE="${CLUSTER}-vm"
 
 XLRDIR=/opt/xcalar
 
@@ -163,22 +164,24 @@ mount_device () {
 
 setenforce Permissive
 sed -i -e 's/^SELINUX=enforcing.*$/SELINUX=permissive/g' /etc/selinux/config
+yum clean all --enablerepo='*'
+rm -rf /var/cache/yum/*
 
 # AzureCLI (ref: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest)
 rpm --import https://packages.microsoft.com/keys/microsoft.asc
 echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo
 
+VERS="$(rpm -q $(rpm -qf /etc/redhat-release) --qf '%{VERSION}')"
+VERS="${VERS:0:1}"
 if ! rpm -q epel-release; then
-    VERS="$(rpm -q $(rpm -qf /etc/redhat-release) --qf '%{VERSION}')"
-    VERS="${VERS:0:1}"
     case "$(rpm -qf /etc/redhat-release)" in
-        centos*) EPEL=epel-release;;
-        *) EPEL=https://dl.fedoraproject.org/pub/epel/epel-release-latest-${VERS}.noarch.rpm;;
+        redhat*) EPEL=https://dl.fedoraproject.org/pub/epel/epel-release-latest-${VERS}.noarch.rpm;;
+        *) EPEL=epel-release;;
     esac
     yum install -y $EPEL
 fi
 
-yum makecache fast
+yum install -y http://repo.xcalar.net/xcalar-release-el${VERS}.rpm
 
 yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart
 yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
@@ -231,6 +234,9 @@ grow_partition $(readlink -f /dev/disk/azure/root) 2
 # all indications, Azure only ever comes with one resource disk.
 setup_instancestore "$(readlink -f /dev/disk/azure/resource)" /ephemeral/data
 run_playload
+
+export TMPDIR=/ephemeral/data/tmp
+mkdir -m 1777 $TMPDIR
 
 pip install -U jinja2
 test -n "$HTML" && safe_curl -sSL "$HTML" > html.tar.gz
@@ -693,7 +699,7 @@ if [ -n "$ADMIN_USERNAME" ]; then
     jsonData="{ \"defaultAdminEnabled\": true, \"username\": \"$ADMIN_USERNAME\", \"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\" }"
     echo "Creating default admin user $ADMIN_USERNAME ($ADMIN_EMAIL)"
     # Don't fail the deploy if this curl doesn't work
-    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/set" || true
+    safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "http://127.0.0.1:12124/login/defaultAdmin/setup" || true
     echo
 else
     echo "ADMIN_USERNAME is not specified"
