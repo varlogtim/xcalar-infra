@@ -38,17 +38,17 @@ aws_latest_official_image() {
 }
 
 aws_list_images() { aws ec2 describe-images --output=json --owners "${1:-self}" --filters "Name=name,Values=${2:-*}" "${AWS_AMI_FILTERS[@]}"; }
-aws_list_self_images() { aws_list_images self '*' | aws_format_images; }
-aws_list_rhel6_images() { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-6.?_HVM_*' | aws_format_images; }
-aws_list_rhel7_images() { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-7.?_HVM_*' | aws_format_images; }
-aws_list_centos6_images() { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 6 x86_64 HVM*' | aws_format_images; }
-aws_list_centos7_images() { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 7 x86_64 HVM*' | aws_format_images; }
-aws_list_el6_images() { aws_list_images self 'EL-6.*' | aws_format_images; }
-aws_list_el7_images() { aws_list_images self 'EL-7.*' | aws_format_images; }
-aws_list_amzn1_images() { aws_list_images $AWS_AMI_AMAZON 'amzn-ami-hvm-20*' | aws_format_images; }
-aws_list_amzn2_images() { aws_list_images $AWS_AMI_AMAZON 'amzn2-ami-hvm-2.*-x86_64-gp2' | aws_format_images; }
-aws_list_ub14_images() { aws_list_images $AWS_AMI_OWNER_CANONICAL '*/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*' | aws_format_images; }
-aws_list_ub14_image_latest() { aws_list_ub14_images | aws_jq_images | head -1; }
+aws_list_self_images() { aws_list_images self '*' "$@" | aws_format_images; }
+aws_list_rhel6_images() { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-6.?_HVM_*' "$@" | aws_format_images; }
+aws_list_rhel7_images() { aws_list_images $AWS_AMI_OWNER_REDHAT 'RHEL-7.?_HVM_*' "$@" | aws_format_images; }
+aws_list_centos6_images() { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 6 x86_64 HVM*' "$@" | aws_format_images; }
+aws_list_centos7_images() { aws_list_images $AWS_AMI_MARKETPLACE 'CentOS Linux 7 x86_64 HVM*' "$@" | aws_format_images; }
+aws_list_el6_images() { aws_list_images self 'EL-6.*' "$@" | aws_format_images; }
+aws_list_el7_images() { aws_list_images self 'EL-7.*' "$@" | aws_format_images; }
+aws_list_amzn1_images() { aws_list_images $AWS_AMI_AMAZON 'amzn-ami-hvm-20*' "$@" | aws_format_images; }
+aws_list_amzn2_images() { aws_list_images $AWS_AMI_AMAZON 'amzn2-ami-hvm-2.*-x86_64-gp2' "$@" | aws_format_images; }
+aws_list_ub14_images() { aws_list_images $AWS_AMI_OWNER_CANONICAL '*/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*' "$@" | aws_format_images; }
+aws_list_ub14_image_latest() { aws_list_ub14_images "$@" | aws_jq_images | head -1; }
 aws_share_ami() {
     local image_id_and_snapshot= rc=
     image_id_and_snapshot=($(
@@ -140,6 +140,15 @@ aws_show_images() {
 }
 
 aws_delete_image() {
+    if [ $# -eq 0 ]; then
+        echo >&2 "ERROR: Must specify image-ids"
+        return 1
+    fi
+    local no_wait=false
+    if [ "$1" = "--no-wait" ]; then
+        shift
+        no_wait=true
+    fi
     local image_id_and_snapshot= rc=
     image_id_and_snapshot=($(
         set -o pipefail
@@ -158,8 +167,9 @@ aws_delete_image() {
         echo >&2 "ERROR($rc): Unknown format for image id and snapshot: ${image_id_and_snapshot[@]}"
         return 1
     fi
-    if [ -t 1 ]; then
-        echo "Deleting ${image_id_and_snapshot[@]}. Sleeping for 5 seconds"
+    echo >&2 "Deleting ${image_id_and_snapshot[@]}."
+    if [ -t 1 ] && [ $no_wait = false ]; then
+        echo >&2 "Sleeping for 5 seconds"
         sleep 5
     fi
     for ((ii = 0; ii < ${#image_id_and_snapshot[@]}; ii += 2)); do
@@ -172,27 +182,21 @@ aws_delete_image() {
 }
 
 aws_delete_ami() {
-    if [ $# -eq 0 ]; then
-        echo >&2 "ERROR: Must specify image-ids"
-        return 1
-    fi
-    aws ec2 describe-images --image-ids "$@" --output=json | aws_format_images
-    local image_id_and_snapshot=($(aws ec2 describe-images --image-ids "$@" --output=json | jq -r '.Images[]|[.ImageId,.BlockDeviceMappings[0].Ebs.SnapshotId]|@tsv'))
-    for ((ii = 0; ii < ${#image_id_and_snapshot[@]}; ii += 2)); do
-        image_id=${image_id_and_snapshot[$ii]}
-        snapshot_id=${image_id_and_snapshot[$((ii + 1))]}
-        echo "Deleting ${image_id} (snapshot_id: ${snapshot_id})"
-        echo "Sleeping for 5 seconds ..."
-        sleep 5
-        aws ec2 deregister-image --image-id "${image_id}" \
-            && aws ec2 delete-snapshot --snapshot-id "${snapshot_id}"
+    local snapshots ii
+    for ii in "$@"; do
+        if ! snapshots=($(aws ec2 describe-images --image-ids "$ii" --query 'Images[].BlockDeviceMappings[0].Ebs.SnapshotId' --output text)); then
+            echo >&2 "No snapshots found for $ii"
+        fi
+        if aws ec2 deregister-image --image-id "$ii"; then
+            aws ec2 delete-snapshot --snapshot-id "${snapshots[@]}"
+        fi
     done
 }
 
-aws_run_instanes() {
+aws_run_instances() {
     aws ec2 run-instances \
         --image-id ${1} \
-        --key-name xcalar-us-west-2 \
+        --key-name xcalar-${AWS_DEFAULT_REGION} \
         --security-groups default \
         --instance-type ${2:-c4.8xlarge} \
         --output json
@@ -226,9 +230,23 @@ aws_create_el7_image() {
 # Get something like
 # 172.x.x.x   i-0228d0f3b610a5c36     MyXcalar
 aws_instances_by_tag() {
+    local key value
+    if [ $# -eq 0 ]; then
+        say "Must specify tag and key to find instances"
+        return 1
+    fi
+    if [ $# -eq 1 ]; then
+        key='aws:cloudformation:stack-name'
+        value="$1"
+        shift
+    else
+        key="$1"
+        value="$2"
+        shift 2
+    fi
     aws ec2 describe-instances \
         --filter 'Name=instance-state-name,Values=running,pending' \
-        'Name=tag-key,Values=aws:cloudformation:stack-name' 'Name=tag-value,Values=my-xcalar' \
+        'Name=tag-key,Values=aws:cloudformation:stack-name' \
         --query 'Reservations[*].Instances[*].[PrivateIpAddress, InstanceId, Tags[?Key==`Name`] | [0].Value]' \
         --output text
 }
@@ -335,7 +353,7 @@ cfn_template_default() {
         return 1
     fi
     case "$ext" in
-        json) jq -r ".Parameters.$2.Default" < "$1" ;;
+        json) jq -r ".Parameters.$2.Default" <"$1" ;;
         yml | yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default" ;;
         *)
             echo >&2 "Unknown file type: $1"
@@ -416,7 +434,7 @@ aws_cfn_template_default() {
         return 1
     fi
     case "$ext" in
-        json) jq -r ".Parameters.$2.Default" < "$1" ;;
+        json) jq -r ".Parameters.$2.Default" <"$1" ;;
         yml | yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default" ;;
         *)
             echo >&2 "Unknown file type: $1"
@@ -550,14 +568,14 @@ aws_r53_findzone() {
 }
 
 aws_r53_upsert() {
-    local zoneid="$1" # eg, Z1LEYCMTWXY870
-    local name="${2%.}."   # eg, foo.aks.xcalar.io
-    local type="$3"   # eg, A
-    shift 3           # remaining are values eg, IP1, IP2, etc
+    local zoneid="$1"    # eg, Z1LEYCMTWXY870
+    local name="${2%.}." # eg, foo.aks.xcalar.io
+    local type="$3"      # eg, A
+    shift 3              # remaining are values eg, IP1, IP2, etc
     local action='UPSERT'
     local tmpf=$(mktemp -t r53XXXXXX.json)
     local yaml="${tmpf}.yaml"
-    cat > $yaml<<EOF
+    cat >$yaml <<EOF
 Comment: 'Updated $(date +%Y%m%d)'
 Changes:
   - Action: UPSERT
@@ -569,18 +587,17 @@ Changes:
 EOF
     local val
     for val in "${@}"; do
-        cat >> $yaml<<EOF
+        cat >>$yaml <<EOF
         - Value: '${val}'
 EOF
     done
-    cfn-flip < $yaml > $tmpf
+    cfn-flip <$yaml >$tmpf
     local rc
     aws route53 change-resource-record-sets --hosted-zone-id $zoneid --change-batch file://${tmpf} --query 'ChangeInfo.[Id,Status]' --output text
     rc=$?
     rm -f $tmpf $yaml
     return $rc
 }
-
 
 aws_start_and_ssh() {
     local curState rc dnsAddress
@@ -595,5 +612,19 @@ aws_start_and_ssh() {
         rc=$?
         [ $rc -eq 0 ] || return $rc
         ssh ec2-user@${dnsAddress}
+    fi
+}
+
+aws_s3_undelete() {
+    local bucket=$(aws_s3_bucket_from_s3url "$1")
+    local key=$(aws_s3_key_from_s3url "$1")
+    local version
+
+    if version=$(aws s3api list-object-versions --bucket $bucket --prefix "$key" --query "DeleteMarkers[?Key==\`$key\`].VersionId" --output text); then
+        if [ "$version" = None ]; then
+            echo >&2 "s3://${bucket}/${key} has no delete markers"
+            return
+        fi
+        aws s3api delete-object --bucket $bucket --key $key --version-id $version
     fi
 }

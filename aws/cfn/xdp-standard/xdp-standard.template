@@ -13,6 +13,8 @@ Parameters:
       - c5d.4xlarge
       - c5d.9xlarge
       - c5d.18xlarge
+      - r5d.large
+      - r5d.xlarge
       - r5d.2xlarge
       - r5d.4xlarge
       - r5d.12xlarge
@@ -22,24 +24,28 @@ Parameters:
       - m5d.4xlarge
       - m5d.12xlarge
       - m5d.24xlarge
-      - i3.xlarge
-      - i3.2xlarge
-      - i3.4xlarge
-      - i3.8xlarge
+      - c5.xlarge
+      - c5.2xlarge
       - c5.4xlarge
       - c5.9xlarge
       - c5.18xlarge
+      - r5.large
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.12xlarge
+      - r5.24xlarge
+      - m5.xlarge
       - m5.2xlarge
       - m5.4xlarge
       - m5.12xlarge
       - m5.24xlarge
-      - r4.xlarge
-      - r4.2xlarge
-      - r4.4xlarge
-      - r4.8xlarge
-      - r4.16xlarge
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
     ConstraintDescription: Choose an instance type.
-    Default: c5d.4xlarge
+    Default: r5d.2xlarge
   Ec2RetryTagKey:
     Description: The Amazon EC2 instance tag key to filter on when joining to other
       Xcalar nodes.
@@ -58,7 +64,7 @@ Parameters:
     Default: id_rsa_aws
     ConstraintDescription: Must be the name of an existing EC2 KeyPair.
   Subnet:
-    Description: ID of the private subnet of servers (e.g., subnet-xxxxxxxx)
+    Description: ID of the private subnet of your VPC (subnet-xxxxxxxx)
     Type: AWS::EC2::Subnet::Id
   InstallerUrl:
     MaxLength: '2047'
@@ -70,7 +76,7 @@ Parameters:
     MaxLength: '2047'
     ConstraintDescription: Location of the bootstrap script. For example, https://s3.amazonaws.com/xcrepoe1/cfn/prod/v2/scripts/user-data.sh
     Type: String
-    Default: https://s3.amazonaws.com/xcrepoe1/cfn/prod/xdp-standard/v7/scripts/user-data.sh
+    Default: https://s3.amazonaws.com/xcrepoe1/cfn/prod/xdp-standard/1.4.1-release/scripts/user-data.sh
   CustomScriptUrl:
     MaxLength: '2047'
     ConstraintDescription: Optional. Location of a custom script to run after bootstrap.
@@ -124,6 +130,17 @@ Parameters:
     MaxValue: 4095
     Default: 100
     Type: Number
+  ExistingShare:
+    Description: Existing EFS Share
+    Type: String
+    Default: NONE
+  ExistingMount:
+    Description: Existing EFS Mount Point
+    Type: String
+    Default: NONE
+Conditions:
+  CreateNewShare: !Equals [!Ref ExistingShare, NONE]
+  CreateNewMount: !Equals [!Ref ExistingMount, NONE]
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -145,6 +162,8 @@ Metadata:
           - AssociatePublicIpAddress
           - ClusterAccessSGId
           - AllowedCIDR
+          - ExistingShare
+          - ExistingMount
       - Label:
           default: Xcalar Configuration
         Parameters:
@@ -169,16 +188,16 @@ Metadata:
         default: 'Server size:'
       KeyName:
         default: 'Key pair:'
-  Version: 1.4.1
-  Release: '3'
+  Version: '1.4.1'
+  Release: 'RELEASE'
 Mappings:
   AWSAMIRegionMap:
     AMI:
       AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20180811-x86_64-gp2
     us-east-1:
-      AMZN1HVM: ami-079b87c75f15ac882
+      AMZN1HVM: ami-0297c8f1f8c963b4d
     us-west-2:
-      AMZN1HVM: ami-07ef94c860b8c06f6
+      AMZN1HVM: ami-046824ba3c18f2726
 Resources:
   ClusterSG:
     Type: AWS::EC2::SecurityGroup
@@ -274,15 +293,17 @@ Resources:
       SourceSecurityGroupId: !Ref 'EfsSecurityGroup'
   EfsSharedRoot:
     Type: AWS::EFS::FileSystem
+    Condition: CreateNewShare
     Properties:
       Encrypted: false
       FileSystemTags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-EFS'
   EfsMountTarget:
+    Condition: CreateNewMount
     Type: AWS::EFS::MountTarget
     Properties:
-      FileSystemId: !Ref 'EfsSharedRoot'
+      FileSystemId: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
       SubnetId: !Ref 'Subnet'
       SecurityGroups:
         - !Ref 'EfsSecurityGroup'
@@ -331,34 +352,49 @@ Resources:
         Fn::Sub:
           - |-
             #!/bin/bash
-            yum update -y
+            yum clean all --enablerepo='*'
+            RELEASE=$(rpm -qf /etc/system-release --qf "%{RELEASE}")
+            VERSION=$(rpm -qf /etc/system-release --qf "%{VERSION}")
             yum install -y curl ca-certificates unzip
             yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
             /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
+            export AWS_DEFAULT_REGION=${AWS::Region}
+            if [[ "${SharedRoot}" =~ ^fs-[0-9a-f]{8}$ ]]; then
+              NFSMOUNT=$(aws efs describe-mount-targets --file-system-id "${SharedRoot}" --query 'MountTargets[?SubnetId==`${Subnet}`].IpAddress' --output text)
+            else
+              NFSMOUNT="${SharedRoot}"
+            fi
             if [ "${Ec2RetryTagKey}" == "aws:cloudformation:stack-name" ]; then
               retryTagValue=${AWS::StackName}
             else
               retryTagValue=${Ec2RetryTagValue}
             fi
-            mkdir -p /var/lib/cfn
-            cd /var/lib/cfn
-            curl -Lf "${BootstrapUrl}" -o bootstrap.sh
-            rc=$?
-            if [ $rc -eq 0 ]; then
-              /bin/bash -x bootstrap.sh --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" --nfs-mount "${EfsMount}" --license "${LicenseKey}" --installer-url "${InstallerUrl}"
-              rc=$?
-            fi
-            if [ $rc -eq 0 ] && [ -n "${CustomScriptUrl}" ]; then
-              curl -Lf "${CustomScriptUrl}" -o customscript.sh
-              rc=$?
-              if [ $rc -eq 0 ]; then
-                /bin/bash -x customscript.sh --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" --nfs-mount "${EfsMount}" --license "${LicenseKey}" --installer-url "${InstallerUrl}"
+            mkdir -p /var/lib/xcalar-installer
+            cd /var/lib/xcalar-installer
+            cat <<EOF >> with_cfn.sh
+            #!/bin/bash
+            script="\$1"
+            shift
+            "\$script" --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" --admin-email "${AdminEmail}" \
+                       --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" \
+                       --nfs-mount "$NFSMOUNT" --license "${LicenseKey}" --installer-url "${InstallerUrl}" "\$@"
+            EOF
+            stage=0
+            for remoteUrl in "${BootstrapUrl}" "${CustomScriptUrl}"; do
+              part="part-${!stage}.sh"
+              if [ -n "$remoteUrl" ] && curl -Lf "$remoteUrl" -o $part; then
+                chmod +x $part
+                bash -x with_cfn.sh ./$part
                 rc=$?
+                if [ $rc != 0 ]; then
+                  break
+                fi
               fi
-            fi
+              stage=$((stage+1))
+            done
             /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
             exit $rc
-          - EfsMount: !Sub '${EfsSharedRoot}.efs.${AWS::Region}.amazonaws.com:/'
+          - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
             Resource: ClusterASG
   IamClusterRole:
     Type: AWS::IAM::Role
@@ -380,6 +416,12 @@ Resources:
             Action:
               - ec2:DescribeInstances
             Resource: '*'
+          - Effect: Allow
+            Action:
+              - elasticfilesystem:DescribeMountTargets
+            Resource: !Sub
+              - 'arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${SharedRoot}'
+              - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
       Roles:
         - !Ref 'IamClusterRole'
   IamClusterProfile:
@@ -391,8 +433,8 @@ Resources:
 Outputs:
   MountTargetID:
     Description: Mount target ID
-    Value: !Ref 'EfsMountTarget'
+    Value: !If [CreateNewShare, !Ref EfsMountTarget, !Ref ExistingMount]
   FileSystemID:
     Description: File system ID
-    Value: !Ref 'EfsSharedRoot'
+    Value: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
 # vim: ft=yaml

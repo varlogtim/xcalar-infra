@@ -9,10 +9,14 @@ Parameters:
       - c5d.4xlarge
       - c5d.9xlarge
       - c5d.18xlarge
+      - r5d.large
+      - r5d.xlarge
       - r5d.2xlarge
       - r5d.4xlarge
       - r5d.12xlarge
       - r5d.24xlarge
+      - m5d.large
+      - m5d.xlarge
       - m5d.2xlarge
       - m5d.4xlarge
       - m5d.12xlarge
@@ -34,7 +38,7 @@ Parameters:
       - r4.8xlarge
       - r4.16xlarge
     ConstraintDescription: Choose an instance type.
-    Default: m5d.2xlarge
+    Default: r5d.large
   KeyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
     Type: AWS::EC2::KeyPair::KeyName
@@ -79,24 +83,38 @@ Parameters:
   AdminEmail:
     Description: Email of the administrator
     Type: String
+  HostedZoneId:
+    Description: HostedZone to update
+    Type: String
+    Default: ZGHV0FVJ28G7N
+  Domain:
+    Description: Domain of hosted zone
+    Type: String
+    Default: 3wpoc.xcalar.com
+  CertBucket:
+    Description: Certificates bucket
+    Type: String
+    Default: cfn-364047378361
+  CertKey:
+    Description: Certificates
+    Type: String
+    Default: cfn/certs/3wpoc.xcalar.com.tgz
   RootSize:
     Description: Size of Root Disk
     MinValue: 32
     MaxValue: 4095
     Default: 100
     Type: Number
-  BootstrapUrl:
-    MaxLength: '2047'
-    Description: Optional. Location of the bootstrap script. For example, https://s3.amazonaws.com/xcrepoe1/cfn/prod/v2/scripts/user-data.sh
-    Type: String
-    Default: ''
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: Xcalar Configuration
+          default: Instance Configuration
         Parameters:
           - InstanceType
+      - Label:
+          default: Xcalar Configuration
+        Parameters:
           - LicenseKey
           - AdminEmail
           - AdminUsername
@@ -109,9 +127,15 @@ Metadata:
           - KeyName
           - HTTPLocation
           - SSHLocation
+      - Label:
+          default: Advanced
+        Parameters:
+          - Domain
+          - HostedZoneId
+          - CertBucket
+          - CertKey
+          - RootSize
     ParameterLabels:
-      InstallerUrl:
-        default: 'XCE Installer Url:'
       LicenseKey:
         default: 'XCE License Key:'
       InstanceType:
@@ -127,10 +151,15 @@ Mappings:
     AMI:
       AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20180811-x86_64-gp2
     us-east-1:
-      AMZN1HVM: ami-079b87c75f15ac882
+      AMZN1HVM: ami-0828bd1a8173c1830
     us-west-2:
-      AMZN1HVM: ami-07ef94c860b8c06f6
+      AMZN1HVM: ami-096a6e696ad6fa827
 Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub 'xcalar-${AWS::StackName}-data'
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -154,11 +183,57 @@ Resources:
           Value: !Sub '${AWS::StackName}-InstanceSecurityGroup'
   EC2Instance:
     Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+            - config1
+            - config2
+        config1:
+          files:
+            /etc/xcalar/certs.tgz:
+              source: !Sub 'https://s3.amazonaws.com/${CertBucket}/${CertKey}'
+              group: root
+              owner: root
+              mode: '000600'
+              authentication: rolebased
+            /usr/bin/r53update.sh:
+              source: https://s3.amazonaws.com/cfn-364047378361/cfn/scripts/r53update.sh
+              group: root
+              owner: root
+              mode: '000755'
+            /var/lib/cloud/scripts/per-boot/r53update.sh:
+              content: !Sub |
+                #!/bin/bash
+                /usr/bin/r53update.sh --zone-id "${HostedZoneId}" --record "$(curl --fail --silent http://169.254.169.254/2018-09-24/meta-data/public-hostname)" --fqdn ${AWS::StackName}.${Domain}
+              group: root
+              owner: root
+              mode: '000755'
+          sources:
+            /etc/xcalar: !Sub 'https://s3.amazonaws.com/${CertBucket}/${CertKey}'
+        config2:
+          commands:
+            01_route53:
+              command: /var/lib/cloud/scripts/per-boot/r53update.sh
+              env:
+                AWS_DEFAULT_REGION: !Sub '${AWS::Region}'
+              cwd: '~'
+            02_certs:
+              command: sed -i.bak 's@tls.*$@tls    /etc/xcalar/cert.crt /etc/xcalar/cert.key@g'
+                Caddyfile
+              cwd: /etc/xcalar
+      AWS::CloudFormation::Authentication:
+        rolebased:
+          type: S3
+          buckets:
+            - !Sub '${CertBucket}'
+          roleName: !Ref 'IamClusterRole'
     CreationPolicy:
       ResourceSignal:
         Timeout: PT15M
     Properties:
       InstanceType: !Ref 'InstanceType'
+      IamInstanceProfile: !Ref 'IamClusterProfile'
       SecurityGroupIds:
         - !GetAtt 'InstanceSecurityGroup.GroupId'
       KeyName: !Ref 'KeyName'
@@ -173,14 +248,18 @@ Resources:
             VolumeType: gp2
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-Node'
+          Value: !Sub '${AWS::StackName}-node'
+        - Key: FQDN
+          Value: !Sub '${AWS::StackName}.${Domain}'
+        - Key: Email
+          Value: !Sub '${AdminEmail}'
       UserData: !Base64
         Fn::Sub:
           - |-
             #!/bin/bash
             ensure_xcalar() {
-              #sed -i '/# Provides:/a# Should-Start: cloud-final' /etc/init.d/xcalar
-              #chkconfig xcalar off
+              sed -i '/# Provides:/a# Should-Start: cloud-final' /etc/init.d/xcalar
+              chkconfig xcalar off
               chkconfig xcalar on
             }
             genDefaultAdmin() {
@@ -189,6 +268,7 @@ Resources:
               {"username": "${AdminUsername}", "password": "$crypted", "email": "${AdminEmail}", "defaultAdminEnabled": true}
             EOF
             }
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource "${Resource}" --region ${AWS::Region}
             if [ "${ClusterSize}" = 1 ] && rpm -q xcalar; then
               if [ -n "${LicenseKey}" ]; then
                 echo "${LicenseKey}" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
@@ -204,54 +284,104 @@ Resources:
               /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
               exit $rc
             fi
-            yum install -y curl ca-certificates unzip
-            if [ "${Ec2RetryTagKey}" == "aws:cloudformation:stack-name" ]; then
-              retryTagValue=${AWS::StackName}
-            else
-              retryTagValue=${Ec2RetryTagValue}
-            fi
-            mkdir -p /var/lib/cfn
-            cd /var/lib/cfn
-            curl -Lf "${BootstrapUrl}" -o bootstrap.sh
-            rc=$?
-            if [ $rc -eq 0 ]; then
-              /bin/bash -x bootstrap.sh --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" --nfs-mount "${EfsMount}" --license "${LicenseKey}" --installer-url "${InstallerUrl}"
-              rc=$?
-            fi
-            if [ $rc -eq 0 ] && [ -n "${CustomScriptUrl}" ]; then
-              curl -Lf "${CustomScriptUrl}" -o customscript.sh
-              rc=$?
-              if [ $rc -eq 0 ]; then
-                /bin/bash -x customscript.sh --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" --nfs-mount "${EfsMount}" --license "${LicenseKey}" --installer-url "${InstallerUrl}"
-                rc=$?
-              fi
-            fi
-            ensure_xcalar
-            /opt/aws/bin/cfn-signal -e $rc --stack ${AWS::StackName} --resource "${Resource}" --region ${AWS::Region}
-            exit $rc
+            echo >&2 "Only ClusterSize=1 with xcalar pre-installed is supported"
           - ClusterSize: '1'
             EfsMount: ''
-            InstallerUrl: ''
             CustomScriptUrl: ''
-            Resource: 'EC2Instance'
+            Resource: EC2Instance
             Ec2RetryTagKey: aws:cloudformation:stack-name
             Ec2RetryTagValue: ''
-
+  IamClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Principal:
+              Service: ec2.amazonaws.com
+            Effect: Allow
+            Sid: ''
+  IamClusterPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      Roles:
+        - !Ref 'IamClusterRole'
+      PolicyName: PocAccess
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 1allowall
+            Effect: Allow
+            Action:
+              - s3:ListAllMyBuckets
+              - route53:GetChange
+            Resource:
+              - '*'
+          - Sid: 2listourbuckets
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - arn:aws:s3:::xcalar-trial-shared
+          - Sid: 3readourbuckets
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+              - arn:aws:s3:::xcalar-trial-shared/*
+          - Sid: 3readourbuckets2
+            Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource:
+              - !Sub 'arn:aws:s3:::${CertBucket}/${CertKey}'
+          - Sid: 4writemybucket
+            Effect: Allow
+            Action:
+              - s3:PutObject
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+          - Sid: 6allowec2
+            Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+            Resource:
+              - '*'
+          - Sid: 8allowroute53
+            Effect: Allow
+            Action:
+              - route53:GetHostedZone
+              - route53:ListResourceRecordSets
+              - route53:ChangeResourceRecordSets
+            Resource:
+              - !Sub 'arn:aws:route53:::hostedzone/${HostedZoneId}'
+  IamClusterProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'IamClusterRole'
 Outputs:
-  InstanceID:
-    Description: The Instance ID
-    Value: !Ref 'EC2Instance'
-  PublicURL:
-    Value: !Sub 'https://${EC2Instance.PublicDnsName}'
-    Description: Public address of newly created XD instance
-  PrivateURL:
-    Value: !Sub 'https://${EC2Instance.PrivateDnsName}'
-    Description: Private address of newly created XD instance
-  SSH:
-    Value: !Sub 'ssh -i ~/.ssh/${KeyName}.pem ec2-user@${EC2Instance.PublicDnsName}'
-    Description: SSH instructions
+  VanityURL:
+    Value: !Sub 'https://${AWS::StackName}.${Domain}'
+    Description: Vanity URL of public address of newly created XD instance
   UserName:
     Value: !Ref 'AdminUsername'
     Description: Default administrator username for XD
-
+  PublicURL:
+    Value: !Sub 'https://${EC2Instance.PublicDnsName}'
+    Description: Public address of newly created XD instance
+  SSH:
+    Value: !Sub 'ssh -i ~/.ssh/${KeyName}.pem ec2-user@${EC2Instance.PublicDnsName}'
+    Description: SSH instructions
+  S3Bucket:
+    Value: !Sub 's3://${S3Bucket}'
+    Description: S3 Bucket
+  InstanceID:
+    Description: The Instance ID
+    Value: !Ref 'EC2Instance'
 # vim: ft=yaml

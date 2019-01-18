@@ -1,0 +1,22 @@
+Parameters:
+  TemplateBaseUrl:
+    Default: {{ baseurl }}
+Mappings:
+  AWSAMIRegionMap:
+    AMI:
+      AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20180811-x86_64-gp2
+    us-east-1:
+      AMZN1HVM: {{ ami_us_east_1_amzn1 }}
+    us-west-2:
+      AMZN1HVM: {{ ami_us_west_2_amzn1 }}
+
+Resources:
+  XcalarClusterASG:
+    Properties:
+      Tags:
+        - Key: Build
+          Value: {{ ami_build }}
+          PropagateAtLaunch: true
+        - Key: Version
+          Value: {{ ami_version }}
+          PropagateAtLaunch: true

@@ -1,0 +1,4 @@
+baseurl: https://s3.amazonaws.com/xcrepoe1/cfn/prod/v1.4/
+s3bucket: xcrepoe1
+s3prefix: cfn/prod/v1.4/
+

@@ -1,0 +1,5 @@
+ami_build: "2619"
+ami_version: "1.4.1"
+ami_us_east_1_amzn1: ami-0607e7b2e4d9b8100
+ami_us_west_2_amzn1: ami-0f2678233cfeca933
+
