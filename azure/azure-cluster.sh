@@ -105,7 +105,7 @@ for op in validate create; do
         --parameters \
         @${PARAMETERS_DEFAULTS} \
         ${INSTALLER_URL+installerUrl="$INSTALLER_URL"} \
-        ${INSTALLER_SAS_TOKEN+installUrlSasToken="$INSTALLER_SAS_TOKEN"} \
+        ${INSTALLER_SAS_TOKEN+installerUrlSasToken="$INSTALLER_SAS_TOKEN"} \
         ${LICENSE+licenseKey="$LICENSE"} \
         domainNameLabel="$CLUSTER" \
         customScriptName="$CUSTOM_SCRIPT_NAME" \
