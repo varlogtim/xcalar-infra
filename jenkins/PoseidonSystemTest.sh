@@ -26,9 +26,9 @@ cmBuild qa
 installer=$INSTALLER_PATH
 cluster=$CLUSTER
 
-# get comma sep list of ip:port for each host in cluster, for runTest.py
+# get comma sep list of ip|hostname:port for each host in cluster, for runTest.py
 node_arg=""
-for node in $(getNodeIps "$cluster"); do
+for node in $(getRealNodeNames "$cluster"); do
     ip_port="$node:18552"
     if [ ! -z "$node_arg" ]; then
         node_arg="$node_arg,$ip_port"

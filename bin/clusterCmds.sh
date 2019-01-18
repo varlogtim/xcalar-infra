@@ -36,11 +36,11 @@ startCluster() {
 
     if [ "$VmProvider" = "GCE" ]; then
         # gce-cluster.sh will based xcalar license on an XCE_LICENSE env variable
-        $XLRINFRADIR/gce/gce-cluster.sh "$installer" "$numInstances" "$clusterName"
+        "$XLRINFRADIR"/gce/gce-cluster.sh "$installer" "$numInstances" "$clusterName"
         return $?
     elif [ "$VmProvider" = "Azure" ]; then
         # azure-cluster.sh bases xcalar license on what you supply to -k option
-        $XLRINFRADIR/azure/azure-cluster.sh -i "$installer" -c "$numInstances" -n "$clusterName" -t "$INSTANCE_TYPE" -k "$XCE_LICENSE"
+        "$XLRINFRADIR"/azure/azure-cluster.sh -i "$installer" -c "$numInstances" -n "$clusterName" -t "$INSTANCE_TYPE" -k "$XCE_LICENSE"
         return $?
     fi
 
@@ -48,7 +48,7 @@ startCluster() {
     return 1
 }
 
-# print hostname of each node in a cluster to stdout
+# print node arg required for nodeSsh for each node in a cluster (not necessarily hostname)
 # one line per node
 getNodes() {
     if [ -z "$1" ]; then
@@ -60,7 +60,7 @@ getNodes() {
         gcloud compute instances list | grep $cluster | cut -d \  -f 1
         return ${PIPESTATUS[0]}
     elif [ "$VmProvider" = "Azure" ]; then
-        $XLRINFRADIR/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}' # goal here: should just be hostname
+        "$XLRINFRADIR"/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}'
         return ${PIPESTATUS[0]}
     fi
 
@@ -68,10 +68,10 @@ getNodes() {
     return 1
 }
 
-# print IPs of each node in a cluster to stdout
-getNodeIps() {
+# print ip or fqdn of each node in a cluster to stdout
+getRealNodeNames() {
     if [ -z "$1" ]; then
-        echo "Must provide a cluster to getNodeIps" >&2
+        echo "Must provide a cluster to getRealNodeNames" >&2
         exit 1
     fi
     local cluster="$1"
@@ -87,7 +87,7 @@ getNodeIps() {
         fi
     elif [ "$VmProvider" = "Azure" ]; then
         # @TODO - Azure case to get IPs - what's below is for printing hostname
-        $XLRINFRADIR/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}' # goal here: col w/ IPs
+        "$XLRINFRADIR"/azure/azure-cluster-info.sh "$cluster" | awk '{print $0}'
         return ${PIPESTATUS[0]}
     fi
 
@@ -113,7 +113,7 @@ nodeSsh() {
         gcloud compute ssh --ssh-flag=-tt "$node" --zone us-central1-f -- "$@"
         return $?
     elif [ "$VmProvider" = "Azure" ]; then
-        $XLRINFRADIR/azure/azure-cluster-ssh.sh -c "$cluster" -n "$node" -- "$@"
+        "$XLRINFRADIR"/azure/azure-cluster-ssh.sh -c "$cluster" -n "$node" -- "$@"
         return $?
     fi
 
@@ -130,10 +130,10 @@ clusterSsh() {
     local cluster="$1"
     shift
     if [ "$VmProvider" = "GCE" ]; then
-        $XLRINFRADIR/gce/gce-cluster-ssh.sh "$cluster" "$@"
+        "$XLRINFRADIR"/gce/gce-cluster-ssh.sh "$cluster" "$@"
         return $?
     elif [ "$VmProvider" = "Azure" ]; then
-        $XLRINFRADIR/azure/azure-cluster-ssh.sh -c "$cluster" -- "$@"
+        "$XLRINFRADIR"/azure/azure-cluster-ssh.sh -c "$cluster" -- "$@"
         return $?
     fi
 
@@ -220,9 +220,9 @@ clusterDelete() {
     fi
     local cluster="$1"
     if [ "$VmProvider" = "GCE" ]; then
-        $XLRINFRADIR/gce/gce-cluster-delete.sh "$cluster"
+        "$XLRINFRADIR"/gce/gce-cluster-delete.sh "$cluster"
     elif [ "$VmProvider" = "Azure" ]; then
-        $XLRINFRADIR/azure/azure-cluster-delete.sh "$cluster"
+        "$XLRINFRADIR"/azure/azure-cluster-delete.sh "$cluster"
     else
         echo 2>&1 "Unknown VmProvider $VmProvider"
         exit 1
