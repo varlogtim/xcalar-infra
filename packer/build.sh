@@ -105,7 +105,7 @@ if [ -n "$TEMPLATE" ]; then
         cfn-flip < "$TEMPLATE" > $TMPDIR/template.json
         TEMPLATE="$TMPDIR/template.json"
     fi
-    cat $VAR_FILE  vars/shared.yaml | cfn-flip > $TMPDIR/vars.json
+    cat $VAR_FILE  vars/${OSID}.yaml vars/shared.yaml | cfn-flip > $TMPDIR/vars.json
     VAR_FILE=$TMPDIR/vars.json
     set -- "$@" "$TEMPLATE"
 fi
