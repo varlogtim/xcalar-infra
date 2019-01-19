@@ -1,0 +1,4 @@
+osid: el7
+device_name: /dev/sda1
+baseos: EL-7.6_HVM
+baseos_owners: 'self'
