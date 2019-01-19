@@ -76,11 +76,6 @@ else
     apt-get -yqq autoremove
 fi
 
-if [[ $PACKER_BUILD_TYPE =~ ^amazon ]] || [[ $PACKER_BUILD_TYPE =~ ^azure ]]; then
-    yum install -y --enablerepo='xcalar*' ephemeral-disk
-    ephemeral-disk
-fi
-
 eval $(get_cloud_cfg)
 
 if [ "$CLOUD" = gce ]; then
@@ -89,13 +84,16 @@ if [ "$CLOUD" = gce ]; then
         yum localinstall -y http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm
     fi
 elif [ "$CLOUD" = aws ]; then
+    yum install -y --enablerepo='xcalar*' ephemeral-disk
+    ephemeral-disk
     if ! command -v ec2-tags; then
         curl -fsSL http://repo.xcalar.net/deps/ec2-tags-v3 > /usr/local/bin/ec2-tags-v3
         chmod +x /usr/local/bin/ec2-tags-v3
         ln -sfn ec2-tags-v3 /usr/local/bin/ec2-tags
     fi
 elif [ "$CLOUD" = azure ]; then
-    :
+    yum install -y --enablerepo='xcalar*' ephemeral-disk
+    ephemeral-disk
 fi
 
 getent group docker || groupadd -f -r -o -g 999 docker
