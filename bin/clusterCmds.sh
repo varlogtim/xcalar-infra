@@ -54,7 +54,7 @@ startCluster() {
         local lic_file_dest="$XLRINFRADIR"/ovirt/XcalarLic.key
         cp "$XCE_FILE" "$lic_file_dest"
         # --listen in case its single node; will set node.0.ipAddr to hostname so jenkins slave can query it;
-        "$XLRINFRADIR"/bin/ovirttool_docker_wrapper --count "$numInstances" --vmbasename "$clusterName" --installer http:/"$installer" --norand --listen --ram 32
+        "$XLRINFRADIR"/bin/ovirttool_docker_wrapper --count "$numInstances" --vmbasename "$clusterName" --installer http:/"$installer" --norand --listen --ram 64
         return $?
     fi
 
