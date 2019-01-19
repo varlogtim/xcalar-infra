@@ -76,6 +76,11 @@ else
     apt-get -yqq autoremove
 fi
 
+if [[ $PACKER_BUILD_TYPE =~ ^amazon ]] || [[ $PACKER_BUILD_TYPE =~ ^azure ]]; then
+    yum install -y --enablerepo='xcalar*' ephemeral-disk
+    ephemeral-disk
+fi
+
 eval $(get_cloud_cfg)
 
 if [ "$CLOUD" = gce ]; then

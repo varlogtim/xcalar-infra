@@ -25,9 +25,9 @@ fix_cloud_init
 yum install --enablerepo='epel' --enablerepo='xcalar*' -y deltarpm curl wget tar gzip collectd htop gdb fuse jq nfs-utils iftop iperf3 tmux sysstat python27-pip
 yum groupinstall -y 'Development tools'
 echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/xcalar/bin:/opt/aws/bin' > /etc/profile.d/paths.sh
-
 pip install -U pip
-pip install ansible
+hash -r
+pip2 install ansible
 mkdir -p /etc/ansible
 curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg | \
     sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg
