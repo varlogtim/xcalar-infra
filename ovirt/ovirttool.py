@@ -2820,7 +2820,7 @@ def validateparams(args):
             if not trying to create vms,
             make sure at least runing to remove VMs then, else nothing to do
         '''
-        if not args.delete and not args.shutdown and not args.poweron and not args.list and not args.listv:
+        if not args.delete and not args.shutdown and not args.poweron and not args.list:
             raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
 
     return int(args.ram), int(args.cores), args.ovirtcluster, puppet_role, licfilepath, installer, ldap_config_url, basename
