@@ -20,8 +20,7 @@ cluster=`echo $CLUSTER | tr A-Z a-z`
 if [ "$LEAVE_ON_FAILURE" = "true" ]; then
     echo "Make sure you delete the cluster once done"
 else
-    #clusterDelete "$cluster"
-	echo "dont delete"
+    clusterDelete "$cluster"
 fi
 
 # in GCE case, remove dir for this cluster from the graphite VM stored on GC
