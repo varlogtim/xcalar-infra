@@ -36,8 +36,6 @@ funcstatsd() {
     fi
 }
 
-sudo yum install -y nc
-
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
 gitsha=$(gitSha "$cluster")
