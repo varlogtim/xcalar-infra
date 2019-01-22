@@ -26,7 +26,7 @@ initClusterCmds() {
     elif [ "$VmProvider" = "Azure" ]; then
         az login --service-principal -u http://Xcalar/Jenkins/SP -p /netstore/infra/jenkins/jenkins-sp.pem --tenant 7bbd3477-af8b-483b-bb48-92976a1f9dfb
     elif [ "$VmProvider" = "Ovirt" ]; then
-        bash -x "$XLRINFRADIR/ovirt/ovirt_setup.sh"
+        return 0 # there is no setup required in the Ovirt case
     else
         echo "Unknown VmProvider $VmProvider"
         exit 1

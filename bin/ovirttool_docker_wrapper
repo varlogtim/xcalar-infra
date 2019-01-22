@@ -18,12 +18,22 @@ if [ -z "$XLRINFRADIR" ]; then
 fi
 cd $XLRINFRADIR
 
-if ! docker image inspect ub14-build >/dev/null 2>&1; then
-    echo >&2 "Hey you need to build ub14-build container before you can run this script! Read the setup section of the ovirttool wiki http://wiki.int.xcalar.com/mediawiki/index.php/Ovirttool#Setup, or I can try to do it for you"
-    cd $XLRDIR/docker/ub14 && make && echo "Done! Run me again" || echo "Failed to run docker make :("
-    exit 1
+# will create a ub14 Docker container and run ovirttool in it;
+# setup so ub14 Docker containers can be built
+if ! docker pull registry.int.xcalar.com/xcalar/ub14-build:ovirttool >/dev/null 2>&1; then
+    if [ -z "$XLRDIR" ]; then
+        echo "Must set XLRDIR to build ub14 containers (which script will run ovirttool in)" >&2
+        exit 1
+    fi
+    echo "Performing a one-time setup on your machine... please wait (could take up to 5 minutes)" >&2
+    cd "$XLRDIR/docker/ub14"
+    echo "export http_proxy:=${http_proxy:-http://cacher:3128}" > local.mk
+    make ub14-build
+else
+    docker tag registry.int.xcalar.com/xcalar/ub14-build:ovirttool ub14-build:latest
 fi
 
+# build the Docker container to run the tool in
 if ! docker image inspect ovirttool >/dev/null 2>&1; then
     TMP="$(mktemp -d -t ovirtool.XXXXXX)"
     docker build -t ovirttool -f "$XLRINFRADIR/docker/ovirttool.df" "$TMP"
