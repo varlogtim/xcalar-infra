@@ -6,10 +6,12 @@ CONTAINER_NAME  ?= xdpce
 TARFILE_NAME ?= xdpce.tar.gz
 TZ ?= America/Los_Angeles
 INSTALLER_PATH ?= /netstore/qa/Downloads/ReleaseCandidates/xcalar-1.2.3-RC4/20171024-3c9a47f4/prod/xcalar-1.2.3-1296-installer
-DEFAULT_CFG_PATH ?= default.cfg
+DEFAULT_CFG_FILE ?= default.cfg
+DEFAULT_CFG_PATH_INSTALLED ?= /etc/xcalar/default.cfg
 CONFIG_DIR ?= /var/opt/xcalar/config
 CLIENT_SECRET_DIR ?= /opt/xcalar/src/bin/sdk/xdp/xcalar/external
 XPE_STATIC_FILES = $(XLRINFRADIR)/docker/xpe/staticfiles
+XLRUSR = xcalar
 
 # temporary for XPE;
 # the gui required in the Docker needs to be built with --product=xdee option
@@ -29,7 +31,7 @@ DOCKER_EXTRA_ARGS ?=
 EXEC_INPUT := $(shell test -t 0 && echo "-i")
 EXEC_TERMINAL ?= -t
 EXEC_ARGS := $(EXEC_TERMINAL) $(EXEC_INPUT)
-XCALARCTL = docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl
+XCALARCTL = docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) /opt/xcalar/bin/xcalarctl
 
 CONTAINER_ARGS_COMMON = --cap-add=ALL --cap-drop=MKNOD \
                  --security-opt seccomp:unconfined \
@@ -70,7 +72,7 @@ strip-binaries: install
 install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
     ifneq ($(XPE),)
-	docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):/etc/xcalar/default.cfg
+	docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):$(DEFAULT_CFG_PATH_INSTALLED)
 	# patch the requirejs that Jupyter relies on, to export require even if it exists
 	# (which it will, when we are running XD in nwjs)
 	docker cp $(CONTAINER_NAME):/opt/xcalar/lib/python3.6/site-packages/notebook/static/components/requirejs/require.js .
@@ -90,19 +92,19 @@ install: run
     endif
 
 enforce-samplesize: install-license
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) bash -c "echo Constants.MaxInteractiveDataSize=1073741824 >> /etc/xcalar/default.cfg"
+	docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) bash -c "echo Constants.MaxInteractiveDataSize=1073741824 >> $(DEFAULT_CFG_PATH_INSTALLED)"
 
 replace-hostname: install-license
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) sed -i 's/Node.0.IpAddr=.*/Node.0.IpAddr=127.0.0.1/' /etc/xcalar/default.cfg
+	docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) sed -i 's/Node.0.IpAddr=.*/Node.0.IpAddr=127.0.0.1/' $(DEFAULT_CFG_PATH_INSTALLED)
 
 install-license: strip-binaries
 	docker cp XcalarLic.key $(CONTAINER_NAME):/etc/xcalar/XcalarLic.key
 
 createuser: install-license
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) mkdir -p $(CONFIG_DIR)
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 0700 $(CONFIG_DIR)
+	docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) mkdir -p $(CONFIG_DIR)
+	docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) chmod 0700 $(CONFIG_DIR)
 	docker cp $(XPE_STATIC_FILES)/defaultAdmin.json $(CONTAINER_NAME):$(CONFIG_DIR)/defaultAdmin.json
-	docker exec $(EXEC_ARGS) --user xcalar $(CONTAINER_NAME) chmod 600 $(CONFIG_DIR)/defaultAdmin.json
+	docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) chmod 600 $(CONFIG_DIR)/defaultAdmin.json
 
 stop-xcalar:
 	$(XCALARCTL) stop-supervisor
@@ -126,7 +128,7 @@ save:
     endif
 
 runWithCfg: image stop clean
-	docker run -d -t -v $(DEFAULT_CFG_PATH):/etc/xcalar/default.cfg $(INSTALLER_ARGS)
+	docker run -d -t -v $(DEFAULT_CFG_FILE):$(DEFAULT_CFG_PATH_INSTALLED) $(INSTALLER_ARGS)
 
 clean: stop
 	docker rm -f $(CONTAINER_NAME) 2>/dev/null || true
@@ -155,4 +157,4 @@ docker-image: run install strip-binaries install-license replace-hostname enforc
 run-xcalar: run install strip-binaries install-license replace-hostname createuser restart
 
 run_xdpce:
-	docker run -v /Volumes:/mnt/Volumes -v /Users:/mnt/Users -d -t --user xcalar $(RUN_ARGS) bash && $(XCALARCTL) start
+	docker run -v /Volumes:/mnt/Volumes -v /Users:/mnt/Users -d -t --user $(XLRUSR) $(RUN_ARGS) bash && $(XCALARCTL) start
