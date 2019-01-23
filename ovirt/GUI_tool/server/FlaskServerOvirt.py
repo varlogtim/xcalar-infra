@@ -121,8 +121,7 @@ def check_url():
         url = api_params['url']
     except MissingRequiredParamsException as e:
         # throws error indicating which param is missing
-        returnData['error'] = str(e)
-        resp = jsonify(returnData)
+        resp = jsonify({'error': str(e)})
         resp.status_code = STATUS_ERR
         return resp
 
@@ -159,8 +158,7 @@ def check_hostname():
         print_wrap("hostname to validate: {}".format(hostname))
     except MissingRequiredParamsException as e:
         # throws error indicating which param is missing
-        returnData['error'] = str(e)
-        resp = jsonify(returnData)
+        resp = jsonify({'error': str(e)})
         resp.status_code = STATUS_ERR
         return resp
 
@@ -199,8 +197,7 @@ def tryLogin():
     # not general unhandled exception, to avoid it containing the auth details
     except MissingRequiredParamsException as e:
         # throws error indicating which param is missing
-        returnData['error'] = str(e)
-        resp = jsonify(returnData)
+        resp = jsonify({'error': str(e)})
         resp.status_code = STATUS_ERR
         return resp
 
@@ -233,8 +230,6 @@ def triggerParameterizedJob(job):
     mainJobUrl = "{}/job/{}".format(JENKINS_URL, job)
     buildUrl = "{}/job/{}/buildWithParameters".format(JENKINS_URL, job)
 
-    returnData = {}
-
     jenkins_user = None
     jenkins_pass = None
     api_params = {}
@@ -251,8 +246,7 @@ def triggerParameterizedJob(job):
     # not general unhandled exception, to avoid it containing the auth details
     except MissingRequiredParamsException as e:
         # throws error indicating which param is missing
-        returnData['error'] = str(e)
-        resp = jsonify(returnData)
+        resp = jsonify({'error': str(e)})
         resp.status_code = STATUS_ERR
         return resp
 
