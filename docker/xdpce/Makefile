@@ -70,7 +70,7 @@ strip-binaries: install
 		/opt/xcalar/bin/xccli /opt/xcalar/bin/xcMapRClient /opt/xcalar/bin/xcmgmtd /opt/xcalar/bin/xcmonitor
 
 install: run
-	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --caddy --start
+	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --nostart
     ifneq ($(XPE),)
 	docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):$(DEFAULT_CFG_PATH_INSTALLED)
 	# patch the requirejs that Jupyter relies on, to export require even if it exists
@@ -90,6 +90,9 @@ install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) rm -r $(GUI_DIR_IN_CONTAINER)
 	docker cp $(CUSTOM_GUI) $(CONTAINER_NAME):$(GUI_DIR_IN_CONTAINER)
     endif
+
+disable-cgroup-mod: install
+	docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) bash -c "echo Constants.Cgroups=false >> $(DEFAULT_CFG_PATH_INSTALLED)"
 
 enforce-samplesize: install-license
 	docker exec $(EXEC_ARGS) --user $(XLRUSR) $(CONTAINER_NAME) bash -c "echo Constants.MaxInteractiveDataSize=1073741824 >> $(DEFAULT_CFG_PATH_INSTALLED)"
@@ -127,6 +130,8 @@ save:
 	docker save $(CONTAINER_IMAGE):latest | gzip > $(TARFILE_NAME)
     endif
 
+# if you are supplying a custom cfg file and Xcalar is not coming up,
+# make sure you have Constants.Cgroups=false ; cgroup mods will not work in Docker
 runWithCfg: image stop clean
 	docker run -d -t -v $(DEFAULT_CFG_FILE):$(DEFAULT_CFG_PATH_INSTALLED) $(INSTALLER_ARGS)
 
@@ -152,7 +157,7 @@ copyconfig:
 	docker cp $(CONTAINER_NAME):$(CONFIG_DIR)/defaultAdmin.json defaultAdmin.json
 	docker cp $(CONTAINER_NAME):$(GUI_DIR_IN_CONTAINER) ./xcalar-gui
 
-docker-image: run install strip-binaries install-license replace-hostname enforce-samplesize createuser restart copyconfig commit save
+docker-image: run install disable-cgroup-mod strip-binaries install-license replace-hostname enforce-samplesize createuser restart copyconfig commit save
 
 run-xcalar: run install strip-binaries install-license replace-hostname createuser restart
 
