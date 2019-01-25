@@ -119,7 +119,7 @@ cd $XLRDIR
 TmpSqlDfLogs=`mktemp SqlDf.XXXXX.log`
 echo "Starting SQLDF"
 mkdir -p src/sqldf/sbt/target
-tar --wildcards -xOf /netstore/builds/byJob/BuildSqldf/lastSuccessful/archive.tar xcalar-sqldf-*.noarch.rpm | rpm2cpio | cpio --to-stdout -i ./opt/xcalar/lib/xcalar-sqldf.jar >$XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
+tar --wildcards -xOf /netstore/builds/byJob/BuildSqldf-with-spark-branch/lastSuccessful/archive.tar xcalar-sqldf-*.noarch.rpm | rpm2cpio | cpio --to-stdout -i ./opt/xcalar/lib/xcalar-sqldf.jar >$XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
 
 java -jar src/sqldf/sbt/target/xcalar-sqldf.jar >"$TmpSqlDfLogs" 2>&1 &
 
