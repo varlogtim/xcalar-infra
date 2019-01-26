@@ -7,15 +7,19 @@
 #
 set -e
 
+SHELLCHECK_IMAGE='koalaman/shellcheck:latest'
+
 if test $# -eq 1 && test -d "$1"; then
     DIR="$1"
     shift
     SCRIPTS=()
-    for FILE in $(find "$DIR" -type f); do
+
+    while IFS= read -r -d '' FILE; do
         if file "$FILE" | grep -q 'shell script'; then
-            SCRIPTS+=($FILE)
+            SCRIPTS+=("$FILE")
         fi
-    done
+    done < <(find "$DIR" -type f)
+
     if [ ${#SCRIPTS[@]} -gt 0 ]; then
         set -- "${SCRIPTS[@]}"
     fi
@@ -34,12 +38,32 @@ fi
 
 set +e
 ERRORS=0
+while [ $# -gt 0 ]; do
+    cmd="$1"
+    case "$cmd" in
+        --update)
+            docker pull $SHELLCHECK_IMAGE
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *) break ;;
+    esac
+done
+
 for FILE in "$@"; do
-    docker run -v "${PWD}:${PWD}:ro" -w "$PWD" --rm koalaman/shellcheck -e ${SHELLCHECK_EXCLUDES} -x -s bash --color=always "$FILE"
+    docker run -v "${PWD}:${PWD}:ro" -w "$PWD" --rm \
+        ${SHELLCHECK_IMAGE} \
+        --shell=bash \
+        --exclude=${SHELLCHECK_EXCLUDES} \
+        --color=always \
+        "$FILE"
     rc=$?
     if [ $rc != 0 ]; then
         echo "FAILED:($rc): $FILE"
-        ERRORS=$(( ERRORS + 1 ))
+        ERRORS=$((ERRORS + 1))
     else
         echo "OK: ${FILE}"
     fi
