@@ -136,6 +136,10 @@
         "debug": "/netstore/builds/ReleaseCandidates/xcalar-1.4.1-RC21/20181214-369eadf5/debug/xcalar-1.4.1-2538-installer",
         "prod": "/netstore/builds/ReleaseCandidates/xcalar-1.4.1-RC21/20181214-369eadf5/prod/xcalar-1.4.1-2538-installer"
     },
+    "xcalar-1.4.1-RC22": {
+        "debug": "/netstore/builds/ReleaseCandidates/xcalar-1.4.1-RC22/20190114-51474ca2/debug/xcalar-1.4.1-2619-installer",
+        "prod": "/netstore/builds/ReleaseCandidates/xcalar-1.4.1-RC22/20190114-51474ca2/prod/xcalar-1.4.1-2619-installer"
+    },
     "xcalar-1.4.1-RC3": {
         "debug": "/netstore/builds/ReleaseCandidates/xcalar-1.4.1-RC3/20180703-23715175/debug/xcalar-1.4.1-1958-installer",
         "prod": "/netstore/builds/ReleaseCandidates/xcalar-1.4.1-RC3/20180703-23715175/prod/xcalar-1.4.1-1958-installer"
