@@ -785,7 +785,7 @@ function isInstallerUrlValid(url) {
                 deferred.reject(resMsg);
             }
         } else {
-            var errMsg = "isInstallerUrlValid: missingexpect 'status' attr from api return";
+            var errMsg = "isInstallerUrlValid: missing 'result' attr from api return";
             console.log(errMsg);
             deferred.reject(errMsg);
         }
@@ -822,7 +822,7 @@ function isHostnameValid(hostname) {
                 deferred.reject(resMsg);
             }
         } else {
-            var errMsg = "validatehostname: missingexpect 'status' attr from api return";
+            var errMsg = "validatehostname: missing 'result' attr from api return";
             console.log(errMsg);
             deferred.reject(errMsg);
         }
