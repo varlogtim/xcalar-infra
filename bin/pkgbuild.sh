@@ -42,7 +42,7 @@ prepare() {
         cd "$pkgname-$pkgver"
     fi
     local patch_file
-    for patch_file in $(ls $srcdir/*.patch $PKGBUILDdir/*.patch 2>/dev/null || true); do
+    for patch_file in $(ls $srcdir/*.patch $PKGBUILDdir/*.patch 2> /dev/null || true); do
         patch -p1 -i "$patch_file"
     done
     true
@@ -240,7 +240,8 @@ pkgmain() {
                 mv ${PKGBUILD}.$$ ${PKGBUILD}
                 ;;
             -f | --force)
-                FORCE=-f;;
+                FORCE=-f
+                ;;
 
             *) die "Unknown command: $cmd" ;;
         esac
@@ -329,31 +330,31 @@ pkgmain() {
     if type -t check > /dev/null; then
         info "Calling check ..."
         (
-        set -e
-        cd $srcpkgdir
-        check
+            set -e
+            cd $srcpkgdir
+            check
         ) || die "Failed to check"
     fi
     if type -t package > /dev/null; then
         info "Calling package ..."
         (
-        cd $srcpkgdir
-        package
+            cd $srcpkgdir
+            package
         ) || die "Failed to package"
     fi
     cd $CURDIR
-    FPM_COMMON=(-s dir --name ${pkgname} \
-        --version ${pkgver#v} \
-        ${prefix+--prefix $prefix} \
-        ${pkgrel+--iteration $pkgrel} \
-        ${license+--license "$license"} \
-        ${arch+--architecture $arch} \
-        --description "${pkgdesc}" \
+    FPM_COMMON=(-s dir --name ${pkgname}
+        --version ${pkgver#v}
+        ${prefix+--prefix $prefix}
+        ${pkgrel+--iteration $pkgrel}
+        ${license+--license "$license"}
+        ${arch+--architecture $arch}
+        --description "${pkgdesc}"
         --url "${url}")
     for script in after-install after-remove after-upgrade before-install before-remove before-upgrade; do
-        if test -x ${script}.sh; then
-            info "adding --${script} ${script}.sh"
-            FPM_COMMON+=(--${script} ${script}.sh)
+        if test -x ${srcdir}/${script}.sh; then
+            info "adding --${script} ${srcdir}/${script}.sh"
+            FPM_COMMON+=(--${script} ${srcdir}/${script}.sh)
         fi
     done
     FPM_COMMON+=(${FORCE} -C "$pkgdir${prefix}")
