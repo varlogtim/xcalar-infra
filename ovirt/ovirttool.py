@@ -118,7 +118,7 @@ OVIRT_TEMPLATE_MAPPING = {
     'node3-cluster': 'ovirt-cli-tool-node3-template'
 }
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 TMPDIR_LOCAL='/tmp/ovirt_tool' # tmp dir to create on local machine running python script, to hold pem cert for connecting to Ovirt
 TMPDIR_VM='/tmp/ovirt_tool' # tmp dir to create on VMs to hold helper shell scripts, lic files (dont put timestamp because forking processes during install processing)
@@ -2686,13 +2686,93 @@ def setup():
     for cmd in cmds:
         run_system_cmd(cmd)
 
-def validateparams(args):
+'''
+Return installer URL to use based on cmd args pasesd in.
+Validate final result.
+'''
+def get_validate_installer_url(args):
 
-    licfilepath = args.licfile
-    installer = args.installer
-    basename = args.vmbasename
-    puppet_role = args.puppet_role
-    ldap_config_url = args.ldap
+    if args.noinstaller:
+        return None
+
+    installer_header = 'http://'
+    default_installer = installer_header + 'netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod'
+
+    installer_url_final = args.installer or default_installer
+
+    if installer_url_final.startswith(installer_header):
+        # make sure they have given the regular RPM installer, not userinstaller
+        filename = os.path.basename(installer_url_final)
+        if 'gui' in filename or 'userinstaller' in filename:
+            raise ValueError("\n\nERROR: Please supply the regular RPM " \
+                "installer, not the gui installer or userinstaller\n")
+    else:
+        raise ValueError("\n\nERROR: --installer arg should be an URL for " \
+            "an RPM installer, which you can curl.\n" \
+            "(If you know the <path> to the installer on netstore, " \
+            "then the URL to supply would be: " \
+            "--installer=http://netstore.int.xcalar.com/<path on netstore>\n"
+            "Example: --installer={})\n".format(default_installer))
+    return installer_url_final
+
+'''
+Return ldap URL to use based on user supplied --ldap arg
+'''
+def get_validate_ldap_config_url(ldap_arg):
+    # ldap URL returned should be a http:// URL.
+    ldap_config_url = None
+    # for --ldap arg, user can supply one of the keys of LDAP_CONFIGS,
+    # or can supply an URL.
+    if ldap_arg:
+        if ldap_arg in LDAP_CONFIGS:
+            ldap_config_url = LDAP_CONFIGS[ldap_arg]
+        elif ldap_arg.startswith("http"):
+            ldap_config_url = ldap_arg
+        else:
+            raise ValueError("\n\nERROR: --ldap not a valid type.  "
+                "Valid values you can supply to --ldap: {}\n" \
+                "Or, you can supply a curlable URL to your " \
+                "own file\n".format(", ".join(LDAP_CONFIGS.keys())))
+    else:
+        # --ldap default should be one of the keys in LDAP_CONFIG
+        # if no longer assigning a default, it needs to be
+        # being assigned in this function or the run will probably fail
+        raise RuntimeException("--ldap does not appear " \
+            "to be taking a default anylonger.  Update script")
+    return ldap_config_url
+
+'''
+Return puppet_role to use based on user supplied args.
+Default depends on if install is being done.
+'''
+def get_validate_puppet_role(args):
+    puppet_role = None
+    if not args.puppet_role:
+        if args.installer:
+            puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
+        else:
+            puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
+
+    # if install, make sure jenkins_slave is puppet role
+    # (there is always args.install value by default; so check by .noinstaller)
+    if not args.noinstaller:
+        jenkins_slave_role = 'jenkins_slave'
+        if puppet_role.lower() == jenkins_slave_role.lower():
+            warn_log("\n\nYou are installing Xcalar, but puppet role " \
+                " is set as {}!  This could cause conflicts with Caddy.\n" \
+                "If not desired, re-run with another puppet role, " \
+                "(--puppet_role option), or " \
+                "--noinstaller option.\n".format(jenkins_slave_role))
+    return puppet_role
+
+'''
+Validates user params/combiantions.
+Any illegal params/combinations results in ValueError Exception being thrown
+
+Params with defaults based on other params/logic, or which
+ require further modiciation or logic to be used, are validated in individual functions.
+'''
+def validate_params(args):
 
     # modification operations
     operations = [args.count, args.delete, args.shutdown, args.poweron]
@@ -2705,29 +2785,35 @@ def validateparams(args):
                 "specified alone.\n")
     else:
         if args.formatted or args.verbose:
-            raise ValueError("\n\nERROR: --verbose and --formatted are only used "
-                "when --list is specified (Display more data, and pretty-print, "
-                "respectively)\n")
+            raise ValueError("\n\nERROR: --verbose and --formatted are only " \
+                "used when --list is specified (Display more data, and " \
+                "pretty-print, respectively)\n")
 
     if args.count:
         if args.count > MAX_VMS_ALLOWED or args.count <= 0:
-            raise ValueError("\n\nERROR: --count argument must be an integer between 1 and {}\n"
-                "(The ovirt tool will provision that number of new VMs for you)".format(MAX_VMS_ALLOWED))
+            raise ValueError("\n\nERROR: --count argument must be an integer " \
+                "between 1 and {}\n" \
+                "(ovirttool will provision that number of new VMs " \
+                "for you)".format(MAX_VMS_ALLOWED))
 
         if args.listen and args.count > 1 and not args.nocluster:
             raise ValueError("\n\n--listen is only for single node cases; "
                 "multi-node clusters will listen outside localhost by default\n")
 
         # validate the basename they gave for the cluster
-        if not basename:
+        if not args.vmbasename:
             errmsg = ""
             if args.count == 1:
-                errmsg = "\n\nPlease supply a name for your new VM using --vmbasename=<name>\n"
+                errmsg = "\n\nPlease supply a name for your new VM using " \
+                    "--vmbasename=<name>\n"
             else:
-                errmsg = "\n\nPlease supply a basename for your requested VMs using --vmbasename=<basename>\n" \
-                    "(The tool will name the new VMs as : <basename>-vm0, <basename>-vm1, .. etc\n"
+                errmsg = "\n\nPlease supply a basename for your requested " \
+                    "VMs using --vmbasename=<basename>\n" \
+                    "(The tool will name the new VMs as : " \
+                    "<basename>-vm0, <basename>-vm1, .. etc\n"
             if not args.nocluster:
-                errmsg = errmsg + "The --vmbasename value will become the name of the created cluster, too.\n"
+                errmsg = errmsg + "The --vmbasename value will become the " \
+                    "name of the created cluster, too.\n"
             raise ValueError(errmsg)
         else:
             # validate hostname is in an allowed format
@@ -2741,79 +2827,29 @@ def validateparams(args):
             if args.ovirtcluster not in OVIRT_TEMPLATE_MAPPING:
                 raise ValueError("\n\nERROR: --ovirtcluster must be one of " \
                     "the following: {}\n" \
-                    "(If '{}' is a valid cluster in Ovirt, probably there is no " \
-                    "supported template for it yet in this tool)\n".format(", ".join(OVIRT_TEMPLATE_MAPPING.keys()), args.ovirtcluster))
+                    "(If '{}' is a valid cluster in Ovirt, " \
+                    "probably there is no supported template for it " \
+                    "yet in this tool)\n".format(", ".join(OVIRT_TEMPLATE_MAPPING.keys()), args.ovirtcluster))
+
+        # you can have args.installer and args.noinstaller since both have defaults
 
         if args.noinstaller:
             if args.installer:
-                raise AttributeError("\n\nERROR: You have specified not to install xcalar with the --noinstaller option,\n"
-                    "but also provided an installation path with the --installer option.\n"
+                raise AttributeError("\n\nERROR: You have specified not to " \
+                    "install xcalar with the --noinstaller option,\n"
+                    "but also provided an installation path with the " \
+                    "--installer option.\n"
                     "(Is this what you intended?)\n")
-            # set default puppet role if they didn't pass --puppet_role
-            if not puppet_role:
-                puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
-        else:
-
-            ''' installer:
-                make sure URL can curl
-            '''
-            installerheader = 'http://'
-            defaultinstaller = installerheader + 'netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod'
-            if not installer:
-                installer = defaultinstaller
-            if installer.startswith(installerheader):
-                # make sure they have given the regular RPM installer, not userinstaller
-                filename = os.path.basename(installer)
-                if 'gui' in filename or 'userinstaller' in filename:
-                    raise ValueError("\n\nERROR: Please supply the regular RPM installer, not the gui installer or userinstaller\n")
-            else:
-                raise ValueError("\n\nERROR: --installer arg should be an URL for an RPM installer, which you can curl.\n"
-                    "(If you know the <path> to the installer on netstore, then the URL to supply would be: --installer=http://netstore/<path>\n"
-                    "Example: --installer={})\n".format(defaultinstaller))
-
-            # if they didn't give a puppet role set default for install scenario
-            if not puppet_role:
-                puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
-
-            # check for jenksins_slave puppet role with an install;
-            # Jenkins slaves don't support Xcalar installs.  Will install another
-            # caddy system-wide, among other issues which could cause undesired behavior.
-            jenkins_slave_role = 'jenkins_slave'
-            if puppet_role.lower() == jenkins_slave_role.lower():
-                warn_log("\n\nYou are installing Xcalar, but puppet role " \
-                    " is set as {}!  This could cause conflicts with Caddy.\n" \
-                    "If not desired, re-run with another puppet role, (--puppet_role option), or " \
-                    "--noinstaller option.\n".format(jenkins_slave_role))
-
-            '''
-                license files for xcalar.
-                If they plan on installing xcalar on the new VMs,
-                and did not supply lic of pub file options,
-                look in their cwd
-            '''
+        elif args.installer:
             debug_log("Make sure license keys are present....")
-
-            scriptcwd = os.path.dirname(os.path.realpath(__file__))
-            if not licfilepath:
-                licfilepath = SCRIPT_DIR + '/' + LICFILENAME
-                debug_log("\tYou did not supply --licfile option... will look in script's cwd for Xcalar license file...")
-            if not os.path.exists(licfilepath):
+            if not os.path.exists(args.licfile):
                 raise FileNotFoundError("\n\nERROR: File {} does not exist!\n"
-                    " (Re-run with --licfile=<path to latest licence file>, or,\n"
-                    " copy the file in to the dir the tool is being run from\n"
-                    "Try this::\n\tcp $XLRDIR/src/data/XcalarLic.key {}\n".format(licfilepath, scriptcwd))
-
-        # get ldap.  they supply one of the keys of LDAP_CONFIGS,
-        # or if they supply with http assume they're giving their own custom one
-        if args.ldap:
-            if args.ldap in LDAP_CONFIGS:
-                ldap_config_url = LDAP_CONFIGS[args.ldap]
-            elif args.ldap.startswith("http"):
-                ldap_config_url = args.ldap
-            else:
-                raise ValueError("\n\nERROR: --ldap not a valid type.  "
-                    "Valid values you can supply to --ldap: {}\n" \
-                    "Or, you can supply a curlable URL to your own file\n".format(", ".join(LDAP_CONFIGS.keys())))
+                    "(If you did not supply the --licfile arg, ovirttool " \
+                    "defaulted to looking for\na license file in {}.)" \
+                    "\nRe-run with --licfile=<path to licence file>, or,\n"
+                    " copy the license file you want to use, into {}.\n"
+                    "Try this::\n\tcp $XLRDIR/src/data/XcalarLic.key {}" \
+                    "\n".format(args.licfile, SCRIPT_DIR, SCRIPT_DIR, SCRIPT_DIR))
 
     else:
         '''
@@ -2821,9 +2857,8 @@ def validateparams(args):
             make sure at least runing to remove VMs then, else nothing to do
         '''
         if not args.delete and not args.shutdown and not args.poweron and not args.list:
-            raise AttributeError("\n\nERROR: Please re-run this script with arg --count=<number of vms you want>\n")
-
-    return int(args.ram), int(args.cores), args.ovirtcluster, puppet_role, licfilepath, installer, ldap_config_url, basename
+            raise AttributeError("\n\nERROR: Please re-run this script with " \
+                "--count=<number of vms you want>\n")
 
 '''
     validates lists of vms for param validation.
@@ -2892,9 +2927,8 @@ def getMultiParamValues(param_name, param_value, error_on_dupes=True):
 if __name__ == "__main__":
 
     '''
-        Parse and validation cmd arguments
+    Parse and validate cmd arguments
     '''
-
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--count", type=int, default=0,
         help="Number of VMs you'd like to create")
@@ -2920,7 +2954,7 @@ if __name__ == "__main__":
         help="Which ovirt cluster to create the VM(s) on.  (Defaults to {})".format(DEFAULT_OVIRT_CLUSTER))
     parser.add_argument("--tryotherclusters", action="store_true", default=False,
         help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
-    parser.add_argument("--licfile", type=str,
+    parser.add_argument("--licfile", type=str, default=SCRIPT_DIR + '/' + LICFILENAME,
         help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
     parser.add_argument("--puppet_role", type=str,
         help="Role the VM(s) should have (Defaults to {} if Xcalar is installed, and {} for no install)".format(DEFAULT_PUPPET_ROLE_INSTALL, DEFAULT_PUPPET_ROLE_NO_INSTALL))
@@ -2945,9 +2979,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # validate user params
-    ram, cores, ovirt_cluster, puppet_role, licfilepath, installer, ldap_config_url, basename = validateparams(args)
-    FORCE = args.force
+    # validate user params.
+    validated_params = validate_params(args)
+
+    # get params needed for this run, which have values based on user params.
+    # (can't use from args.<param> directly).
+    puppet_role = get_validate_puppet_role(args) # default based on other params
+    installer = get_validate_installer_url(args) # note: just because it has a value doesnt mean install is being done (will have value in args.delete, etc. cases, only returns None if --noinstaller)
+    ldap_config_url = get_validate_ldap_config_url(args.ldap)
+
+    FORCE = args.force # used globally
 
     # script setup
     setup()
@@ -3012,8 +3053,8 @@ if __name__ == "__main__":
         # genrate <another basename> from this with randomness (to avoid old hostnames being resued), then
         # create --count number of VM names from <another basename>.  It returns those Vm names,
         # and <another basename> (if creating cluster, will name the cluster <another basename>)
-        unique_generated_basename, vmnames = generate_vm_names(basename, int(args.count), no_rand=args.norand)
-        vmids = provision_vms(vmnames, ovirt_cluster, convert_mem_size(ram), cores, tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        unique_generated_basename, vmnames = generate_vm_names(args.vmbasename, int(args.count), no_rand=args.norand)
+        vmids = provision_vms(vmnames, args.ovirtcluster, convert_mem_size(int(args.ram)), int(args.cores), tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if not args.noinstaller:
             # if you supply a value to 'createcluster' arg of setup_xcalar,
@@ -3021,7 +3062,7 @@ if __name__ == "__main__":
             # to a cluster by that name
             if not args.nocluster and int(args.count) > 1:
                 cluster_name = unique_generated_basename
-            setup_xcalar(vmids, licfilepath, installer, ldap_config_url, args.listen, createcluster=cluster_name)
+            setup_xcalar(vmids, args.licfile, installer, ldap_config_url, args.listen, createcluster=cluster_name)
 
         # get hostnames to print to stdout, and ips for restart
         for vmid in vmids:
@@ -3030,7 +3071,7 @@ if __name__ == "__main__":
             hostnames.append(get_hostname(next_ip))
 
     # get summary of work done, while VMs are still ssh'able by ovirttool
-    summary_string = get_summary_string(vmids, ram, cores, ovirt_cluster, installer=installer, cluster_name=cluster_name)
+    summary_string = get_summary_string(vmids, int(args.ram), int(args.cores), args.ovirtcluster, installer=installer, cluster_name=cluster_name)
 
     # setup puppet on all the VMs
     # you can not make any more root ssh calls to the VMs after this;
