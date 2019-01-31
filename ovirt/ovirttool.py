@@ -2900,16 +2900,17 @@ def ip_address(string):
         return False
 
 '''
-    some user-supplied arguments allow multiple values.
-    This function splits such values in to a list of values.  Error on dupes.
-    (Gets own function so if delimeter changes, only need to change here)
+some user-supplied arguments allow multiple values.
+This function splits such values in to a list of values.  Error on dupes.
+(Gets own function so if delimeter changes, only need to change here)
 
-    :param_name: String to display in Error output in dupe case,
-         indicating which param is having an issue
-    :param_value: the param the user supplied
-
+:param_name: String to display in Error output in dupe case,
+    indicating which param is having an issue
+:param_value: the param the user supplied
 '''
-def getMultiParamValues(param_name, param_value, error_on_dupes=True):
+def get_multi_param_values(param_name, param_value, error_on_dupes=True):
+    if not param_value:
+        return []
     split_list = param_value.split(',')
     values = {}
     dupes = []
@@ -2921,7 +2922,7 @@ def getMultiParamValues(param_name, param_value, error_on_dupes=True):
     if dupes and error_on_dupes:
         raise ValueError("\n\nERROR: Duplicate values were supplied " \
             "to {}: {}\n".format(param_name, ", ".join(dupes)))
-    return values.keys()
+    return list(values.keys())
 
 
 if __name__ == "__main__":
@@ -3004,15 +3005,9 @@ if __name__ == "__main__":
 
     # validation that requires a connection to the Ovirt engine (validating VMs)
     #doing all validation before calling any of the operations so can fail out early
-    vms_to_delete = []
-    vms_to_shutdown = []
-    vms_to_poweron = []
-    if args.delete:
-        vms_to_delete = getMultiParamValues("--delete", args.delete) # errs on dupes
-    if args.shutdown:
-        vms_to_shutdown = getMultiParamValues("--shutdown", args.shutdown)
-    if args.poweron:
-        vms_to_poweron = getMultiParamValues("--poweron", args.poweron)
+    vms_to_delete = get_multi_param_values("--delete", args.delete) # errs on dupes
+    vms_to_shutdown = get_multi_param_values("--shutdown", args.shutdown)
+    vms_to_poweron = get_multi_param_values("--poweron", args.poweron)
     # validate all the VMs in these lists are valid
     # validating in one go because want to display list of valid vms
     # in err msg; don't want to repeat that list for each arg that could have invalid entries
