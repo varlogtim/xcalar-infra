@@ -14,7 +14,8 @@ set -e
 
 SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 if [ -z "$XLRINFRADIR" ]; then
-    export XLRINFRADIR="$(cd $SCRIPTDIR/.. && pwd)"
+    XLRINFRADIR="$(cd $SCRIPTDIR/.. && pwd)"
+    export XLRINFRADIR
 fi
 cd $XLRINFRADIR
 
@@ -48,4 +49,4 @@ VM_COMMENT="${VM_COMMENT:-""}"
 # VM_COMMENT allows an override of the default comment metadata that gets attached to
 # VMs created by the ovirttool, so automated deployments of ovirttool can set their own
 # (setting this comment is a way to keep track in ovirt gui, which VMs were created by ovirttool)
-docker run -t -e OVIRT_PASSWORD -e OVIRT_UNAME -e VM_COMMENT -v /netstore:/netstore -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u `id -u`:`id -g` --rm ovirttool ovirt/ovirttool.py "$@"
+docker run -t -e OVIRT_PASSWORD -e OVIRT_UNAME -e VM_COMMENT -v /netstore:/netstore -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u "$(id -u)":"$(id -g)" --rm ovirttool ovirt/ovirttool.py "$@"
