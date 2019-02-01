@@ -42,6 +42,8 @@ export OVIRT_DATA_DIR="${OVIRT_DATA_DIR:-/netstore/ovirt/logs/$USER/$timestamp}"
 mkdir -p $OVIRT_DATA_DIR >&2
 # logfile will redirect stdout to
 OVIRT_LOG_FILE=$OVIRT_DATA_DIR/logfile.txt
+# ovirttool will create a data file; env param can set its location
+export OVIRT_DATA_FILE="$OVIRT_DATA_DIR/ovirttool_run.txt"
 
 cat << EOF >&2
 Calling ovirttool!  You can track full debug log here: $OVIRT_LOG_FILE
@@ -52,6 +54,14 @@ EOF
 # what's being prepended
 "$OVIRT_WRAPPER" $cmds | tee $OVIRT_LOG_FILE | grep -v DEBUG
 rc=${PIPESTATUS[0]}
+
+# append log location to data file ovirttool created
+if [ -f "$OVIRT_DATA_FILE" ]; then
+    printf '%s\n%s\n%s\n' "Debug log:" "$OVIRT_LOG_FILE" "$(cat $OVIRT_DATA_FILE)" > "$OVIRT_DATA_FILE"
+else
+    echo "Can't find ovirttool data file!  This needs to be investigated!" >&2
+fi
+
 if [ $rc != 0 ]; then
 cat << EOF >&2
 Encountered a problem when executing the Ovirt tool.  Exit code $rc .

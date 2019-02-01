@@ -2932,6 +2932,43 @@ def get_multi_param_values(param_name, param_value, error_on_dupes=True):
             "to {}: {}\n".format(param_name, ", ".join(dupes)))
     return list(values.keys())
 
+'''
+Generates a summary data file with information about the job.
+File @ <script dir>/ovirttool_run.txt, unless specified by OVIRT_DATA_FILE env var
+Intermediary dirs are created as needed.
+'''
+def generate_data_file(args, vms_created, vms_deleted, vms_shutdown, vms_powered_on):
+
+    default_data_file = SCRIPT_DIR + "/ovirttool_run.txt"
+    data_file_path = os.environ.get("OVIRT_DATA_FILE") or default_data_file
+
+    file_str = ""
+    file_str += "\ncmd args:"
+    for cmd_arg in sys.argv:
+        file_str += "\n" + cmd_arg
+
+    file_str += "\n\ntags:"
+    tags = get_multi_param_values("--tags", args.tags)
+    for tag in tags:
+        file_str += "\n" + tag
+    file_str += "\n\nCreated:"
+    for vm in vms_created:
+        file_str += "\n" + vm
+    file_str += "\n\nDeleted:"
+    for vm in vms_deleted:
+        file_str += "\n" + vm
+    file_str += "\n\nShutdown:"
+    for vm in vms_shutdown:
+        file_str += "\n" + vm
+    file_str += "\n\nPowered-on:"
+    for vm in vms_powered_on:
+        file_str += "\n" + vm
+
+    # write the output file; create intermediary dirs first if dont exist
+    info_log("Create data file at {}".format(data_file_path))
+    os.makedirs(os.path.dirname(data_file_path), exist_ok=True)
+    with open(data_file_path, 'w') as ovirt_data_file:
+        ovirt_data_file.write(file_str)
 
 if __name__ == "__main__":
 
@@ -2963,6 +3000,8 @@ if __name__ == "__main__":
         help="Which ovirt cluster to create the VM(s) on.  (Defaults to {})".format(DEFAULT_OVIRT_CLUSTER))
     parser.add_argument("--tryotherclusters", action="store_true", default=False,
         help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
+    parser.add_argument("--tags", type=str,
+        help="Useful data tags for this run of ovirttool. For example, a username or a purpose description. Multiple tags can be specified with commas. NO WHITESPACES, even if quoted. (tags will be included in datafile output when tool concludes; this is mostly for automation/bookkeeping.  Please use to help keep track of VM purposes.)")
     parser.add_argument("--licfile", type=str, default=SCRIPT_DIR + '/' + LICFILENAME,
         help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
     parser.add_argument("--puppet_role", type=str,
@@ -3094,6 +3133,10 @@ if __name__ == "__main__":
     for hostname in hostnames:
         debug_log(hostname)
     info_log(summary_string, timestamp=False)
+
+    # generate a data file with minimal info (for automation/log tracking)
+    # (env var OVIRT_DATA_FILE can specify where the file is written)
+    generate_data_file(args, hostnames, vms_to_delete, vms_to_shutdown, vms_to_poweron)
 
     # close connection
     close_connection(CONN)

@@ -44,9 +44,26 @@ cd $XLRINFRADIR
 
 VM_COMMENT="${VM_COMMENT:-""}"
 
-# OVIRT_PASSWORD and OVIRT_UNAME set in shell wrapper; allows tool to be non-interactive
-# (--user in @$ takes precedence over OVIRT_UNAME if both supplied)
-# VM_COMMENT allows an override of the default comment metadata that gets attached to
-# VMs created by the ovirttool, so automated deployments of ovirttool can set their own
-# (setting this comment is a way to keep track in ovirt gui, which VMs were created by ovirttool)
-docker run -t -e OVIRT_PASSWORD -e OVIRT_UNAME -e VM_COMMENT -v /netstore:/netstore -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u "$(id -u)":"$(id -g)" --rm ovirttool ovirt/ovirttool.py "$@"
+docker_run_args="-t -v /netstore:/netstore -v $XLRINFRADIR:$XLRINFRADIR -w $XLRINFRADIR -u $(id -u):$(id -g)"
+
+# env vars in current shell to expose in Docker env
+
+# - OVIRT_PASSWORD and OVIRT_UNAME allow ovirttool to be non-interactive; set in ovirttool_cli wrapper
+#  set in ovirttool_cli wrapper
+#  (note: --user in @$ takes precedence over OVIRT_UNAME if both supplied)
+# - VM_COMMENT overrides default comment that gets attached to created VMs
+# (way to keep track which VMs were created by ovirttool and ovirttool-gui)
+# - OVIRT_DATA_DIR set dir to write output file of job data ovirttool creates;
+#  set in ovirttool_cli wrapper to logdir
+declare -a docker_env_vars=(
+    "OVIRT_UNAME"
+    "OVIRT_PASSWORD"
+    "VM_COMMENT"
+    "OVIRT_DATA_FILE"
+)
+for i in "${docker_env_vars[@]}"
+do
+   docker_run_args="$docker_run_args -e $i"
+done
+
+docker run $docker_run_args --rm ovirttool ovirt/ovirttool.py "$@"
