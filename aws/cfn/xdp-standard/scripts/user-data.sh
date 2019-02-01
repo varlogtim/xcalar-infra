@@ -9,7 +9,7 @@ chmod 0600 $LOGFILE
 if [ -t 1 ]; then
     :
 else
-    exec > >(tee -a $LOGFILE | logger -t user-data -s 2>/dev/console) 2>&1
+    exec > >(tee -a $LOGFILE | logger -t user-data -s 2> /dev/console) 2>&1
 fi
 
 ec2_find_cluster() {
@@ -112,7 +112,7 @@ INSTANCE_TYPE=$(curl -sSf http://169.254.169.254/latest/meta-data/instance-type)
 export AWS_DEFAULT_REGION="${AVZONE%[a-f]}"
 
 export PATH=/opt/mssql-tools/bin:/opt/xcalar/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/opt/aws/bin:/bin
-echo "export PATH=$PATH" >/etc/profile.d/path.sh
+echo "export PATH=$PATH" > /etc/profile.d/path.sh
 
 set +e
 if [ -e /etc/ec2.env ]; then
@@ -159,7 +159,7 @@ if ! rpm -q xcalar; then
     yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
     yum install -y ephemeral-disk ec2tools --enablerepo='xcalar-*'
 
-    if rpm -q java-1.7.0-openjdk >/dev/null 2>&1; then
+    if rpm -q java-1.7.0-openjdk > /dev/null 2>&1; then
         yum remove -y java-1.7.0-openjdk || true
     fi
 
@@ -186,9 +186,9 @@ fi
 
 if [ -n "$LICENSE" ]; then
     if [[ $LICENSE =~ ^s3:// ]]; then
-        aws s3 cp $LICENSE - | base64 -d | gzip -dc >/etc/xcalar/XcalarLic.key
+        aws s3 cp $LICENSE - | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
     else
-        echo "$LICENSE" | base64 -d | gzip -dc >/etc/xcalar/XcalarLic.key
+        echo "$LICENSE" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
     fi
 fi
 
@@ -260,6 +260,7 @@ NUM_INSTANCES="${#IPS[@]}"
 MOUNT_OK=false
 XLRROOT=/var/opt/xcalar
 if [ -n "$NFSMOUNT" ]; then
+    mkdir -p /mnt/xcalar
     if mount_xlrroot $NFSHOST:/${NFSDIR:-cluster/$CLUSTER_ID} /mnt/xcalar; then
         MOUNT_OK=true
         XLRROOT=/mnt/xcalar
@@ -282,14 +283,14 @@ mkdir -m 0700 -p $XLRROOT/config
 
 if test -x /opt/xcalar/scripts/genDefaultAdmin.sh; then
     /opt/xcalar/scripts/genDefaultAdmin.sh \
-        --username "$ADMIN_USERNAME" \
-        --email "$ADMIN_EMAIL" \
-        --password "$ADMIN_PASSWORD" > $XLRROOT/config/defaultAdmin.json.tmp \
+        --username "${ADMIN_USERNAME:-xdpadmin}" \
+        --email "${ADMIN_EMAIL:-info@xcalar.com}" \
+        --password "${ADMIN_PASSWORD:-Welcome1}" > $XLRROOT/config/defaultAdmin.json.tmp \
         && mv $XLRROOT/config/defaultAdmin.json.tmp $XLRROOT/config/defaultAdmin.json
 fi
 
 if ! test -e $XLRROOT/config/defaultAdmin.json; then
-    cat >$XLRROOT/config/defaultAdmin.json <<EOF
+    cat > $XLRROOT/config/defaultAdmin.json << EOF
 {
 "username": "xdpadmin",
 "password": "9021834842451507407c09c7167b1b8b1c76f0608429816478beaf8be17a292b",
@@ -319,8 +320,8 @@ if [ -n "$XCE_XDBSERDESPATH" ]; then
     XCE_SERDESMODE=${XCE_SERDESMODE:-1}
     XCE_CONFIG=${XCE_CONFIG:-/etc/xcalar/default.cfg}
     sed -i '/^Constants.XdbLocalSerDesPath=/d' $XCE_CONFIG
-    echo "Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH" >>$XCE_CONFIG
-    echo "Constants.XdbSerDesMode=$XCE_SERDESMODE" >>$XCE_CONFIG
+    echo "Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH" >> $XCE_CONFIG
+    echo "Constants.XdbSerDesMode=$XCE_SERDESMODE" >> $XCE_CONFIG
 fi
 
 /etc/init.d/xcalar start
