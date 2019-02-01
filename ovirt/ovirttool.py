@@ -2831,8 +2831,6 @@ def validate_params(args):
                     "probably there is no supported template for it " \
                     "yet in this tool)\n".format(", ".join(OVIRT_TEMPLATE_MAPPING.keys()), args.ovirtcluster))
 
-        # you can have args.installer and args.noinstaller since both have defaults
-
         if args.noinstaller:
             if args.installer:
                 raise AttributeError("\n\nERROR: You have specified not to " \
@@ -2840,7 +2838,11 @@ def validate_params(args):
                     "but also provided an installation path with the " \
                     "--installer option.\n"
                     "(Is this what you intended?)\n")
-        elif args.installer:
+        else:
+            # if an install is being done - verify you have license file
+            # do NOT check for args.installer explicitally to do this;
+            # --installer doesn't get an automatic default so might not be set yet
+            # if here - args.count + ~ notinstaller - an install is going to be done!
             debug_log("Make sure license keys are present....")
             if not os.path.exists(args.licfile):
                 raise FileNotFoundError("\n\nERROR: File {} does not exist!\n"
@@ -2981,7 +2983,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # validate user params.
-    validated_params = validate_params(args)
+    validate_params(args)
 
     # get params needed for this run, which have values based on user params.
     # (can't use from args.<param> directly).
