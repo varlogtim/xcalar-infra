@@ -2742,27 +2742,33 @@ def get_validate_ldap_config_url(ldap_arg):
     return ldap_config_url
 
 '''
-Return puppet_role to use based on user supplied args.
-Default depends on if install is being done.
+Return puppet_role to use based on user supplied --puppet_arg;
+if no arg supplied, set default based on if an install will be done.
 '''
 def get_validate_puppet_role(args):
-    puppet_role = None
-    if not args.puppet_role:
-        if args.installer:
-            puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
-        else:
-            puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
+    puppet_role = args.puppet_role
 
-    # if install, make sure jenkins_slave is puppet role
-    # (there is always args.install value by default; so check by .noinstaller)
-    if not args.noinstaller:
-        jenkins_slave_role = 'jenkins_slave'
-        if puppet_role.lower() == jenkins_slave_role.lower():
+    # install scenario: set default or ensure user supplied
+    # jenkins_slave role!
+    # note: not sufficient to check args.installer to determine if installing;
+    # install is done by default but no default given to --installer arg
+    # due to how it's being error checked.
+    # if --count > 0 and --noinstaller was NOT supplied, this is sufficient
+    # to determine an install will be done.
+    if args.count and not args.noinstaller:
+        if puppet_role is None:
+            puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
+        # warn if puppet_role isn't jenkins_slave for install scenarios
+        if puppet_role.lower() == DEFAULT_PUPPET_ROLE_INSTALL.lower():
             warn_log("\n\nYou are installing Xcalar, but puppet role " \
                 " is set as {}!  This could cause conflicts with Caddy.\n" \
                 "If not desired, re-run with another puppet role, " \
                 "(--puppet_role option), or " \
-                "--noinstaller option.\n".format(jenkins_slave_role))
+                "--noinstaller option.\n".format(DEFAULT_PUPPET_ROLE_INSTALL))
+    elif puppet_role is None:
+        # set default for no install, and user didn't pass puppet_role
+        puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
+
     return puppet_role
 
 '''
