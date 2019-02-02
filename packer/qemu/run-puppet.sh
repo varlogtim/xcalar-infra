@@ -9,14 +9,17 @@ while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
-        --puppet-tar|-p) PUPPET_TAR="$1"; shift;;
+        --puppet-archive|-p) PUPPET_TAR="$1"; shift;;
         --hostname) MYHOSTNAME="$1"; shift;;
         --role) export FACTER_role="$1"; shift;;
         --cluster) export FACTER_cluster="$1"; shift;;
+        --datacenter) export FACTER_datacenter="$1"; shift;;
         --environment) ENVIRONMENT="$1"; shift;;
         *) echo >&2 "ERROR: Unrecognized command $cmd"; exit 1;;
     esac
 done
+
+export PATH=/opt/puppetlabs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin:$HOME/bin
 
 if ! test -r "$PUPPET_TAR"; then
     echo >&2 "ERROR: Unable to find $PUPPET_TAR"
@@ -30,11 +33,14 @@ fi
 ELVERSION=$(rpm -qf /etc/system-release --qf '%{VERSION}')
 ELVERSION=${ELVERSION:0:1}
 
-yum install -y http://yum.puppetlabs.com/puppetlabs-release-pc1-el-${ELVERSION}.noarch.rpm
-yum install -y puppet-agent
+if ! rpm -q puppet-agent; then
+    yum install -y http://yum.puppetlabs.com/puppetlabs-release-pc1-el-${ELVERSION}.noarch.rpm
+    yum install -y puppet-agent
+fi
 
 if [ -n "$MYHOSTNAME" ]; then
-    hostnamectl set-hostname $MYHOSTNAME
+    hostnamectl set-hostname $MYHOSTNAME || true
+    export HOSTNAME=$MYHOSTNAME
 fi
 cat <<EOF >> /etc/resolv.conf
 nameserver 8.8.8.8
@@ -47,14 +53,23 @@ if [ -n "$CACHER_IP" ]; then
     echo "proxy = http://${CACHER_IP}:3128" | tee -a /etc/yum.conf
 fi
 
-export PATH=/opt/puppetlabs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin:$HOME/bin
+PUPPETROOT=/etc/puppetlabs/code/environments/${ENVIRONMENT}
 
-rm -rfv /etc/puppetlabs/code/environments/${ENVIRONMENT}
-
-mkdir -p /etc/facter/facts.d /etc/puppetlabs/code/environments/${ENVIRONMENT}
-cd /etc/puppetlabs/code/environments/${ENVIRONMENT}
+rm -rfv $PUPPETROOT
+mkdir -p $PUPPETROOT
+cd $PUPPETROOT
 tar xzf ${PUPPET_TAR}
 set +e
+(
+mkdir -p /etc/facter/facts.d
+cd /etc/facter/facts.d
+echo "role=${FACTER_role}" > role.txt
+echo "cluster=${FACTER_cluster}" > cluster.txt
+echo "datacenter=${FACTER_datacenter}" > datacenter.txt
+)
+env
+cat /etc/facter/facts.d/*
+
 for retry in 1 2 3; do
     puppet apply -t -v ./manifests/site.pp
     rc=$?

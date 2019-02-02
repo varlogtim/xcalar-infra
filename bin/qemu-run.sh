@@ -3,7 +3,7 @@
 set -e
 
 SMP=${SMP:-2}
-MEM=${MEM:-1024M}
+MEM=${MEM:-2048M}
 FORCE=false
 
 die() {
@@ -15,7 +15,7 @@ usage() {
     cat << EOF
     usage: $(basename $0) [-smp #] [-mem #M] [--serial] [--image src.qcow2]
               [--clone clone.qcow2] [-f|--force (overwrite existing clone)]
-              -- [-qemu-arg [value,..]]
+              [--size #G ] [-vnc address] -- [-qemu-arg [key1=value1,key2=value2...]]
 
     defaults:
         -smp $SMP
@@ -24,16 +24,32 @@ EOF
     exit 2
 }
 
+freeport() {
+    local start=$1
+    local end=$((start+20))
+    local port=
+    for port in $(seq $start $end); do
+        if ! nc -w 1 0.0.0.0 $port >/dev/null 2>&1; then
+            echo $port
+            return 0
+        fi
+    done
+    return 1
+}
+
 while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
-        -smp) SMP="$1" ; shift;;
-        -m) MEM="$1" ; shift;;
+        --name) NAME="$1"; shift;;
+        -smp|-cpu|--cpu) SMP="$1" ; shift;;
+        -m|-mem|--mem) MEM="$1" ; shift;;
         --image) IMAGE="$1"; shift;;
         --clone) CLONE="$1" ; shift;;
+        -vnc|--vnc) VNC="$1"; shift;;
         -f|--force) FORCE=true ;;
         -h|--help) usage;;
+        --size) SIZE="$1"; shift;;
         --serial) ARGS+=(-serial mon:stdio);;
         --) break ;;
         --*) die "Unknown argument $cmd" ;;
@@ -61,8 +77,8 @@ fi
 
 if [ -n "$CLONE" ]; then
     if ! [ -e "$CLONE" ] || $FORCE; then
-        echo >&2 "NOTE: Cloning existing image"
-        qemu-img create -f qcow2 -b "$IMAGE_TO_USE" "$CLONE"
+        echo >&2 "NOTE: Creating linked clone of $IMAGE_TO_USE -> $CLONE"
+        qemu-img create -f qcow2 -b "$IMAGE_TO_USE" "$CLONE" $SIZE
     else
         echo >&2 "NOTE: Using existing clone $CLONE of image ${IMAGE_TO_USE}. Use --force to recreate it"
     fi
@@ -71,12 +87,31 @@ elif ! [ -w "$IMAGE_TO_USE" ]; then
     die "$IMAGE_TO_USE is not writable. Please fix the permissions, or use --clone"
 fi
 
-qemu-system-x86_64 -name $(basename $IMAGE_TO_USE .qcow2) -vnc 127.0.0.1:5656 \
+if test -e "${IMAGE_TO_USE}.name"; then
+    NAME=$(cat "${IMAGE_TO_USE}.name")
+else
+    NAME="${NAME:-$(basename $IMAGE_TO_USE .qcow2)}"
+    echo $NAME > "${IMAGE_TO_USE}.name"
+fi
+
+if [ -z "$INSTANCE_ID" ]; then
+    if ! [ -e "${IMAGE_TO_USE}.id" ]; then
+        uuidgen | cut -d- -f1 > "${IMAGE_TO_USE}.id" || die "Failed to write out instance-id"
+    fi
+    INSTANCE_ID=$(cat "${IMAGE_TO_USE}.id")
+fi
+
+#    -drive file=${CI_ISO} \
+
+set -x
+qemu-system-x86_64 -name $NAME \
+    -nographic \
     -drive file=${IMAGE_TO_USE},if=virtio,cache=writeback,discard=ignore,format=qcow2 \
     -m ${MEM} \
     -smp ${SMP} \
     -machine type=pc,accel=kvm \
-    -device virtio-net,netdev=forward,id=net0 \
-    -boot once=d \
-    -netdev user,hostfwd=tcp::2222-:22,id=forward  "${ARGS[@]}" "$@"
+    -boot c ${VNC+-vnc $VNC} \
+    -device virtio-net-pci,netdev=user.0 \
+    -netdev user,id=user.0,hostfwd=tcp::$(freeport 2224)-:22 \
+    -smbios "type=1,serial=ds=nocloud;h=${NAME}-${INSTANCE_ID}.int.xcalar.com;i=i-${INSTANCE_ID}" "${ARGS[@]}" "$@"
     #-cdrom /root/packer/packer_cache/bbd74514a6e11bf7916adb6b0bde98a42ff22a8f853989423e5ac064f4f89395.iso

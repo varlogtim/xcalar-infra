@@ -3,29 +3,37 @@ variables:
   http_proxy: '{{ env `http_proxy` }}'
   https_proxy: '{{ env `https_proxy` }}'
   no_proxy: '{{ env `no_proxy` }}'
-  cluster: jenkins-slave
+  cluster: jenkins-swarm
   role: jenkins_slave
   datacenter: xcalar-sjc
   ts: '{{ timestamp }}'
   osid: el7
   cacher_ip: '{{ env `CACHER_IP` }}'
-  iso_url: file://el7-base-qemu/tdhtest
-  iso_checksum: '7a3074551d1df46eca492d6808863095'
-  puppet_src: null
+  iso_url: el7-base-qemu/tdhtest
+  iso_checksum: '489da6148a3480a9d4ef94eb895ef033'
+  iso_checksum_type: md5
+  headless: "true"
+  home: '{{env `HOME`}}'
+  puppet_src: '{{env `HOME`}}/puppet'
+  puppet_host: 'puppet'
+  domain: 'int.xcalar.com'
+  disk_size: "128000"
+  build_index: '4'
+  environment: 'production'
 builders:
   - type: qemu
-    name: "{{user `osid`}}-puppet-qemu"
+    name: "{{user `osid`}}-{{user `role`}}-qemu"
     accelerator: kvm
-    iso_url: "{{user `iso_url`}}"
-    iso_checksum: "{{user `iso_checksum`}}"
-    iso_checksum_type: md5
-    output_directory: "{{ build_name }}"
+    iso_url: '{{ user `iso_url` }}'
+    iso_checksum: '{{ user `iso_checksum` }}'
+    iso_checksum_type: '{{ user `iso_checksum_type` }}'
+    output_directory: '{{ build_name }}'
     shutdown_command: shutdown -P now
-    disk_size: 25000
+    disk_size: '{{user `disk_size`}}'
     disk_image: true
     use_backing_file: true
     format: qcow2
-    headless: true
+    headless: "{{user `headless`}}"
     http_directory: httpdir
     http_port_min: 10082
     http_port_max: 10089
@@ -38,34 +46,97 @@ builders:
     vm_name: tdhtest
     net_device: virtio-net
     disk_interface: virtio
+    vnc_bind_address: 0.0.0.0
+    vnc_port_min: 5902
+    vnc_port_max: 5909
+    memory: 2048
+    cpus: 4
+    qemuargs:
+      - - "-serial"
+        - "mon:stdio"
+    #    qemuargs:
+    #      - - -netdev
+    #        - user,hostfwd=tcp::{{ .SSHHostPort }}-:22,id=forward
+    #      - - -device
+    #        - virtio-net,netdev=forward,id=net0
+    #      - - -m
+    #        - 2048
+    #      - - -smp
+    #        - 2
+    #
 provisioners:
   - type: shell-local
     inline:
-      - cd {{ user `puppet_src` }} && make puppet.tar.gz
-      - cp {{ user `puppet_src` }}/puppet.tar.gz {{ template_dir }}/../scripts/
+      - ulimit -Ss 8192; cd {{ user `puppet_src` }} && make puppet.tar.gz
+  - type: shell
+    inline:
+      - mkdir /tmp/scripts
+
   - type: file
-    source: "{{ template_dir }}/../scripts"
-    destination: /tmp
-    #  - type: file
-    #    source: /etc/yum.repos.d/CentOS-Base.repo
-    #    destination: /etc/yum.repos.d/CentOS-Base.repo
+    source: "{{ user `puppet_src` }}/puppet.tar.gz"
+    destination: /tmp/scripts/
+
+  - type: file
+    source: "{{ template_dir }}/run-puppet.sh"
+    destination: /tmp/scripts/
+
+  - type: file
+    source: "{{ template_dir }}/../scripts/cloud-init-nocloud.sh"
+    destination: /tmp/scripts/
+
+  - type: file
+    source: "{{ template_dir }}/../scripts/repo.tar"
+    destination: /tmp/scripts/
+
+  - type: file
+    source: "{{ template_dir }}/../scripts/centos-updates.sh"
+    destination: /tmp/scripts/
+
   - type: shell
     environment_vars:
+      - OSID={{user `osid`}}
       - http_proxy={{user `http_proxy`}}
       - https_proxy={{user `https_proxy`}}
       - no_proxy={{user `no_proxy`}}
       - FACTER_role={{user `role`}}
       - FACTER_cluster={{user `cluster`}}
-      - FACTER_override=offline
       - FACTER_packer=1
       - FACTER_datacenter={{user `datacenter`}}
       - CACHER_IP={{user `cacher_ip`}}
-      - MYHOSTNAME={{user `cluster`}}-{{user `osid`}}
-      - OSID={{user `osid`}}
+      - MYHOSTNAME={{user `cluster`}}-{{user `osid`}}.{{user `domain`}}
       - PUPPET_TAR=/tmp/scripts/puppet.tar.gz
+      - FACTER_override=offline
     execute_command: chmod +x {{ .Path }}; {{ .Vars }} {{.Path}}
-    expect_disconnect: true
-    script: run-puppet.sh
+    inline:
+      - set -x
+      - cd /tmp/scripts
+      - mkdir puppet
+      - tar zxf puppet.tar.gz -C puppet
+      - tar xf puppet/t/repo.tar -C /
+      - bash -x centos-updates.sh
+      - yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
+      - yum remove -y git perl-Git
+      - yum install -y git2u git2u-perl-Git --enablerepo='ius'
+      - yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
+      - yum install -y --disablerepo='updates' --enablerepo='ius' --enablerepo='xcalar-*' $(cat puppet/t/${OSID}-packages.txt  | grep -v '^#')
+      - bash -x cloud-init-nocloud.sh
+      - bash -x run-puppet.sh
+      - echo "[main]" > /etc/puppetlabs/puppet/puppet.conf
+      - echo "server = {{user `puppet_host`}}.{{user `domain`}}" >> /etc/puppetlabs/puppet/puppet.conf
+      - if [ "{{user `environment`}}" != "production" ]; then echo "environment = {{user `environment`}}" >> /etc/puppetlabs/puppet/puppet.conf; fi
+
   - type: shell
     inline:
       - rm -rf /tmp/scripts
+      - rm -rf /etc/puppetlabs/code
+
+  - type: shell
+    environment_vars:
+      - NODISABLE=puppet
+    script: '{{ template_dir }}/../scripts/generalize.sh'
+
+post-processors:
+  - type: compress
+    format: tar.gz
+    keep_input_artifact: true
+    output: '{{build_name}}-{{user `build_index`}}.tar.gz'

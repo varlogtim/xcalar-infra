@@ -1,5 +1,8 @@
 *.tar
-*.tar.gz
+*.gz
+*.xz
+*.raw
+*.img
 *.tmp
 .venv
 .direnv

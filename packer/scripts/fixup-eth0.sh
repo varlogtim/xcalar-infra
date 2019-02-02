@@ -37,7 +37,6 @@ esac
 cat >/etc/sysconfig/network <<EOF
 NETWORKING=yes
 NOZEROCONF=yes
-NETWORKING_IPV6=yes
 ONBOOT=yes
 EOF
 
@@ -48,7 +47,6 @@ cat >/etc/sysconfig/network-scripts/ifcfg-eth0 <<EOF
 DEVICE="eth0"
 NAME="eth0"
 ONBOOT="yes"
-NETBOOT="yes"
 IPV6INIT="yes"
 BOOTPROTO="dhcp"
 TYPE="Ethernet"

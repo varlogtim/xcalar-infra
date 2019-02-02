@@ -2,7 +2,7 @@
 
 ROOTFS="${ROOTFS:-}"
 
-export PATH=/opt/puppetlabs/bin:/usr/local/sbin:/usr/sbin:/usr/local/bin:/usr/bin:/sbin:/bin
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/puppetlabs/bin:/root/bin
 
 die() {
     echo >&2 "ERROR: $1"
@@ -75,7 +75,7 @@ else
         case "$cmd" in
             disable) chkconfig $svc off ;;
             enable) chkconfig $svc on ;;
-            start | stop | restart | status | stop-supervisor) /usr/sbin/service $svc $cmd ;;
+            start | stop | restart | status | stop-supervisor) /sbin/service $svc $cmd ;;
             *) die "svc_cmd: Unknown command: $svc $cmd" ;;
         esac
     }
@@ -98,11 +98,14 @@ echo "PRESS Ctrl-C to exit"
 )
 
 if have_package puppet-agent; then
-    svc_cmd stop puppet-agent
-    svc_cmd disable puppet-agent
-    rm -rf /etc/puppetlabs/puppet/ssl
-    rm -f /etc/facter/facts.d/*
-    sed -i '/^certname/d; /^server/d; /^environment/d' /etc/puppetlabs/puppet/puppet.conf
+    svc_cmd stop puppet
+    if [[ $NODISABLE =~ puppet ]]; then
+        echo >&2 "Keeping puppet due to NODISABLE=\"$NODISABLE\""
+    else
+        svc_cmd disable puppet
+    fi
+    rm -v -rf /etc/puppetlabs/puppet/ssl
+    sed -i '/^certname/d' /etc/puppetlabs/puppet/puppet.conf
 fi
 
 if have_package collectd; then
@@ -119,19 +122,30 @@ if have_package cloud-init; then
     rm -f /var/log/cloud*.log
 fi
 
-if have_package chronyd; then
+if have_package chrony; then
     svc_cmd enable chronyd
 fi
 
+if have_package cronie; then
+    svc_cmd enable crond
+    svc_cmd start crond
+fi
+
+if have_package at; then
+    svc_cmd enable atd
+    svc_cmd start atd
+fi
+
 if have_program consul; then
+    consul leave
     svc_cmd stop consul
     svc_cmd disable consul
     rm -rf /var/lib/consul/*
 fi
 
 if have_program caddy; then
-    svc stop caddy
-    svc disable caddy
+    svc_cmd stop caddy
+    svc_cmd disable caddy
 fi
 
 if have_program nomad; then
@@ -148,7 +162,7 @@ ONBOOT=yes
 EOF
 
 sed -r -i '/(HWADDR|UUID|IPADDR|NETWORK|NETMASK|USERCTL)/d' /etc/sysconfig/network-scripts/ifcfg-e*
-rm -f /etc/sysconfig/network-scripts/ifcfg-e*
+rm -v -f /etc/sysconfig/network-scripts/ifcfg-e*
 
 cat >/etc/sysconfig/network-scripts/ifcfg-eth0 <<EOF
 DEVICE="eth0"
@@ -175,7 +189,11 @@ ln -sfn /dev/null /etc/udev/rules.d/80-net-name-slot.rules
 
 if [ $ELVERSION = 7 ]; then
     sed -i 's/^GRUB_TIMEOUT=.*$/GRUB_TIMEOUT=0/g' /etc/default/grub
-    sed -i 's/rhgb quiet/net.ifnames=0 biosdevname=0/' /etc/default/grub
+    if ! grep -q 'net.ifnames=0' /etc/default/grub; then
+        sed -i 's/rhgb quiet/net.ifnames=0 biosdevname=0/g' /etc/default/grub
+    fi
+    sed -i 's/rhgb quiet//g' /etc/default/grub
+
     grub2-mkconfig -o /boot/grub2/grub.cfg
     if [ -d /boot/efi/EFI/redhat ]; then
         grub2-mkconfig -o /boot/efi/EFI/redhat/grub.cfg
@@ -213,8 +231,6 @@ sed -i '/HOSTNAME=/d' /etc/sysconfig/network
 export HISTFILESIZE=0
 export HISTSIZE=0
 
-touch /.unconfigured
-
 waagent=$(command -v waagent)
 if [ -n "$waagent" ]; then
     svc_cmd atd start
@@ -226,5 +242,4 @@ if [ -n "$waagent" ]; then
     fi
     $waagent -force -deprovision+user
 fi
-
-shutdown -h now
+exit 0
