@@ -383,7 +383,7 @@
     "Reader": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
-    "imageSKU": "7.5",
+    "imageSKU": "7.6",
     "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
     "linuxConfiguration": {
       "sshPublicKey": {
@@ -430,9 +430,9 @@
         "count": "[parameters('scaleNumber')]"
       },
       "tags": {
+        "nodeId": "[copyIndex()]",
         "appName": "[parameters('appName')]",
-        "adminEmail": "[parameters('adminEmail')]",
-        "nodeId": "[copyIndex()]"
+        "adminEmail": "[parameters('adminEmail')]"
       },
       "properties": {
         "publicIPAllocationMethod": "Dynamic",
