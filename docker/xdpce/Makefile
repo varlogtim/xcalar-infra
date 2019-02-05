@@ -14,7 +14,7 @@ XPE_STATIC_FILES = $(XLRINFRADIR)/docker/xpe/staticfiles
 XLRUSR = xcalar
 
 # temporary for XPE;
-# the gui required in the Docker needs to be built with --product=xdee option
+# the gui required in the Docker needs to be built with --product=XPE option
 # but no rpm installers exist which install GUI built in this manner.
 # provide this option to swap out what gets installed in to the Docker with a custom gui before Docker image saved
 # once rpm installers are generated which install this this product option, remove this option
