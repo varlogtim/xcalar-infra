@@ -169,7 +169,7 @@ generate_app_assets()  {
     mv jupyterNotebooks "$tarDirPath"
     mv xdpce.tar.gz "$tarDirPath"
     # make also saves a copy of the xcalar-gui dir that got installed in the
-    # Docker container; move to staging dir to be consumed by makeapp.sh
+    # Docker container; move to staging dir to be consumed by make-app.sh
     # (this should NOT be part of installer tarball; its just a byproduct of
     # generating the installer tarball assets so dealing with it here)
     mv xcalar-gui "$STAGING_DIR"
@@ -198,7 +198,7 @@ build_app() {
 
     echo "making mac app..." >&2
     # create the app; supply gui that was copied out from the container during Makefile
-    APPOUT="$STAGING_DIR/$APP_NAME.app" GUIBUILD="$STAGING_DIR/xcalar-gui" INSTALLERTARBALL="$STAGING_DIR/$INSTALLERTARFILE" bash -x "$INFRA_XPE_DIR/scripts/makeapp.sh"
+    APPOUT="$STAGING_DIR/$APP_NAME.app" GUIBUILD="$STAGING_DIR/xcalar-gui" INSTALLERTARBALL="$STAGING_DIR/$INSTALLERTARFILE" bash -x "$INFRA_XPE_DIR/scripts/make-app.sh"
 
     # set app name occurances before tarring app
     set_app_name "$STAGING_DIR/$APP_NAME.app"

@@ -15,7 +15,6 @@ set -e
 : "${INSTALLERTARBALL:?Need to set non-empty INSTALLERTARBALL (path to installer tarball)}"
 
 startCwd=$(pwd)
-SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # make sure app out specified is .app
 if [[ ! $APPOUT == *.app ]]; then
@@ -46,7 +45,6 @@ SERVERROOT="$RESOURCES/server"
 SCRIPTS="$RESOURCES/scripts"
 DATA="$RESOURCES/Data"
 INSTALLER="$RESOURCES/Installer"
-DMGBIN="$BIN"
 
 # nwjs to curl and include
 # IF YOU CHANGE THIS - make sure you update app executable, <infra>/docker/xpe/scripts/Xcalar\ Design
@@ -113,8 +111,10 @@ setup_nwjs() {
 setup_nwjs_binary() {
     # setup nwjs binary
     local nwjs_url="$1"
-    local nwjs_zip=$(basename "$nwjs_url")
-    local nwjs_dir=$(basename "$nwjs_url" .zip) # name of the unzipped dir
+    local nwjs_zip
+    local nwjs_dir
+    nwjs_zip=$(basename "$nwjs_url")
+    nwjs_dir=$(basename "$nwjs_url" .zip) # name of the unzipped dir
 
     cd "$BIN"
     curl "$nwjs_url" -O
