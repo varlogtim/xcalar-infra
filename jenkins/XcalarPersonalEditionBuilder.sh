@@ -12,7 +12,8 @@ set -e
 # (job workspace should be cwd when this script begins)
 # see 'Source Code Management' section of job to see which subdirs each are being checked out to
 CWD_START=$(pwd)
-export XLRINFRADIR="${XLRINFRADIR:-$CWD_START/xcalar-infra}"
+SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+export XLRINFRADIR="${XLRINFRADIR:-$(readlink -f $SCRIPTDIR/..)}"
 export XLRGUIDIR="${XLRGUIDIR:-$CWD_START/xcalar-gui}"
 export GRAFANADIR="${GRAFANADIR:-$CWD_START/graphite-grafana}"
 
