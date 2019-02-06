@@ -274,7 +274,7 @@ cd "$BUILD_DIRECTORY" && ln -sfn "$BUILD_NUMBER" lastSuccessful
 # msg of summary with instructions for creating a dmg using the script generated
 # will print as last step in trap so its last thing printed
 DRAG_AND_DROP_MSG="
-=========================================
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
  YOUR APP HAS BEEN GENERATED!!
  THE FULL APP IS STORED IN THIS TARFILE:
@@ -293,7 +293,7 @@ DRAG_AND_DROP_MSG="
   netstore; it will inform you of the dmg's
   final location)
 
-========================================
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 " >&2
 
 # printing to stdout for other scripts to call
