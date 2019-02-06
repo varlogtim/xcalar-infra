@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# This script will be executed when Jenkins job 'XcalarPersonalEditionBuilder'
-# is run.  It gets run indirectly via $XLRDIR/bin/jenkins.sh
+# This script will be executed when Jenkins job 'XcalarPersonalEditionBuilder' is triggered.
 # Some env params referenced here, (such as PATH_TO_XCALAR_INSTALLER) are the
 # names of params that can be specified when building the XcalarPersonalEditionBuilder job.
 # Such env vars hold whichever value was provided for that param, for the build
@@ -13,9 +12,8 @@ set -e
 # (job workspace should be cwd when this script begins)
 # see 'Source Code Management' section of job to see which subdirs each are being checked out to
 CWD_START=$(pwd)
-export XLRDIR="${XLRDIR:-$CWD_START}" # XLRDIR gets set by jenkins.sh
+export XLRINFRADIR="${XLRINFRADIR:-$CWD_START/xcalar-infra}"
 export XLRGUIDIR="${XLRGUIDIR:-$CWD_START/xcalar-gui}"
-export XLRINFRADIR="${XLRINFRADIR:-$CWD_START/xcalar-infra}" # set but not exported by jenkins.sh
 export GRAFANADIR="${GRAFANADIR:-$CWD_START/graphite-grafana}"
 
 #================================================================
