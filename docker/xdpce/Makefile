@@ -72,7 +72,7 @@ strip-binaries: install
 install: run
 	docker exec $(EXEC_ARGS) $(CONTAINER_NAME) /tmp/xcalarInstaller --nostart
     ifneq ($(XPE),)
-	docker cp $(XLRDIR)/src/data/xem.cfg $(CONTAINER_NAME):$(DEFAULT_CFG_PATH_INSTALLED)
+	docker cp $(XPE_STATIC_FILES)/xem.cfg $(CONTAINER_NAME):$(DEFAULT_CFG_PATH_INSTALLED)
 	# patch the requirejs that Jupyter relies on, to export require even if it exists
 	# (which it will, when we are running XD in nwjs)
 	docker cp $(CONTAINER_NAME):/opt/xcalar/lib/python3.6/site-packages/notebook/static/components/requirejs/require.js .
