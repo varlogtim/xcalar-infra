@@ -21,9 +21,8 @@ job "prometheus" {
     }
 
     ephemeral_disk {
-      size = 300
-
-      #  sticky = true
+      size   = 300
+      sticky = true
     }
 
     task "grafana" {
@@ -65,7 +64,7 @@ job "prometheus" {
 
     task "prometheus" {
       template {
-        change_mode = "noop"
+        change_mode = "restart"
         destination = "local/prometheus.yml"
 
         data = <<EOH
@@ -78,6 +77,16 @@ scrape_configs:
     static_configs:
       - targets:
           - localhost:9090
+  - job_name: node-exporter
+    scrape_interval: 5s
+    params:
+      format:
+        - prometheus
+    consul_sd_configs:
+      - server: 10.10.5.18:8500
+        datacenter: xcalar-sjc
+        services:
+       - node-exporter
   - job_name: nomad
     scrape_interval: 10s
     metrics_path: /v1/metrics
