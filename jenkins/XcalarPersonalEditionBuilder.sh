@@ -60,4 +60,4 @@ git checkout "$FRONTEND_GIT_SHA"
 # Main job: Build Xcalar image, app, etc.
 # (TODO: Shift this all in to one file?  File below exists already; leaving it be for now)
 #================
-bash "$XLRINFRADIR"/docker/xpe/jenkins/XcalarPersonalEditionRunner.sh
+bash -x "$XLRINFRADIR"/docker/xpe/jenkins/XcalarPersonalEditionRunner.sh
