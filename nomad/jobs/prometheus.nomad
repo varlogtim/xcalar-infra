@@ -21,8 +21,9 @@ job "prometheus" {
     }
 
     ephemeral_disk {
-      size   = 300
-      sticky = true
+      size    = "3000"
+      sticky  = true
+      migrate = true
     }
 
     task "grafana" {
@@ -85,8 +86,7 @@ scrape_configs:
     consul_sd_configs:
       - server: 10.10.5.18:8500
         datacenter: xcalar-sjc
-        services:
-       - node-exporter
+        services: ["node-exporter"]
   - job_name: nomad
     scrape_interval: 10s
     metrics_path: /v1/metrics
@@ -139,7 +139,7 @@ EOH
       driver = "docker"
 
       config {
-        image = "prom/prometheus:v2.6.1"
+        image = "prom/prometheus:v2.7.1"
 
         volumes = [
           "local/prometheus.yml:/etc/prometheus/prometheus.yml",
@@ -151,8 +151,8 @@ EOH
       }
 
       resources {
-        cpu    = 500
-        memory = 256
+        cpu    = 4000
+        memory = 2048
 
         network {
           port "prometheus_ui" {}
