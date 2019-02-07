@@ -200,14 +200,16 @@ chown xcalar:xcalar /etc/xcalar/XcalarLic.key
 mount_xlrroot() {
     local NFSHOST="${1%%:*}"
     local NFSDIR="${1#$NFSHOST}"
+    local MOUNT="$2"
+
     NFSDIR="${NFSDIR#:}"
     NFSDIR="${NFSDIR#/}"
 
+    local tmpdir=$(mktemp -d -t nfs.XXXXXX)
     set +e
-    mount -t $NFS_TYPE -o ${NFS_OPTS},timeo=3 $NFSHOST:/$NFSDIR $2
+    mount -t $NFS_TYPE -o ${NFS_OPTS},timeo=3 $NFSHOST:/$NFSDIR $tmpdir
     local rc=$?
     if [ $rc -eq 32 ]; then
-        local tmpdir=$(mktemp -d -t nfs.XXXXXX)
         mount -t $NFS_TYPE -o ${NFS_OPTS},timeo=3 $NFSHOST:/ $tmpdir
         rc=$?
         if [ $rc -eq 0 ]; then
@@ -215,15 +217,19 @@ mount_xlrroot() {
             chmod 0700 ${tmpdir}/${NFSDIR}
             chown xcalar:xcalar ${tmpdir}/${NFSDIR} ${tmpdir}/${NFSDIR}/members
             umount ${tmpdir}
-            mount -t $NFS_TYPE -o ${NFS_OPTS},timeo=3 $NFSHOST:/$NFSDIR $2
-            rc=$?
         fi
-        rmdir $tmpdir
     fi
+    if mountpoint -q $tmpdir; then
+        umount $tmpdir || true
+    fi
+    rmdir $tmpdir || true
 
     if [ $rc -eq 0 ]; then
-        sed -i '\@'$2'@d' /etc/fstab
-        echo "${NFSHOST}:/${NFSDIR} $2  $NFS_TYPE  $NFS_OPTS 0 0" >> /etc/fstab
+        sed -i '\@'$MOUNT'@d' /etc/fstab
+        echo "${NFSHOST}:/${NFSDIR} $MOUNT $NFS_TYPE  $NFS_OPTS 0 0" >> /etc/fstab
+        test -d $MOUNT || mkdir -p $MOUNT
+        mountpoint -q $MOUNT || mount $MOUNT
+        rc=$?
     fi
     return $rc
 }
@@ -252,7 +258,7 @@ if [ -n "$TAG_VALUE" ]; then
     done
     sleep 5
 else
-    CLUSTER_ID="xcalar-$(uuid-gen)"
+    CLUSTER_ID="xcalar-$(uuidgen)"
     IPS=(localhost)
 fi
 NUM_INSTANCES="${#IPS[@]}"
