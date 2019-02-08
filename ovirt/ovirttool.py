@@ -2798,7 +2798,7 @@ def get_validate_installer_url(args):
         return None
 
     installer_header = 'http://'
-    default_installer = installer_header + 'netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod'
+    default_installer = installer_header + 'netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod-match'
 
     installer_url_final = args.installer or default_installer
 
@@ -3086,7 +3086,7 @@ if __name__ == "__main__":
     parser.add_argument("--nocluster", action='store_true',
         help="Do not create a Xcalar cluster of the new VMs.")
     parser.add_argument("--installer", type=str, #default='builds/Release/xcalar-latest-installer-prod',
-        help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for latest BuildTrunk prod build.)")
+        help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for most recent prod version of BuildTrunk without version mismatch.)")
     parser.add_argument("--noinstaller", action="store_true", default=False,
         help="Don't install Xcalar on provisioned VM(s)")
     parser.add_argument("--ovirtcluster", type=str, default=DEFAULT_OVIRT_CLUSTER,
