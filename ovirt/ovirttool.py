@@ -2759,7 +2759,7 @@ def get_validate_puppet_role(args):
         if puppet_role is None:
             puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
         # warn if puppet_role isn't jenkins_slave for install scenarios
-        if puppet_role.lower() == DEFAULT_PUPPET_ROLE_INSTALL.lower():
+        if puppet_role.lower() != DEFAULT_PUPPET_ROLE_INSTALL.lower():
             warn_log("\n\nYou are installing Xcalar, but puppet role " \
                 " is set as {}!  This could cause conflicts with Caddy.\n" \
                 "If not desired, re-run with another puppet role, " \
