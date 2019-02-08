@@ -1688,8 +1688,8 @@ def setup_admin_account(node, ldap_config_url):
 
     :param ip: (String)
         IP of VM to install Xcalar on
-    :param licfilepath: (String)
-        path on local machine runnign this script, of Xcalar license file
+    :param uncompressed_xcalar_license_string: (String)
+        an uncompressed Xcalar license
     :param installer: (String)
         URL for an RPM installer on netstore (valid URL user should be able to curl)
     :param node_0_val (String)
@@ -1701,7 +1701,7 @@ def setup_admin_account(node, ldap_config_url):
         start Xcalar after the install
 
 '''
-def install_xcalar(ip, licfilepath, installer, node_0_val, startXcalar=True):
+def install_xcalar(ip, uncompressed_xcalar_license_string, installer, node_0_val, startXcalar=True):
 
     vmname = get_vm_name(get_vm_id("ip=" + ip))
 
@@ -1719,11 +1719,14 @@ def install_xcalar(ip, licfilepath, installer, node_0_val, startXcalar=True):
 
     # copy in installer shell script and files it depends on
     fileslist = [[SCRIPT_DIR + '/' + INSTALLER_SH_SCRIPT, TMPDIR_VM],
-        [SCRIPT_DIR + '/' + TEMPLATE_HELPER_SH_SCRIPT, TMPDIR_VM], # installer script will call this template helper script
-        # rename lic file to std name in case they supplied a file with a diff name, because e2e script will call by st name
-        [licfilepath, TMPDIR_VM + '/' + LICFILENAME]]
+        [SCRIPT_DIR + '/' + TEMPLATE_HELPER_SH_SCRIPT, TMPDIR_VM]] # installer script will call this template helper script
     for filedata in fileslist:
         scp_file(ip, filedata[0], filedata[1])
+
+    # echo licdata to licfile on vm.
+    # e2e installer script will look for lic file in this specific location
+    lic_file_vm = TMPDIR_VM + '/' + LICFILENAME
+    run_ssh_cmd(ip, "echo '{}' > {}".format(uncompressed_xcalar_license_string, lic_file_vm))
 
     # install using bld requested
     run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=XCALAR_INSTALL_TIMEOUT)
@@ -1752,8 +1755,8 @@ def install_xcalar(ip, licfilepath, installer, node_0_val, startXcalar=True):
     form in to a cluster unless specified otherwise
 
     :param vmids: list of unique vm ids in Ovirt of VMs to install xcalar on
-    :param licfilepath: (String)
-        path to License file on local machine executing this script
+    :param uncompressed_xcalar_license_string: (String)
+        an uncompressed Xcalar license
     :param installer (String)
         curl'able URL to an RPM installer
     :param ldap_config_url (String)
@@ -1769,7 +1772,7 @@ def install_xcalar(ip, licfilepath, installer, node_0_val, startXcalar=True):
         If not supplied will leave nodes as individual VMs
 
 '''
-def setup_xcalar(vmids, licfilepath, installer, ldap_config_url, listen, createcluster=None):
+def setup_xcalar(vmids, uncompressed_xcalar_license_string, installer, ldap_config_url, listen, createcluster=None):
 
     debug_log("installer: " + str(installer))
     debug_log("Setup xcalar on node set and cluster {}".format(createcluster))
@@ -1792,7 +1795,7 @@ def setup_xcalar(vmids, licfilepath, installer, ldap_config_url, listen, createc
         if listen:
             node_0_val = name
         # bring up Xcalar only after cluster create and/or admin/ldap setup
-        proc = multiprocessing.Process(target=install_xcalar, args=(ip, licfilepath, installer, node_0_val), kwargs={
+        proc = multiprocessing.Process(target=install_xcalar, args=(ip, uncompressed_xcalar_license_string, installer, node_0_val), kwargs={
             'startXcalar': False
         })
         # failing if i dont sleep in between.  think it might just be on when using the SDK, similar operations on the vms service
@@ -2215,6 +2218,7 @@ def run_ssh_cmd(host, command, port=22, user=DEFAULT_SSH_USER, bufsize=-1, keyfi
 
 '''
     run system command on local machine calling this function
+    returns stdout
 
     (i've made this in to a function because there's a better way
     in python to be making system calls than os.system; i will
@@ -2228,10 +2232,13 @@ def run_system_cmd(cmd):
     try:
         #cmdout = subprocess.run(cmd, shell=True)
         debug_log(" $ {}".format(cmd))
-        cmdout = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+        cmd_out = subprocess.check_output(cmd, shell=True)
+        #cmd_out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True) # this will route stderr to stdout too
+        cmd_out_str = cmd_out.decode("utf-8") # haven't checked this against python 2
+        return cmd_out_str
     except subprocess.CalledProcessError as e:
-        debug_log("Stderr: {}\n\nGot error when running sys command {}:\n{}".format(str(e.stderr), cmd, str(e.output))) # str on output in case None
-        sys.exit(e.returncode)
+        info_log("Stderr: {}\n\nGot error when running sys command {}:\n{}".format(str(e.stderr), cmd, str(e.output))) # str on output in case None
+        raise e
 
     '''
     debug_log("~:$ {}".format(cmd))
@@ -2687,6 +2694,101 @@ def setup():
         run_system_cmd(cmd)
 
 '''
+@uncompressed_license: (String) an uncompressed Xcalar license
+@returns: (String) compressed version of the license
+'''
+def get_compressed_license(uncompressed_license):
+    command ="echo '{}' | gzip -c - | base64 -w0".format(uncompressed_license)
+    debug_log("Get compressed license with command: {}".format(command))
+    output = run_system_cmd(command).strip()
+    return output
+
+'''
+@compressed_license: (String) a compressed version of a Xcalar license
+@returns: (String) uncompressed version of the license
+'''
+def get_uncompressed_license(compressed_license):
+    command="echo '{}' | base64 -d | gunzip".format(compressed_license)
+    debug_log("Get uncompressed license with command: {}".format(command))
+    output = run_system_cmd(command).strip()
+    return output
+
+'''
+Return an uncompressed Xcalar license.
+If --license supplied (should be compressed), try to uncompress it, else,
+look for XcalarLic.key (should be uncompressed) in script dir and use that.
+validation is done by trying to compress then re-uncompress the data found.
+'''
+def get_validate_xcalar_uncompressed_license(args):
+
+    # if no --license passed, the license file to look for
+    license_to_look_for = SCRIPT_DIR + "/" + LICFILENAME
+
+    arg_msg_reminder = "Did you pass a valid, COMPRESSED license value?"
+    file_reminder = "Is {} a valid, UNCOMPRESSED Xcalar license?".format(license_to_look_for)
+
+    # get a compressed license
+    uncompressed_license_data_start = None
+    if args.license:
+        try:
+            uncompressed_license_data_start = get_uncompressed_license(args.license)
+        except Exception as e:
+            raise ValueError("\n\nERROR: --license passed, but an error "
+                "occured when trying to uncompress the "
+                "license.\n{}\n".format(arg_msg_reminder))
+    else:
+        info_log("No --license passed... look for {} in ovirttool dir...".format(LICFILENAME))
+        err_msg_start="ovirttol needs license data for VMs.  No --license " \
+            "arg was passed so looking in script directory for a license file."
+        if os.path.exists(license_to_look_for):
+            # get license contents and compress
+            try:
+                with open(license_to_look_for, 'r') as lic_file:
+                    uncompressed_license_data_start = lic_file.read()
+            except Exception as e:
+                raise ValueError("\n\nERROR: {}\n{} Was found, but an "
+                    "error occured when trying to read the "
+                    "file.\n{}\n".format(err_msg_start, license_to_look_for, file_reminder))
+        else:
+            raise ValueError("\n\nERROR: {}\n"
+                "But {} does not exist. "
+                "\nRe-run with --license=<compressed Xcalar license string>, or,\n"
+                " copy the license file you want to use, into {}.\n"
+                "Try this::\n\tcp $XLRDIR/src/data/XcalarLic.key {}"
+                "\n".format(err_msg_start, license_to_look_for, SCRIPT_DIR, SCRIPT_DIR))
+
+    # validate: try to compress, then uncompress found license data,
+    # make sure result is same as start
+    uncompressed_license_data_final = None
+    err_msg_common_start = "License data was obtained, either " \
+            "from --license arg, or, if it was not passed, by finding " \
+            "a file {} in the script directory.".format(LICFILENAME)
+    err_msg_common_end = "If you passed --license: {}\n" \
+            "If you did not pass " \
+            "--license: {}\n" \
+            "Try re-running with --license=<valid, COMPRESSED, Xcalar " \
+            "license>".format(arg_msg_reminder, file_reminder)
+    try:
+        uncompressed_license_data_start = uncompressed_license_data_start.strip()
+        compressed_license = get_compressed_license(uncompressed_license_data_start)
+        uncompressed_license_data_final = get_uncompressed_license(compressed_license)
+    except Exception as e:
+        raise ValueError("\n\nERROR: {}\n"
+            "However, could not compressed and then uncompress "
+            "the license data found, as a validation "
+            "check.\n{}\n".format(err_msg_common_start, err_msg_common_end))
+    # make sure they are equal
+    if uncompressed_license_data_final and (uncompressed_license_data_final != uncompressed_license_data_start):
+        raise ValueError("\n\nERROR: {}\n"
+            "Tried to validate by compressing, "
+            "then uncompressing the data, but the final uncompressed data "
+            "did not match the initial uncompressed data.\n"
+            "\nInitial uncompressed license data:\n{}\n"
+            "\nFinal uncompressed license data (after compressing then "
+            "uncompressing:\n\n{}\n{}\n".format(err_msg_common_start, uncompressed_license_data_start, uncompressed_license_data_final, err_msg_common_end))
+        return uncompressed_license_data_final
+
+'''
 Return installer URL to use based on cmd args pasesd in.
 Validate final result.
 '''
@@ -2845,20 +2947,11 @@ def validate_params(args):
                     "--installer option.\n"
                     "(Is this what you intended?)\n")
         else:
-            # if an install is being done - verify you have license file
+            # checks for if doing an install
             # do NOT check for args.installer explicitally to do this;
             # --installer doesn't get an automatic default so might not be set yet
             # if here - args.count + ~ notinstaller - an install is going to be done!
-            debug_log("Make sure license keys are present....")
-            if not os.path.exists(args.licfile):
-                raise FileNotFoundError("\n\nERROR: File {} does not exist!\n"
-                    "(If you did not supply the --licfile arg, ovirttool " \
-                    "defaulted to looking for\na license file in {}.)" \
-                    "\nRe-run with --licfile=<path to licence file>, or,\n"
-                    " copy the license file you want to use, into {}.\n"
-                    "Try this::\n\tcp $XLRDIR/src/data/XcalarLic.key {}" \
-                    "\n".format(args.licfile, SCRIPT_DIR, SCRIPT_DIR, SCRIPT_DIR))
-
+            pass
     else:
         '''
             if not trying to create vms,
@@ -3002,8 +3095,8 @@ if __name__ == "__main__":
         help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
     parser.add_argument("--tags", type=str,
         help="Useful data tags for this run of ovirttool. For example, a username or a purpose description. Multiple tags can be specified with commas. NO WHITESPACES, even if quoted. (tags will be included in datafile output when tool concludes; this is mostly for automation/bookkeeping.  Please use to help keep track of VM purposes.)")
-    parser.add_argument("--licfile", type=str, default=SCRIPT_DIR + '/' + LICFILENAME,
-        help="Path to a XcalarLic.key file on your local machine (If not supplied, will look for it in cwd)")
+    parser.add_argument("--license", type=str,
+        help="A compressed Xcalar license String. (If not supplied, will look in {} for {}.)".format(SCRIPT_DIR, LICFILENAME))
     parser.add_argument("--puppet_role", type=str,
         help="Role the VM(s) should have (Defaults to {} if Xcalar is installed, and {} for no install)".format(DEFAULT_PUPPET_ROLE_INSTALL, DEFAULT_PUPPET_ROLE_NO_INSTALL))
     parser.add_argument("--puppet_cluster", type=str,
@@ -3035,7 +3128,7 @@ if __name__ == "__main__":
     puppet_role = get_validate_puppet_role(args) # default based on other params
     installer = get_validate_installer_url(args) # note: just because it has a value doesnt mean install is being done (will have value in args.delete, etc. cases, only returns None if --noinstaller)
     ldap_config_url = get_validate_ldap_config_url(args.ldap)
-
+    xcalar_license_uncompressed = get_validate_xcalar_uncompressed_license(args)
     FORCE = args.force # used globally
 
     # script setup
@@ -3104,7 +3197,7 @@ if __name__ == "__main__":
             # to a cluster by that name
             if not args.nocluster and int(args.count) > 1:
                 cluster_name = unique_generated_basename
-            setup_xcalar(vmids, args.licfile, installer, ldap_config_url, args.listen, createcluster=cluster_name)
+            setup_xcalar(vmids, xcalar_license_uncompressed, installer, ldap_config_url, args.listen, createcluster=cluster_name)
 
         # get hostnames to print to stdout, and ips for restart
         for vmid in vmids:
