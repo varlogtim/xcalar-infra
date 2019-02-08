@@ -2786,7 +2786,7 @@ def get_validate_xcalar_uncompressed_license(args):
             "\nInitial uncompressed license data:\n{}\n"
             "\nFinal uncompressed license data (after compressing then "
             "uncompressing:\n\n{}\n{}\n".format(err_msg_common_start, uncompressed_license_data_start, uncompressed_license_data_final, err_msg_common_end))
-        return uncompressed_license_data_final
+    return uncompressed_license_data_final
 
 '''
 Return installer URL to use based on cmd args pasesd in.
