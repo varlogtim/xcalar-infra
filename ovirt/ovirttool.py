@@ -1729,7 +1729,7 @@ def install_xcalar(ip, uncompressed_xcalar_license_string, installer, node_0_val
     run_ssh_cmd(ip, "echo '{}' > {}".format(uncompressed_xcalar_license_string, lic_file_vm))
 
     # install using bld requested
-    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, args=[installer, ip], timeout=XCALAR_INSTALL_TIMEOUT)
+    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, script_args=[installer, ip], timeout=XCALAR_INSTALL_TIMEOUT)
 
     # set Node.0.IpAddr val in default.cfg::
     # In default.cfg, default val of Node.0.IpAddr in SINGLE NODE case is
@@ -2045,7 +2045,7 @@ def generate_cluster_template_file(node, clusternodes, xcalar_root):
     nodeliststr = ' '.join(clusternodes)
     #scp_file(node, TEMPLATE_HELPER_SH_SCRIPT, TMPDIR_VM) # the e2e installer needs this script too so if it's not present I want this to fail
     # so don't copy it in
-    run_sh_script(node, TMPDIR_VM + '/' + TEMPLATE_HELPER_SH_SCRIPT, args=[xcalar_root, nodeliststr])
+    run_sh_script(node, TMPDIR_VM + '/' + TEMPLATE_HELPER_SH_SCRIPT, script_args=[xcalar_root, nodeliststr])
 
 '''
     Check if a path exists on a remote node
@@ -2252,7 +2252,7 @@ def run_system_cmd(cmd):
         (String) IP of node to run shell script on
     :param path:
         (String) filepath (on node) of shell script to run
-    :param args:
+    :param script_args:
         (list) list of Strings as positional args to supply to shell script after
     :param scriptvars:
         (list) list of Strings as vars to supply in front of shell script call
@@ -2263,14 +2263,14 @@ def run_system_cmd(cmd):
         if True will run bash with -x option
 
 '''
-def run_sh_script(node, path, args=[], scriptvars=[], timeout=120, redirect=True, debug=True):
+def run_sh_script(node, path, script_args=[], scriptvars=[], timeout=120, redirect=True, debug=True):
 
     debug_log("Run shell script {} on node {}...\n".format(path, node))
 
     bash_call = '/bin/bash'
     if debug:
         bash_call += ' -x'
-    shell_cmd = " ".join(scriptvars) + " " + bash_call + ' ' + path + ' ' + ' '.join(args)
+    shell_cmd = " ".join(scriptvars) + " " + bash_call + ' ' + path + ' ' + ' '.join(script_args)
     cmds = []
     output_file = None
     if redirect:
@@ -2442,7 +2442,7 @@ def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cl
             #If not, it still could be xcalar config options if they specified a curom ldapConfig file
             # so maybe at least print a note indicating
             login_details = "Login page credentials: "
-            if args.ldap == "xcalar":
+            if ARGS.ldap == "xcalar":
                 see_note_text_ldap = add_note("You can also log in with your Xcalar LDAP credentials; use '@xcalar.com' in the username")
                 login_details += see_note_text_ldap
             #else:
@@ -2507,30 +2507,30 @@ def get_summary_string(vmids, ram, cores, ovirt_cluster, installer=None, cluster
         summary_str = summary_str + summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=installer, cluster_name=cluster_name)
 
     # print debug on delete, shutdown, or powered on VMs with this job
-    if args.delete:
+    if ARGS.delete:
         if summary_str:
             summary_str += summary_str + "\n\n"
         summary_str = summary_str + solid_line + "\n" \
                         "|\n|  The following VMs were deleted:\n|"
-        for deletedVm in args.delete.split(','):
+        for deletedVm in ARGS.delete.split(','):
                     summary_str = summary_str + "\n|\t{}".format(deletedVm)
         summary_str = summary_str + "\n|\n" + solid_line
 
-    if args.shutdown:
+    if ARGS.shutdown:
         if summary_str:
             summary_str += "\n\n"
         summary_str = summary_str + solid_line + "\n" \
                         "|\n|  The following VMs have been shut down:\n|"
-        for shutDownVm in args.shutdown.split(','):
+        for shutDownVm in ARGS.shutdown.split(','):
                     summary_str = summary_str + "\n|\t{}".format(shutDownVm)
         summary_str = summary_str + "\n|\n" + solid_line
 
-    if args.poweron:
+    if ARGS.poweron:
         if summary_str:
             summary_str += "\n\n"
         summary_str = summary_str + solid_line + "\n" \
                         "|\n|  The following VMs are powered on:\n|"
-        for poweredOnVm in args.poweron.split(','):
+        for poweredOnVm in ARGS.poweron.split(','):
                     summary_str = summary_str + "\n|\t{}".format(poweredOnVm)
 
         summary_str += "\n|\n" + solid_line
@@ -2719,7 +2719,7 @@ If --license supplied (should be compressed), try to uncompress it, else,
 look for XcalarLic.key (should be uncompressed) in script dir and use that.
 validation is done by trying to compress then re-uncompress the data found.
 '''
-def get_validate_xcalar_uncompressed_license(args):
+def get_validate_xcalar_uncompressed_license():
 
     # if no --license passed, the license file to look for
     license_to_look_for = SCRIPT_DIR + "/" + LICFILENAME
@@ -2729,9 +2729,9 @@ def get_validate_xcalar_uncompressed_license(args):
 
     # get a compressed license
     uncompressed_license_data_start = None
-    if args.license:
+    if ARGS.license:
         try:
-            uncompressed_license_data_start = get_uncompressed_license(args.license)
+            uncompressed_license_data_start = get_uncompressed_license(ARGS.license)
         except Exception as e:
             raise ValueError("\n\nERROR: --license passed, but an error "
                 "occured when trying to uncompress the "
@@ -2792,15 +2792,15 @@ def get_validate_xcalar_uncompressed_license(args):
 Return installer URL to use based on cmd args pasesd in.
 Validate final result.
 '''
-def get_validate_installer_url(args):
+def get_validate_installer_url():
 
-    if args.noinstaller:
+    if ARGS.noinstaller:
         return None
 
     installer_header = 'http://'
     default_installer = installer_header + 'netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod-match'
 
-    installer_url_final = args.installer or default_installer
+    installer_url_final = ARGS.installer or default_installer
 
     if installer_url_final.startswith(installer_header):
         # make sure they have given the regular RPM installer, not userinstaller
@@ -2820,7 +2820,10 @@ def get_validate_installer_url(args):
 '''
 Return ldap URL to use based on user supplied --ldap arg
 '''
-def get_validate_ldap_config_url(ldap_arg):
+def get_validate_ldap_config_url():
+
+    ldap_arg = ARGS.ldap
+
     # ldap URL returned should be a http:// URL.
     ldap_config_url = None
     # for --ldap arg, user can supply one of the keys of LDAP_CONFIGS,
@@ -2847,17 +2850,17 @@ def get_validate_ldap_config_url(ldap_arg):
 Return puppet_role to use based on user supplied --puppet_arg;
 if no arg supplied, set default based on if an install will be done.
 '''
-def get_validate_puppet_role(args):
-    puppet_role = args.puppet_role
+def get_validate_puppet_role():
+    puppet_role = ARGS.puppet_role
 
     # install scenario: set default or ensure user supplied
     # jenkins_slave role!
-    # note: not sufficient to check args.installer to determine if installing;
+    # note: not sufficient to check ARGS.installer to determine if installing;
     # install is done by default but no default given to --installer arg
     # due to how it's being error checked.
     # if --count > 0 and --noinstaller was NOT supplied, this is sufficient
     # to determine an install will be done.
-    if args.count and not args.noinstaller:
+    if ARGS.count and not ARGS.noinstaller:
         if puppet_role is None:
             puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
         # warn if puppet_role isn't jenkins_slave for install scenarios
@@ -2880,38 +2883,38 @@ Any illegal params/combinations results in ValueError Exception being thrown
 Params with defaults based on other params/logic, or which
  require further modiciation or logic to be used, are validated in individual functions.
 '''
-def validate_params(args):
+def validate_params():
 
     # modification operations
-    operations = [args.count, args.delete, args.shutdown, args.poweron]
+    operations = [ARGS.count, ARGS.delete, ARGS.shutdown, ARGS.poweron]
 
     # if trying to list vms, let them know no other options will be done
-    if args.list:
+    if ARGS.list:
         if any(operations):
             raise ValueError("\n\nERROR: --list will list all VMs, "
                 "no other operations can be done.  It must be "
                 "specified alone.\n")
     else:
-        if args.formatted or args.verbose:
+        if ARGS.formatted or ARGS.verbose:
             raise ValueError("\n\nERROR: --verbose and --formatted are only " \
                 "used when --list is specified (Display more data, and " \
                 "pretty-print, respectively)\n")
 
-    if args.count:
-        if args.count > MAX_VMS_ALLOWED or args.count <= 0:
+    if ARGS.count:
+        if ARGS.count > MAX_VMS_ALLOWED or ARGS.count <= 0:
             raise ValueError("\n\nERROR: --count argument must be an integer " \
                 "between 1 and {}\n" \
                 "(ovirttool will provision that number of new VMs " \
                 "for you)".format(MAX_VMS_ALLOWED))
 
-        if args.listen and args.count > 1 and not args.nocluster:
+        if ARGS.listen and ARGS.count > 1 and not ARGS.nocluster:
             raise ValueError("\n\n--listen is only for single node cases; "
                 "multi-node clusters will listen outside localhost by default\n")
 
         # validate the basename they gave for the cluster
-        if not args.vmbasename:
+        if not ARGS.vmbasename:
             errmsg = ""
-            if args.count == 1:
+            if ARGS.count == 1:
                 errmsg = "\n\nPlease supply a name for your new VM using " \
                     "--vmbasename=<name>\n"
             else:
@@ -2919,28 +2922,28 @@ def validate_params(args):
                     "VMs using --vmbasename=<basename>\n" \
                     "(The tool will name the new VMs as : " \
                     "<basename>-vm0, <basename>-vm1, .. etc\n"
-            if not args.nocluster:
+            if not ARGS.nocluster:
                 errmsg = errmsg + "The --vmbasename value will become the " \
                     "name of the created cluster, too.\n"
             raise ValueError(errmsg)
         else:
             # validate hostname is in an allowed format
             try:
-                modules.OvirtUtils.validate_hostname(args.vmbasename)
+                modules.OvirtUtils.validate_hostname(ARGS.vmbasename)
             except ValueError as e:
                 raise ValueError("\n\nERROR: --vmbasename: {}\n".format(str(e)))
 
-        if args.ovirtcluster:
+        if ARGS.ovirtcluster:
             # make sure they supplied a valid cluster with a template
-            if args.ovirtcluster not in OVIRT_TEMPLATE_MAPPING:
+            if ARGS.ovirtcluster not in OVIRT_TEMPLATE_MAPPING:
                 raise ValueError("\n\nERROR: --ovirtcluster must be one of " \
                     "the following: {}\n" \
                     "(If '{}' is a valid cluster in Ovirt, " \
                     "probably there is no supported template for it " \
-                    "yet in this tool)\n".format(", ".join(OVIRT_TEMPLATE_MAPPING.keys()), args.ovirtcluster))
+                    "yet in this tool)\n".format(", ".join(OVIRT_TEMPLATE_MAPPING.keys()), ARGS.ovirtcluster))
 
-        if args.noinstaller:
-            if args.installer:
+        if ARGS.noinstaller:
+            if ARGS.installer:
                 raise AttributeError("\n\nERROR: You have specified not to " \
                     "install xcalar with the --noinstaller option,\n"
                     "but also provided an installation path with the " \
@@ -2948,16 +2951,16 @@ def validate_params(args):
                     "(Is this what you intended?)\n")
         else:
             # checks for if doing an install
-            # do NOT check for args.installer explicitally to do this;
+            # do NOT check for ARGS.installer explicitally to do this;
             # --installer doesn't get an automatic default so might not be set yet
-            # if here - args.count + ~ notinstaller - an install is going to be done!
+            # if here - ARGS.count + ~ notinstaller - an install is going to be done!
             pass
     else:
         '''
             if not trying to create vms,
             make sure at least runing to remove VMs then, else nothing to do
         '''
-        if not args.delete and not args.shutdown and not args.poweron and not args.list:
+        if not ARGS.delete and not ARGS.shutdown and not ARGS.poweron and not ARGS.list:
             raise AttributeError("\n\nERROR: Please re-run this script with " \
                 "--count=<number of vms you want>\n")
 
@@ -3030,7 +3033,7 @@ Generates a summary data file with information about the job.
 File @ <script dir>/ovirttool_run.txt, unless specified by OVIRT_DATA_FILE env var
 Intermediary dirs are created as needed.
 '''
-def generate_data_file(args, vms_created, vms_deleted, vms_shutdown, vms_powered_on):
+def generate_data_file(vms_created, vms_deleted, vms_shutdown, vms_powered_on):
 
     default_data_file = SCRIPT_DIR + "/ovirttool_run.txt"
     data_file_path = os.environ.get("OVIRT_DATA_FILE") or default_data_file
@@ -3041,7 +3044,7 @@ def generate_data_file(args, vms_created, vms_deleted, vms_shutdown, vms_powered
         file_str += "\n" + cmd_arg
 
     file_str += "\n\ntags:"
-    tags = get_multi_param_values("--tags", args.tags)
+    tags = get_multi_param_values("--tags", ARGS.tags)
     for tag in tags:
         file_str += "\n" + tag
     file_str += "\n\nCreated:"
@@ -3118,36 +3121,36 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--force", action="store_true", default=False,
         help="Force certain operations such as provisioning, delete, when script would fail normally")
 
-    args = parser.parse_args()
+    ARGS = parser.parse_args()
 
     # validate user params.
-    validate_params(args)
+    validate_params()
 
     # get params needed for this run, which have values based on user params.
-    # (can't use from args.<param> directly).
-    puppet_role = get_validate_puppet_role(args) # default based on other params
-    installer = get_validate_installer_url(args) # note: just because it has a value doesnt mean install is being done (will have value in args.delete, etc. cases, only returns None if --noinstaller)
-    ldap_config_url = get_validate_ldap_config_url(args.ldap)
-    xcalar_license_uncompressed = get_validate_xcalar_uncompressed_license(args)
-    FORCE = args.force # used globally
+    # (can't use from ARGS.<param> directly).
+    puppet_role = get_validate_puppet_role() # default based on other params
+    installer = get_validate_installer_url() # note: just because it has a value doesnt mean install is being done (will have value in ARGS.delete, etc. cases, only returns None if --noinstaller)
+    ldap_config_url = get_validate_ldap_config_url()
+    xcalar_license_uncompressed = get_validate_xcalar_uncompressed_license()
+    FORCE = ARGS.force # used globally
 
     # script setup
     setup()
 
     #open connection to Ovirt server
-    CONN = open_connection(user=args.user)
+    CONN = open_connection(user=ARGS.user)
 
     # if list requested, list all VMs and quit.
-    if args.list:
-        valid_vms = get_all_vms(verbose=args.verbose, formatted=args.formatted)
+    if ARGS.list:
+        valid_vms = get_all_vms(verbose=ARGS.verbose, formatted=ARGS.formatted)
         info_log("\n\n{}\n".format("\n".join(valid_vms)), timestamp=False)
         sys.exit(0)
 
     # validation that requires a connection to the Ovirt engine (validating VMs)
     #doing all validation before calling any of the operations so can fail out early
-    vms_to_delete = get_multi_param_values("--delete", args.delete) # errs on dupes
-    vms_to_shutdown = get_multi_param_values("--shutdown", args.shutdown)
-    vms_to_poweron = get_multi_param_values("--poweron", args.poweron)
+    vms_to_delete = get_multi_param_values("--delete", ARGS.delete) # errs on dupes
+    vms_to_shutdown = get_multi_param_values("--shutdown", ARGS.shutdown)
+    vms_to_poweron = get_multi_param_values("--poweron", ARGS.poweron)
     # validate all the VMs in these lists are valid
     # validating in one go because want to display list of valid vms
     # in err msg; don't want to repeat that list for each arg that could have invalid entries
@@ -3158,19 +3161,19 @@ if __name__ == "__main__":
     '''
         remove vms first if requested, to free up resources
     '''
-    if args.delete and vms_to_delete: # to be on the safe side check both?
+    if ARGS.delete and vms_to_delete: # to be on the safe side check both?
         remove_vms(vms_to_delete)
 
     '''
         shut down VMs if requsted, to free up resources
     '''
-    if args.shutdown and vms_to_shutdown:
+    if ARGS.shutdown and vms_to_shutdown:
         shutdown_vms(vms_to_shutdown)
 
     '''
         power up existing VMs if requested before creating new ones
     '''
-    if args.poweron and vms_to_poweron:
+    if ARGS.poweron and vms_to_poweron:
         power_on_vms(vms_to_poweron)
 
     ''''
@@ -3182,22 +3185,22 @@ if __name__ == "__main__":
     hostnames = [] # hostnames assigned to the vms generated
     ips = [] # ips assigned to generated vms
     cluster_name = None
-    if args.count:
+    if ARGS.count:
         # generate names for the VMs.
         # generate_vm_names will take the basename you supply it,
         # genrate <another basename> from this with randomness (to avoid old hostnames being resued), then
         # create --count number of VM names from <another basename>.  It returns those Vm names,
         # and <another basename> (if creating cluster, will name the cluster <another basename>)
-        unique_generated_basename, vmnames = generate_vm_names(args.vmbasename, int(args.count), no_rand=args.norand)
-        vmids = provision_vms(vmnames, args.ovirtcluster, convert_mem_size(int(args.ram)), int(args.cores), tryotherclusters=args.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        unique_generated_basename, vmnames = generate_vm_names(ARGS.vmbasename, int(ARGS.count), no_rand=ARGS.norand)
+        vmids = provision_vms(vmnames, ARGS.ovirtcluster, convert_mem_size(int(ARGS.ram)), int(ARGS.cores), tryotherclusters=ARGS.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
-        if not args.noinstaller:
+        if not ARGS.noinstaller:
             # if you supply a value to 'createcluster' arg of setup_xcalar,
             # then once xcalar install compled on all nodes will form the vms in
             # to a cluster by that name
-            if not args.nocluster and int(args.count) > 1:
+            if not ARGS.nocluster and int(ARGS.count) > 1:
                 cluster_name = unique_generated_basename
-            setup_xcalar(vmids, xcalar_license_uncompressed, installer, ldap_config_url, args.listen, createcluster=cluster_name)
+            setup_xcalar(vmids, xcalar_license_uncompressed, installer, ldap_config_url, ARGS.listen, createcluster=cluster_name)
 
         # get hostnames to print to stdout, and ips for restart
         for vmid in vmids:
@@ -3206,17 +3209,17 @@ if __name__ == "__main__":
             hostnames.append(get_hostname(next_ip))
 
     # get summary of work done, while VMs are still ssh'able by ovirttool
-    summary_string = get_summary_string(vmids, int(args.ram), int(args.cores), args.ovirtcluster, installer=installer, cluster_name=cluster_name)
+    summary_string = get_summary_string(vmids, int(ARGS.ram), int(ARGS.cores), ARGS.ovirtcluster, installer=installer, cluster_name=cluster_name)
 
     # setup puppet on all the VMs
     # you can not make any more root ssh calls to the VMs after this;
     # ssh'ing is done in this script with a special ovirt pub key
     # puppet will remove it from auth users.
-    enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=args.puppet_cluster)
+    enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=ARGS.puppet_cluster)
 
     # TEMPORARY: running puppet results in issue with ldapConfig which was set up.
     # need to restart xcalar service post-puppet install for ldap to take effect.
-    if not args.noinstaller:
+    if not ARGS.noinstaller:
         restart_xcalar_in_parallel(ips, restart_expserver=True)
 
     '''
@@ -3229,7 +3232,7 @@ if __name__ == "__main__":
 
     # generate a data file with minimal info (for automation/log tracking)
     # (env var OVIRT_DATA_FILE can specify where the file is written)
-    generate_data_file(args, hostnames, vms_to_delete, vms_to_shutdown, vms_to_poweron)
+    generate_data_file(hostnames, vms_to_delete, vms_to_shutdown, vms_to_poweron)
 
     # close connection
     close_connection(CONN)
