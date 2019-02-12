@@ -10,7 +10,6 @@ EMAIL="${EMAIL:-devaccounts@xcalar.com}"
 LE_ENDPOINT=https://acme-v02.api.letsencrypt.org/directory
 LE_DIR="/etc/letsencrypt"
 LE_ACCOUNTS=${CDUP}/letsencrypt-accounts-shared
-IMAGE=certbot/dns-google
 
 usage() {
     echo >&2 "usage: $0 [--domain (default: $DOMAIN)] [--email (default: $EMAIL)] [--dryrun]"
@@ -31,18 +30,24 @@ while [ $# -gt 0 ]; do
             DOMAIN_ARGS="$DOMAIN_ARGS -d $1"
             shift
             ;;
-        -e | --email) EMAIL="$1"; shift;;
+        -e | --email)
+            EMAIL="$1"
+            shift
+            ;;
         -n | --dryrun | --dry-run)
             DRYRUN=true
             LE_ENDPOINT=https://acme-staging-v02.api.letsencrypt.org/directory
             LE_DIR="/etc/letsencrypt-stage"
             ;;
-        -i| --image)
+        -i | --image)
             IMAGE="$1"
             shift
             ;;
-        -h|--help) usage;;
-        *) echo >&2 "ERROR: Unknown argument $cmd"; exit 2;;
+        -h | --help) usage ;;
+        *)
+            echo >&2 "ERROR: Unknown argument $cmd"
+            exit 2
+            ;;
     esac
 done
 
@@ -54,39 +59,43 @@ fi
 
 if [ -z "$IMAGE" ]; then
     case "$DOMAIN" in
-        *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53;;
-        *.xcalar.rocks | xcalar.rocks) IMAGE=certbot/dns-route53;;
-        *.xcalar.io    | xcalar.io) IMAGE=certbot/dns-google;;
-        *.xcalar.com   | xcalar.com) IMAGE=certbot/dns-google;;
-        *) echo >&2 "Unrecognized domain: ${DOMAIN}"; exit 1;;
+        *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53 ;;
+        *.xcalar.rocks | xcalar.rocks) IMAGE=certbot/dns-route53 ;;
+        *.xcalar.io | xcalar.io) IMAGE=certbot/dns-google ;;
+        *.xcalar.com | xcalar.com) IMAGE=certbot/dns-google ;;
+        *)
+            echo >&2 "Unrecognized domain: ${DOMAIN}"
+            exit 1
+            ;;
     esac
 fi
 
 TMP=$(mktemp -t dns.XXXXXX)
+# shellcheck disable=SC2046
 trap "rm -f $TMP" EXIT
 
 docker pull $IMAGE
 
 DOCKER_FLAGS="-it --rm --name certbot -v $LE_DIR:/etc/letsencrypt -v $LE_ACCOUNTS:/etc/letsencrypt/accounts -v /var/lib/letsencrypt:/var/lib/letsencrypt --dns 8.8.8.8 --dns 8.8.4.4"
 
-if [[ $IMAGE = certbot/dns-google ]]; then
+if [[ $IMAGE == certbot/dns-google ]]; then
     (
-    vault kv get -field=data secret/service_accounts/gcp/google-dnsadmin >> $TMP
-    set -x
-    docker run  $DOCKER_FLAGS \
-                -v "$(readlink -f $TMP):/etc/gdns.json:ro" \
-                $IMAGE certonly --dns-google-credentials /etc/gdns.json \
-                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
+        vault kv get -field=data secret/service_accounts/gcp/google-dnsadmin >> $TMP
+        set -x
+        docker run $DOCKER_FLAGS \
+            -v "$(readlink -f $TMP):/etc/gdns.json:ro" \
+            $IMAGE certonly --dns-google-credentials /etc/gdns.json \
+            --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
 
     )
-elif [[ $IMAGE = certbot/dns-route53 ]]; then
+elif [[ $IMAGE == certbot/dns-route53 ]]; then
     (
-    eval $(vault-aws-credentials-provider.sh --export-env --ttl 15m) || exit 1
-    set -x
-    docker run $DOCKER_FLAGS \
-                -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
-                $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 30 \
-                --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
+        eval $(vault-aws-credentials-provider.sh --export-env --ttl 15m) || exit 1
+        set -x
+        docker run $DOCKER_FLAGS \
+            -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+            $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 30 \
+            --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
     )
 fi
 
@@ -104,6 +113,6 @@ else
     vault kv get -field=data secret/certs/${DOMAIN}/cert.key > $DOMAIN.key
     vault kv get -field=data secret/certs/${DOMAIN}/cert.crt > $DOMAIN.crt
     echo >&2 "# Stored certificates:"
-    echo "crt: `pwd`/${DOMAIN}.crt"
-    echo "key: `pwd`/${DOMAIN}.key"
+    echo "crt: $(pwd)/${DOMAIN}.crt"
+    echo "key: $(pwd)/${DOMAIN}.key"
 fi
