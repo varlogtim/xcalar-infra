@@ -9,6 +9,7 @@
 
 DEBUG=${DEBUG:-0}
 NOW=$(date +%s)
+FORCE=false
 #PREFIX=/usr
 
 die() {
@@ -115,6 +116,7 @@ fetch() {
 
 download() {
     local path="${1#https://}"
+    path="${1#http://}"
     local cache="${HOME}/.cache/pkgbuild/sources/${path}"
     if ! test -e "$cache"; then
         info "cache-miss: downloading $1 to $cache"
@@ -146,7 +148,7 @@ pkggenerate() {
         pkgdesc="$(jq -r .description $api_json)"
         pkgrel="${pkgrel:-1}"
 
-        local sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'linux' | grep -E '(amd64|x86_64|x64)' | grep -Ev '\.(deb|rpm)$' | head -1))
+        local sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'linux' | grep -E '(amd64|x86_64|x64)' | grep -Ev '\.(deb|rpm|pacman)$' | head -1))
         if [ ${#sources[@]} -eq 0 ]; then
             sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'amd64' | grep -Ev '(.asc$|SHA)' | head -1))
         fi
@@ -240,7 +242,7 @@ pkgmain() {
                 mv ${PKGBUILD}.$$ ${PKGBUILD}
                 ;;
             -f | --force)
-                FORCE=-f
+                FORCE=true
                 ;;
 
             *) die "Unknown command: $cmd" ;;
@@ -357,7 +359,10 @@ pkgmain() {
             FPM_COMMON+=(--${script} ${srcdir}/${script}.sh)
         fi
     done
-    FPM_COMMON+=(${FORCE} -C "$pkgdir${prefix}")
+    if $FORCE; then
+        FPM_COMMON+=(-f)
+    fi
+    FPM_COMMON+=(-C "$pkgdir${prefix}")
     info "building $pkgname rpm ..."
     run fpm -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
     info "building $pkgname deb ..."
