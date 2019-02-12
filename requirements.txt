@@ -22,9 +22,7 @@ pre-commit
 pylint
 pytest
 pyvmomi
-requests
 testinfra
 troposphere
 warrant
 yamllint
-# yasha
