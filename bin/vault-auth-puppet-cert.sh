@@ -23,7 +23,7 @@ fi
 /usr/bin/sudo -H ${VAULT} login -address=${VAULT_ADDR} -method=cert -client-cert=${CERT} -client-key=${KEY} "$@"
 
 if test -r $KEY; then
-    vault login -method=cert -client-cert=${CERT} -client-key=${KEY} "$@"
+    ${VAULT} login -method=cert -client-cert=${CERT} -client-key=${KEY} "$@"
 else
-    eval /usr/bin/sudo -H ${VAULT} login -address=${VAULT_ADDR} -method=cert -client-cert=${CERT} -client-key=${KEY} "$@"
+    /usr/bin/sudo -H ${VAULT} login -address=${VAULT_ADDR} -method=cert -client-cert=${CERT} -client-key=${KEY} "$@"
 fi
