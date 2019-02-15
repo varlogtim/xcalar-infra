@@ -22,8 +22,8 @@ while getopts "c:f:" opt; do
 done
 
 echo "Delete cluster $CLUSTERNAME"
-gcloud dataproc clusters delete $CLUSTERNAME
+gcloud dataproc clusters delete -q $CLUSTERNAME
 
 echo "Delete firewal rule $FRULE"
-gcloud compute firewall-rules delete $FRULE
+gcloud compute firewall-rules delete -q $FRULE
 

@@ -1,9 +1,9 @@
 #!/bin/bash
 
-set -e
 
-IMAGE='1.3-deb9'
-FRULE='sparkport'
+export CLOUDSDK_COMPUTE_REGION=${CLOUDSDK_COMPUTE_REGION-us-central1}
+export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
+
 
 usage()
 {
@@ -11,7 +11,7 @@ usage()
     Create Dataproc Cluster within GCE.
 
     Example invocation:
-        $myName -c my-cluster-test -m n1-standard-4 -n 3 -w n1-standard-4 -S 500 -s 500 -z us-central1-a -b bucket-name-store-data
+        $myName -c my-cluster-test -m n1-standard-4 -n 3 -w n1-standard-4 -b bucket-name-store-data
 
         -c <name>       GCE cluster name
         -m <type>       Master instance type (eg n1-standard-8)
@@ -19,13 +19,14 @@ usage()
         -w <type>       Worker instance type (eg n1-standard-8)
         -S <size>       Master disk siez(GB)
         -s <size>       Worker disk size(GB)
-        -z <zone>       Zone
         -b <bucket>     Bucket to store the data
-        -f <fire rule>  Fire Rule Name to set port 10000 open, dafault name "sparkport"
+        -f <fire rule>  Fire Rule Name to set port 10000 open, default name "sparkport"
+        -D <disk type>  Master instance disk type, defult pd-standard
+        -d <disk type>  Woker instance disk type, default pd-standard
 EOF
 }
 
-while getopts "c:m:n:w:S:s:z:b:f:" opt; do
+while getopts "c:m:n:w:S:s:b:f:" opt; do
   case $opt in
       c) CLUSTERNAME="$OPTARG";;
       m) MASTER_TYPE="$OPTARG";;
@@ -33,12 +34,36 @@ while getopts "c:m:n:w:S:s:z:b:f:" opt; do
       w) WORKER_TYPE="$OPTARG";;
       S) MASTER_DISK_SIZE="$OPTARG";;
       s) WORKER_DISK_SIZE="$OPTARG";;
-      z) ZONE="$OPTARG";;
       b) BUCKET="$OPTARG";;
       f) FRULE="$OPTARG";;
       *) usage; exit 0;;
   esac
 done
+
+IMAGE='1.3-deb9'
+FRULE="${FRULE:-sparkport}"
+MASTER_DISK_TYPE="${MASTER_DISK_TYPE:-pd-standard}"
+WORKER_DISK_TYPE="${WORKER_DISK_TYPE:-pd-standard}"
+
+if [ -z "$MASTER_DISK_SIZE" ]; then
+    case "$INSTANCE_TYPE" in
+        n1-highmem-16) MASTER_DISK_SIZE=400;;
+        n1-highmem-8) MASTER_DISK_SIZE=200;;
+        n1-standard*) MASTER_DISK_SIZE=80;;
+        g1-*) MASTER_DISK_SIZE=80;;
+        *) MASTER_DISK_SIZE=80;;
+    esac
+fi
+
+if [ -z "$WOKER_DISK_SIZE" ]; then
+    case "$INSTANCE_TYPE" in
+        n1-highmem-16) WORKER_DISK_SIZE=400;;
+        n1-highmem-8) WORKER_DISK_SIZE=200;;
+        n1-standard*) WORKER_DISK_SIZE=80;;
+        g1-*) WORKER_DISK_SIZE=80;;
+        *) WORKER_DISK_SIZE=80;;
+    esac
+fi
 
 getMasterIp() {
     gcloud compute instances describe "${CLUSTERNAME}-m" \
@@ -57,16 +82,16 @@ setSparkServer(){
 }
 
 cleanup () {
-    gcloud dataproc clusters delete $CLUSTERNAME
+    gcloud dataproc clusters delete -q $CLUSTERNAME
+    gcloud compute firewall-rules delete -q $FRULE
 }
 
 die () {
     cleanup
-    say "ERROR($1): $2"
     exit $1
 }
 
-gcloud dataproc clusters create ${CLUSTERNAME} --bucket ${BUCKET} --subnet default --zone ${ZONE} \
+gcloud dataproc clusters create ${CLUSTERNAME} --bucket ${BUCKET} --subnet default \
     --master-machine-type ${MASTER_TYPE} \
     --master-boot-disk-size ${MASTER_DISK_SIZE} \
     --num-workers ${NUM_WORKER} \
@@ -78,7 +103,7 @@ gcloud dataproc clusters create ${CLUSTERNAME} --bucket ${BUCKET} --subnet defau
 
 res=${PIPESTATUS[0]}
 if [ "$res" -ne 0 ]; then
-    die $res "Failed to create some instances"
+    die
 fi
 
 gcloud compute firewall-rules create ${FRULE} --direction=INGRESS --priority=1000 \
@@ -86,6 +111,11 @@ gcloud compute firewall-rules create ${FRULE} --direction=INGRESS --priority=100
     --action=ALLOW \
     --rules=tcp:10000 \
     --source-ranges=0.0.0.0/0
+
+res=${PIPESTATUS[0]}
+if [ "$res" -ne 0 ]; then
+    die
+fi
 
 setSparkServer
 getMasterIp

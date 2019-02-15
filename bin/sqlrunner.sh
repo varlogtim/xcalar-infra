@@ -33,7 +33,7 @@ usage()
         ssh-add -t0 ~/.ssh/google_compute_engine
 
     Example invocation:
-        $myName -c ecohen-sqlrunner -I n1-standard-8 -n 3 -i /netstore/builds/byJob/BuildTrunk/2427/prod/xcalar-1.4.1-2427-installer -l ~/archive/xcelicense.lic -N -- -w 3 -s 1031 -IC -t test_xcTest -U test-admin@xcalar.com -P <password>
+        $myName -c ecohen-sqlrunner -I n1-standard-8 -n 3 -i /netstore/builds/byJob/BuildTrunk/2427/prod/xcalar-1.4.1-2427-installer -l ~/archive/xcelicense.lic -N -b <storage bucket> -- -w 3 -s 1031 -IC -t test_xcTest -U test-admin@xcalar.com -P <password>
 
     All options following "--" are passed as-is to test_jdbc.py.
 
@@ -52,10 +52,11 @@ usage()
         -u              Use an existing cluster instead of creating one
         -x <instpath>   Path to Xcalar install directory on cluster
         -X <xlrpath>    Path to Xcalar root on cluster
+        -b <bucket>     gcloud storage bucket
 EOF
 }
 
-while getopts "c:i:I:kn:Npr:St:ux:X:" opt; do
+while getopts "c:i:I:kn:Npr:St:ux:X:b:" opt; do
   case $opt in
       c) optClusterName="$OPTARG";;
       i) optXcalarImage="$OPTARG";;
@@ -70,6 +71,7 @@ while getopts "c:i:I:kn:Npr:St:ux:X:" opt; do
       u) optUseExisting=true;;
       x) optRemoteXlrDir="$OPTARG";;
       X) optRemoteXlrRoot="$OPTARG";;
+      b) optBucket="$OPTARG";;
       --) break;; # Pass all following to test_jdbc
       *) usage; exit 0;;
   esac
@@ -108,6 +110,12 @@ getNodeIp() {
         | python -c 'import sys; print(eval(sys.stdin.readline())[0]);'
 }
 
+getSparkIp() {
+    gcloud compute instances describe "$optClusterName-spark-m" \
+        --format='value[](networkInterfaces.accessConfigs.natIP)' \
+        | echo $(python -c 'import sys; print(eval(sys.stdin.readline())[0]);')
+}
+
 waitCmd() {
     local cmd="$1"
     local to="$2"
@@ -140,6 +148,11 @@ createCluster() {
     echo "Waiting for Xcalar start on $optNumNodes node cluster $optClusterName"
 
     waitCmd "rcmd $optRemoteXlrDir/bin/xccli -c version > /dev/null" $optTimeoutSec
+
+    $XLRINFRADIR/bin/gce-dataproc.sh -c "$optClusterName-spark" -m $optInstanceType -n $(($optNumNodes - 1)) \
+          -w $optInstanceType -b $optBucket
+
+    SPARK_IP=$(getSparkIp)
 }
 
 installDeps() {
@@ -163,7 +176,7 @@ installDeps() {
 runTest() {
     local results="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType"
     rcmd "XLRDIR=$optRmoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
-        -p "$optRemotePwd" -o $results -n "$optNumNodes,$optInstanceType" $optsTestJdbc
+        -p "$optRemotePwd" -o $results -n "$optNumNodes,$optInstanceType" -S $SPARK_IP --path "gs:\\$optBucket" $optsTestJdbc
 
     gcloud compute scp "$clusterLeadName:${results}*.json" "$optResultsPath"
 }
@@ -172,6 +185,7 @@ destroyCluster() {
     if ! $optKeep
     then
         $XLRINFRADIR/gce/gce-cluster-delete.sh $optClusterName
+        $XLRINFRADIR/bin/gce-dataproc-delete.sh -c "$optClusterName-spark"
     fi
 }
 
