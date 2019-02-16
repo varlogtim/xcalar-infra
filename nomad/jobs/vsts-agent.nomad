@@ -4,6 +4,13 @@ job "my-vsts-agents" {
   group "vsts" {
     count = 1
 
+    restart {
+      attempts = 5
+      interval = "2m"
+      delay    = "15s"
+      mode     = "fail"
+    }
+
     constraint {
       distinct_hosts = true
     }
@@ -24,9 +31,14 @@ job "my-vsts-agents" {
         ]
       }
 
-      env {
+      template {
+        data = <<EOT
         VSTS_ACCOUNT = "xcalar"
-        VSTS_TOKEN   = "2tucq3pofi24pjdteaemt57xge7amkrbdyodoxbs6oggtkzkfxaa"
+        VSTS_TOKEN   = "{{ with secret/data/infra/vsts }}{{ .Data.data.token }}"
+EOT
+
+        env         = true
+        destination = "secrets/vsts.env"
       }
 
       resources {
