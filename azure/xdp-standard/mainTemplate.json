@@ -248,6 +248,13 @@
         "description": "Storage account resource group"
       }
     },
+    "shareName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Share name"
+      }
+    },
     "bootDiagnostics": {
       "type": "bool",
       "defaultValue": false,

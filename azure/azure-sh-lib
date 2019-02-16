@@ -5,7 +5,6 @@
 # export XLRINFRADIR=$HOME/xcalar-infra
 # . $XLRINFRADIR/azure/azure-sh-lib
 
-NO_CACHE='no-cache, no-store, must-revalidate, max-age=0, no-transform'
 AZ_CACHEDIR="$HOME/.cache/azure"
 HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
 AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
@@ -25,6 +24,10 @@ AZ_DEFAULT_TEMPLATE="${AZ_DEFAULT_TEMPLATE:-$TEMAPLTE}"
 mkdir -p "$AZ_CACHEDIR" &&
 
 . $XLRINFRADIR/bin/infra-sh-lib
+
+az_mktemp() {
+    mktemp "$@" ${TMPDIR:-/tmp}/azure-sh-lib.XXXXXX
+}
 
 az_version()  {
     az --version | head -1 | sed -r 's/^(azure-cli).*\(([0-9]+)\.([0-9]+)\.([0-9]+)\)$/\2 \3 \4/g'
@@ -68,7 +71,7 @@ az_metadata_env() {
     (
         set -eo pipefail
         local tmp
-        tmp="$(mktemp --tmpdir az_metadata-XXXXX.env)"
+        tmp="$(az_mktemp -d)"
         az_meta 'http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json' |
             jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/AZ_\U\1 /g' |
             while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""
@@ -249,7 +252,7 @@ az_dns()  {
 # line endings. This function will take a filename (or stdin) and print the fixed version
 # to stdout
 az_fix_deploysh()  {
-    local tmp=$(mktemp /tmp/deployXXXXXX.sh)
+    local tmp=$(az_mktemp)
     (
         set -e
         if test -f "$1"; then
@@ -315,14 +318,16 @@ az_blob_upload_public()  {
     local fname="$1"
     test -f "$fname" || return 1
     local name="${2:-$fname}"
-    az storage blob upload -f "$fname" -n "$name" --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" --content-cache-control "$NO_CACHE" >/dev/null \
+    local no_cache="--content-cache-control no-cache,no-store,must-revalidate,max-age=0,no-transform"
+    az storage blob upload -f "$fname" -n "$name" --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" $no_cache >/dev/null \
         && az storage blob url --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" --name "$name" -otsv
 }
 
 az_blob_upload_batch_public()  {
     local src="$1"
     local dst="$2"
-    az storage blob upload-batch --account-name ${AZ_PUBLIC_ACCOUNT} --destination "${AZ_PUBLIC_CONTAINER}" --content-cache-control "$NO_CACHE" --source "$src" --destination-path "$dst" \
+    local no_cache="--content-cache-control no-cache,no-store,must-revalidate,max-age=0,no-transform"
+    az storage blob upload-batch --account-name ${AZ_PUBLIC_ACCOUNT} --destination "${AZ_PUBLIC_CONTAINER}" $no_cache --source "$src" --destination-path "$dst" \
         && az storage blob url --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" --name "$dst" -otsv
 }
 
@@ -449,9 +454,11 @@ list_functions()  {
 }
 
 export_all()  {
-    export -f safe_curl say error file_age az_version az_rg_vms az_rg_vms_do az_rg_vms_stop_start_all az_rg_pip az_rg_dns az_rg_ssh \
+    export AZ_PUBLIC_ACCOUNT AZ_PUBLIC_CONTAINER AZ_PUBKEY AZ_DEFAULT_TEMPLATE
+    export -f safe_curl say error file_age az_version az_rg_vms az_rg_vms_do az_rg_vms_stop_start_all az_rg_pip az_rg_dns_or_ip az_rg_ssh \
               az_fix_deploysh az_vms az_vm_running az_vm_details_update az_vm_details az_provider_api_versions az_blob_upload_public az_meta_json az_meta_text az_rg_deployment_url \
-              az_browse list_functions az_msi az_container_size az_containers az_storage_accounts az_deploy az_deploy_usage
+              az_browse list_functions az_msi az_container_size az_containers az_storage_accounts az_deploy az_deploy_usage \
+              az_disk_info az_disk_update az_rg_scheduled_shutdown
 }
 
 az_sub_browse() {
@@ -498,7 +505,7 @@ az_deploy() {
     local -a extra_params=()
     local email=$(git config user.email) retry ip_address
     local name group count=1 size=Standard_E8s_v3 template_arg storageAccount_arg
-    local template_uri=$AZ_DEFAULT_TEMPLATE
+    local template_file=$AZ_DEFAULT_TEMPLATE
     local parameters_file=${DEFAULTS}
     local installer_url dnslabel
     while [ $# -gt 0 ]; do
@@ -554,7 +561,7 @@ az_deploy() {
     else
         storageAccount_arg="storageAccountNewOrExisting=new"
     fi
-    local TMP="$(mktemp /tmp/az_deploy-XXXXXX.json)"
+    local TMP="$(az_mktemp)"
 
     say "Browse the deployment here: $(az_rg_deployment_url $group)"
     az group deployment create --name deploy-${NOW} -g $group $template_arg \
@@ -590,3 +597,5 @@ az_disk_update () {
 
     az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids ${disks[@]}
 }
+
+export_all
