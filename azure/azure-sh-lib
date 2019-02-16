@@ -11,30 +11,28 @@ AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
 HOSTED_ZONEID="Z2S03H582J2UUD" ## .xcalar.io
 TODAY=$(date +%Y%m%d)
 NOW="${TODAY}$(date +%H%M%S)"
-TEMAPLTE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
-DEFAULTS=$XLRINFRADIR/azure/xdp-standard/defaults.json
+TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
+TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v9/mainTemplate.json
+DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
 
 AZ_PUBLIC_ACCOUNT=${AZ_PUBLIC_ACCOUNT:-xcrepo}
 AZ_PUBLIC_CONTAINER=${AZ_PUBLIC_CONTAINER:-public}
 AZ_PUBKEY="${AZ_PUBKEY:-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b azureuser@xdp-standard}"
-AZ_DEFAULT_TEMPLATE="${AZ_DEFAULT_TEMPLATE:-$TEMAPLTE}"
+AZ_DEFAULT_TEMPLATE="$TEMPLATE_URL"
 
-#AZ_DEFAULT_TEMPLATE="https://${AZ_PUBLIC_ACCOUNT}.blob.core.windows.net/${AZ_PUBLIC_CONTAINER}/xdp-standard-platform/v3/mainTemplate.json}"
-
-mkdir -p "$AZ_CACHEDIR" &&
-
-. $XLRINFRADIR/bin/infra-sh-lib
+mkdir -p "$AZ_CACHEDIR" \
+    && . $XLRINFRADIR/bin/infra-sh-lib
 
 az_mktemp() {
     mktemp "$@" ${TMPDIR:-/tmp}/azure-sh-lib.XXXXXX
 }
 
-az_version()  {
+az_version() {
     az --version | head -1 | sed -r 's/^(azure-cli).*\(([0-9]+)\.([0-9]+)\.([0-9]+)\)$/\2 \3 \4/g'
 }
 
 az_rg_exists() {
-    [[ "$(az group exists -g $1 -otsv)" = true ]]
+    [[ "$(az group exists -g $1 -otsv)" == true ]]
 }
 
 az_meta() {
@@ -44,20 +42,20 @@ az_meta() {
 az_rg_create() {
     local name="$1"
     local location=${2:-${LOCATION:-westus2}}
-    az_rg_exists "$name" || [[ "$(az group create -n "$name" -l $location -ojson --query 'properties.provisioningState' -otsv)" = Succeeded ]]
+    az_rg_exists "$name" || [[ "$(az group create -n "$name" -l $location -ojson --query 'properties.provisioningState' -otsv)" == Succeeded ]]
 }
 
 # Returns Azure instance metadata like this:
 # LOCATION=westus2
 # NAME=trial-rmadugula-01-vm0
 # OFFER=CentOS
-az_metadata_instance()  {
+az_metadata_instance() {
     az_meta "http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json" | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'
 }
 
 # Returns any scheduled events in this format:
 ## { "DocumentIncarnation": 0, "Events": [] }
-az_metadata_event()  {
+az_metadata_event() {
     az_meta "http://169.254.169.254/metadata/scheduledevents?api-version=2018-04-02&format=json" | jq -r . #| jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'; echo "${PIPESTATUS[0]}";
 }
 
@@ -72,17 +70,18 @@ az_metadata_env() {
         set -eo pipefail
         local tmp
         tmp="$(az_mktemp -d)"
-        az_meta 'http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json' |
-            jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/AZ_\U\1 /g' |
-            while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""
+        az_meta 'http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json' \
+            | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/AZ_\U\1 /g' \
+            | while read KEY VALUE; do
+                echo "${KEY//-/_}=\"${VALUE}\""
             done | tee $tmp
         . $tmp
         if [ -n "$AZ_TAGS" ]; then
             echo "$AZ_TAGS" | tr ';' '\n' | sed -r 's/^([^:]+):/AZ_TAG_\U\1 /g' | while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""; done | tee -a $tmp
         fi
-        az_meta 'http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json' |
-            jq -r '.network.interface[0].ipv4.ipAddress[0]|[.privateIpAddress,.publicIpAddress]|@tsv' |
-            while read LOCALIP4 PUBLICIPV4; do
+        az_meta 'http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json' \
+            | jq -r '.network.interface[0].ipv4.ipAddress[0]|[.privateIpAddress,.publicIpAddress]|@tsv' \
+            | while read LOCALIP4 PUBLICIPV4; do
                 echo "AZ_LOCALIPV4=${LOCALIP4}"
                 test -z "$PUBLICIPV4" || echo "AZ_PUBLICIPV4=${PUBLICIPV4}"
             done | tee -a $tmp
@@ -97,7 +96,7 @@ az_vm_ids() {
     az vm list -ojson "$@" | jq -r '.[].id'
 }
 
-az_groups()  {
+az_groups() {
     local groups=$AZ_CACHEDIR/allgroups.json name group groupdir
     az group list -ojson >$groups
     jq -r '.[].id' <$groups >$AZ_CACHEDIR/allgroups.txt
@@ -111,13 +110,13 @@ az_groups()  {
     ln -sfn $NOW $groupdir/../current
 }
 
-az_rg_vms()  {
+az_rg_vms() {
     az vm list -g "$1" -ojson --query '[].id' -otsv
 }
 
 # For all vms in group $1 perform action $2
 # eg, az_rg_vms_do abakshi-50-rg deallocate
-az_rg_vms_do()  {
+az_rg_vms_do() {
     local action=$1 rg="$2" ids=()
     if [ -z "$rg" ]; then
         error "Must specify at least one resource group"
@@ -144,7 +143,7 @@ az_rg_vms_do()  {
 
 }
 
-az_rg_vms_stop_start_all()  {
+az_rg_vms_stop_start_all() {
     local rg="$1" rc ip
     if [ -z "$rg" ] || [ "$(az group exists -g $rg -otsv)" != true ]; then
         error "Need to specify existing resource group"
@@ -154,8 +153,8 @@ az_rg_vms_stop_start_all()  {
         error "Couldn't find IP for RG: $ip"
         return 1
     fi
-    az_rg_vms_do deallocate $rg &&
-        az_rg_vms_do start $rg
+    az_rg_vms_do deallocate $rg \
+        && az_rg_vms_do start $rg
     rc=$?
     if [ $rc -ne 0 ]; then
         error "$rc: Failed to stop/start RG $rg"
@@ -170,19 +169,19 @@ az_rg_vms_stop_start_all()  {
     done
 }
 
-az_rg_pip()  {
+az_rg_pip() {
     az resource list -g "$1" --namespace Microsoft.Network --resource-type publicIPAddresses -ojson --query '[].id' -otsv
 }
 
-az_rg_stop()  {
+az_rg_stop() {
     az_rg_vms_do deallocate "$@"
 }
 
-az_rg_deallocate()  {
+az_rg_deallocate() {
     az_rg_vms_do deallocate "$@"
 }
 
-az_rg_start()  {
+az_rg_start() {
     az_rg_vms_do start "$@"
 }
 
@@ -196,14 +195,14 @@ az_rg_ip() {
     if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
         return 1
     fi
-    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
+    if ip="$(jq -r .properties.ipAddress <<<$ip_data)" && test -n "$ip" && test "$ip" != null; then
         echo $ip
         return 0
     fi
     return 1
 }
 
-az_rg_dns_or_ip()  {
+az_rg_dns_or_ip() {
     local rg="$1" ip_id ip_data dns ip
     if ! ip_id=$(az vm list-ip-addresses -g "$rg" -ojson --query '[0].virtualMachine.network.publicIpAddresses[0].id' -otsv) || test -z "$ip_id"; then
         return 1
@@ -211,11 +210,11 @@ az_rg_dns_or_ip()  {
     if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
         return 1
     fi
-    if dns="$(jq -r .properties.dnsSettings.fqdn <<< $ip_data)" && test -n "$dns" && test "$dns" != null; then
+    if dns="$(jq -r .properties.dnsSettings.fqdn <<<$ip_data)" && test -n "$dns" && test "$dns" != null; then
         echo $dns
         return 0
     fi
-    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
+    if ip="$(jq -r .properties.ipAddress <<<$ip_data)" && test -n "$ip" && test "$ip" != null; then
         echo $ip
         return 0
     fi
@@ -228,7 +227,7 @@ az_ssh() {
     ssh -A -oStrictHostKeyChecking=no -oLogLevel=ERROR -oUserKnownHostsFile=/dev/null -i ~/.ssh/id_azure "$@" azureuser@${host}
 }
 
-az_rg_ssh()  {
+az_rg_ssh() {
     local pip ip dns
     if pip=$(az_rg_pip "$1") && test -n "$pip"; then
         shift
@@ -240,7 +239,7 @@ az_rg_ssh()  {
     return 1
 }
 
-az_dns()  {
+az_dns() {
     local location
     if ! location=$(az group show -g $1 -ojson --query location -otsv); then
         return 1
@@ -251,7 +250,7 @@ az_dns()  {
 # The deploy.sh scripts from exportTemplate function gives shell scripts with Windows
 # line endings. This function will take a filename (or stdin) and print the fixed version
 # to stdout
-az_fix_deploysh()  {
+az_fix_deploysh() {
     local tmp=$(az_mktemp)
     (
         set -e
@@ -266,34 +265,34 @@ az_fix_deploysh()  {
     )
 }
 
-az_vm_cache()  {
-           http_proxy= https_proxy= curl "${HTTPCACHE}" -s -o $AZ_ALLVMS
+az_vm_cache() {
+    http_proxy= https_proxy= curl "${HTTPCACHE}" -s -o $AZ_ALLVMS
 }
 
-az_vms()  {
+az_vms() {
     if [ "$(file_age $AZ_ALLVMS)" -gt $((3 * 60 * 60)) ] || [ "$1" = "-f" ]; then
-        az_vm_cache >$AZ_ALLVMS  || return 1
+        az_vm_cache >$AZ_ALLVMS || return 1
     fi
     cat "${AZ_ALLVMS}"
 }
 
-az_vm_running()  {
+az_vm_running() {
     local subs="$(az account list -otsv 2>/dev/null | awk '{print $2}')"
     az_vm_details | grep running #| tr -d "'" | awk '{printf("/subscriptions/'${subs}'/resourceGroups/%s/providers/Microsoft.Compute/virtualMachines/%s\n",tolower($1),$2)}'
 }
 
-az_vm_details_update()  {
-    mkdir -p "$AZ_CACHEDIR" &&
-           az vm list -d -ojson >"${AZ_ALLVMS}.tmp" &&
-           mv -f "${AZ_ALLVMS}.tmp" "${AZ_ALLVMS}"
+az_vm_details_update() {
+    mkdir -p "$AZ_CACHEDIR" \
+        && az vm list -d -ojson >"${AZ_ALLVMS}.tmp" \
+        && mv -f "${AZ_ALLVMS}.tmp" "${AZ_ALLVMS}"
     return
 }
 
-az_vm_details()  {
+az_vm_details() {
     az_vms | jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps]|@sh' | column -t #jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps ]|@tsv' | column -t
 }
 
-az_provider_api_versions()  {
+az_provider_api_versions() {
     az provider show --namespace "${1:-Microsoft.Compute}" --query "resourceTypes[].[resourceType,apiVersions[]]" --out table
 }
 
@@ -309,12 +308,11 @@ az_provider_resource() {
     az provider operation show --namespace "${1:-Microsoft.Compute}" -ojson --query 'resourceTypes[].[name]' -otable
 }
 
-
 az_provider_operations_list() {
     az provider operation show --namespace "${1:-Microsoft.Storage}" -ojson --query "resourceTypes[?name=='storageAccounts'].operations[].name | [?contains(@, 'list')]"
 }
 
-az_blob_upload_public()  {
+az_blob_upload_public() {
     local fname="$1"
     test -f "$fname" || return 1
     local name="${2:-$fname}"
@@ -323,7 +321,7 @@ az_blob_upload_public()  {
         && az storage blob url --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" --name "$name" -otsv
 }
 
-az_blob_upload_batch_public()  {
+az_blob_upload_batch_public() {
     local src="$1"
     local dst="$2"
     local no_cache="--content-cache-control no-cache,no-store,must-revalidate,max-age=0,no-transform"
@@ -369,12 +367,12 @@ az_blob_url_public() {
     az storage blob url --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" --name "$1" -otsv
 }
 
-az_blob_container_du()  {
+az_blob_container_du() {
     az storage blob list --account-name "$1" --container-name "$2" --query "[*].[properties.contentLength]" --output tsv | tee "${1}_${2}.tsv" | paste --serial --delimiters=+ | bc
 }
 
 az_storage_accounts() {
-    az storage account list -ojson --query  '[*].id' --output tsv
+    az storage account list -ojson --query '[*].id' --output tsv
 }
 
 az_containers() {
@@ -392,17 +390,17 @@ az_container_size() {
 }
 
 # Returns the entire json document
-az_meta_json()  {
+az_meta_json() {
     az_meta "http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json"
 }
 
 # az_meta_text <key>, for example compute/name
-az_meta_text()  {
+az_meta_text() {
     az_meta "http://169.254.169.254/metadata/instance/$1?api-version=2018-04-02&format=text"
 }
 
 ## Resource group level functions
-az_rg_ips()  {
+az_rg_ips() {
     az vm list-ip-addresses --resource-group "$1" --output json --query '[].virtualMachine.network.publicIpAddresses[].[name,ipAddress]' --output tsv
 }
 
@@ -418,7 +416,7 @@ az_rg_deployment_url() {
     az_rg_url "$1" "deployments"
 }
 
-az_browse()  {
+az_browse() {
     local url browser
     if ! url="$(az_rg_url "$1")"; then
         return 1
@@ -429,15 +427,11 @@ az_browse()  {
     fi
     if [[ $OSTYPE =~ darwin ]]; then
         open "$url"
-        return 0
+    elif [[ $OSTYPE =~ linux ]]; then
+        xdg-open "$url"
+    else
+        say "Failed to find a browser: Url is $url"
     fi
-    for browser in google-chrome chrome firefox; do
-        if command -v $browser >/dev/null 2>&1; then
-            $browser "$url"
-            return $?
-        fi
-    done
-    say "Failed to find a browser: Url is $url"
 }
 
 # Example:
@@ -448,17 +442,16 @@ az_msi() {
     curl -s http://localhost:50342/oauth2/token --data "resource=https://management.azure.com/" -H Metadata:true
 }
 
-
-list_functions()  {
+list_functions() {
     grep '^[a-z]' | grep '{$' | awk '{print $1}' | tr '\n' ' '
 }
 
-export_all()  {
+export_all() {
     export AZ_PUBLIC_ACCOUNT AZ_PUBLIC_CONTAINER AZ_PUBKEY AZ_DEFAULT_TEMPLATE
     export -f safe_curl say error file_age az_version az_rg_vms az_rg_vms_do az_rg_vms_stop_start_all az_rg_pip az_rg_dns_or_ip az_rg_ssh \
-              az_fix_deploysh az_vms az_vm_running az_vm_details_update az_vm_details az_provider_api_versions az_blob_upload_public az_meta_json az_meta_text az_rg_deployment_url \
-              az_browse list_functions az_msi az_container_size az_containers az_storage_accounts az_deploy az_deploy_usage \
-              az_disk_info az_disk_update az_rg_scheduled_shutdown
+        az_fix_deploysh az_vms az_vm_running az_vm_details_update az_vm_details az_provider_api_versions az_blob_upload_public az_meta_json az_meta_text az_rg_deployment_url \
+        az_browse list_functions az_msi az_container_size az_containers az_storage_accounts az_deploy az_deploy_usage \
+        az_disk_info az_disk_update az_rg_scheduled_shutdown
 }
 
 az_sub_browse() {
@@ -486,13 +479,13 @@ az_sp_list() {
 
 az_deploy_usage() {
 
-    local -a params=($(jq -r '.parameters|keys|join("\n")' < $TEMAPLTE  | tr '\t' '\n')) str=()
+    local -a params=($(jq -r '.parameters|keys|join("\n")' <$TEMPLATE | tr '\t' '\n')) str=()
     local ii
     for ii in "${params[@]}"; do
         str+=("[${ii}=]")
     done
 
-    cat << EOF
+    cat <<EOF
     az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer-url url] [--dnslabel dns]
               [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
               [-n|--name name] [--dnslabel dns] ${str[*]}
@@ -501,41 +494,116 @@ EOF
 }
 
 az_deploy() {
-    local uid=$((RANDOM%511)) template_file ii cmd location=westus2
+    local uid=$((RANDOM % 511)) template ii cmd location=westus2
     local -a extra_params=()
     local email=$(git config user.email) retry ip_address
     local name group count=1 size=Standard_E8s_v3 template_arg storageAccount_arg
-    local template_file=$AZ_DEFAULT_TEMPLATE
+    local template=$AZ_DEFAULT_TEMPLATE
     local parameters_file=${DEFAULTS}
     local installer_url dnslabel
     while [ $# -gt 0 ]; do
         cmd="$1"
         case "$cmd" in
-            -h|--help) az_deploy_usage; return 1;;
-            --location=) location="${1##*=}"; shift 1;;
-            --group=|--resource-group=) group="${1##*=}"; shift 1;;
-            --template-file=) template_file="${1##*=}"; shift 1;;
-            --template-uri=) template_uri="${1##*=}"; shift 1;;
-            --parameters-file=) parameters_file="${1##*=}"; shift 1;;
-            --count=) count="${1##*=}"; shift 1;;
-            --dnslabel=) dnslabel="${1##*=}"; shift 1;;
-            --size=) size="${1##*=}"; shift 1;;
-            --name=) name="${1##*=}"; shift 1;;
-            --installer-url=) installer_url="${1##*=}"; extra_params+=(installerUrl="${1##*=}"); shift 1;;
-            -l|--location) location="$2"; shift 2;;
-            -g|--group|--resource-group) group="$2"; shift 2;;
-            -n|--name) name="$2"; shift 2;;
-            --template-file) template_file="$2"; shift 2;;
-            --template-uri) template_uri="$2"; shift 2;;
-            --parameters-file) parameters_file="$2"; shift 2;;
-            --count) count="$2"; shift 2;;
-            --dnslabel) dnslabel="$2"; shift 2;;
-            --size) size="$2"; shift 2;;
-            -i|--installer-url) installer_url="$2"; extra_params+=(installerUrl="$2"); shift 2;;
-            --parameters) shift; break;;
-            --) shift; break;;
-            -*) echo >&2 "Unknown arg: $cmd"; az_deploy_usage; return 1;;
-            *) break;;
+            -h | --help)
+                az_deploy_usage
+                return 1
+                ;;
+            --location=)
+                location="${1##*=}"
+                shift 1
+                ;;
+            --group= | --resource-group=)
+                group="${1##*=}"
+                shift 1
+                ;;
+            --template-file=)
+                template="${1##*=}"
+                shift 1
+                ;;
+            --template-uri=)
+                template="${1##*=}"
+                shift 1
+                ;;
+            --parameters-file=)
+                parameters_file="${1##*=}"
+                shift 1
+                ;;
+            --count=)
+                count="${1##*=}"
+                shift 1
+                ;;
+            --dnslabel=)
+                dnslabel="${1##*=}"
+                shift 1
+                ;;
+            --size=)
+                size="${1##*=}"
+                shift 1
+                ;;
+            --name=)
+                name="${1##*=}"
+                shift 1
+                ;;
+            --installer-url=)
+                installer_url="${1##*=}"
+                extra_params+=(installerUrl="${1##*=}")
+                shift 1
+                ;;
+            -l | --location)
+                location="$2"
+                shift 2
+                ;;
+            -g | --group | --resource-group)
+                group="$2"
+                shift 2
+                ;;
+            -n | --name)
+                name="$2"
+                shift 2
+                ;;
+            --template-file)
+                template="$2"
+                shift 2
+                ;;
+            --template-uri)
+                template="$2"
+                shift 2
+                ;;
+            --parameters-file)
+                parameters_file="$2"
+                shift 2
+                ;;
+            --count)
+                count="$2"
+                shift 2
+                ;;
+            --dnslabel)
+                dnslabel="$2"
+                shift 2
+                ;;
+            --size)
+                size="$2"
+                shift 2
+                ;;
+            -i | --installer-url)
+                installer_url="$2"
+                extra_params+=(installerUrl="$2")
+                shift 2
+                ;;
+            --parameters)
+                shift
+                break
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                echo >&2 "Unknown arg: $cmd"
+                az_deploy_usage
+                return 1
+                ;;
+            *) break ;;
         esac
     done
     if [ -n "$group" ] && [ -z "$name" ]; then
@@ -546,16 +614,20 @@ az_deploy() {
     fi
     test -n "$name" || name="xdp-${USER}-${uid}"
     test -n "$dnslabel" || dnslabel="${name}"
-    test -n "$group" || group="${name}-rg"
 
     if [ "$(az group exists -g "$group" -otsv)" = false ]; then
-        az group create -g "$group" -l $location
+        say "Must specify resource group with -g <resource group>"
+        say "Please create a resource group first, for example:"
+        say ""
+        say " az group create -g ${name}-rg -l westus2"
+        say ""
     fi
-    if [ -n "$template_file" ]; then
-        template_arg="--template-file $template_file"
-    else
-        template_arg="--template-uri $template_uri"
-    fi
+
+    case "$template" in
+        https://*|http://*) template_arg="--template-uri $template";;
+        *) template_arg="--template-file $template";;
+    esac
+
     if [ "$location" = westus2 ]; then
         storageAccount_arg="storageAccountNewOrExisting=existing storageAccountRG=xcalarroot-rg storageAccountName=xcalarroot"
     else
@@ -563,12 +635,34 @@ az_deploy() {
     fi
     local TMP="$(az_mktemp)"
 
-    say "Browse the deployment here: $(az_rg_deployment_url $group)"
+    az group deployment validate -g $group $template_arg \
+        --parameters ${parameters_file+@$parameters_file} "appName=${name}" \
+        "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
+        vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP" >/dev/null
+    rc=${PIPESTATUS[0]}
+    if [ $rc != 0 ]; then
+        cat "$TMP" >&2
+        say "Failed to validate!"
+        return 1
+    fi
+
+    say
+    say "Deploying to $group.. you can browse your resource group here: $(az_rg_url $group)"
+    say " and your deployment here: $(az_rg_deployment_url $group)"
+    say
+
     az group deployment create --name deploy-${NOW} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
+    rc=${PIPESTATUS[0]}
+    if [ $rc != 0 ]; then
+        say "Failed to deploy!"
+        return 1
+    fi
     az_rg_scheduled_shutdown $group 2300
+
+    say "Finished. Browse your deployment here: https://${dnslabel}.westus.cloudapp.azure.com"
 }
 
 # Call this function with the resourceGroup name and optionally
@@ -587,11 +681,11 @@ az_rg_scheduled_shutdown() {
     az group deployment create -n scheduledShutdown-${NOW} -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json --parameters vmName="${vm0%[0-9]*}" time=${time} timeZoneId='Pacific Standard Time' scaleNumber=$count -ojson --no-wait
 }
 
-az_disk_info () {
-    az disk  list -ojson |  jq -r '[.[]|{id:.id, sku:.sku.name,size:.diskSizeGb}]'
+az_disk_info() {
+    az disk list -ojson | jq -r '[.[]|{id:.id, sku:.sku.name,size:.diskSizeGb}]'
 }
 
-az_disk_update () {
+az_disk_update() {
     local cluster="$1" size_gb="${2:-127}" storage_sku="${3:-StandardSSD_LRS}" disks=''
     disks=($(az disk list -otsv | grep "$cluster" | awk '{print $5}'))
 

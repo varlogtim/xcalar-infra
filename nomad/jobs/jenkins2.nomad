@@ -22,12 +22,15 @@ job "jenkins2" {
       delay    = "25s"
       mode     = "delay"
     }
+    task "jenkins-docker-sidecar" {
+      driver = "docker"
+
 
     task "jenkins-master" {
       driver = "docker"
 
       config {
-        image = "jenkins/jenkins:lts"
+        image = "jenkins/jenkins:2.150.3"
 
         port_map {
           http = 8080
@@ -42,10 +45,10 @@ job "jenkins2" {
       }
 
       service {
-        name = "jenkins2"
+        name = "jenkins"
         port = "http"
 
-        tags = ["jenkins2", "http", "urlprefix-jenkins2.service.consul:9999/", "urlprefix-jenkins2.nomad:9999/", "urlprefix-jenkins2.int.xcalar.com:9999/", "urlprefix-jenkins2:9999/"]
+        tags = ["jenkins2", "urlprefix-jenkins2.service.consul:9999/", "urlprefix-jenkins2.nomad:9999/", "urlprefix-jenkins2.int.xcalar.com:9999/", "urlprefix-jenkins2:9999/"]
 
         check {
           name     = "alive"
@@ -89,7 +92,6 @@ job "jenkins2" {
 
         network {
           port "http" {
-            static = 8080
           }
 
           port "jnlp" {

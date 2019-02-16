@@ -26,11 +26,50 @@ job "prometheus" {
       migrate = true
     }
 
+    task "loki" {
+      driver = "docker"
+
+      config {
+        image = "grafana/loki:master"
+
+        port_map {
+          loki = 3100
+        }
+
+        args = ["-config.file=/etc/loki/local-config.yaml"]
+      }
+
+      resources {
+        network {
+          port "loki" {
+            static = "3100"
+          }
+        }
+
+        cpu    = 1000
+        memory = 512
+      }
+
+      service {
+        name = "loki"
+        port = "loki"
+
+        tags = ["urlprefix-loki.nomad:9999/", "urlprefix-loki.service.consul:9999/"]
+
+        check {
+          name     = "loki port alive"
+          type     = "tcp"
+          interval = "10s"
+          timeout  = "2s"
+        }
+      }
+    }
+
     task "grafana" {
       driver = "docker"
 
       config {
-        image = "grafana/grafana:5.4.3"
+        image = "grafana/grafana:master"
 
         port_map {
           grafana_ui = 3000
@@ -46,6 +85,9 @@ job "prometheus" {
         network {
           port "grafana_ui" {}
         }
+
+        cpu    = 1000
+        memory = 512
       }
 
       service {

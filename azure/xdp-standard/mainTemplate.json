@@ -11,17 +11,16 @@
     },
     "_artifactsLocation": {
       "metadata": {
-        "description": "Artifacts location",
-        "artifactsBaseUrl": ""
+        "description": "The base URI where artifacts required by this template are located including a trailing '/'"
       },
       "type": "string",
-      "defaultValue": "https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v3"
+      "defaultValue": "https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v8/"
     },
     "_artifactsLocationSasToken": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Artifacts Sas token"
+        "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
       }
     },
     "appName": {
@@ -35,7 +34,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Custom installer URL"
+        "description": "Custom installer URL (Optional)"
       }
     },
     "installerUrlSasToken": {
@@ -49,22 +48,23 @@
       "type": "securestring",
       "defaultValue": "",
       "metadata": {
-        "description": "Valid license key"
+        "description": "Valid license key or empty to enter key from XD GUI (Optional)"
       }
     },
     "scaleNumber": {
       "type": "int",
       "defaultValue": 1,
       "minValue": 1,
+      "maxValue": 249,
       "metadata": {
-        "description": "Number of XCE nodes to provision. (Max: 16)"
+        "description": "Number of XCE nodes to provision. (Max: 249)"
       }
     },
     "domainNameLabel": {
       "type": "string",
       "defaultValue": "[concat('xdp-standard-', uniqueString(resourceGroup().id))]",
       "metadata": {
-        "description": "Domain name label for public ip"
+        "description": "Domain name label for public ip."
       }
     },
     "appUsername": {
@@ -85,12 +85,6 @@
         "description": "Administrator's email address"
       }
     },
-    "adminUsername": {
-      "type": "string",
-      "metadata": {
-        "description": "VM Administrator's username for the Xcalar cluster"
-      }
-    },
     "authenticationType": {
       "type": "string",
       "defaultValue": "sshPublicKey",
@@ -102,19 +96,18 @@
         "description": "Authentication to use (password of sshkey)"
       }
     },
-    "adminPassword": {
+    "adminUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "VM Administrator's username for the Xcalar cluster, use for SSH access."
+      }
+    },
+    "adminPasswordOrKey": {
       "type": "securestring",
       "defaultValue": "",
       "metadata": {
-        "description": "VM Administrator's password for the Xcalar cluster. Not used when using SSH keys."
+        "description": "VM Administrator's password or SSH public key for the Xcalar cluster."
       }
-    },
-    "adminSSHPublicKey": {
-      "type": "string",
-      "metadata": {
-        "description": "VM Administrator's SSH Key"
-      },
-      "defaultValue": ""
     },
     "vmDiskType": {
       "type": "string",
@@ -130,7 +123,7 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_DS13_v2",
+      "defaultValue": "Standard_E8s_v3",
       "metadata": {
         "description": "Size of the VM"
       }
@@ -163,52 +156,47 @@
     "virtualNetworkNewOrExisting": {
       "type": "string",
       "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing"
+      ],
       "metadata": {
         "description": "Determines whether or not a new virtual network should be provisioned."
       }
     },
+    "virtualNetworkRG": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Name of the resource group for the existing virtual network"
+      }
+    },
     "virtualNetworkName": {
       "type": "string",
-      "defaultValue": "VirtualNetwork",
+      "defaultValue": "[concat(parameters('appName'),'-vnet')]",
       "metadata": {
         "description": "Name of the virtual network"
       }
     },
-    "addressPrefixes": {
-      "type": "array",
-      "defaultValue": [
-        "10.0.0.0/16"
-      ],
+    "addressPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16",
       "metadata": {
         "description": "Address prefix of the virtual network"
       }
     },
     "subnetName": {
       "type": "string",
-      "defaultValue": "subnet1",
+      "defaultValue": "[concat(parameters('appName'),'-subnet')]",
       "metadata": {
         "description": "Name of the subnet"
       }
     },
     "subnetPrefix": {
       "type": "string",
-      "defaultValue": "10.0.0.",
-      "metadata": {
-        "description": "Subnet prefix of the virtual network"
-      }
-    },
-    "subnetPrefixCIDR": {
-      "type": "string",
       "defaultValue": "10.0.0.0/24",
       "metadata": {
         "description": "Subnet prefix of the virtual network"
-      }
-    },
-    "virtualNetworkResourceGroupName": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().name]",
-      "metadata": {
-        "description": "Name of the resource group for the existing virtual network"
       }
     },
     "storageAccountNewOrExisting": {
@@ -224,7 +212,7 @@
     },
     "storageAccountName": {
       "type": "string",
-      "defaultValue": "[concat('xdpstorage', uniqueString(resourceGroup().id))]",
+      "defaultValue": "[concat('xdp', uniqueString(resourceGroup().id))]",
       "metadata": {
         "description": "Storage account name"
       }
@@ -248,11 +236,35 @@
         "description": "Storage account resource group"
       }
     },
+    "shareServerNewOrExisting": {
+      "type": "string",
+      "defaultValue": "new",
+      "allowedValues": [
+        "new",
+        "existing"
+      ],
+      "metadata": {
+        "description": "New or existing NFS server"
+      }
+    },
+    "shareSize": {
+      "type": "string",
+      "metadata": {
+        "description": "Size of NFS Server VM"
+      }
+    },
     "shareName": {
       "type": "string",
-      "defaultValue": "",
+      "defaultValue": "[concat(parameters('appName'),'-nfs')]",
       "metadata": {
-        "description": "Share name"
+        "description": "NFS storage server"
+      }
+    },
+    "shareFolder": {
+      "type": "string",
+      "defaultValue": "/data/nfs",
+      "metadata": {
+        "description": "Share folder on the NFS server"
       }
     },
     "bootDiagnostics": {
@@ -267,22 +279,11 @@
     "vmName": "[concat(toLower(parameters('appName')), '-vm')]",
     "nicName": "[concat(parameters('appName'), '-nic')]",
     "networkSecurityGroupName": "[concat(parameters('appName'),'-nsg')]",
-    "vnetLookup": {
-      "new": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
-      "existing": "[resourceId(parameters('virtualNetworkResourceGroupName'), 'Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
-    },
-    "vnetID": "[variables('vnetLookup')[parameters('virtualNetworkNewOrExisting')]]",
-    "subnetRef": "[concat(variables('vnetID'),'/subnets/', parameters('subnetName'))]",
-    "publicIPAddressLookup": {
-      "new": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]",
-      "existing": "[resourceId(parameters('publicIpAddressRG'),'Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]"
-    },
+    "vnetID": "[resourceId(parameters('virtualNetworkRG'), 'Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
+    "shareNic": "[concat(parameters('appName'), '-nfs-nic')]",
+    "subnetID": "[resourceId(parameters('virtualNetworkRG'), 'Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]",
     "publicIPAddress": {
-      "id": "[variables('publicIPAddressLookup')[parameters('publicIpAddressNewOrExisting')]]"
-    },
-    "storageAccountLookup": {
-      "new": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-      "existing": "[resourceId(parameters('storageAccountRG'),'Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+      "id": "[resourceId(parameters('publicIpAddressRG'),'Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]"
     },
     "sizesWithAcceleratedNetworking": [
       "Standard_F8s_v2",
@@ -365,34 +366,108 @@
       "Standard_E64is_v3",
       "Standard_E64s_v3"
     ],
-    "enableAcceleratedNetworking": "[contains(variables('sizesWithAcceleratedNetworking'),parameters('vmSize'))]",
-    "storageAccountId": "[variables('storageAccountLookup')[parameters('storageAccountNewOrExisting')]]",
-    "customScriptFilePath": "[concat(parameters('_artifactsLocation'),'/bootstrap.sh', parameters('_artifactsLocationSasToken'))]",
-    "payloadFilePath": "[concat(parameters('_artifactsLocation'),'/payload.tar.gz', parameters('_artifactsLocationSasToken'))]",
-    "customScriptCommandToExecute": "/bin/bash bootstrap.sh ",
-    "Reader": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
-    "imagePublisher": "OpenLogic",
-    "imageOffer": "CentOS",
-    "imageSKU": "7.5",
-    "shareName": "[concat('xcalar-', toLower(resourceGroup().name))]",
+    "storageAccountId": "[resourceId(parameters('storageAccountRG'),'Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+    "customScriptUrl": "[concat(parameters('_artifactsLocation'),'bootstrap.sh', parameters('_artifactsLocationSasToken'))]",
+    "customScriptCommandToExecute": "/bin/bash -x bootstrap.sh ",
+    "imageReference": {
+      "publisher": "OpenLogic",
+      "offer": "CentOS",
+      "sku": "7.6",
+      "version": "latest"
+    },
     "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
     "linuxConfiguration": {
-      "sshPublicKey": {
-        "disablePasswordAuthentication": "true",
-        "ssh": {
-          "publicKeys": [
-            {
-              "path": "[concat('/home/',parameters('adminUsername'),'/.ssh/authorized_keys')]",
-              "keyData": "[parameters('adminSSHPublicKey')]"
-            }
-          ]
-        }
-      },
-      "password": {}
+      "disablePasswordAuthentication": "true",
+      "ssh": {
+        "publicKeys": [
+          {
+            "path": "[concat('/home/',parameters('adminUsername'),'/.ssh/authorized_keys')]",
+            "keyData": "[parameters('adminPasswordOrKey')]"
+          }
+        ]
+      }
     },
+    "shareNetworkSecurityGroupName": "[concat(parameters('shareName'),'-nsg')]",
     "osDiskSize": 127
   },
   "resources": [
+    {
+      "apiVersion": "2017-05-10",
+      "condition": "[equals(parameters('shareServerNewOrExisting'),'new')]",
+      "name": "[concat(deployment().name,'-nfsTemplate')]",
+      "type": "Microsoft.Resources/deployments",
+      "dependsOn": [
+        "[parameters('virtualNetworkName')]",
+        "[concat('Microsoft.Network/networkInterfaces/',variables('shareNic'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "contentVersion": "1.0.0.0",
+          "uri": "[concat(parameters('_artifactsLocation'),'nfsTemplate.json', parameters('_artifactsLocationSasToken'))]"
+        },
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "_artifactsLocation": {
+            "value": "[parameters('_artifactsLocation')]"
+          },
+          "_artifactsLocationSasToken": {
+            "value": "[parameters('_artifactsLocationSasToken')]"
+          },
+          "vmName": {
+            "value": "[parameters('shareName')]"
+          },
+          "vmSize": {
+            "value": "[parameters('shareSize')]"
+          },
+          "vmDiskType": {
+            "value": "[parameters('vmDiskType')]"
+          },
+          "shareFolder": {
+            "value": "[parameters('shareFolder')]"
+          },
+          "imageReference": {
+            "value": "[variables('imageReference')]"
+          },
+          "authenticationType": {
+            "value": "[parameters('authenticationType')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPasswordOrKey": {
+            "value": "[parameters('adminPasswordOrKey')]"
+          },
+          "networkInterfaceId": {
+              "value": "[resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))]"
+          },
+          "nfsPrefix": {
+              "value": "[parameters('subnetPrefix')]"
+          },
+          "tags": {
+            "value": {
+              "appName": "[parameters('appName')]",
+              "adminEmail": "[parameters('adminEmail')]"
+            }
+          }
+        }
+      }
+    },
+    {
+        "apiVersion": "2018-02-01",
+        "name": "pid-0477ea54-137d-53ee-a010-42e454ef46f9",
+        "type": "Microsoft.Resources/deployments",
+        "properties": {
+            "mode": "Incremental",
+            "template": {
+                "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                "contentVersion": "1.0.0.0",
+                "resources": []
+            }
+        }
+    },
     {
       "apiVersion": "2018-07-01",
       "type": "Microsoft.Storage/storageAccounts",
@@ -412,15 +487,14 @@
       }
     },
     {
-      "apiVersion": "2018-08-01",
+      "apiVersion": "2018-11-01",
       "type": "Microsoft.Network/publicIPAddresses",
-      "name": "[parameters('publicIPAddressName')]",
-      "condition": "[equals(parameters('publicIpAddressNewOrExisting'), 'new')]",
+      "name": "[parameters('publicIpAddressName')]",
+      "condition": "[equals(parameters('publicIpAddressNewOrExisting'),'new')]",
       "location": "[parameters('location')]",
       "tags": {
         "appName": "[parameters('appName')]",
-        "adminEmail": "[parameters('adminEmail')]",
-        "nodeId": "0"
+        "adminEmail": "[parameters('adminEmail')]"
       },
       "properties": {
         "publicIPAllocationMethod": "Dynamic",
@@ -430,11 +504,66 @@
       }
     },
     {
-      "apiVersion": "2018-08-01",
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('shareNetworkSecurityGroupName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "ssh_rule",
+            "properties": {
+              "description": "Allow SSH access",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "22",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "nfs_rule",
+            "properties": {
+              "description": "Allow NFS access",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "2049",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 110,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "deny_all_rule",
+            "properties": {
+              "description": "Deny all remaining incoming",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Deny",
+              "priority": 200,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2018-11-01",
       "type": "Microsoft.Network/networkSecurityGroups",
       "name": "[variables('networkSecurityGroupName')]",
       "location": "[parameters('location')]",
-      "condition": "[equals(parameters('virtualNetworkNewOrExisting'), 'new')]",
       "tags": {
         "appName": "[parameters('appName')]",
         "adminEmail": "[parameters('adminEmail')]"
@@ -458,10 +587,16 @@
           {
             "name": "https_rule",
             "properties": {
-              "description": "Allow HTTPS access",
+              "description": "Allow HTTP, HTTPS access",
               "protocol": "Tcp",
               "sourcePortRange": "*",
-              "destinationPortRange": "443",
+              "destinationPortRanges": [
+                "80",
+                "443",
+                "8080",
+                "8443",
+                "9443"
+              ],
               "sourceAddressPrefix": "*",
               "destinationAddressPrefix": "*",
               "access": "Allow",
@@ -470,16 +605,58 @@
             }
           },
           {
-            "name": "http_rule",
+            "name": "xcdata_rule",
             "properties": {
-              "description": "Allow HTTP access",
+              "description": "Xcalar data path",
               "protocol": "Tcp",
               "sourcePortRange": "*",
-              "destinationPortRange": "80",
+              "destinationPortRange": "5000",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 103,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "xcmonitor_rule",
+            "properties": {
+              "description": "Xcalar Monitor communication",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "8000",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 104,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "xcapi_rule",
+            "properties": {
+              "description": "Xcalar API communication",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "18552",
               "sourceAddressPrefix": "*",
               "destinationAddressPrefix": "*",
               "access": "Allow",
-              "priority": 103,
+              "priority": 105,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "deny_all_rule",
+            "properties": {
+              "description": "Deny all remaining incoming",
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Deny",
+              "priority": 200,
               "direction": "Inbound"
             }
           }
@@ -487,9 +664,9 @@
       }
     },
     {
-      "condition": "[equals(parameters('virtualNetworkNewOrExisting'), 'new')]",
-      "apiVersion": "2018-08-01",
+      "apiVersion": "2018-11-01",
       "type": "Microsoft.Network/virtualNetworks",
+      "condition": "[equals(parameters('virtualNetworkNewOrExisting'), 'new')]",
       "name": "[parameters('virtualNetworkName')]",
       "location": "[parameters('location')]",
       "dependsOn": [
@@ -501,13 +678,15 @@
       },
       "properties": {
         "addressSpace": {
-          "addressPrefixes": "[parameters('addressPrefixes')]"
+          "addressPrefixes": [
+            "[parameters('addressPrefix')]"
+          ]
         },
         "subnets": [
           {
             "name": "[parameters('subnetName')]",
             "properties": {
-              "addressPrefix": "[parameters('subnetPrefixCIDR')]",
+              "addressPrefix": "[parameters('subnetPrefix')]",
               "networkSecurityGroup": {
                 "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
               }
@@ -517,7 +696,41 @@
       }
     },
     {
-      "apiVersion": "2018-08-01",
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/networkInterfaces",
+      "condition": "[equals(parameters('shareServerNewOrExisting'),'new')]",
+      "name": "[variables('shareNic')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[parameters('virtualNetworkName')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('shareNetworkSecurityGroupName'))]"
+      ],
+      "tags": {
+        "nodeRole": "nfsserver",
+        "appName": "[parameters('appName')]",
+        "adminEmail": "[parameters('adminEmail')]"
+      },
+      "properties": {
+        "primary": true,
+        "enableAcceleratedNetworking": "[contains(variables('sizesWithAcceleratedNetworking'), parameters('shareSize'))]",
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('shareNetworkSecurityGroupName'))]"
+        },
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('subnetID')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2018-11-01",
       "type": "Microsoft.Network/networkInterfaces",
       "name": "[concat(variables('nicName'), copyIndex())]",
       "location": "[parameters('location')]",
@@ -532,20 +745,23 @@
       },
       "dependsOn": [
         "[variables('publicIpAddress').id]",
-        "[parameters('virtualNetworkName')]"
+        "[parameters('virtualNetworkName')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
       ],
       "properties": {
         "primary": true,
-        "enableAcceleratedNetworking": "[variables('enableAcceleratedNetworking')]",
+        "enableAcceleratedNetworking": "[contains(variables('sizesWithAcceleratedNetworking'), parameters('vmSize'))]",
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+        },
         "ipConfigurations": [
           {
             "name": "ipconfig1",
             "properties": {
-              "privateIPAllocationMethod": "Static",
-              "privateIPAddress": "[concat(parameters('subnetPrefix'), copyIndex(4))]",
+              "privateIPAllocationMethod": "Dynamic",
               "publicIPAddress": "[if(equals(copyIndex(), 0), variables('publicIPAddress'), json('null'))]",
               "subnet": {
-                "id": "[variables('subnetRef')]"
+                "id": "[variables('subnetID')]"
               }
             }
           }
@@ -570,9 +786,6 @@
         "[concat('Microsoft.Storage/storageAccounts/', parameters('storageAccountName'))]",
         "[concat('Microsoft.Network/networkInterfaces/',variables('nicName'), copyIndex())]"
       ],
-      "identity": {
-        "type": "SystemAssigned"
-      },
       "properties": {
         "hardwareProfile": {
           "vmSize": "[parameters('vmSize')]"
@@ -580,16 +793,11 @@
         "osProfile": {
           "computername": "[concat(variables('vmName'), copyIndex())]",
           "adminUsername": "[parameters('adminUsername')]",
-          "adminPassword": "[if(equals(parameters('authenticationType'), 'password'), parameters('adminPassword'), json('null'))]",
-          "linuxConfiguration": "[variables('linuxConfiguration')[parameters('authenticationType')]]"
+          "adminPassword": "[parameters('adminPasswordOrKey')]",
+          "linuxConfiguration": "[if(equals(parameters('authenticationType'), 'password'), json('null'), variables('linuxConfiguration'))]"
         },
         "storageProfile": {
-          "imageReference": {
-            "publisher": "[variables('imagePublisher')]",
-            "offer": "[variables('imageOffer')]",
-            "sku": "[variables('imageSKU')]",
-            "version": "latest"
-          },
+          "imageReference": "[variables('imageReference')]",
           "osDisk": {
             "name": "[concat(variables('vmName'), copyIndex(), '-osdisk')]",
             "createOption": "FromImage",
@@ -610,7 +818,7 @@
         "diagnosticsProfile": {
           "bootDiagnostics": {
             "enabled": "[parameters('bootDiagnostics')]",
-            "storageUri": "[reference(variables('storageAccountId'), '2017-10-01').primaryEndpoints.blob]"
+            "storageUri": "[if(parameters('bootDiagnostics'), reference(variables('storageAccountId'), '2017-10-01').primaryEndpoints.blob, json('null'))]"
           }
         }
       }
@@ -639,12 +847,11 @@
         "autoUpgradeMinorVersion": true,
         "settings": {
           "fileUris": [
-            "[variables('customScriptFilePath')]",
-            "[variables('payloadFilePath')]"
+            "[variables('customScriptUrl')]"
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', variables('shareName'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -c ', variables('vmName'),' -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'), parameters('installerUrlSasToken'), '\"')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', if( equals(parameters('shareServerNewOrExisting'),'new'), reference(resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))).ipConfigurations[0].properties.privateIPAddress, parameters('shareName')),':', parameters('shareFolder'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -e \"', variables('vmName'), '\" -c \"', parameters('appName'),'\" -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'), parameters('installerUrlSasToken'), '\"')]"
         }
       }
     }

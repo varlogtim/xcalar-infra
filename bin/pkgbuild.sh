@@ -10,6 +10,7 @@
 DEBUG=${DEBUG:-0}
 NOW=$(date +%s)
 FORCE=false
+CLEAN=true
 #PREFIX=/usr
 
 die() {
@@ -234,6 +235,9 @@ pkgmain() {
                 pkggenerate "$1"
                 exit $?
                 ;;
+            -nc | -no-clean)
+                CLEAN=false
+                ;;
             -gb)
                 PKG="$1"
                 shift
@@ -259,7 +263,9 @@ pkgmain() {
     TMPDIR="${TMPDIR:-/tmp}/pkgbuild-$(id -u)/$pkgname"
     pkgdir="${TMPDIR}/rootfs"
     srcdir="${TMPDIR}/srcdir"
-    rm -rf $TMPDIR
+    if $CLEAN; then
+        rm -rf $TMPDIR
+    fi
     mkdir -p $pkgdir $srcdir
     sources+=($source)
     local nsources=${#sources[@]}

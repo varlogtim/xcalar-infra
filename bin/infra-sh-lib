@@ -227,23 +227,11 @@ ip_cidr() {
 }
 
 urlencode() {
-    (
-    set +x
-    local string="${1}"
-    local strlen=${#string}
-    local encoded=""
-    local pos c o
-
-    for (( pos=0 ; pos<strlen ; pos++ )); do
-        c=${string:$pos:1}
-        case "$c" in
-            [-_.~a-zA-Z0-9] ) o="${c}" ;;
-            * )               printf -v o '%%%02x' "'$c"
-        esac
-        encoded+="${o}"
-    done
-    echo "${encoded}"
-    )
+    if [ $# -gt 0 ]; then
+        printf '%s' "$1" | jq -s -R -r '@uri'
+    else
+        jq -s -R -r '@uri'
+    fi
 }
 
 vssh() {
@@ -331,3 +319,45 @@ registry_repo_tags() {
         curl -s ${XREGISTRY}/v2/${repo}/tags/list | jq -r .
     done | jq -s -r '.'
 }
+
+##
+##
+## Jenkins helpers
+##
+JENKINS_URL="${JENKINS_URL:-https://jenkins.int.xcalar.com}"
+
+jenkins_node_online() {
+    curl -L --silent "$JENKINS_URL/computer/$1/api/json" | grep --silent '"temporarilyOffline":false'
+}
+
+jenkins_node_busy() {
+    curl -L --silent "$JENKINS_URL/computer/$1/api/json" | grep --silent '"idle":false'
+}
+
+jenkins_toggle_node_online() {
+    curl -L --silent "$JENKINS_URL/computer/$1/toggleOffline" --request 'POST' --data 'offlineMessage=Pending node re-image'
+}
+
+jenkins_deregister_node() {
+    curl -L --silent "$JENKINS_URL/computer/$1/doDelete" --request 'POST' --data ''
+}
+
+jenkins_wait_for_node() {
+    while jenkins_node_busy $1; do
+        sleep 20
+        echo -n "."
+    done
+    echo ""
+}
+
+cleanhostname() {
+    if [ $# -gt 0 ]; then
+        local name
+        for name; do
+            echo "$name" | sed -r 's/_/-/g; s/([A-Z])/\L\1/g; s/\./-/g; s/^-//; s/-$//;'
+        done
+    else
+        sed -r 's/_/-/g; s/([A-Z])/\L\1/g; s/\./-/g; s/^-//; s/-$//;'
+    fi
+}
+
