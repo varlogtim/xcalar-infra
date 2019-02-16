@@ -217,6 +217,9 @@ yum install -y http://repo.xcalar.net/xcalar-release-el${VERS}.rpm
 yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart
 yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
 
+# Microsoft's Network testing tool. See: https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-bandwidth-testing
+curl -L -f -o /usr/local/bin/ntttcp https://xcrepo.blob.core.windows.net/public/azuremp/v1/ntttcp && chmod +x /usr/local/bin/ntttcp
+
 run_playload () {
     #(set -o pipefail; extract "${BASH_SOURCE[0]}" | base64 -d | tar zxf - && cd payload && ./install.sh $INSTANCESTORE $DISK)
     test -e payload.tar.gz && tar zxf payload.tar.gz
@@ -269,13 +272,15 @@ run_playload
 export TMPDIR=/ephemeral/data/tmp
 mkdir -m 1777 $TMPDIR
 
-pip install -U jinja2
-test -n "$HTML" && safe_curl -sSL "$HTML" > html.tar.gz
-tar -zxvf html.tar.gz
 
 serveError() {
     errorMsg="$1"
     rectifyMsg="$2"
+
+    pip install -U jinja2
+    test -n "$HTML" && safe_curl -sSL "$HTML" > html.tar.gz
+    tar -zxvf html.tar.gz
+
     cd html
     python ./render.py "$errorMsg" "$rectifyMsg"
     nohup python -m SimpleHTTPServer 80 >> /var/log/xcalarHttp.log 2>&1 &
@@ -326,25 +331,25 @@ XCE_HOME="${XCE_HOME:-/mnt/xcalar}"
 XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
 XCE_LICENSEDIR="${XCE_LICENSEDIR:-/etc/xcalar}"
 
-# Download the installer as soon as we can
-rm -f $TMPDIR/installer.sh
+INSTALLER=${TMPDIR}/installer.sh
+rm -f $INSTALLER
 for retry in $(seq 10); do
     safe_curl -f "$INSTALLER_URL" -o $TMPDIR/installer.sh
     rc=$?
-    if [ $rc -eq 0 ] && test -s $TMPDIR/installer.sh; then
+    if [ $rc -eq 0 ] && test -s ${INSTALLER}; then
         break
     fi
     sleep 10
 done
 
-if [ $rc -ne 0 ] || ! test -s $TMPDIR/installer.sh; then
+if [ $rc -ne 0 ] || ! test -s ${INSTALLER}; then
     echo >&2 "ERROR: Error downloading installer"
     serveError "Error downloading installer"
     exit 1
 fi
 
 # Determine our CIDR by querying the metadata service
-safe_curl -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=2017-12-01&format=json" | jq . > metadata.json
+safe_curl -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json" | jq . > metadata.json
 retCode=${PIPESTATUS[0]}
 if [ "$retCode" != "0" ]; then
     echo >&2 "ERROR: Could not contact metadata service"
@@ -379,7 +384,7 @@ MEMSIZEMB=$(free -m | awk '/Mem:/{print $2}')
 SWAPSIZEMB=$MEMSIZEMB
 case "$VMSIZE" in
 	Standard_E*) SWAPSIZEMB=$((MEMSIZEMB*2));;
-	*)
+	*) ;;
 esac
 
 # Format and mount additional SSD, and prefer to use that
@@ -429,9 +434,9 @@ fi
 
 
 ### Install Xcalar
-if [ -s "$TMPDIR/installer.sh" ]; then
+if [ -s "$INSTALLER" ]; then
     # We install our own systemd unit for xcalar in the payload so don't need --startonboot
-    if ! bash -x $TMPDIR/installer.sh --nostart; then
+    if ! bash -x "$INSTALLER" --stop --nostart; then
         echo >&2 "ERROR: Failed to run installer"
         serveError "Failed to run installer" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
         exit 1
@@ -446,7 +451,7 @@ mv caddy ${XLRDIR}/bin/
 
 # az hangs in telemetry.py occasionally casuing the whole cluster bootup sequence to hang
 az_disable_telemetry() {
-    local azconfig=$HOME/.azure/config
+    local azconfig=${HOME:-/root}/.azure/config
     test -e $(dirname $azconfig) || mkdir -m 0755 -p $(dirname $azconfig)
     if ! test -e $azconfig; then
         printf '[cloud]\nname = AzureCloud\n\n[core]\ncollect_telemetry = no\n\n' > $azconfig
@@ -565,7 +570,6 @@ if [ "$PUBLICIPV4" != "" ]; then
     if [ -z "$XCE_DNS" ]; then
         XCE_DNS="${DOMAINNAMELABEL}${INDEX}.${SUBDOMAIN}"
     fi
-    #aws_route53_record "${CNAME}" "${XCE_DNS}"
     (
     echo ":443, https://${XCE_DNS}:443 {"
     tail -n+2 /etc/xcalar/Caddyfile
@@ -622,7 +626,7 @@ if [ -n "$LICENSE" ]; then
         echo -n "$LICENSE" > $LIC
     fi
     mv $LIC "${XCE_LICENSEDIR}/XcalarLic.key"
-    chmod 0644 "${XCE_LICENSEDIR}/XcalarLic.key"
+    chmod 0640 "${XCE_LICENSEDIR}/XcalarLic.key"
 fi
 
 # Make Xcalar config dir writable by xcalar user for config changes via XD
@@ -645,7 +649,7 @@ case "$MOUNT_TYPE" in
         chmod 0600 $CREDENTIALS
         echo "username=${AZURE_STORAGE_ACCOUNT}" >> $CREDENTIALS
         echo "password=${AZURE_STORAGE_KEY}" >> $CREDENTIALS
-        MOUNT_OPTS="noauto,_netdev,x-systemd.automount,vers=2.1,sec=ntlmssp,credentials=$CREDENTIALS,file_mode=0600,dir_mode=0775,uid=xcalar,gid=xcalar,serverino,mapposix,rsize=1048576,wsize=1048576,echo_interval=60"
+        MOUNT_OPTS="_netdev,vers=2.1,sec=ntlmssp,credentials=$CREDENTIALS,file_mode=0600,dir_mode=0775,uid=xcalar,gid=xcalar,serverino,mapposix,rsize=1048576,wsize=1048576,echo_interval=60"
         MOUNT_WHAT="//${AZURE_STORAGE_ACCOUNT}.file.core.windows.net/${SHARE}"
         az_storage_share_create "$SHARE"
         ;;
@@ -662,25 +666,17 @@ if [ "$MOUNT_TYPE" != local ]; then
 
 
 #    cat > /etc/systemd/system/mnt-xcalar.mount <<-EOF
+#	[Unit]
+#	Description=Xcalar Shared Root
+#	Requires=network-online.target
+#	After=network-online.service
 #	[Mount]
 #	What=$MOUNT_WHAT
 #	Where=$XCE_HOME
 #	SloppyOptions=on
-#	DirectoryMode=0777
+#	DirectoryMode=0755
 #	Type=$MOUNT_TYPE
 #	Options=$MOUNT_OPTS
-#	EOF
-#    cat > /etc/systemd/system/mnt-xcalar.automount <<-EOF
-#	[Unit]
-#	DefaultDependencies=no
-#	Wants=remote-fs-pre.target
-#	After=remote-fs-pre.target
-#	Conflicts=umount.target
-#	Before=umount.target
-#	[Automount]
-#	Where=$XCE_HOME
-#	TimeoutIdleSec=0
-#	DirectoryMode=0777
 #	[Install]
 #	WantedBy=remote-fs.target
 #	EOF
@@ -735,6 +731,7 @@ systemctl start xcalar
 # Add in the default admin user into Xcalar
 if [ -n "$ADMIN_USERNAME" ]; then
     mkdir -p $XCE_HOME/config
+    chmod 0700 $XCE_HOME/config
     genDefaultAdmin > $XCE_HOME/config/defaultAdmin.json
     chmod 0600 $XCE_HOME/config/defaultAdmin.json
     chown -R xcalar:xcalar $XCE_HOME/config /etc/xcalar
