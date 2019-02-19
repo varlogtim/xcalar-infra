@@ -2721,6 +2721,15 @@ validation is done by trying to compress then re-uncompress the data found.
 '''
 def get_validate_xcalar_uncompressed_license():
 
+    # do not perform this check unless an install is being done.
+    if not will_install():
+        if ARGS.license:
+            raise ValueError("\n\nERROR: --license was passed, "
+                "but based on your other cmd args, Xcalar is not "
+                "going to be installed on any provisioned VMs. "
+                "Was this intended?\n")
+        return None
+
     # if no --license passed, the license file to look for
     license_to_look_for = SCRIPT_DIR + "/" + LICFILENAME
 
