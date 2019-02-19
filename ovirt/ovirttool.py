@@ -2856,11 +2856,8 @@ def get_validate_puppet_role():
     # install scenario: set default or ensure user supplied
     # jenkins_slave role!
     # note: not sufficient to check ARGS.installer to determine if installing;
-    # install is done by default but no default given to --installer arg
-    # due to how it's being error checked.
-    # if --count > 0 and --noinstaller was NOT supplied, this is sufficient
-    # to determine an install will be done.
-    if ARGS.count and not ARGS.noinstaller:
+    # use built-in function
+    if will_install():
         if puppet_role is None:
             puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
         # warn if puppet_role isn't jenkins_slave for install scenarios
@@ -2950,10 +2947,12 @@ def validate_params():
                     "--installer option.\n"
                     "(Is this what you intended?)\n")
         else:
-            # checks for if doing an install
-            # do NOT check for ARGS.installer explicitally to do this;
-            # --installer doesn't get an automatic default so might not be set yet
-            # if here - ARGS.count + ~ notinstaller - an install is going to be done!
+            # if you need to check conditions for if an install is being done,
+            # do NOT check for ARGS.installer in this block to do that;
+            # (--installer doesn't get an automatic default, so it might not be set
+            # yet, even though an install will be done.)
+            # if here : ARGS.count + ~ notinstaller --> an install is going to be done!
+            # there is also a function 'will_install' which can be used.
             pass
     else:
         '''
@@ -2984,6 +2983,20 @@ def validateVmLists(list_option_mapping):
         valid_vms = get_all_vms()
         err_msg = "{}\n{}\n\nPlease see list of valid vms above\n".format("\n\t".join(valid_vms), err_msg)
         raise ValueError(err_msg)
+
+'''
+Return True if a Xcalar install will be performed, based on user supplied args
+and False if a Xcalar install will not be performed.
+'''
+def will_install():
+    # note: not sufficient to check ARGS.installer to determine if installing;
+    # install is done by default but no default given to --installer arg
+    # due to how it's being error checked.
+    # if --count > 0 and --noinstaller was NOT supplied, this is sufficient
+    # to determine an install will be done.
+    if ARGS.count and not ARGS.noinstaller:
+        return True
+    return False
 
 '''
     Check if a String is in format of ip address
