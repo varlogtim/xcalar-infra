@@ -2853,23 +2853,27 @@ if no arg supplied, set default based on if an install will be done.
 def get_validate_puppet_role():
     puppet_role = ARGS.puppet_role
 
-    # install scenario: set default or ensure user supplied
-    # jenkins_slave role!
-    # note: not sufficient to check ARGS.installer to determine if installing;
-    # use built-in function
-    if will_install():
-        if puppet_role is None:
+    # set default
+    if puppet_role is None:
+        # if puppet role was not specified, its default depends on if an install
+        # is being done.
+        # it is NOT sufficient to check ARGS.installer to determine if installing;
+        # use built-in function
+        if will_install():
             puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
-        # warn if puppet_role isn't jenkins_slave for install scenarios
-        if puppet_role.lower() != DEFAULT_PUPPET_ROLE_INSTALL.lower():
-            warn_log("\n\nYou are installing Xcalar, but puppet role " \
-                " is set as {}!  This could cause conflicts with Caddy.\n" \
-                "If not desired, re-run with another puppet role, " \
-                "(--puppet_role option), or " \
-                "--noinstaller option.\n".format(DEFAULT_PUPPET_ROLE_INSTALL))
-    elif puppet_role is None:
-        # set default for no install, and user didn't pass puppet_role
-        puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
+        else:
+            puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
+
+    # validate.
+    # warn if installing and puppet role is not jenkins_slave
+    # do here so it also checks for cases where puppet_role was set above by ovirttool,
+    # in case default ever changes
+    if will_install() and puppet_role.lower() != DEFAULT_PUPPET_ROLE_INSTALL.lower():
+        warn_log("\n\nYou are installing Xcalar, but puppet role " \
+            " is set as {}!  This could cause conflicts with Caddy.\n" \
+            "If not desired, re-run with another puppet role, " \
+            "(--puppet_role option), or " \
+            "--noinstaller option.\n".format(DEFAULT_PUPPET_ROLE_INSTALL))
 
     return puppet_role
 
