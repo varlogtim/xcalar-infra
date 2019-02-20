@@ -40,13 +40,21 @@ while getopts "c:m:n:w:S:s:b:f:" opt; do
   esac
 done
 
+if [ -z "$CLUSTERNAME" ] || [ -z "$BUCKET" ]; then
+    echo "cluster name or bucket is required"
+    exit 1
+fi
+
 IMAGE='1.3-deb9'
 FRULE="${FRULE:-sparkport}"
 MASTER_DISK_TYPE="${MASTER_DISK_TYPE:-pd-standard}"
 WORKER_DISK_TYPE="${WORKER_DISK_TYPE:-pd-standard}"
+NUM_WORKER="${NUM_WORKER:-2}"
+MASTER_TYPE="${MASTER_TYPE:-n1-standard-8}"
+WORKER_TYPE="${WORKER_TYPE:-$MASTER_TYPE}"
 
 if [ -z "$MASTER_DISK_SIZE" ]; then
-    case "$INSTANCE_TYPE" in
+    case "$MASTER_TYPE" in
         n1-highmem-16) MASTER_DISK_SIZE=400;;
         n1-highmem-8) MASTER_DISK_SIZE=200;;
         n1-standard*) MASTER_DISK_SIZE=80;;
@@ -56,7 +64,7 @@ if [ -z "$MASTER_DISK_SIZE" ]; then
 fi
 
 if [ -z "$WOKER_DISK_SIZE" ]; then
-    case "$INSTANCE_TYPE" in
+    case "$WORKER_TYPE" in
         n1-highmem-16) WORKER_DISK_SIZE=400;;
         n1-highmem-8) WORKER_DISK_SIZE=200;;
         n1-standard*) WORKER_DISK_SIZE=80;;
@@ -82,8 +90,8 @@ setSparkServer(){
 }
 
 cleanup () {
-    gcloud dataproc clusters delete -q $CLUSTERNAME
-    gcloud compute firewall-rules delete -q $FRULE
+    gcloud dataproc clusters delete -q $CLUSTERNAME || true
+    gcloud compute firewall-rules delete -q $FRULE  || true
 }
 
 die () {
@@ -91,7 +99,7 @@ die () {
     exit $1
 }
 
-gcloud dataproc clusters create ${CLUSTERNAME} --bucket ${BUCKET} --subnet default \
+gcloud dataproc clusters create ${CLUSTERNAME} --bucket ${BUCKET} \
     --master-machine-type ${MASTER_TYPE} \
     --master-boot-disk-size ${MASTER_DISK_SIZE} \
     --num-workers ${NUM_WORKER} \

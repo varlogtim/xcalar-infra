@@ -26,4 +26,3 @@ gcloud dataproc clusters delete -q $CLUSTERNAME
 
 echo "Delete firewal rule $FRULE"
 gcloud compute firewall-rules delete -q $FRULE
-
