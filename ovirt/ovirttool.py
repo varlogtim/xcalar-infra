@@ -649,7 +649,7 @@ def setup_puppet(ip, puppet_role, puppet_cluster):
         once puppet is set up!  ovirt_key pubkey won't be authorized as root anymore
 '''
 def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, puppet_timeout=PUPPET_SETUP_TIMEOUT):
-    info_log("Run puppet agent on {} (10-25 minutes)".format(ip))
+    info_log("Run puppet agent on {}".format(ip))
     if setup:
         if not puppet_role:
             raise RuntimeError("Specified to setup puppet before running "
@@ -669,9 +669,21 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, pupp
             lockfileWait -= 1
         else:
             break
+
+    # clears out stale metadata before running puppet agent
+    pre_cmds = [
+        ["yum clean all --enablerepo='*'"],
+        ["rm -rf /var/cache/yum/*"]
+    ]
+    info_log("Run commands to clear puppet cache prior to running " \
+        "puppet agent: ({})".format(", ".join(item[0] for item in pre_cmds)))
+    run_ssh_cmds(ip, pre_cmds)
+
     # still try to run puppet agent; if it fails, it fails...
     # once puppet is set up, will not be able to ssh with ovirt key any longer
-    run_ssh_cmd(ip, '/opt/puppetlabs/bin/puppet agent -t -v', timeout=puppet_timeout, valid_exit_codes=[0, 2])
+    puppet_cmd = '/opt/puppetlabs/bin/puppet agent -t -v'
+    info_log("Run puppet agent ({}) on {} (10-25 minutes)".format(puppet_cmd, ip))
+    run_ssh_cmd(ip, puppet_cmd, timeout=puppet_timeout, valid_exit_codes=[0, 2])
 
     # some follow up commands, to make sure netstore accessible
     # been going down after puppet agent.  maybe temp issue?
