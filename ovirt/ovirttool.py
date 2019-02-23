@@ -822,6 +822,21 @@ def get_cluster_available_memory(name):
             "cluster names)\n".format(name, name))
 
 '''
+Return an ovirtsdk4.types.Cluster object representing the
+Ovirt cluster that a VM is part of.
+(Note: 2 different Ovirt clusters can each have a VM of the same name;
+ hence why we're retrieving by Vm obj, not Vm name.)
+
+@vm_obj: ovirtsdk4.types.Vm object for the VM
+'''
+def get_ovirt_cluster_obj_for_vm(vm_obj):
+    if vm_obj.cluster:
+        # cluster attr is a link.  follow link to retrieve Cluster object
+        # which has attrs for data about that cluster (.name, etc.)
+        cluster = CONN.follow_link(vm_obj.cluster)
+        return cluster
+
+'''
     returns list of VM objects matching a given identifier
     (This is equivalent to logging in to Ovirt, and typing
     this EXACT identifier string in the search bar, and returning a ovirtsdk4.type.Vm
@@ -1054,7 +1069,7 @@ def stop_vm(vmid):
 '''
     Return list of strings containing data of each VM in Ovirt
     :parm verbose:
-        if True: each line formatted with hostname, ip, status
+        if True: each line formatted with VM's hostname, Ovirt cluster, ip, and status
             (takes much longer, depending on how many VMs are in Ovirt)
             for VMs without an IP, prints '-'
         if False, each line just contains vm hostname (quick)
@@ -1070,11 +1085,13 @@ def get_all_vms(verbose=False, formatted=False):
     name_col_w = 0
     ip_col_w = 0
     status_col_w = 0
+    clus_col_w = 0
     # set col widths if formatting
     # (only do in verbose case since regular only contains one col)
     if verbose and formatted:
         ip_col_w = 20
         status_col_w = 10
+        clus_col_w = 35
         # name width make length of longest hostname
         for vm in vms:
             name_col_w = max(name_col_w, len(vm.name))
@@ -1083,14 +1100,22 @@ def get_all_vms(verbose=False, formatted=False):
         vm_line = ""
         # getting all IPs can take a long time... make it optional
         if verbose:
+            # get IP of vm
             vm_id = vm.id
             vm_ip = "-" # if None, print formatting will fail
             try:
                 vm_ip = get_vm_ip(vm_id)
             except NoIpException:
                 pass
+            # determine which Ovirt cluster its on
+            ovirt_cluster_obj = get_ovirt_cluster_obj_for_vm(vm)
+            ovirt_cluster_name = "-"
+            if ovirt_cluster_obj and ovirt_cluster_obj.name:
+                ovirt_cluster_name = ovirt_cluster_obj.name
+            # status of vm (UP, DOWN, etc.)
             vm_status = vm.status
-            vm_line = '{:<{}} {:<{}} {:<{}}'.format(vm_name, name_col_w, vm_ip, ip_col_w, vm_status, status_col_w)
+
+            vm_line = '{:<{}} {:<{}} {:<{}} {:<{}}'.format(vm_name, name_col_w, ovirt_cluster_name, clus_col_w, vm_ip, ip_col_w, vm_status, status_col_w)
         else:
             vm_line = vm_name
         vm_list.append(vm_line)
