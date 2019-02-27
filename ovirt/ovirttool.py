@@ -1505,7 +1505,8 @@ def provision_vm(name, ram, cores, availableClusters):
             debug_log("Change password for user 'jenkins' on {} ({})".format(name, ip))
             run_ssh_cmd(ip, 'echo "jenkins:{}" | chpasswd'.format(JENKINS_USER_PASS))
             debug_log("Set MariaDB timeout to 30 seconds because it sometimes crashes")
-            run_ssh_cmd(ip, 'sed -i \'s:TimeoutSec=300:TimeoutSec=30:\' /usr/lib/systemd/system/mariadb.service')
+            # basic templates do not have mariadb service so || true or it will fail
+            run_ssh_cmd(ip, 'sed -i \'s:TimeoutSec=300:TimeoutSec=30:\' /usr/lib/systemd/system/mariadb.service || true')
 
             # set the hostname now (in case they don't want to install Xcalar)
             setup_hostname(ip, name)
