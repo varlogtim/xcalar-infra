@@ -2973,6 +2973,12 @@ def validate_params():
             raise ValueError("\n\n--listen is only for single node cases; "
                 "multi-node clusters will listen outside localhost by default\n")
 
+        if ARGS.nopuppet:
+            if ARGS.puppet_cluster or ARGS.puppet_role:
+                raise ValueError("\n\nERROR: --nopuppet/-np specified, " \
+                    "which means puppet will not be set up on new VMs.  But " \
+                    "--puppet_cluster or --puppet_role was also specified.\n")
+
         # validate the basename they gave for the cluster
         if not ARGS.vmbasename:
             errmsg = ""
@@ -3194,6 +3200,8 @@ if __name__ == "__main__":
         help="For single node clusters, sets Node.0.IpAddr in /etc/xcalar/default.cfg to VM's hostname; (Will be able to listen to incoming requests, but relies on Ovirt DNS to work properly)")
     parser.add_argument("--user", type=str,
         help="Your LDAP username (no '@xcalar.com')")
+    parser.add_argument("--nopuppet", "-np", action="store_true", default=False,
+        help="Don't run puppet on any provisioned VMs. (Do NOT use this option just to speed up the tool!  Puppet installs ESSENTIAL information on your VM.  This should only be used if you want to more closely mirror a customer scenario. Use at your OWN RISK!)")
     parser.add_argument("-nr", "--norand", action="store_true", default=False,
         help="Don't add random chars to vmbasename; use vmbasename exactly. (Use only if you are certain this name has NEVER been used by any VM in Ovirt, even by past deleted VMs, else, you will encounter DNS issues.  Use at your OWN RISK!)")
     parser.add_argument("-f", "--force", action="store_true", default=False,
@@ -3206,10 +3214,12 @@ if __name__ == "__main__":
 
     # get params needed for this run, which have values based on user params.
     # (can't use from ARGS.<param> directly).
-    puppet_role = get_validate_puppet_role() # default based on other params
     installer = get_validate_installer_url() # note: just because it has a value doesnt mean install is being done (will have value in ARGS.delete, etc. cases, only returns None if --noinstaller)
     ldap_config_url = get_validate_ldap_config_url()
     xcalar_license_uncompressed = get_validate_xcalar_uncompressed_license()
+    puppet_role = None
+    if not ARGS.nopuppet:
+        puppet_role = get_validate_puppet_role() # default based on other params
     FORCE = ARGS.force # used globally
 
     # script setup
@@ -3293,7 +3303,10 @@ if __name__ == "__main__":
     # you can not make any more root ssh calls to the VMs after this;
     # ssh'ing is done in this script with a special ovirt pub key
     # puppet will remove it from auth users.
-    enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=ARGS.puppet_cluster)
+    if ARGS.nopuppet:
+        info_log("Skipping puppet setup (tool was run with --nopuppet/-np)")
+    else:
+        enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=ARGS.puppet_cluster)
 
     # TEMPORARY: running puppet results in issue with ldapConfig which was set up.
     # need to restart xcalar service post-puppet install for ldap to take effect.
