@@ -148,8 +148,6 @@ INSTALLER_SH_SCRIPT = 'e2einstaller.sh'
 TEMPLATE_HELPER_SH_SCRIPT = 'templatehelper.sh'
 ADMIN_HELPER_SH_SCRIPT = 'setupadmin.sh'
 
-FORCE = False # a force option will allow certain operations when script would fail otherwise (use arg)
-
 class NoIpException(Exception):
     pass
 
@@ -1574,7 +1572,7 @@ def provision_vms(vmnames, ovirt_cluster, ram, cores, tryotherclusters=True):
 
     # will check for memory constraints and fail script if determined we can't handle the VM request.
     # bypass if force specified and try to provision anyway
-    if not FORCE:
+    if not ARGS.force:
         '''
             Before attempting to provision the VMs, make a best guess
             if there is enough memory available amongst the clusters
@@ -3204,7 +3202,7 @@ if __name__ == "__main__":
         help="Don't run puppet on any provisioned VMs. (Do NOT use this option just to speed up the tool!  Puppet installs ESSENTIAL information on your VM.  This should only be used if you want to more closely mirror a customer scenario. Use at your OWN RISK!)")
     parser.add_argument("-nr", "--norand", action="store_true", default=False,
         help="Don't add random chars to vmbasename; use vmbasename exactly. (Use only if you are certain this name has NEVER been used by any VM in Ovirt, even by past deleted VMs, else, you will encounter DNS issues.  Use at your OWN RISK!)")
-    parser.add_argument("-f", "--force", action="store_true", default=False,
+    parser.add_argument("--force", "-f", action="store_true", default=False,
         help="Force certain operations such as provisioning, delete, when script would fail normally")
 
     ARGS = parser.parse_args()
@@ -3220,7 +3218,6 @@ if __name__ == "__main__":
     puppet_role = None
     if not ARGS.nopuppet:
         puppet_role = get_validate_puppet_role() # default based on other params
-    FORCE = ARGS.force # used globally
 
     # script setup
     setup()
