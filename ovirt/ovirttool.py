@@ -549,6 +549,12 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
         # IP came up, but make sure it is actually unique to this new VM for Ovirt (feynman issue)
         # args is search string to use in ovirt search bar; search by actual ip
         # else just supplying ip would return superstrings of that ip too
+        #
+        # NOTE: This will NOT work on machines where IP does not appear on the ovirt GUI
+        # right after the VM is created; get_matching_vms will essentially search
+        # what is on the Ovirt GUI looking for matches in the 'IP Address' column.
+        # on some machines, even though an IP gets assigned, that IP does NOT appear
+        # in that column and in those cases, this error will not get detected.
         matchingVMs = get_matching_vms("ip=" + assigned_ip)
         if len(matchingVMs) > 1:
             info_log("IP that got assigned to {}, {}, " \
@@ -1723,8 +1729,12 @@ def setup_admin_account(node, ldap_config_url):
     Copy in helper shell scripts used for instlalation
     start service if requested
 
-    :param ip: (String)
-        IP of VM to install Xcalar on
+    :param vm_name: (String)
+        name of VM to install Xcalar on
+        (as it shows up in Ovirt GUI in the 'Virtual Machines' tab.
+        Note... do NOT switch this param to relying on IP - the function will
+        end up searching that GUI for the value passed here - IPs do not always
+        show up in the Ovirt GUI for some Ovirt clusters.)
     :param uncompressed_xcalar_license_string: (String)
         an uncompressed Xcalar license
     :param installer: (String)
@@ -1738,11 +1748,12 @@ def setup_admin_account(node, ldap_config_url):
         start Xcalar after the install
 
 '''
-def install_xcalar(ip, uncompressed_xcalar_license_string, installer, node_0_val, startXcalar=True):
+def install_xcalar(vm_name, uncompressed_xcalar_license_string, installer, node_0_val, startXcalar=True):
 
-    vmname = get_vm_name(get_vm_id("ip=" + ip))
+    vm_id = get_vm_id("name=" + vm_name)
+    vm_ip = get_vm_ip(vm_id)
 
-    info_log("Install Xcalar on {}, using RPM installer: {} (5-10 minutes)".format(vmname, installer))
+    info_log("Install Xcalar on {}, using RPM installer: {} (5-10 minutes)".format(vm_name, installer))
 
     '''
         There is an end-to-end shell script whicho will
@@ -1752,21 +1763,21 @@ def install_xcalar(ip, uncompressed_xcalar_license_string, installer, node_0_val
     '''
 
     # create tmp dir to hold the files
-    run_ssh_cmd(ip, 'mkdir -p {}'.format(TMPDIR_VM))
+    run_ssh_cmd(vm_ip, 'mkdir -p {}'.format(TMPDIR_VM))
 
     # copy in installer shell script and files it depends on
     fileslist = [[SCRIPT_DIR + '/' + INSTALLER_SH_SCRIPT, TMPDIR_VM],
         [SCRIPT_DIR + '/' + TEMPLATE_HELPER_SH_SCRIPT, TMPDIR_VM]] # installer script will call this template helper script
     for filedata in fileslist:
-        scp_file(ip, filedata[0], filedata[1])
+        scp_file(vm_ip, filedata[0], filedata[1])
 
     # echo licdata to licfile on vm.
     # e2e installer script will look for lic file in this specific location
     lic_file_vm = TMPDIR_VM + '/' + LICFILENAME
-    run_ssh_cmd(ip, "echo '{}' > {}".format(uncompressed_xcalar_license_string, lic_file_vm))
+    run_ssh_cmd(vm_ip, "echo '{}' > {}".format(uncompressed_xcalar_license_string, lic_file_vm))
 
     # install using bld requested
-    run_sh_script(ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, script_args=[installer, ip], timeout=XCALAR_INSTALL_TIMEOUT)
+    run_sh_script(vm_ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, script_args=[installer, vm_ip], timeout=XCALAR_INSTALL_TIMEOUT)
 
     # set Node.0.IpAddr val in default.cfg::
     # In default.cfg, default val of Node.0.IpAddr in SINGLE NODE case is
@@ -1780,11 +1791,11 @@ def install_xcalar(ip, uncompressed_xcalar_license_string, installer, node_0_val
     sed_cmd="sudo sed -i 's@^{}=.*$@{}={}@g' {}".format(node_param, node_param, node_0_val, DEFAULT_CFG_PATH)
     debug_log("Set {} in {} as: {}, using sed cmd: {} (will get reset if " \
         "node becomes part of cluster)".format(node_param, DEFAULT_CFG_PATH, node_0_val, sed_cmd))
-    run_ssh_cmd(ip, sed_cmd)
+    run_ssh_cmd(vm_ip, sed_cmd)
 
     if startXcalar:
         # start xcalar
-        start_xcalar(ip)
+        start_xcalar(vm_ip)
 
 '''
     Install and setup Xcalar on a set of nodes.
@@ -1832,7 +1843,10 @@ def setup_xcalar(vmids, uncompressed_xcalar_license_string, installer, ldap_conf
         if listen:
             node_0_val = name
         # bring up Xcalar only after cluster create and/or admin/ldap setup
-        proc = multiprocessing.Process(target=install_xcalar, args=(ip, uncompressed_xcalar_license_string, installer, node_0_val), kwargs={
+        # note: use name of VM for install, not IP; SDK will have to search Ovirt
+        # GUI to get additional VM metadata, and IP does NOT always show up
+        # in Ovirt GUI right after VM creation!
+        proc = multiprocessing.Process(target=install_xcalar, args=(name, uncompressed_xcalar_license_string, installer, node_0_val), kwargs={
             'startXcalar': False
         })
         # failing if i dont sleep in between.  think it might just be on when using the SDK, similar operations on the vms service
