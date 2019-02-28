@@ -21,16 +21,16 @@ job "prometheus" {
     }
 
     ephemeral_disk {
-      size    = "3000"
-      sticky  = true
-      migrate = true
+      size   = "3000"
+      sticky = true
     }
 
     task "loki" {
       driver = "docker"
 
       config {
-        image = "grafana/loki:master"
+        image      = "grafana/loki:master"
+        force_pull = true
 
         port_map {
           loki = 3100
@@ -69,7 +69,8 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image = "grafana/grafana:master"
+        image      = "grafana/grafana:master"
+        force_pull = true
 
         port_map {
           grafana_ui = 3000

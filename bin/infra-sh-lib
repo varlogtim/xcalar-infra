@@ -11,15 +11,15 @@ fi
 XREGISTRY="${XREGISTRY:-https://registry.int.xcalar.com}"
 
 # When a script is sourced, you can use this function to get the caller / origin
-env_script_file()  {
+env_script_file() {
     echo "${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}"
 }
 
-say () {
+say() {
     echo >&2 "$*"
 }
 
-debug_run () {
+debug_run() {
     test "${DEBUG-1}" = "1" && say "debug: $*" || :
     "$@"
     local rc=$?
@@ -27,7 +27,7 @@ debug_run () {
     return $rc
 }
 
-debug () {
+debug() {
     test "${DEBUG-1}" = "1" && say "debug: $*" || :
 }
 
@@ -42,7 +42,7 @@ warn() {
     fi
 }
 
-error () {
+error() {
     if test -t 2; then
         RED='\e[31m'
         RESET='\e[0m'
@@ -57,7 +57,7 @@ resource() {
     . $XLRINFRADIR/.env
 }
 
-please_use_puppet () {
+please_use_puppet() {
     if [[ $OSTYPE =~ darwin ]]; then
         error "$1. Please install homebrew https://brew.sh/ for Mac"
     else
@@ -65,50 +65,50 @@ please_use_puppet () {
     fi
 }
 
-die_with_status () {
+die_with_status() {
     local rc=$1
     shift
     error "$*"
     exit $rc
 }
 
-die () {
+die() {
     error "$*"
     exit 1
 }
 
-strjoin () {
+strjoin() {
     local IFS="$1"
     shift
     echo "$*"
 }
 
 path_remove() {
-  # Delete path by parts so we can never accidentally remove sub paths
-  while [ $# -gt 0 ]; do
-    PATH=${PATH//":$1:"/":"} # delete any instances in the middle
-    PATH=${PATH/#"$1:"/} # delete any instance at the beginning
-    PATH=${PATH/%":$1"/} # delete any instance in the at the end
-    shift
-  done
+    # Delete path by parts so we can never accidentally remove sub paths
+    while [ $# -gt 0 ]; do
+        PATH=${PATH//":$1:"/":"} # delete any instances in the middle
+        PATH=${PATH/#"$1:"/}     # delete any instance at the beginning
+        PATH=${PATH/%":$1"/}     # delete any instance in the at the end
+        shift
+    done
 }
 
 # Return the age of a file in seconds
-file_age () {
+file_age() {
     if ! test -f "$1"; then
         echo 9999999
         return 1
     fi
-    echo $(( $(date +%s) - $(stat -c '%Y' "$1") ))
+    echo $(($(date +%s) - $(stat -c '%Y' "$1")))
 }
 
 # $1 'key="value"' $2 json document
-json_set () {
+json_set() {
     local tmp="${2}.$$"
-    jq -r "$1" "$2" >  "$tmp" && mv "$tmp" "$2" && return 0 || return 1
+    jq -r "$1" "$2" >"$tmp" && mv "$tmp" "$2" && return 0 || return 1
 }
 
-json_param () {
+json_param() {
     if [ -z "$2" ] && [ -z "$PARAMETERS" ]; then
         die "Need to pass a parameters.json or set PARAMETERS"
     fi
@@ -127,8 +127,8 @@ json_tokv() {
     jq -r "to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"
 }
 
-json_parameters_merge () {
-     jq -r -s '.[0] * .[1] | .parameters | {\
+json_parameters_merge() {
+    jq -r -s '.[0] * .[1] | .parameters | {\
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,
                                            dnsLabelPrefix: {value:"'$GROUP'"},
                                            installerUrl: {value:"'$INSTALLER_URL'"},
@@ -136,13 +136,12 @@ json_parameters_merge () {
                                            }|tojson' "$@" --output json
 }
 
-
 ## Generic helpers
-have_command () {
+have_command() {
     command -v "$1" >/dev/null
 }
 
-preflight () {
+preflight() {
     if ! jq --version | grep -q '^jq-1.5'; then
         please_use_puppet 'Need at least jq version 1.5. Please see https://stedolan.github.io/jq/download/'
     fi
@@ -152,7 +151,7 @@ preflight () {
     return 0
 }
 
-safe_curl () {
+safe_curl() {
     debug_run curl -4 --location --retry 20 --retry-delay 5 --retry-max-time 60 "$@"
 }
 
@@ -186,26 +185,26 @@ s3_exists() {
     aws s3api head-object --bucket $bucket --key $key
 }
 
-get_sha1 () {
+get_sha1() {
     shasum $1 | cut -d' ' -f1 | cut -c1-8
 }
 
 if [ "$(uname -s)" = Darwin ]; then
-    readlink_f () {
+    readlink_f() {
         (
-        target="$1"
-        cd "$(dirname $target)"
-        target="$(basename $target)"
-        while [ -L "$target" ]; do
-            target="$(readlink $target)"
+            target="$1"
             cd "$(dirname $target)"
             target="$(basename $target)"
-        done
-        echo "$(pwd -P)/$target"
+            while [ -L "$target" ]; do
+                target="$(readlink $target)"
+                cd "$(dirname $target)"
+                target="$(basename $target)"
+            done
+            echo "$(pwd -P)/$target"
         )
     }
 else
-    readlink_f () {
+    readlink_f() {
         readlink -f "$@"
     }
 fi
@@ -215,7 +214,7 @@ file_sizemb() {
 }
 
 ip_network() {
-    ip route get 8.8.8.8 |head -1| awk '{print $3}'
+    ip route get 8.8.8.8 | head -1 | awk '{print $3}'
 }
 
 ip_localaddr() {
@@ -237,21 +236,21 @@ urlencode() {
 vssh() {
     # try to guess the user's intentions
     (
-    unset SSH_AUTH_SOCK
-    if [[ "$1" =~ ^-mode ]] || [[ "$1" =~ ^-role ]]; then
-        vault ssh "$@"
-    elif [[ "$@" =~ jenkins ]]; then
-        vault ssh -mode=ca -role=jenkins "$@"
-    elif [[ "$@" =~ ec2 ]]; then
-        vault ssh -mode=ca -role=cloud "$@"
-    elif [[ "$@" =~ azure ]]; then
-        vault ssh -mode=ca -role=cloud "$@"
-    elif [[ "$@" =~ root ]]; then
-        vault ssh -mode=ca -role=admin "$@"
-    else
-        echo >&2 "Don't understand your vault ssh command: $*"
-        return 1
-    fi
+        unset SSH_AUTH_SOCK
+        if [[ $1 =~ ^-mode ]] || [[ $1 =~ ^-role ]]; then
+            vault ssh "$@"
+        elif [[ $@ =~ jenkins ]]; then
+            vault ssh -mode=ca -role=jenkins "$@"
+        elif [[ $@ =~ ec2 ]]; then
+            vault ssh -mode=ca -role=cloud "$@"
+        elif [[ $@ =~ azure ]]; then
+            vault ssh -mode=ca -role=cloud "$@"
+        elif [[ $@ =~ root ]]; then
+            vault ssh -mode=ca -role=admin "$@"
+        else
+            echo >&2 "Don't understand your vault ssh command: $*"
+            return 1
+        fi
     )
 }
 
@@ -260,9 +259,9 @@ consul_session() {
         say "ERROR: Must specify session name"
         return 1
     fi
-    echo '{"Node": "'$(hostname -s)'", "Name":"'${1}'","TTL":"'${2:-60s}'"}' |
-        curl -fsS --request PUT --data @- http://127.0.0.1:8500/v1/session/create | \
-        jq -r .ID
+    echo '{"Node": "'$(hostname -s)'", "Name":"'${1}'","TTL":"'${2:-60s}'"}' \
+        | curl -fsS --request PUT --data @- http://127.0.0.1:8500/v1/session/create \
+        | jq -r .ID
 }
 
 CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR-http://127.0.0.1:8500}
@@ -274,7 +273,6 @@ acquire_lock() {
     [ "${result}" == "true" ] && echo "Lock acquired"
 }
 
-
 release_lock() {
     local session_id=$1 task_name=$2 result
     echo "Releasing the lock..."
@@ -282,17 +280,17 @@ release_lock() {
     [ "${result}" == "true" ] && echo "Lock released"
 }
 
-destroy_session () {
+destroy_session() {
     local session_id=$1 result
     echo "Destroying the session..."
     result=$(curl -s -XPUT "${CONSUL_HTTP_ADDR}/v1/session/destroy/${session_id}")
     [ "${result}" == "true" ] && echo "Session destroyed"
 }
 
-with_lock () {
+with_lock() {
     local session_id task_name="$1"
     shift
-    session_id=$(curl -s -XPUT "${CONSUL_HTTP_ADDR}/v1/session/create" -d "{\"Name\": \"${task_name}\"}"  | jq -r '.ID')
+    session_id=$(curl -s -XPUT "${CONSUL_HTTP_ADDR}/v1/session/create" -d "{\"Name\": \"${task_name}\"}" | jq -r '.ID')
     if ! acquire_lock "${session_id}"; then
         destroy_session "${session_id}"
         echo "Unable to acquire the lock."
@@ -310,7 +308,7 @@ with_lock () {
 ##
 
 registry_repos() {
-    curl -s ${XREGISTRY}/v2/_catalog  | jq -r '.repositories[]'
+    curl -s ${XREGISTRY}/v2/_catalog | jq -r '.repositories[]'
 }
 
 registry_repo_tags() {
@@ -360,4 +358,3 @@ cleanhostname() {
         sed -r 's/_/-/g; s/([A-Z])/\L\1/g; s/\./-/g; s/^-//; s/-$//;'
     fi
 }
-

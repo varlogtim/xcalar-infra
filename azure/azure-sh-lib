@@ -624,8 +624,8 @@ az_deploy() {
     fi
 
     case "$template" in
-        https://*|http://*) template_arg="--template-uri $template";;
-        *) template_arg="--template-file $template";;
+        https://* | http://*) template_arg="--template-uri $template" ;;
+        *) template_arg="--template-file $template" ;;
     esac
 
     if [ "$location" = westus2 ]; then
