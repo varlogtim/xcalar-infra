@@ -1775,6 +1775,12 @@ def install_xcalar(vm_name, uncompressed_xcalar_license_string, installer, node_
     lic_file_vm = TMPDIR_VM + '/' + LICFILENAME
     run_ssh_cmd(vm_ip, "echo '{}' > {}".format(uncompressed_xcalar_license_string, lic_file_vm))
 
+    # install will fail on new templates otherwise
+    # NOTE: Jenkins slaves DO need xcalar-node10; if you move this cmd to a
+    # general area of the script so that it runs on any provisioned VM, make
+    # sure puppet gets run at some point afterwards
+    run_ssh_cmd(vm_ip, "yum remove -y xcalar-node10 xcalar-node")
+
     # install using bld requested
     run_sh_script(vm_ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, script_args=[installer, vm_ip], timeout=XCALAR_INSTALL_TIMEOUT)
 
