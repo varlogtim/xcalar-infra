@@ -2,9 +2,13 @@
 
 touch /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME
 
-export XLRDIR=/opt/xcalar
+export INSTALL_OUTPUT_DIR=`pwd`/xcalar-install
+export XLRDIR=$INSTALL_OUTPUT_DIR/opt/xcalar
+export XLRGUIDIR=$XLRDIR/xcalar-gui
+export XCE_PUBSIGNKEYFILE=$INSTALL_OUTPUT_DIR/etc/xcalar/EcdsaPub.key
+
 export PATH=$XLRDIR/bin:$PATH
-export XCE_CONFIG=`pwd`/default.cfg
+export XCE_CONFIG=$INSTALL_OUTPUT_DIR/etc/xcalar/default.cfg
 export XCE_USER=`id -un`
 export XCE_GROUP=`id -gn`
 
@@ -20,7 +24,7 @@ genSupport() {
     miniDumpOn=`echo "$FuncParams" | grep "Constants.Minidump" | cut -d= -f 2`
     miniDumpOn=${miniDumpOn:-true}
     if [ "$miniDumpOn" = "true" ]; then
-        sudo /opt/xcalar/scripts/support-generate.sh
+        sudo $XLRDIR/scripts/support-generate.sh
     else
         echo "support-generate.sh disabled because minidump is off. Check `pwd` for cores"
     fi
@@ -50,9 +54,6 @@ genBuildArtifacts() {
     mkdir -p ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
     mkdir -p `pwd`/tmpdir
 
-    # Find core files and dump backtrace
-    gdbcore.sh -c core.tar.bz2 $XLRDIR /var/log/xcalar /var/tmp/xcalar-root
-
     find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2>/dev/null | xargs cp --parents -rt `pwd`/tmpdir/
 
     PIDS=()
@@ -75,7 +76,7 @@ genBuildArtifacts() {
         echo >&2 "ERROR($ret): tar failed"
     fi
 
-    for dir in core tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
+    for dir in tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
         if [ "$dir" = "/var/log/xcalar" ]; then
             cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
             rm var_log_xcalar.tar.bz2
@@ -124,14 +125,15 @@ find /var/opt/xcalar -mindepth 1 -name support -prune -o -exec rm -rf {} +
 set -e
 
 sudo -E yum -y remove xcalar || true
+rm -rf $INSTALL_OUTPUT_DIR
+mkdir -p $INSTALL_OUTPUT_DIR
 
-# Prevent installer picking up newer bits than what is included
-sudo -E yum-config-manager --disable xcalar,xcalar-deps,xcalar-deps-common || true
-
-sudo -E $INSTALLER_PATH --noStart
-
+set +e
+$INSTALLER_PATH -d $INSTALL_OUTPUT_DIR -v
 rm $XCE_CONFIG
-$XLRDIR/scripts/genConfig.sh /etc/xcalar/template.cfg $XCE_CONFIG `hostname`
+set -e
+
+$XLRDIR/scripts/genConfig.sh $INSTALL_OUTPUT_DIR/etc/xcalar/template.cfg $XCE_CONFIG `hostname`
 echo "$FuncParams" | tee -a $XCE_CONFIG
 
 # Enable XEM
@@ -254,7 +256,7 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
             retinapath="`pwd`/retina.$now"
             exportpath="`pwd`/export.$now"
             pubTablepath="`pwd`/pubTable.$now"
-            cp /opt/xcalar/bin/usrnode "$filepath"
+            cp $XLRDIR/bin/usrnode "$filepath"
             cp -r /var/opt/xcalar/dataflows/ "$retinapath"
             cp -r /var/opt/xcalar/export/ "$exportpath"
             cp -r /var/opt/xcalar/published/ "$pubTablepath"
@@ -270,7 +272,6 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
         ii=$(( $ii + 1 ))
     done
 done
-
 # Shutdown the cluster
 time xccli -c "shutdown" 2>&1 | tee "$logfile"
 

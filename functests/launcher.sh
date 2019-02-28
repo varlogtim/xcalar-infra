@@ -8,8 +8,8 @@ ulimit -c unlimited
 ulimit -l unlimited
 
 # Change defaults for your installation in the following file
-if [ -r "/etc/default/xcalar" ]; then
-    . /etc/default/xcalar
+if [ -r "${INSTALL_OUTPUT_DIR}/etc/default/xcalar" ]; then
+    . $INSTALL_OUTPUT_DIR/etc/default/xcalar
 fi
 
 export XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
@@ -26,14 +26,14 @@ export MALLOC_CHECK_=2
 
 export XCE_CONFIG XCE_LOGDIR XLRDIR LIBHDFS3_CONF PATH XCE_LICENSEDIR
 
-mkdir -p /var/run/xcalar
+mkdir -p $INSTALL_OUTPUT_DIR/var/run/xcalar
 
-oldpids="$(cat /var/run/xcalar/*.pid 2>/dev/null)"
+oldpids="$(cat ${INSTALL_OUTPUT_DIR}/var/run/xcalar/*.pid 2>/dev/null)"
 if test -n "$oldpids"; then
     kill -- $oldpids 2>/dev/null || true
     sleep 5
     kill -9 $oldpids 2>/dev/null || true
-    rm -f /var/run/xcalar/*.pid
+    rm -f $INSTALL_OUTPUT_DIR/var/run/xcalar/*.pid
 fi
 
 killall xcmgmtd xcmonitor usrnode childnode &>/dev/null || true
@@ -42,9 +42,9 @@ sleep 30
 find /var/opt/xcalar -type f -not -path '/var/opt/xcalar/support/*' -delete
 find /dev/shm -name "xcalar-*" -delete
 
-/opt/xcalar/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
+$XLRDIR/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
 pid=$!
-echo $pid > /var/run/xcalar/xcmgmtd.pid
+echo $pid > $INSTALL_OUTPUT_DIR/var/run/xcalar/xcmgmtd.pid
 
 NumNodes=$(awk -F= '/^Node.NumNodes/{print $2}' $XCE_CONFIG)
 
@@ -52,15 +52,15 @@ for ii in $(seq 0 $(( $NumNodes - 1 ))); do
     monitorLog=$XCE_LOGDIR/xcmonitor.${ii}.out
     # memAllocator = 1(jemalloc) and memAllocator = 2(guardrails)
     if [ $1 -eq 1 ]; then
-        MALLOC_CONF=tcache:false,junk:true /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        MALLOC_CONF=tcache:false,junk:true $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
     elif [ $1 -eq 2 ]; then
         grlibpath="`pwd`/xcalar-infra/GuardRails/libguardrails.so.0.0"
-        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
     else
-        /opt/xcalar/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
     fi
     pid=$!
-    echo $pid > /var/run/xcalar/xcmonitor.${ii}.pid
+    echo $pid > $INSTALL_OUTPUT_DIR/var/run/xcalar/xcmonitor.${ii}.pid
 done
 
 backendUp="false"
