@@ -113,7 +113,9 @@ LDAP_CONFIGS = {
 
 OVIRT_TEMPLATE_MAPPING = {
     'ovirt-node-03-cluster': 'el7-test-template-node-03-1',
-    'ceph-osd2': 'el7-template-20190225',
+    'ceph-osd1-cluster': 'jenkins-slave-el7-template-20190301-osd1',
+    'ceph-osd2': 'jenkins-slave-el7-template-20190301-osd2',
+    'ceph-osd3-dc': 'jenkins-slave-el7-template-20190301-osd3',
     'einstein-cluster2': 'ovirt-tool-einstein-updated',
     'node2-cluster': 'ovirt-cli-tool-node2-template',
     'node3-cluster': 'ovirt-cli-tool-node3-template'
