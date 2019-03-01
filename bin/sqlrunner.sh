@@ -22,6 +22,7 @@ optSetupOnly=false
 optResultsPath="."
 optTimeoutSec=$(( 10 * 60 ))
 optEnableSpark=false
+optBucket="sqlscaletest"
 
 usage()
 {
@@ -34,7 +35,7 @@ usage()
         ssh-add -t0 ~/.ssh/google_compute_engine
 
     Example invocation:
-        $myName -c ecohen-sqlrunner -I n1-standard-8 -n 3 -i /netstore/builds/byJob/BuildTrunk/2707/prod/xcalar-2.0.0-2707-installer -N -d -b sqlscaletest -- -w 1 -t test_tpch -s 1031 -U test-admin@xcalar.com -P welcome1
+        $myName -c ecohen-sqlrunner -I n1-standard-8 -n 3 -i /netstore/builds/byJob/BuildTrunk/2707/prod/xcalar-2.0.0-2707-installer -N -d -- -w 1 -t test_tpch -s 1031 -U test-admin@xcalar.com -P welcome1
     All options following "--" are passed as-is to test_jdbc.py.
 
     Usage: $myName <options> -- <test_jdbc options>
@@ -161,9 +162,16 @@ createCluster() {
 installDeps() {
     rcmd sudo yum install -y tmux nc gcc gcc-c++
     rcmd sudo "$optRemoteXlrDir/bin/pip" install gnureadline multiset jaydebeapi
+    # XXX: Fix in test_jdbc
+    local imdTestDir="/opt/xcalar/src/sqldf/tests/IMDTest/"
     rcmd mkdir -p "$optRemotePwd"
+    rcmd sudo mkdir -p "$imdTestDir"
+    rcmd sudo chmod a+rwx "$imdTestDir"
     gcloud compute scp "$XLRDIR/src/sqldf/tests/test_jdbc.py" "$clusterLeadName:$optRemotePwd"
     gcloud compute scp "$XLRGUIDIR/assets/test/json/SQLTest.json" "$clusterLeadName:$optRemotePwd"
+    gcloud compute scp "$XLRGUIDIR/assets/test/json/SQLTestTPCDS.json" "$clusterLeadName:$optRemotePwd"
+    gcloud compute scp "$XLRDIR/src/sqldf/tests/IMDTest/IMDTestPlan.json" "$clusterLeadName:$imdTestDir"
+    gcloud compute scp "$XLRDIR/src/sqldf/tests/IMDTest/loadData.py" "$clusterLeadName:$imdTestDir"
 
     gcloud compute scp "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" "$clusterLeadName:/tmp"
     gcloud compute scp "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" "$clusterLeadName:/tmp"
@@ -184,16 +192,17 @@ runTest() {
     if $optEnableSpark
     then
         local results_spark="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-spark"
-        rcmd "XLRDIR=$optRmoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
+        rcmd "XLRDIR=$optRemoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
             -p "$optRemotePwd" -o $results_spark -n "$optNumNodes,$optInstanceType" -S $SPARK_IP --bucket "gs://$optBucket/" $optsTestJdbc --ignore-xcalar
         gcloud compute scp "$clusterLeadName:${results_spark}*.json" "$optResultsPath"
     fi
 
     local results_xcalar="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType"
-    rcmd "XLRDIR=$optRmoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
+    rcmd "XLRDIR=$optRemoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
         -p "$optRemotePwd" -o $results_xcalar -n "$optNumNodes,$optInstanceType" $optsTestJdbc
 
-    gcloud compute scp "$clusterLeadName:${results_xcalar}*.json" "$optResultsPath"
+    # IMD test doesn't generate a perf file
+    gcloud compute scp "$clusterLeadName:${results_xcalar}*.json" "$optResultsPath" || true
 }
 
 destroyCluster() {
