@@ -5,6 +5,8 @@ if [ -z "$EMAIL" ]; then
     exit 1
 fi
 
+source $XLRINFRADIR/azure/azure-sh-lib
+
 cd $XLRINFRADIR/azure
 
 az_login
