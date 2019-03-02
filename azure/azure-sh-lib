@@ -508,6 +508,10 @@ az_deploy() {
                 az_deploy_usage
                 return 1
                 ;;
+            --email=)
+                email="${1##*=}"
+                shift 1
+                ;;
             --location=)
                 location="${1##*=}"
                 shift 1
@@ -559,6 +563,10 @@ az_deploy() {
                 ;;
             -n | --name)
                 name="$2"
+                shift 2
+                ;;
+            --email)
+                email="$2"
                 shift 2
                 ;;
             --template-file)
