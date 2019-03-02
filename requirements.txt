@@ -3,7 +3,7 @@ ansible
 #ansible-container[docker]
 ansible-modules-hashivault
 awscli
-aws-sam-cli
+#aws-sam-cli
 azure-cosmosdb-table
 azure-storage-blob
 azure-storage-queue

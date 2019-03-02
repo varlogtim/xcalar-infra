@@ -273,6 +273,14 @@
       "metadata": {
         "description": "Enable storing boot diagnostics"
       }
+    },
+    "osDiskSize": {
+      "type": "int",
+      "defaultValue": 127,
+      "minValue": 31,
+      "metadata": {
+        "description": "Size of root disk"
+      }
     }
   },
   "variables": {
@@ -387,8 +395,7 @@
         ]
       }
     },
-    "shareNetworkSecurityGroupName": "[concat(parameters('shareName'),'-nsg')]",
-    "osDiskSize": 127
+    "shareNetworkSecurityGroupName": "[concat(parameters('shareName'),'-nsg')]"
   },
   "resources": [
     {
@@ -802,7 +809,7 @@
             "name": "[concat(variables('vmName'), copyIndex(), '-osdisk')]",
             "createOption": "FromImage",
             "caching": "ReadWrite",
-            "diskSizeGB": "[int(variables('osDiskSize'))]",
+            "diskSizeGB": "[int(parameters('osDiskSize'))]",
             "managedDisk": {
               "storageAccountType": "[parameters('vmDiskType')]"
             }

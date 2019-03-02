@@ -271,6 +271,14 @@
       "metadata": {
         "description": "Enable storing boot diagnostics"
       }
+    },
+    "osDiskSize": {
+      "type": "int",
+      "defaultValue": 127,
+      "minValue": 127,
+      "metadata": {
+        "description": "Size of root disk"
+      }
     }
   },
   "variables": {
@@ -399,7 +407,7 @@
       },
       "password": {}
     },
-    "osDiskSize": 127
+    "osDiskSize": "[parameters('osDiskSize')]"
   },
   "resources": [
     {
