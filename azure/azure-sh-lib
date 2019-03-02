@@ -5,23 +5,32 @@
 # export XLRINFRADIR=$HOME/xcalar-infra
 # . $XLRINFRADIR/azure/azure-sh-lib
 
-AZ_CACHEDIR="$HOME/.cache/azure"
-HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
-AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
-HOSTED_ZONEID="Z2S03H582J2UUD" ## .xcalar.io
-TODAY=$(date +%Y%m%d)
-NOW="${TODAY}$(date +%H%M%S)"
-TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
-TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v9/mainTemplate.json
-DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
+source $XLRINFRADIR/bin/infra-sh-lib
 
-AZ_PUBLIC_ACCOUNT=${AZ_PUBLIC_ACCOUNT:-xcrepo}
-AZ_PUBLIC_CONTAINER=${AZ_PUBLIC_CONTAINER:-public}
-AZ_PUBKEY="${AZ_PUBKEY:-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b azureuser@xdp-standard}"
-AZ_DEFAULT_TEMPLATE="$TEMPLATE_URL"
 
-mkdir -p "$AZ_CACHEDIR" \
-    && . $XLRINFRADIR/bin/infra-sh-lib
+az_setup() {
+    AZ_CACHEDIR="$HOME/.cache/azure"
+    HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
+    AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
+    HOSTED_ZONEID="Z2S03H582J2UUD" ## .xcalar.io
+    TODAY=$(date +%Y%m%d)
+    NOW="${TODAY}$(date +%H%M%S)"
+    TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
+    TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v9/mainTemplate.json
+    DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
+
+    AZ_PUBLIC_ACCOUNT=${AZ_PUBLIC_ACCOUNT:-xcrepo}
+    AZ_PUBLIC_CONTAINER=${AZ_PUBLIC_CONTAINER:-public}
+    AZ_PUBKEY="${AZ_PUBKEY:-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b azureuser@xdp-standard}"
+    AZ_DEFAULT_TEMPLATE="$TEMPLATE_URL"
+    az_export_all
+}
+
+
+az_login() {
+    az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET \
+        --tenant $AZURE_TENANT_ID --subscription $AZURE_SUBSCRIPTION_ID
+}
 
 az_mktemp() {
     mktemp "$@" ${TMPDIR:-/tmp}/azure-sh-lib.XXXXXX
@@ -97,15 +106,16 @@ az_vm_ids() {
 }
 
 az_groups() {
+    mkdir -p "$AZ_CACHEDIR"
     local groups=$AZ_CACHEDIR/allgroups.json name group groupdir
-    az group list -ojson >$groups
-    jq -r '.[].id' <$groups >$AZ_CACHEDIR/allgroups.txt
+    az group list -ojson > $groups
+    jq -r '.[].id' < $groups > $AZ_CACHEDIR/allgroups.txt
     groupdir=$AZ_CACHEDIR/groups/${NOW}
     mkdir -p $groupdir
     for name in $(cat $AZ_CACHEDIR/allgroups.txt); do
         name=$(basename $name)
         echo >&2 "Updating $name ..."
-        az group show -g ${name} -ojson >$groupdir/${name}.json
+        az group show -g ${name} -ojson > $groupdir/${name}.json
     done
     ln -sfn $NOW $groupdir/../current
 }
@@ -135,7 +145,7 @@ az_rg_vms_do() {
     local pids=() id
     for id in "${ids[@]}"; do
         say az vm $action "$@" --ids "$id"
-        az vm $action "$@" --ids "$id" </dev/null &
+        az vm $action "$@" --ids "$id" < /dev/null &
         pids+=($!)
     done
     say "Waiting for action $action to finish"
@@ -195,7 +205,7 @@ az_rg_ip() {
     if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
         return 1
     fi
-    if ip="$(jq -r .properties.ipAddress <<<$ip_data)" && test -n "$ip" && test "$ip" != null; then
+    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
         echo $ip
         return 0
     fi
@@ -210,11 +220,11 @@ az_rg_dns_or_ip() {
     if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
         return 1
     fi
-    if dns="$(jq -r .properties.dnsSettings.fqdn <<<$ip_data)" && test -n "$dns" && test "$dns" != null; then
+    if dns="$(jq -r .properties.dnsSettings.fqdn <<< $ip_data)" && test -n "$dns" && test "$dns" != null; then
         echo $dns
         return 0
     fi
-    if ip="$(jq -r .properties.ipAddress <<<$ip_data)" && test -n "$ip" && test "$ip" != null; then
+    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
         echo $ip
         return 0
     fi
@@ -257,7 +267,7 @@ az_fix_deploysh() {
         if test -f "$1"; then
             dos2unix -q -n "$1" $tmp
         else
-            cat - >$tmp
+            cat - > $tmp
             dos2unix -q $tmp
         fi
         sed '/^$/d' $tmp | sed -e 's/^#/\n#/g' | shfmt -i 2 -ci
@@ -271,19 +281,19 @@ az_vm_cache() {
 
 az_vms() {
     if [ "$(file_age $AZ_ALLVMS)" -gt $((3 * 60 * 60)) ] || [ "$1" = "-f" ]; then
-        az_vm_cache >$AZ_ALLVMS || return 1
+        az_vm_cache > $AZ_ALLVMS || return 1
     fi
     cat "${AZ_ALLVMS}"
 }
 
 az_vm_running() {
-    local subs="$(az account list -otsv 2>/dev/null | awk '{print $2}')"
+    local subs="$(az account list -otsv 2> /dev/null | awk '{print $2}')"
     az_vm_details | grep running #| tr -d "'" | awk '{printf("/subscriptions/'${subs}'/resourceGroups/%s/providers/Microsoft.Compute/virtualMachines/%s\n",tolower($1),$2)}'
 }
 
 az_vm_details_update() {
     mkdir -p "$AZ_CACHEDIR" \
-        && az vm list -d -ojson >"${AZ_ALLVMS}.tmp" \
+        && az vm list -d -ojson > "${AZ_ALLVMS}.tmp" \
         && mv -f "${AZ_ALLVMS}.tmp" "${AZ_ALLVMS}"
     return
 }
@@ -317,7 +327,7 @@ az_blob_upload_public() {
     test -f "$fname" || return 1
     local name="${2:-$fname}"
     local no_cache="--content-cache-control no-cache,no-store,must-revalidate,max-age=0,no-transform"
-    az storage blob upload -f "$fname" -n "$name" --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" $no_cache >/dev/null \
+    az storage blob upload -f "$fname" -n "$name" --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" $no_cache > /dev/null \
         && az storage blob url --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" --name "$name" -otsv
 }
 
@@ -446,7 +456,7 @@ list_functions() {
     grep '^[a-z]' | grep '{$' | awk '{print $1}' | tr '\n' ' '
 }
 
-export_all() {
+az_export_all() {
     export AZ_PUBLIC_ACCOUNT AZ_PUBLIC_CONTAINER AZ_PUBKEY AZ_DEFAULT_TEMPLATE
     export -f safe_curl say error file_age az_version az_rg_vms az_rg_vms_do az_rg_vms_stop_start_all az_rg_pip az_rg_dns_or_ip az_rg_ssh \
         az_fix_deploysh az_vms az_vm_running az_vm_details_update az_vm_details az_provider_api_versions az_blob_upload_public az_meta_json az_meta_text az_rg_deployment_url \
@@ -479,13 +489,13 @@ az_sp_list() {
 
 az_deploy_usage() {
 
-    local -a params=($(jq -r '.parameters|keys|join("\n")' <$TEMPLATE | tr '\t' '\n')) str=()
+    local -a params=($(jq -r '.parameters|keys|join("\n")' < $TEMPLATE | tr '\t' '\n')) str=()
     local ii
     for ii in "${params[@]}"; do
         str+=("[${ii}=]")
     done
 
-    cat <<EOF
+    cat << EOF
     az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer-url url] [--dnslabel dns]
               [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
               [-n|--name name] [--dnslabel dns] ${str[*]}
@@ -646,7 +656,7 @@ az_deploy() {
     az group deployment validate -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
-        vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP" >/dev/null
+        vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP" > /dev/null
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
         cat "$TMP" >&2
@@ -668,9 +678,16 @@ az_deploy() {
         say "Failed to deploy!"
         return 1
     fi
-    az_rg_scheduled_shutdown $group 2300
+    az_rg_scheduled_shutdown $group 2359
 
-    say "Finished. Browse your deployment here: https://${dnslabel}.westus.cloudapp.azure.com"
+    local dns=${dnslabel}.${location}.cloudapp.azure.com
+
+    say "Finished. Browse your deployment here: https://${dns}"
+    say
+    say "You can ssh into the head node of your cluster: ssh azureuser@${dns}"
+    say
+    say "Finally, you can delete your cluster: az group delete -g $group"
+    say
 }
 
 # Call this function with the resourceGroup name and optionally
@@ -700,4 +717,4 @@ az_disk_update() {
     az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids ${disks[@]}
 }
 
-export_all
+az_setup
