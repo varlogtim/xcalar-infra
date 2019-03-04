@@ -72,6 +72,7 @@ var JENKINS_PASS;
 // installer types, since it will be checked in multiple places.
 // value should be the 'value' attr of the <input
 var OWN = "own";
+var STABLE = "latest-stable";
 var RC = "get-rc";
 var NO = "no-inst";
 
@@ -158,6 +159,10 @@ $( document ).ready(function() {
         var selected = $(this).val();
         if (selected === OWN) {
             setupForOwnInstaller(true);
+            setupForRCInstaller(false);
+            setWillInstall(true);
+        } else if (selected === STABLE) {
+            setupForOwnInstaller(false);
             setupForRCInstaller(false);
             setWillInstall(true);
         } else if (selected === RC) {
@@ -594,7 +599,7 @@ function tryLogin() {
 /**
  * returns hash with data regarding currently selected installer:
  * {
- *    'type': <OWN|NO|RC> (installer type selected)
+ *    'type': <OWN|STABLE|NO|RC> (installer type selected)
  *    'path': <path to installer for selection>
  *    'url': <url for path>,
  *    'element': <jQuery input element, for the selected, which you'd want to fail if path doesn't validate>
@@ -622,6 +627,9 @@ function getInstallerData() {
             $installField = $userInstallerInput;
             rawInstallerPath = $userInstallerInput.val();
             els['type'] = OWN;
+        } else if (installTypeSelected === STABLE) {
+            els['type'] = STABLE;
+            rawInstallerPath = "/netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod-match";
         } else if (installTypeSelected === RC) {
             console.log("using rc");
             $installField = $rcInstallerDropdown;
@@ -1278,7 +1286,7 @@ function triggerJenkins(params) {
                 'password': JENKINS_PASS,
                 'job-params': jobParams
             }
-            //return dummyPass();
+            //return dummyPass()
             sendRequest("POST", SERVER_URL + "/flask/trigger/" + OVIRT_JENKINS_JOB, apiParams)
             .then(function(res) {
                 deferred.resolve("Job triggered");

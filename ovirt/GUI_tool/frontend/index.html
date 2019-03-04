@@ -60,6 +60,14 @@ Welcome to the VM Shop!
             <div id="inst-type" class="input-field col s12">
               <fieldset id="group1">
                 <legend>Installer</legend>
+
+                <p>
+                  <label class="tooltipped" data-position="bottom" data-tooltip="Will install the prod version of the most recent BuildTrunk build without version mismatch.">
+                    <input id="install-type-latest-stable" name="install-type" type="radio" value="no-inst" />
+                    <span id="install-type-latest-stable-label">Install the latest stable BuildTrunk</span>
+                  </label>
+                </p>
+
                 <p>
                   <label>
                     <input id="install-type-own" name="install-type" type="radio" value="own" required />
@@ -70,8 +78,8 @@ Welcome to the VM Shop!
                 <!-- user installer input; unhide if radio button above selected -->
                 <div id="my-installer-wrap" style="display: none;">
                   <div class="input-field col s12">
-                    <input type="text" id="own-installer" placeholder="/netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod" />
-                    <label for="own-installer">Installer path</label>
+                    <input type="text" id="own-installer" placeholder="/netstore/<path to an RPM installer to install>" />
+                    <label for="own-installer" class="tooltipped" data-position="bottom" data-tooltip="An absolute path on netstore to an RPM installer, for example: /netstore/builds/byJob/BuildCustom/10638/prod/xcalar-2.0.0-10638-installer">Installer path</label>
                     <span class="helper-text" for="own-installer" data-error="" data-success=""></span>
                   </div>
                 </div>
