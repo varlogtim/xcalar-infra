@@ -1,6 +1,7 @@
 #!/bin/bash
+set -x
 
-source $XLRINFRADIR/azure/azure-sh-lib
+source $XLRINFRADIR/azure/azure-sh-lib || exit 1
 
 cd $XLRINFRADIR/azure
 
@@ -13,12 +14,19 @@ fi
 INSTALLER_URL="${INSTALLER_URL%\?*}"
 echo "Installer: $INSTALLER_URL"
 
-APP=xdp-azurecluster-${BUILD_NUMBER}
+if [ -z "$APP" ]; then
+    if [ -n "$BUILD_USER" ]; then
+        APP="xdp-${BUILD_USER}-${BUILD_NUMBER}"
+    else
+        APP="xdp-${JOB_NAME}-${BUILD_NUMBER}"
+    fi
+fi
+
+APP="$(echo $APP | tr A-Z a-z | tr ' ' '-')"
 GROUP=${APP}-rg
 
 set -e
 
-TMPDIR=$(mktemp -d -t azure.XXXXXX)
 LOCATION=${LOCATION:-westus2}
 
 if ! az group show -g $GROUP > /dev/null 2>&1; then
@@ -29,7 +37,8 @@ if ! az group show -g $GROUP > /dev/null 2>&1; then
 fi
 
 if ! az_deploy -g $GROUP -l $LOCATION -i "$INSTALLER_URL" --count $NUM_NODES \
-    --size $INSTANCE_TYPE --name $APP --parameters adminEmail="$ADMIN_EMAIL" adminUsername="$ADMIN_USER" adminPassword="$ADMIN_PASSWORD" > output.json; then
+    --size $INSTANCE_TYPE --name "$APP" --parameters adminEmail="$ADMIN_EMAIL" adminUsername="${ADMIN_USERNAME:-xdpadmin}" adminPassword="${ADMIN_PASSWORD:-Welcome1}" \
+    licenseKey="$LICENSE_KEY" > output.json; then
     cat output.json >&2
     echo >&2 "Failed to deploy your template"
     exit 1
