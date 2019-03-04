@@ -257,6 +257,26 @@ setup_instancestore () {
 
 }
 
+setup_swap() {
+    DEVICE="$1"
+
+    parted "$DEVICE" -s 'mklabel gpt'
+    parted "$DEVICE" -s 'mkpart primary 1 -1'
+
+    PART="${1}1"
+
+    mkswap -f $PART
+
+    UUID=$(blkid $PART -s UUID -o value)
+    echo "UUID=$UUID	none    swap	swap	0	0" | tee -a /etc/fstab >/dev/null
+    swapon -a
+}
+
+if test -b /dev/sdc; then
+    setup_swap /dev/sdc
+fi
+
+
 # The root parition is not resized by default on Azure. Handy symlink provided
 # in /dev/disk/azure/root (eg, -> /dev/sda) for where we take the 2nd partition
 # with the first being the boot partition.

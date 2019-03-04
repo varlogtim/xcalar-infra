@@ -59,7 +59,7 @@ if ! http_code="$(curl -f -o /dev/null -s -L -w '%{http_code}\n' -I "${BOOTSTRAP
     aws s3 cp --acl public-read "$BOOTSTRAP" "$S3_BOOTSTRAP"
 fi
 
-az group create --name "$CLUSTER" --location "$LOCATION" --tags adminEmail=${BUILD_USER_EMAIL:-$(git config user.email)}  owner="${BUILD_USER:-$(git config user.name)}" deployHost="$(hostname -s)"
+az group create --name "$CLUSTER" --location "$LOCATION" --tags adminEmail=${BUILD_USER_EMAIL:-$(git config user.email)}  owner="${BUILD_USER_ID:-$(git config user.name)}" deployHost="$(hostname -s)"
 
 if [ -n "$INSTALLER" ] && [ -z "$INSTALLER_URL" ]; then
     if [ "$INSTALLER" = "none" ]; then
@@ -118,6 +118,6 @@ for op in validate create; do
         appUsername="xdpadmin" \
         appPassword="Welcome1" \
         vmSize="$INSTANCE_TYPE" \
-        osDiskSize=${OS_DISKSIZE:-511}
+        osDiskSize=${OS_DISKSIZE:-511} swapDiskSize=${SWAP_SIZE:-255}
 done
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"
