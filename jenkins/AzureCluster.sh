@@ -1,10 +1,5 @@
 #!/bin/bash
 
-if [ -z "$EMAIL" ]; then
-    echo "MUST SPECIFY EMAIL"
-    exit 1
-fi
-
 source $XLRINFRADIR/azure/azure-sh-lib
 
 cd $XLRINFRADIR/azure
@@ -34,7 +29,7 @@ if ! az group show -g $GROUP > /dev/null 2>&1; then
 fi
 
 if ! az_deploy -g $GROUP -l $LOCATION -i "$INSTALLER_URL" --count $NUM_NODES \
-    --size $INSTANCE_TYPE --name $APP --email "$EMAIL" > output.json; then
+    --size $INSTANCE_TYPE --name $APP --parameters adminEmail="$ADMIN_EMAIL" adminUsername="$ADMIN_USER" adminPassword="$ADMIN_PASSWORD" > output.json; then
     cat output.json >&2
     echo >&2 "Failed to deploy your template"
     exit 1
