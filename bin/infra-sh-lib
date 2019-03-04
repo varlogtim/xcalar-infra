@@ -105,7 +105,7 @@ file_age() {
 # $1 'key="value"' $2 json document
 json_set() {
     local tmp="${2}.$$"
-    jq -r "$1" "$2" >"$tmp" && mv "$tmp" "$2" && return 0 || return 1
+    jq -r "$1" "$2" > "$tmp" && mv "$tmp" "$2" && return 0 || return 1
 }
 
 json_param() {
@@ -138,7 +138,7 @@ json_parameters_merge() {
 
 ## Generic helpers
 have_command() {
-    command -v "$1" >/dev/null
+    command -v "$1" > /dev/null
 }
 
 preflight() {
@@ -235,6 +235,35 @@ urlencode() {
 
 vssh() {
     # try to guess the user's intentions
+    local -a sshargs=()
+    local mode=ca role=admin
+    local cmd
+    while [ $# -gt 0 ]; do
+        cmd="$1"
+        shift
+        case "$cmd" in
+            -mode=*)
+                mode=${cmd#*=}
+                ;;
+            -role=*)
+                role=${cmd#*=}
+                ;;
+            -* | --*)
+                sshargs+=("$cmd")
+                ;;
+            ^[a-z][a-z0-9\.\-]+)
+                sshargs+=("$cmd")
+                ;;
+            *)
+                sshargs+=("$cmd")
+                ;;
+        esac
+    done
+    vault write -field=signed_key ssh/sign/$role public_key=@$HOME/.ssh/id_rsa.pub > ~/.ssh/id_rsa-cert.pub
+    ssh "${sshargs[@]}"
+}
+
+vssh_old() {
     (
         unset SSH_AUTH_SOCK
         if [[ $1 =~ ^-mode ]] || [[ $1 =~ ^-role ]]; then

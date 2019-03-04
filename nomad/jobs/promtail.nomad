@@ -24,8 +24,9 @@ job "promtail" {
       driver = "docker"
 
       config {
-        image   = "grafana/promtail:master"
-        volumes = ["/var/log:/var/log", "local/config.yaml:/etc/promtail/config.yaml"]
+        image      = "grafana/promtail:master"
+        volumes    = ["/var/log:/var/log", "local/config.yaml:/etc/promtail/config.yaml"]
+        force_pull = true
 
         #args    = ["-config.file=/etc/promtail/docker-config.yaml"]
         args = ["-config.file=/etc/promtail/config.yaml"]
@@ -45,7 +46,7 @@ positions:
   filename: /tmp/positions.yaml
 
 client:
-  url: http://loki.nomad:9999/api/prom/push
+  url: http://loki.service.consul:3100/api/prom/push
 
 scrape_configs:
 - job_name: system
