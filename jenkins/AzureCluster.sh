@@ -15,8 +15,8 @@ INSTALLER_URL="${INSTALLER_URL%\?*}"
 echo "Installer: $INSTALLER_URL"
 
 if [ -z "$APP" ]; then
-    if [ -n "$BUILD_USER" ]; then
-        APP="xdp-${BUILD_USER}-${BUILD_NUMBER}"
+    if [ -n "$BUILD_USER_ID" ]; then
+        APP="xdp-${BUILD_USER_ID}-${BUILD_NUMBER}"
     else
         APP="xdp-${JOB_NAME}-${BUILD_NUMBER}"
     fi
@@ -37,7 +37,7 @@ if ! az group show -g $GROUP > /dev/null 2>&1; then
 fi
 
 if ! az_deploy -g $GROUP -l $LOCATION -i "$INSTALLER_URL" --count $NUM_NODES \
-    --size $INSTANCE_TYPE --name "$APP" --parameters adminEmail="$ADMIN_EMAIL" adminUsername="${ADMIN_USERNAME:-xdpadmin}" adminPassword="${ADMIN_PASSWORD:-Welcome1}" \
+    --size $INSTANCE_TYPE --name "$APP" --parameters adminEmail="$BUILD_USER_EMAIL" appUsername="${ADMIN_USERNAME:-xdpadmin}" appPassword="${ADMIN_PASSWORD:-Welcome1}" \
     licenseKey="$LICENSE_KEY" > output.json; then
     cat output.json >&2
     echo >&2 "Failed to deploy your template"
