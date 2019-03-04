@@ -118,6 +118,7 @@ fi
 cd $XLRDIR
 TmpSqlDfLogs=`mktemp SqlDf.XXXXX.log`
 echo "Starting SQLDF"
+chmod 0600 /var/opt/xcalar/config/defaultAdmin.json
 mkdir -p src/sqldf/sbt/target
 tar --wildcards -xOf /netstore/builds/byJob/BuildSqldf-with-spark-branch/lastSuccessful/archive.tar xcalar-sqldf-*.noarch.rpm | rpm2cpio | cpio --to-stdout -i ./opt/xcalar/lib/xcalar-sqldf.jar >$XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
 
@@ -146,7 +147,7 @@ cd $XLRGUIDIR/assets/dev/unitTest
 npm install node-bin-setup
 npm install
 
-exitCode=0
+exitCode=1
 echo "Starting test driver"
 if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
     npm test -- sqlTest https://localhost:8443 || exitCode=$?
