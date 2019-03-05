@@ -118,7 +118,11 @@ fi
 cd $XLRDIR
 TmpSqlDfLogs=`mktemp SqlDf.XXXXX.log`
 echo "Starting SQLDF"
-chmod 0600 /var/opt/xcalar/config/defaultAdmin.json
+# loader.sh expects an existing defaultAdmin.json file to have 600
+# permissions. fix that if the file exists.
+if [ -f "/var/opt/xcalar/config/defaultAdmin.json" ]; then
+    chmod 0600 /var/opt/xcalar/config/defaultAdmin.json
+fi
 mkdir -p src/sqldf/sbt/target
 tar --wildcards -xOf /netstore/builds/byJob/BuildSqldf-with-spark-branch/lastSuccessful/archive.tar xcalar-sqldf-*.noarch.rpm | rpm2cpio | cpio --to-stdout -i ./opt/xcalar/lib/xcalar-sqldf.jar >$XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
 
