@@ -61,8 +61,6 @@ import modules.OvirtUtils
 
 MAX_VMS_ALLOWED=1024
 
-DEFAULT_SSH_USER='root' # what tool will be ssh'ing as.
-
 DEFAULT_OVIRT_CLUSTER="ovirt-node-03-cluster"
 #DEFAULT_PUPPET_CLUSTER="ovirt"
 DEFAULT_PUPPET_ROLE_INSTALL="xcalar_qa"
@@ -2217,47 +2215,33 @@ def run_ssh_cmds(host, cmds):
         run_ssh_cmd(host, cmd[0], **extraops)
 
 '''
-    tryOtherUsers: list of other users to try ssh'ing as, in that order, if 'user' fails
+try to ssh with credentials @user/@password, passing @keyfile.
+Context: VMs are initially provisioned with Ovirt public key in ~/.ssh/authorized_keys
+of both jenkins and root users.
+(Ovirt pub keys is stored at <infra>/ovirt/id_ovirt.pub, and the default value
+provided to this methods @keyfile argument)
+After running puppet, this key is removed from authorized_keys.
+Therefore, prior to running puppet, password should not be needed for sshing as
+root or jenkins users, if ovirt keyfile is passed as @keyfile, but after puppet
+runs (example: --delete, --shutdown, --poweron operations) it is needed.
+If @password is not provided, known passwords for root and jenkins will be tried
+if trying to ssh as one of those users.
 '''
-def run_ssh_cmd(host, command, port=22, user=DEFAULT_SSH_USER, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None, tryOtherUsers=["root", "jenkins"]):
+def run_ssh_cmd(host, command, port=22, user='root', password=None, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
 
-    ## users to try ssh'ing as;
-    ## prioritize main 'user' arg, maintain order of tryOtherUsers
-    try_users = tryOtherUsers
-    try:
-        try_users.remove(user) # if 'user' in list remove so can prioritize at front
-    except:
-        pass
-    try_users.insert(0, user)
+    known_user_creds = {'root': 'Welcome1', 'jenkins': 'i0turbine'}
+    if password is None:
+        if user in known_user_creds:
+            password = known_user_creds[user]
 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    connected_user = None # user able to make a connection as
-    last_exception = None # if can't connect any users, will raise most rec. exception
-    for next_user in try_users:
-        debug_log("Connection attempt: ssh {}@{}".format(next_user, host))
-        try:
-            client.connect(hostname=host, port=port, username=next_user, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
-            connected_user = next_user
-            debug_log("connected to ... {} as user {}".format(host, connected_user))
-            break
-        except Exception as e:
-            last_exception = e
-            # if keyfile isn't in authorized_keys of the user you're trying to
-            # ssh as, paramiko will throw a paramiko.ssh_exception.SSHException
-            # with "not a valid OPENSSH private key"
-            # just catch any err in case change on other paramiko versions
-            debug_log("Error connecting to {}: {}; " \
-                " try to attempt other user if available...".format(next_user, str(e)))
-    if not connected_user:
-        info_log("Could not establish ssh connection to {} with " \
-            "any available users: {}; " \
-            "Throwing most recent exception".format(host, ", ".join(try_users)))
-        raise last_exception
-
+    debug_log("Connection attempt: ssh {}@{} (user/pass {}/{} or keyfile {})".format(user, host, user, password, keyfile))
+    client.connect(hostname=host, port=port, username=user, password=password, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
+    debug_log("connected to ... {} as user {}".format(host, user))
     chan = client.get_transport().open_session()
     chan.settimeout(timeout)
-    debug_log("[{}@{}  ~]# {}".format(connected_user, host, command))
+    debug_log("[{}@{}  ~]# {}".format(user, host, command))
     chan.exec_command(command)
     stdout = chan.makefile('r', bufsize) # opens stdout stream
     stderr = chan.makefile_stderr('rb', bufsize) # opens stderr stream
