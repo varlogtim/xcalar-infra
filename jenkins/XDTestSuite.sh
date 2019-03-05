@@ -156,20 +156,18 @@ npm install
 exitCode=1
 echo "Starting test driver"
 if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
-    npm test -- sqlTest https://localhost:8443 || exitCode=$?
+    npm test -- sqlTest https://localhost:8443
 elif [ $JOB_NAME = "XDUnitTest" ]; then
-    npm test -- unitTest https://localhost:8443 || exitCode=$?
+    npm test -- unitTest https://localhost:8443
 # elif [ $JOB_NAME = "GerritExpServerTest" ]; then
-#     npm test -- expServer || exitCode=$?
-#     exitCode=0
+#     npm test -- expServer || true
 else
-    npm test -- testSuite https://localhost:8443 || exitCode=$?
+    npm test -- testSuite https://localhost:8443
 fi
+exitCode=$?
 
 sudo unlink /var/www/xcalar-gui || true
-kill $serverPid || true
 kill $caddyPid || true
-kill $tailPid || true
 
 if [ $exitCode -ne "0" ]; then
     mkdir -p /var/log/xcalar/failedLogs || true
