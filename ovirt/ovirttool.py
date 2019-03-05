@@ -462,7 +462,10 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
     :param cluster: cluster in Ovirt should be hosted on
     :param template: name of template to use
     :param ram: (int) memory size (in bytes)
-    :param cores: (int) num CPU on the VM
+    :param cores: (int) num cores per socket (sockets being set to 1 by default)
+    ** virtual CPUs per VM calcualted as (sockets) x (cores) x (threads)
+    ** currently, both sockets and threads being set to one,
+    ** so cores = vCPUs.
 
     :returns: (String) the unique Ovirt id generated for the new VM
 '''
@@ -477,7 +480,11 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
 
     # create the VM Object and add to vms service
     # need a types:Cpu object to define cores
-    vm_cpu_top = types.CpuTopology(cores=cores, sockets=1)
+    # NOTE:: num virtual CPUs on the VM will be sockets x cores x threads
+    # right now, sockets and thread being set to 1, which is why cores = vCPUs.
+    # if threads and sockets are ever parameterized, be aware
+    # vCPUs might not = cores anymore
+    vm_cpu_top = types.CpuTopology(cores=cores, sockets=1, threads=1)
     vm_cpu = types.Cpu(topology=vm_cpu_top)
 
     '''
