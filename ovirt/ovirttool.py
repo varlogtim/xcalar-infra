@@ -61,7 +61,8 @@ import modules.OvirtUtils
 
 MAX_VMS_ALLOWED=1024
 
-DEFAULT_OVIRT_CLUSTER="ovirt-node-03-cluster"
+#DEFAULT_OVIRT_CLUSTER="ovirt-node-03-cluster"
+DEFAULT_OVIRT_CLUSTER="ceph-osd1-cluster"
 #DEFAULT_PUPPET_CLUSTER="ovirt"
 DEFAULT_PUPPET_ROLE_INSTALL="xcalar_qa"
 DEFAULT_PUPPET_ROLE_NO_INSTALL="jenkins_slave"
