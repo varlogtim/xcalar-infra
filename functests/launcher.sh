@@ -21,6 +21,9 @@ LIBHDFS3_CONF="${LIBHDFS3_CONF:-/etc/xcalar/hdfs-client.xml}"
 PATH="$XLRDIR/bin:$PATH"
 XCE_LICENSEDIR="${XCE_LICENSEDIR:-`pwd`/src/data}"
 XCE_LOGDIR="$(awk -F'=' '/^Constants.XcalarLogCompletePath/{print $2}' $XCE_CONFIG)"
+CGROUPS_ENABLED=$(grep '^Constants.Cgroups' "$XCE_CONFIG" | tail -1 | cut -d '=' -f 2)
+CGROUP_XCALAR_XCE=xcalar_xce_${USER}
+CGROUP_XCALAR_MW=xcalar_middleware_${USER}
 XCE_LOGDIR="${XCE_LOGDIR:-/var/log/xcalar}"
 export MALLOC_CHECK_=2
 
@@ -42,7 +45,12 @@ sleep 30
 find /var/opt/xcalar -type f -not -path '/var/opt/xcalar/support/*' -delete
 find /dev/shm -name "xcalar-*" -delete
 
-$XLRDIR/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
+if [ "$CGROUPS_ENABLED" != "false" ]; then
+    cgexec -g cpu,cpuacct,memory:${CGROUP_XCALAR_MW} --sticky $XLRDIR/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
+else
+    $XLRDIR/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
+fi
+
 pid=$!
 echo $pid > $INSTALL_OUTPUT_DIR/var/run/xcalar/xcmgmtd.pid
 
@@ -55,9 +63,17 @@ for ii in $(seq 0 $(( $NumNodes - 1 ))); do
         MALLOC_CONF=tcache:false,junk:true $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
     elif [ $1 -eq 2 ]; then
         grlibpath="`pwd`/xcalar-infra/GuardRails/libguardrails.so.0.0"
-        $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        if [ "$CGROUPS_ENABLED" != "false" ]; then
+            cgexec -g cpu,cpuacct,memory:${CGROUP_XCALAR_XCE} --sticky $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        else
+            $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -g "$grlibpath" -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        fi
     else
-        $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        if [ "$CGROUPS_ENABLED" != "false" ]; then
+            cgexec -g cpu,cpuacct,memory:${CGROUP_XCALAR_XCE} --sticky $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        else
+            $XLRDIR/bin/xcmonitor -n $ii -m $NumNodes -c $XCE_CONFIG -k $XCE_LICENSEDIR/XcalarLic.key > $monitorLog 2>&1 &
+        fi
     fi
     pid=$!
     echo $pid > $INSTALL_OUTPUT_DIR/var/run/xcalar/xcmonitor.${ii}.pid
