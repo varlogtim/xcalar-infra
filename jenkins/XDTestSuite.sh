@@ -139,6 +139,8 @@ TmpCaddy=`mktemp Caddy.conf.XXXXX`
 TmpCaddyLogs=`mktemp CaddyLogs.XXXXX.log`
 cp $XLRDIR/conf/Caddyfile "$TmpCaddy"
 sed -i -e 's!/var/www/xcalar-gui!'$XLRGUIDIR'/'$GUI_FOLDER'!g' "$TmpCaddy"
+# strip out the jwt settings for testing (for now) to allow unauthenticated access
+sed -i -e '/jwt {/,/}/d' "$TmpCaddy"
 echo "Caddy logs at $TmpCaddyLogs"
 caddy -conf "$TmpCaddy" >"$TmpCaddyLogs" 2>&1 &
 caddyPid=$!
