@@ -25,7 +25,8 @@ LICENSE_SERVER="https://x3xjvoyc6f.execute-api.us-west-2.amazonaws.com/productio
 # Static files on Azure Storage
 PUBLIC_REPO="https://xcrepo.blob.core.windows.net/public/azuremp/v1"
 HTML="${PUBLIC_REPO}/html-4.tar.gz"
-CADDY="${PUBLIC_REPO}/caddy_0.10.10-53_linux_amd64.gz"
+CADDY_VERSION="0.11.0-103"
+CADDY="${PUBLIC_REPO}/caddy_${CADDY_VERSION}_linux_amd64.gz"
 
 CONTAINER="customer"
 SHARE=""
