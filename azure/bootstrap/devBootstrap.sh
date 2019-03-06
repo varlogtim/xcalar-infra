@@ -599,8 +599,6 @@ if [ "$PUBLICIPV4" != "" ]; then
     echo "}"
     ) | tee /etc/xcalar/Caddyfile.$$
     mv /etc/xcalar/Caddyfile.$$ /etc/xcalar/Caddyfile
-    # Have to add the -agree flag or caddy asks us interactively
-    sed -i -e 's/caddy -quiet/caddy -quiet -agree/g' /etc/xcalar/supervisor.conf
     if [ "$INDEX" = 0 ] && test -e "/etc/xcalar/${XCE_DNS}.key"; then
         sed -i -e "s|tls.*$|tls /etc/xcalar/${XCE_DNS}.crt /etc/xcalar/${XCE_DNS}.key|g" /etc/xcalar/Caddyfile
     else
