@@ -1,6 +1,5 @@
 #!/bin/bash
-
-trap '(xclean; kill $(jobs -p)) || true' SIGINT SIGTERM EXIT
+set -x
 
 export XLRINFRADIR="${XLRINFRADIR:-$XLRDIR/xcalar-infra}"
 export XLRGUIDIR="${XLRGUIDIR:-$XLRDIR/xcalar-gui}"
@@ -8,6 +7,83 @@ export XCE_LICENSEDIR=$XLRDIR/src/data
 export XCE_LICENSEFILE=${XCE_LICENSEDIR}/XcalarLic.key
 NUM_USERS=${NUM_USERS:-$(shuf -i 2-3 -n 1)}
 TEST_DRIVER_PORT="5909"
+NETSTORE="/netstore/qa/jenkins"
+
+genBuildArtifacts() {
+    mkdir -p ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+    mkdir -p $XLRDIR/tmpdir
+
+    # Find core files, dump backtrace & bzip core files into core.tar.bz2
+    gdbcore.sh -c core.tar.bz2 $XLRDIR /var/log/xcalar /var/tmp/xcalar-root 2> /dev/null
+
+    if [ -f core.tar.bz2 ]; then
+        corefound=1
+    else
+        corefound=0
+    fi
+
+    find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2> /dev/null | xargs cp --parents -rt $XLRDIR/tmpdir/
+
+    taropts="--warning=no-file-changed --warning=no-file-ignored --use-compress-prog=pbzip2"
+    PIDS=()
+    for dir in tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
+        if [ -d $dir ]; then
+            if [ "$dir" = "/var/log/xcalar" ]; then
+                tar -cf var_log_xcalar.tar.bz2 $taropts $dir > /dev/null 2>&1 &
+            elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
+                tar -cf xcalar_dataflows.tar.bz2 $taropts $dir > /dev/null 2>&1 &
+            else
+                tar -cf $dir.tar.bz2 $taropts $dir > /dev/null 2>&1 &
+            fi
+            PIDS+=($!)
+        fi
+    done
+
+    wait "${PIDS[@]}"
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo "tar returned non-zero value"
+    fi
+
+    for dir in core tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
+        if [ "$dir" = "/var/log/xcalar" ]; then
+            cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+            rm var_log_xcalar.tar.bz2
+            rm $dir/* 2> /dev/null
+        elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
+            if [ -f xcalar_dataflows.tar.bz2 ]; then
+                cp xcalar_dataflows.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+                rm xcalar_dataflows.tar.bz2
+            fi
+        else
+            if [ -f $dir.tar.bz2 ]; then
+                cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+                rm $dir.tar.bz2
+                if [ -d $dir ]; then
+                    rm -r $dir/* 2> /dev/null
+                fi
+            fi
+        fi
+    done
+
+    return $corefound
+}
+
+onExit() {
+    local retval=$?
+    set +e
+
+    if [[ $retval != 0 ]]
+    then
+        genBuildArtifacts
+        echo "Build artifacts copied to ${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
+    fi
+
+    (xclean; kill $(jobs -p))
+    exit $retval
+}
+
+trap onExit SIGINT SIGTERM EXIT
 
 # Make symbolic link
 sudo mkdir /var/www || true
@@ -166,14 +242,16 @@ exitCode=1
 echo "Starting test driver"
 if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
     npm test -- sqlTest https://localhost:8443
+    exitCode=$?
 elif [ $JOB_NAME = "XDUnitTest" ]; then
     npm test -- unitTest https://localhost:8443
+    exitCode=$?
 # elif [ $JOB_NAME = "GerritExpServerTest" ]; then
-#     npm test -- expServer || true
-else
+#     npm test -- expServer https://localhost:8443
+elif [ $JOB_NAME = "XDTestSuite" ]; then
     npm test -- testSuite https://localhost:8443
+    exitCode=$?
 fi
-exitCode=$?
 
 sudo unlink /var/www/xcalar-gui || true
 kill $caddyPid || true
