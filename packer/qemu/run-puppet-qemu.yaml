@@ -18,7 +18,7 @@ variables:
   puppet_host: 'puppet'
   domain: 'int.xcalar.com'
   disk_size: "128000"
-  build_index: '4'
+  build_number: '4'
   environment: 'production'
 builders:
   - type: qemu
@@ -139,4 +139,4 @@ post-processors:
   - type: compress
     format: tar.gz
     keep_input_artifact: true
-    output: '{{build_name}}-{{user `build_index`}}.tar.gz'
+    output: '{{build_name}}-{{user `build_number`}}.tar.gz'

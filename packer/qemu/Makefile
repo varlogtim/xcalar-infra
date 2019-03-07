@@ -10,6 +10,7 @@ PACKER_BUILD := /usr/local/bin/packer build -force -on-error=abort
 # resolve inside the VM/container.
 CACHER_IP  = $(shell getent hosts cacher | awk '{print $$1}')
 EL7_BASE_IMAGE=el7-base-qemu/tdhtest
+BUILD_NUMBER ?= 6
 
 #%.img: %.json
 #	$(PACKER_BUILD) -only=$(@F) $<
@@ -26,6 +27,7 @@ el7-base-qemu/tdhtest: el7-base-qemu.json
 	-var "http_proxy=http://$(CACHER_IP):3128" \
 	-var "https_proxy=" \
 	-var "no_proxy=10.,127.,localhost,169.254." \
+	-var "build_number=$(BUILD_NUMBER)" \
 	$<
 
 el7-puppet-qemu/tdhtest: run-puppet-qemu.json
@@ -42,6 +44,7 @@ el7-jenkins_slave-qemu/tdhtest: run-puppet-qemu.json
 	-var "http_proxy=http://$(CACHER_IP):3128" \
 	-var "https_proxy=" \
 	-var "no_proxy=10.,127.,localhost,169.254." \
+	-var "build_number=$(BUILD_NUMBER)" \
 	-var "iso_url=file://$(EL7_BASE_IMAGE)" \
 	-var "iso_checksum=$(shell md5sum $(EL7_BASE_IMAGE) | awk '{print $$1}')" $<
 
@@ -53,6 +56,7 @@ el7-jenkins_slave-qemu/tdhtest: run-puppet-qemu.json
 	-var "http_proxy=http://$(CACHER_IP):3128" \
 	-var "https_proxy=" \
 	-var "no_proxy=10.,127.,localhost,169.254." \
+	-var "build_number=$(BUILD_NUMBER)" \
 	-var "iso_url=file://$(EL7_BASE_IMAGE)" \
 	-var "iso_checksum=$(shell md5sum $(EL7_BASE_IMAGE) | awk '{print $$1}')" \
 	$<

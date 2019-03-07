@@ -10,6 +10,7 @@ variables:
   iso_checksum: bd43d41e01c2a46b3cb23eb9139dce4b
   iso_checksum_type: md5
   headless: "true"
+  build_number: '7'
 
 builders:
   - type: qemu
@@ -61,4 +62,4 @@ post-processors:
   - type: compress
     format: tar.gz
     keep_input_artifact: true
-    output: '{{build_name}}-{{user `build_index`}}.tar.gz'
+    output: '{{build_name}}-{{user `build_number`}}.tar.gz'
