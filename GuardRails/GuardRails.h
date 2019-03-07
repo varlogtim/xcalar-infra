@@ -72,6 +72,10 @@ typedef struct GRArgs {
     size_t maxTrackFreeFrames;
     size_t numSlots;
     size_t maxMemPct;
+    // Maximum requested bytes allowed for a slot before GuardRails
+    // will report and abort.  This doesn't include buf$ unless running
+    // in malloc-backed buf$ mode.
+    uint64_t maxRequestedBytes;
     uint8_t poisonVal;
     bool useDelay;
     bool verbose;

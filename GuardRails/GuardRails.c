@@ -349,6 +349,12 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
     memHisto[slotNum][usrSizeBin].allocs++;
     memSlots[slotNum].totalUserRequestedBytes += usrSize;
 
+    if (unlikely(memSlots[slotNum].totalUserRequestedBytes >
+                grArgs.maxRequestedBytes)) {
+        onExitHelper(false);
+        GR_ASSERT_ALWAYS(false);
+    }
+
     ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
     GR_ASSERT_ALWAYS(ret == 0);
 
@@ -443,7 +449,8 @@ parseArgs(GRArgs *args) {
     argc++;
 
     args->numSlots = 1;
-    while ((c = getopt(argc, argv, "aAdm:p:s:t:T:v")) != -1) {
+    args->maxRequestedBytes = ULONG_MAX;
+    while ((c = getopt(argc, argv, "aAdmM:p:s:t:T:v")) != -1) {
         switch (c) {
             case 'a':
                 args->abortOnOOM = true;
@@ -457,6 +464,10 @@ parseArgs(GRArgs *args) {
             case 'm':
                 args->maxMemPct = atoi(optarg);
                 GR_ASSERT_ALWAYS(args->maxMemPct <= 100);
+                break;
+            case 'M':
+                args->maxRequestedBytes =
+                    strtoull(optarg, NULL, 10) * 1024 * 1024;
                 break;
             case 'p':
                 GR_ASSERT_ALWAYS(atoi(optarg) >= 0 && atoi(optarg) < 256);
