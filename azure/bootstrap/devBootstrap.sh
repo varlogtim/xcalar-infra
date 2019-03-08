@@ -266,10 +266,29 @@ setup_swap() {
 
     PART="${1}1"
 
+    until test -b $PART; do
+        echo "Waiting for $PART to become available..."
+        echo "*** lsblk"
+        lsblk
+        echo "*** blkid"
+        blkid
+        echo "*** /dev/sd?"
+        ls -l /dev/sd*
+        echo "*** /dev/disk/azure"
+        ls -al /dev/disk/azure/
+        echo "***"
+        sleep 2
+    done
+    sleep 2
     mkswap -f $PART
 
-    UUID=$(blkid $PART -s UUID -o value)
-    echo "UUID=$UUID	none    swap	swap	0	0" | tee -a /etc/fstab >/dev/null
+    until UUID=$(blkid $PART -s UUID -o value) && [ -n "$UUID" ]; do
+        echo "Waiting for UUID of $PART to become available..."
+        sleep 1
+    done
+    echo "UUID=$UUID   swap     swap    pri=-2    0       0" | tee -a /etc/fstab >/dev/null
+    swapon -a
+    sleep 1
     swapon -a
 }
 
