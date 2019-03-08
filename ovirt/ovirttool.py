@@ -971,7 +971,7 @@ def get_vm_ip(vmid):
         if device.name == 'eth0':
             debug_log("is eth0")
             ips = device.ips
-            debug_log(ips)
+            print(ips)
             if ips: # ips is coming back None sometimes
                for ip in ips:
                    debug_log("\tip " + ip.address)
