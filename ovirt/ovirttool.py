@@ -971,13 +971,15 @@ def get_vm_ip(vmid):
         if device.name == 'eth0':
             debug_log("is eth0")
             ips = device.ips
-            for ip in ips:
-                debug_log("\tip " + ip.address)
-                # it will return mac address and ip address dont return mac address
-                if ip_address(ip.address):
-                    return ip.address
-                else:
-                    debug_log("\t(IP {} is probably a mac address; dont return this one".format(ip.address))
+            debug_log(ips)
+            if ips: # ips is coming back None sometimes
+               for ip in ips:
+                   debug_log("\tip " + ip.address)
+                   # it will return mac address and ip address dont return mac address
+                   if ip_address(ip.address):
+                       return ip.address
+                   else:
+                       debug_log("\t(IP {} is probably a mac address; dont return this one".format(ip.address))
 
     # never found!
     #return None
