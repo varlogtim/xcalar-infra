@@ -3088,6 +3088,20 @@ def ip_address(string):
         return False
 
 '''
+create an empty file at :file_path:
+fails if file exists.
+'''
+def create_empty_file(file_path):
+    if os.path.isfile(file_path):
+        raise RuntimeError("Trying to create an empty file, {}, "
+            "but file already exists!".format(file_path))
+    else:
+        debug_log("Create an empty file at {}".format(file_path))
+        # write the output file; create intermediary dirs first if dont exist
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        open(file_path, 'w')
+
+'''
 some user-supplied arguments allow multiple values.
 This function splits such values in to a list of values.  Error on dupes.
 (Gets own function so if delimeter changes, only need to change here)
@@ -3113,15 +3127,9 @@ def get_multi_param_values(param_name, param_value, error_on_dupes=True):
     return list(values.keys())
 
 '''
-Generates a summary data file with information about the job.
-File @ <script dir>/ovirttool_run.txt, unless specified by OVIRT_DATA_FILE env var
-Intermediary dirs are created as needed.
+Generates a summary String with information about the job.
 '''
-def generate_data_file(vms_created, vms_deleted, vms_shutdown, vms_powered_on):
-
-    default_data_file = SCRIPT_DIR + "/ovirttool_run.txt"
-    data_file_path = os.environ.get("OVIRT_DATA_FILE") or default_data_file
-
+def get_data_file_summary(vms_created, vms_deleted, vms_shutdown, vms_powered_on):
     file_str = ""
     file_str += "\ncmd args:"
     for cmd_arg in sys.argv:
@@ -3143,14 +3151,42 @@ def generate_data_file(vms_created, vms_deleted, vms_shutdown, vms_powered_on):
     file_str += "\n\nPowered-on:"
     for vm in vms_powered_on:
         file_str += "\n" + vm
+    return file_str
 
-    # write the output file; create intermediary dirs first if dont exist
-    info_log("Create data file at {}".format(data_file_path))
-    os.makedirs(os.path.dirname(data_file_path), exist_ok=True)
-    with open(data_file_path, 'w') as ovirt_data_file:
-        ovirt_data_file.write(file_str)
+'''
+Writes/appends to the data file generated for this run of the ovirttool.
+If file is not yet created, creates it.
+(Data file path: <script dir>/ovirttool_run.txt, unless specified by env var
+OVIRT_DATA_FILE.  (Intermediary dirs are created as needed.))
+
+options :data: String to write to file.  If not supplied and data file
+ does not yet exist, creates it.
+(if file already exists 'data' is not passed, data file remains as-is.)
+'''
+def data_file_write(data=None):
+    default_data_file = SCRIPT_DIR + "/ovirttool_run.txt"
+    data_file_path = os.environ.get("OVIRT_DATA_FILE") or default_data_file
+
+    # create data file if not yet created
+    if not os.path.isfile(data_file_path):
+        info_log("Create data file at {}".format(data_file_path))
+        create_empty_file(data_file_path)
+    # write requested data to it
+    if data:
+        with open(data_file_path, 'a') as ovirt_data_file:
+            ovirt_data_file.write(data)
+
 
 if __name__ == "__main__":
+
+    # generate empty data file for automation purposes for this run of ovirttool
+    # cli wrapper will try to append its own log data to it, so create now before
+    # any operations, so that file will exist in all success cases.
+    # notes:
+    # - env var OVIRT_DATA_FILE can specify location of this file
+    # - append data to this file at any time in this script by calling:
+    #   data_file_write(<string>)
+    data_file_write()
 
     '''
     Parse and validate cmd arguments
@@ -3320,9 +3356,9 @@ if __name__ == "__main__":
         debug_log(hostname)
     info_log(summary_string, timestamp=False)
 
-    # generate a data file with minimal info (for automation/log tracking)
-    # (env var OVIRT_DATA_FILE can specify where the file is written)
-    generate_data_file(hostnames, vms_to_delete, vms_to_shutdown, vms_to_poweron)
+    # write minimal info to the data file for automation/log tracking
+    data_file_summary = get_data_file_summary(hostnames, vms_to_delete, vms_to_shutdown, vms_to_poweron)
+    data_file_write(data_file_summary)
 
     # close connection
     close_connection(CONN)

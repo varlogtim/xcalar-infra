@@ -59,7 +59,13 @@ rc=${PIPESTATUS[0]}
 if [ -f "$OVIRT_DATA_FILE" ]; then
     printf '%s\n%s\n%s\n' "Debug log:" "$OVIRT_LOG_FILE" "$(cat $OVIRT_DATA_FILE)" > "$OVIRT_DATA_FILE"
 else
-    echo "Can't find ovirttool data file!  This needs to be investigated!" >&2
+    # if couldn't find data file to append logfile to and the job was
+    # successful, this probably indicates some bug in ovirttool; issue warning.
+    # (data file should be created right when the job begins, so it should
+    # be present even if only --list, --help, etc.)
+    if [ "$rc" -eq 0 ]; then
+        echo "Can't find ovirttool data file!  This needs to be investigated!" >&2
+    fi
 fi
 
 if [ $rc != 0 ]; then
