@@ -255,7 +255,12 @@ cat /etc/default/xcalar.default | tee -a /etc/default/xcalar
 $sh_c 'service rsyslog restart'
 cd ~xcalar || cd /var/tmp
 
-echo "$(get_metadata_value attributes/license)" > /etc/xcalar/temp
-echo "$(get_metadata_value attributes/license)" | base64 -d | gunzip > /etc/xcalar/XcalarLic.key
+get_metadata_value attributes/license > /etc/xcalar/temp
+get_metadata_value attributes/license | base64 -d | gunzip > /etc/xcalar/XcalarLic.key
 
-$sh_c 'su -c "/opt/xcalar/bin/xcalarctl start" - xcalar'
+if [ "$ELVERSION" == 7 ] || systemctl cat xcalar.service >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl start xcalar.service
+else
+    /sbin/service xcalar start
+fi
