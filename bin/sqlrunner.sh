@@ -208,7 +208,7 @@ runTest() {
 destroyCluster() {
     if ! $optKeep
     then
-        $XLRINFRADIR/gce/gce-cluster-delete.sh $optClusterName
+        $XLRINFRADIR/gce/gce-cluster-delete.sh --all-disks $optClusterName
         if $optEnableSpark
         then
             $XLRINFRADIR/bin/gce-dataproc-delete.sh -c "$optClusterName-spark" -f "$optClusterName-port"

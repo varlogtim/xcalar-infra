@@ -167,7 +167,7 @@ CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
 (echo "Constants.BufferCacheLazyMemLocking=true";
  echo "Constants.XcMonSlaveMasterTimeout=180";
  echo "Constants.XcMonMasterSlaveTimeout=240";
- echo "Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH";
+ echo "Constants.XdbLocalSerDesPath=${XCE_XDBSERDESPATH}/";
  $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}") > $CONFIG
 
 ARGS=()
@@ -228,7 +228,7 @@ res=${PIPESTATUS[0]}
 if [ "$res" -ne 0 ]; then
     die $res "Failed to create some instances"
 fi
-gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
+gcloud compute ssh nfs --ssh-flag="-tt" --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
 for ii in `seq 1 $COUNT`; do
     instance=${CLUSTER}-${ii}
     swap=${CLUSTER}-swap-${ii}
@@ -243,38 +243,55 @@ for ii in `seq 1 $COUNT`; do
         die $res "Failed to attach some disks"
     fi
 done
-for ii in `seq 1 $COUNT`; do
-    # Mount SerDes SSD
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XCE_XDBSERDESPATH && echo /dev/sdb $XCE_XDBSERDESPATH   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XCE_XDBSERDESPATH || sudo mkfs.ext4 -F /dev/sdb >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XCE_XDBSERDESPATH"
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo chmod o+w $XCE_XDBSERDESPATH"
 
-    # Mount swap SSD
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdc >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdc >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null" && \
-    if [ $DATA_SIZE -gt 0 ]; then
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && echo /dev/sdd $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XC_DEMO_DATASET_DIR || sudo mkfs.ext4 -F /dev/sdd >/dev/null" && \
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mount $XC_DEMO_DATASET_DIR" && \
-        gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
-    fi
-    res=$?
-    if [ $res -ne 0 ]; then
-        die $res "Failed to setup ${CLUSTER}-${ii}"
+# Mount SerDes SSD
+disk_setup_script() {
+    cat <<-EOF
+	#/bin/bash
+	set -e
+	mkpart() {
+	    parted \$1 -s 'mklabel gpt mkpart primary 1 -1'
+	    PART=\${1}1
+	    until test -b \${PART}; do
+	        echo >&2 "Waiting for \${PART} ..."
+	        sleep 1
+	    done
+	    echo "\${PART} \$3 \$2 defaults 0 0" | tee -a /etc/fstab
+	    case "\$2" in
+	        ext4)
+	            until mkfs.ext4 -m 0 -F \${PART}; do
+	                sleep 3
+	            done
+	            mkdir -p \$3
+	            mount \$3
+	            ;;
+	        swap)
+	            until mkswap -f \${PART}; do
+	                sleep 3
+	            done
+	            swapon \${PART}
+	            ;;
+	    esac
+	}
+	mkpart /dev/sdb ext4 $XCE_XDBSERDESPATH
+	chmod o+w $XCE_XDBSERDESPATH
+	mkpart /dev/sdc swap none
+	if [ $DATA_SIZE -gt 0 ]; then
+	    mkdir -p $XC_DEMO_DATASET_DIR
+	    mkpart /dev/sdd ext4 $XC_DEMO_DATASET_DIR
+	    echo "export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR" | tee -a /etc/default/xcalar
+	fi
+	exit 0
+	EOF
+}
+
+disk_setup_script > $TMPDIR/disk_setup_script.sh
+for ii in `seq 1 $COUNT`; do
+    gcloud compute scp $TMPDIR/disk_setup_script.sh ${CLUSTER}-${ii}:/tmp/disk_setup_script.sh || die 1 "Failed to copy $TMP/disk_setup_script.sh to ${CLUSTER}-${ii}"
+    if ! gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo -H /bin/bash -x /tmp/disk_setup_script.sh"; then
+        die 1 "Cluster instance ${CLUSTER}-${ii} failed to setup disks properly"
     fi
 done
-
-PIDS=()
-for ii in `seq 1 $COUNT`; do
-    instance=${CLUSTER}-${ii}
-    swap=${CLUSTER}-swap-${ii}
-    gcloud compute instances set-disk-auto-delete  $instance --disk=$swap &
-    PIDS+=($!)
-done
-wait "${PIDS[@]}"
 
 if [ "$NOTPREEMPTIBLE" != "1" ]; then
     grep 'RUNNING$' $TMPDIR/gce-output.txt | awk '{printf "%s\t%s #internal\n",$5,$1;}' | tee $TMPDIR/hosts-int.txt

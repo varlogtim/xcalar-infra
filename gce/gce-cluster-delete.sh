@@ -12,7 +12,7 @@ say () {
 }
 
 usage () {
-    say "$0 [-f|--force] cluster-name (default: $CLUSTER)"
+    say "$0 [-a|--all-disks] [-f|--force] cluster-name (default: $CLUSTER)"
     exit 1
 }
 
@@ -31,17 +31,18 @@ warn_user () {
     done
 }
 
-while getopts "hf" opt "$@"; do
-    case "$opt" in
-        f) FORCE=true;;
-        h) usage;;
-        --) break;;
-        \?) say "Invalid option -$OPTARG"; exit 1;;
-        :) say "Option -$OPTARG requires an argument."; exit 1;;
+ARGS=()
+while [ $# -gt 0 ]; do
+    cmd="$1"
+    shift
+    case "$cmd" in
+        -f | --force) FORCE=true;;
+        -a | --all-disks) ARGS+=(--delete-disks=all);;
+        -h | --help) usage;;
+        -*) say "Invalid option: $cmd"; usage;;
+        *) CLUSTER="$cmd"; break;;
     esac
 done
-shift $((OPTIND - 1))
-test -n "$1" && CLUSTER="$1"
 
 set +e
 
@@ -54,7 +55,7 @@ else
         warn_user "${SLEEP}" "${INSTANCES[@]}"
     fi
     say "Deleting ${INSTANCES[@]} ..."
-    gcloud compute instances delete -q "${INSTANCES[@]}"
+    gcloud compute instances delete -q "${INSTANCES[@]}" "${ARGS[@]}"
 fi
 
 DISKS=($(gcloud compute disks list | awk '$1~/^'$CLUSTER'-swap-[0-9]+/{print $1}'))
