@@ -116,22 +116,12 @@ else
 fi
 
 cd $XLRDIR
-TmpSqlDfLogs=`mktemp SqlDf.XXXXX.log`
-echo "Starting SQLDF"
-# loader.sh expects an existing defaultAdmin.json file to have 600
-# permissions. fix that if the file exists.
-if [ -f "/var/opt/xcalar/config/defaultAdmin.json" ]; then
-    chmod 0600 /var/opt/xcalar/config/defaultAdmin.json
-fi
+
 mkdir -p src/sqldf/sbt/target
 tar --wildcards -xOf /netstore/builds/byJob/BuildSqldf-with-spark-branch/lastSuccessful/archive.tar xcalar-sqldf-*.noarch.rpm | rpm2cpio | cpio --to-stdout -i ./opt/xcalar/lib/xcalar-sqldf.jar >$XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
 
-java -jar src/sqldf/sbt/target/xcalar-sqldf.jar >"$TmpSqlDfLogs" 2>&1 &
-
-echo "Starting usrnodes"
-export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/bin/usrnode/test-config.cfg}"
-export NODE_ENV="dev"
-launcher.sh 1 daemon
+export NODE_ENV=dev
+xc2 cluster start --num-nodes 1
 
 echo "Starting Caddy"
 pkill caddy || true
@@ -168,10 +158,11 @@ exitCode=$?
 
 sudo unlink /var/www/xcalar-gui || true
 kill $caddyPid || true
+xc2 cluster stop
 
 if [ $exitCode -ne "0" ]; then
     mkdir -p /var/log/xcalar/failedLogs || true
-    cp $XLRDIR/$TmpSqlDfLogs /var/log/xcalar/failedLogs/
+    cp -r "/tmp/xce-`id -u`"/* /var/log/xcalar/failedLogs/
     cp $XLRDIR/$TmpCaddyLogs /var/log/xcalar/failedLogs/
 fi
 exit $exitCode
