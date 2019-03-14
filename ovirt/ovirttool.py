@@ -93,7 +93,7 @@ XCALAR_STOP_TIMEOUT = 600 # seconds to wait before timing out on service xcalar 
 
 NETSTORE_IP='10.10.1.107'
 XUID = '1001' # xcalar group uid. hacky fix later
-JENKINS_USER_PASS = "jenkins" # password to set for user 'jenkins' on provisioned VMs
+JENKINS_USER_PASS = "Welcome1" # password to set for user 'jenkins' on provisioned VMs
 LOGIN_UNAME = "admin"
 LOGIN_PWORD = "admin"
 LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
