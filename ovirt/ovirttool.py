@@ -1200,14 +1200,15 @@ def remove_vm(identifier, releaseIP=True):
                 info_log("Release {}/{} from consul".format(name, assigned_ip))
                 # if puppet wasn't set up, might not work, just catch and go on
                 try:
-                    run_ssh_cmd(assigned_ip, "consul leave")
+                    # you probably won't have root access if puppet has run; use jenkins user
+                    run_ssh_cmd(assigned_ip, "sudo consul leave", user="jenkins")
                 except Exception as e:
                     debug_log("consul leave command failed on {}, Reason: {}" \
                         "; ignoring".format(assigned_ip, str(e)))
 
                 info_log("Release IP {}".format(assigned_ip))
-                cmds = [['sudo dhclient -v -r']] # assuming Centos7... @TODO for other cases?
-                run_ssh_cmds(assigned_ip, cmds)
+                cmd = 'sudo dhclient -v -r' # assuming Centos7... @TODO for other cases?
+                run_ssh_cmd(assigned_ip, cmd, user="jenkins") # if puppet ran probably won't have root access
 
         except NoIpException:
             '''
@@ -2238,16 +2239,31 @@ if trying to ssh as one of those users.
 '''
 def run_ssh_cmd(host, command, port=22, user='root', password=None, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
 
-    known_user_creds = {'root': 'Welcome1', 'jenkins': 'i0turbine'}
+    known_user_creds = {'root': ['i0turbine', 'Welcome1'], 'jenkins': ['i0turbine', 'Welcome1']}
+    passwords_to_try = []
     if password is None:
         if user in known_user_creds:
-            password = known_user_creds[user]
+            passwords_to_try = known_user_creds[user]
+    else:
+        passwords_to_try = [password]
 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    debug_log("Connection attempt: ssh {}@{} (user/pass {}/{} or keyfile {})".format(user, host, user, password, keyfile))
-    client.connect(hostname=host, port=port, username=user, password=password, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
-    debug_log("connected to ... {} as user {}".format(host, user))
+
+    # try all the known passwords for this user
+    connected = False
+    for password_to_try in passwords_to_try:
+        debug_log("Connection attempt: ssh {}@{} (user/pass {}/{} or keyfile {})".format(user, host, user, password_to_try, keyfile))
+        try:
+            client.connect(hostname=host, port=port, username=user, password=password_to_try, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
+            debug_log("connected to ... {} as user {}".format(host, user))
+            connected = True
+        except Exception as e: # except any type of error paramiko might raise
+            debug_log("Caught exception '{}' when trying to connect... "
+                "attempt again if more passwords available".format(str(e)))
+    if not connected:
+        raise RuntimeError("Can not establish connection with {}!".format(host))
+
     chan = client.get_transport().open_session()
     chan.settimeout(timeout)
     debug_log("[{}@{}  ~]# {}".format(user, host, command))
