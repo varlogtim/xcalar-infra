@@ -2239,7 +2239,7 @@ if trying to ssh as one of those users.
 '''
 def run_ssh_cmd(host, command, port=22, user='root', password=None, bufsize=-1, keyfile=OVIRT_KEYFILE_DEST, timeout=120, valid_exit_codes=[0], pkey=None):
 
-    known_user_creds = {'root': ['i0turbine', 'Welcome1'], 'jenkins': ['i0turbine', 'Welcome1']}
+    known_user_creds = {'root': ['i0turbine', 'Welcome1'], 'jenkins': ['i0turbine', 'Welcome1', 'jenkins']}
     passwords_to_try = []
     if password is None:
         if user in known_user_creds:
