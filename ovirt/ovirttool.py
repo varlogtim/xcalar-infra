@@ -2258,6 +2258,7 @@ def run_ssh_cmd(host, command, port=22, user='root', password=None, bufsize=-1, 
             client.connect(hostname=host, port=port, username=user, password=password_to_try, key_filename=keyfile)#, key_filename=key_filename, banner_timeout=100)
             debug_log("connected to ... {} as user {}".format(host, user))
             connected = True
+            break
         except Exception as e: # except any type of error paramiko might raise
             debug_log("Caught exception '{}' when trying to connect... "
                 "attempt again if more passwords available".format(str(e)))
