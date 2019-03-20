@@ -644,12 +644,9 @@ def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_as
 '''
 def setup_puppet(ip, puppet_role, puppet_cluster):
     debug_log("Setup puppet to run on {} as role {}".format(ip, puppet_role))
-    cmds = [
-        ['echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role)]
-    ]
+    run_ssh_cmd(ip, 'echo "role={}" > /etc/facter/facts.d/role.txt'.format(puppet_role))
     if puppet_cluster:
-        cmds.append(['echo "cluster={}" > /etc/facter/facts.d/cluster.txt'.format(puppet_cluster)])
-    run_ssh_cmds(ip, cmds)
+        run_ssh_cmd(ip, 'echo "cluster={}" > /etc/facter/facts.d/cluster.txt'.format(puppet_cluster))
 
 '''
     Run puppet agent -t -v on an IP, with option to do skip setup
@@ -685,12 +682,13 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, pupp
 
     # clears out stale metadata before running puppet agent
     pre_cmds = [
-        ["yum clean all --enablerepo='*'"],
-        ["rm -rf /var/cache/yum/*"]
+        "yum clean all --enablerepo='*'",
+        "rm -rf /var/cache/yum/*"
     ]
     info_log("Run commands to clear puppet cache prior to running " \
-        "puppet agent: ({})".format(", ".join(item[0] for item in pre_cmds)))
-    run_ssh_cmds(ip, pre_cmds)
+        "puppet agent: ({})".format(", ".join(pre_cmds)))
+    for cmd in pre_cmds:
+        run_ssh_cmd(ip, cmd)
 
     # still try to run puppet agent; if it fails, it fails...
     # once puppet is set up, will not be able to ssh with ovirt key any longer
@@ -701,12 +699,13 @@ def run_puppet_agent(ip, puppet_role=None, puppet_cluster=None, setup=True, pupp
     # some follow up commands, to make sure netstore accessible
     # been going down after puppet agent.  maybe temp issue?
     follow_up_cmds = [
-        ['sudo systemctl restart autofs'], # won't be able to ssh as root after puppet runs
-        ['ls /netstore/']
+        'sudo systemctl restart autofs', # won't be able to ssh as root after puppet runs
+        'ls /netstore/'
     ]
     info_log("Run follow up cmds ({}) to ensure netstore " \
-        "mounted".format(", ".join(item[0] for item in follow_up_cmds)))
-    run_ssh_cmds(ip, follow_up_cmds)
+            "mounted".format(", ".join(follow_up_cmds)))
+    for cmd in follow_up_cmds:
+        run_ssh_cmd(ip, cmd)
 
 '''
     setup puppet on all nodes in parallel
@@ -1652,10 +1651,9 @@ def is_xcalar_running(node):
 def start_xcalar(node):
 
     # sudo in case running after puppet setup, in which case no root ssh
-    startCmd = 'sudo service xcalar start'
-    info_log("Start Xcalar service on {} via {}".format(node, startCmd))
-    cmds = [[startCmd, XCALAR_START_TIMEOUT]]
-    run_ssh_cmds(node, cmds)
+    start_cmd = 'sudo service xcalar start'
+    info_log("Start Xcalar service on {} via {}".format(node, start_cmd))
+    run_ssh_cmd(node, start_cmd, timeout=XCALAR_START_TIMEOUT)
 
 '''
     Bring down Xcalar service on node
@@ -1671,8 +1669,7 @@ def stop_xcalar(node, stop_supervisor=False):
     if stop_supervisor:
         stop_cmd += '-supervisor'
     info_log("Stop Xcalar service on {} via {}".format(node, stop_cmd))
-    cmds = [[stop_cmd, XCALAR_STOP_TIMEOUT]]
-    run_ssh_cmds(node, cmds)
+    run_ssh_cmd(node, stop_cmd, timeout=XCALAR_STOP_TIMEOUT)
 
 def restart_xcalar(node, restart_expserver=False):
     stop_xcalar(node, stop_supervisor=restart_expserver)
@@ -2207,23 +2204,6 @@ def scp_file(node, localfilepath, remotefilepath, keyfile=OVIRT_KEYFILE_DEST):
     cmd = 'scp -i ' + keyfile + ' -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
     run_system_cmd(cmd)
 
-def run_ssh_cmds(host, cmds):
-
-    debug_log("Send cmds to {} via SSH.  cmd list: {}".format(host, str(cmds)))
-
-    # run the cmds one by one.  it will create a new session each time
-    errorFound = False
-    for cmd in cmds:
-        time.sleep(5)
-        status = None
-        extraops = {}
-        if len(cmd) > 1:
-            if cmd[1]:
-                extraops['timeout'] = cmd[1]
-            if len(cmd) > 2:
-                extraops['valid_exit_codes'] = cmd[2]
-        run_ssh_cmd(host, cmd[0], **extraops)
-
 '''
 try to ssh with credentials @user/@password, passing @keyfile.
 Context: VMs are initially provisioned with Ovirt public key in ~/.ssh/authorized_keys
@@ -2343,15 +2323,13 @@ def run_sh_script(node, path, script_args=[], scriptvars=[], timeout=120, redire
     if debug:
         bash_call += ' -x'
     shell_cmd = " ".join(scriptvars) + " " + bash_call + ' ' + path + ' ' + ' '.join(script_args)
-    cmds = []
     output_file = None
     if redirect:
-        cmds.append(['mkdir -p ' + OVIRT_SHELL_LOGS_DIR])
+        run_ssh_cmd(node, "mkdir -p {}".format(OVIRT_SHELL_LOGS_DIR))
         output_file = OVIRT_SHELL_LOGS_DIR + "/" + os.path.basename(path) + "_log"
         shell_cmd += ' &> ' + output_file
-    cmds.append([shell_cmd, timeout])
     try:
-        run_ssh_cmds(node, cmds)
+        run_ssh_cmd(node, shell_cmd, timeout=timeout)
     except ShellError as e:
         errInfo = "\nHit error running shell script {} on {}.  ERROR: {}".format(path, node, e.summary)
         if output_file: # no stderr to print to them it was all redirected
