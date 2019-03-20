@@ -140,8 +140,6 @@ def generate_random_string(length=5, exclude=[]):
         rand_string = ''.join([random.choice(string.ascii_letters + string.digits) for n in range(length)])
     return rand_string
 
-OVIRT_SHELL_LOGS_DIR = '/tmp/ovirtShellScriptLogs_' + generate_random_string() # dir on created VMs to hold redirected shell script output
-
 CONN=None
 LICFILENAME='XcalarLic.key'
 # helper scripts - they should be located in dir this python script is at
@@ -149,6 +147,11 @@ DEFAULT_ADMIN_FILE = 'defaultAdmin.json'
 INSTALLER_SH_SCRIPT = 'e2einstaller.sh'
 TEMPLATE_HELPER_SH_SCRIPT = 'templatehelper.sh'
 ADMIN_HELPER_SH_SCRIPT = 'setupadmin.sh'
+# dir to redirect shell output of above scripts to on VMs they are run on;
+# append timestamp so diff ovirttool runs on same VM would generated diff dirs
+timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") # specifies with no spaces since this will be a dir
+SH_REDIRECT_OUTPUT_DIR = '/tmp/ovirt_shell_script_logs_{}'.format(timestamp)
+
 
 class NoIpException(Exception):
     pass
@@ -2298,26 +2301,27 @@ def run_system_cmd(cmd):
     '''
 
 '''
-    Run a shell script on a node
+Run a shell script on a VM; optionally redirect output to a file.
 
-    :param node:
-        (String) IP of node to run shell script on
-    :param path:
-        (String) filepath (on node) of shell script to run
-    :param script_args:
-        (list) list of Strings as positional args to supply to shell script after
-    :param scriptvars:
-        (list) list of Strings as vars to supply in front of shell script call
-    :redirect:
-        if True will redirct shell output on node to OVIRT_SHELL_LOGS_DIR
-        (if dir does not exist on node will create it)
-    :debug:
-        if True will run bash with -x option
-
+@node
+  (String) IP of node to run shell script on
+@path
+  (String) filepath (on node) of shell script to run
+@user
+  (String) user to run script as
+@script_args
+  (list) list of Strings as positional args to supply to shell script after
+@scriptvars:
+  (list) list of Strings as vars to supply in front of shell script call
+@redirect:
+  (boolean) if True will redirect console output on node to SH_REDIRECT_OUTPUT_DIR
+  (if dir does not exist on node will create it)
+@debug:
+   if True will run bash with -x option
 '''
-def run_sh_script(node, path, script_args=[], scriptvars=[], timeout=120, redirect=True, debug=True):
+def run_sh_script(node, path, user="root", script_args=[], scriptvars=[], timeout=120, redirect=True, debug=True):
 
-    debug_log("Run shell script {} on node {}...\n".format(path, node))
+    debug_log("Run shell script {} on node {} as user {}\n".format(path, node, user))
 
     bash_call = '/bin/bash'
     if debug:
@@ -2325,11 +2329,13 @@ def run_sh_script(node, path, script_args=[], scriptvars=[], timeout=120, redire
     shell_cmd = " ".join(scriptvars) + " " + bash_call + ' ' + path + ' ' + ' '.join(script_args)
     output_file = None
     if redirect:
-        run_ssh_cmd(node, "mkdir -p {}".format(OVIRT_SHELL_LOGS_DIR))
-        output_file = OVIRT_SHELL_LOGS_DIR + "/" + os.path.basename(path) + "_log"
+        output_file = SH_REDIRECT_OUTPUT_DIR + "/" + os.path.basename(path) + "_log"
+        run_ssh_cmd(node, "sudo mkdir -p {}".format(os.path.dirname(output_file)))
         shell_cmd += ' &> ' + output_file
+        debug_log("** Console output from shell script {} will be redirected "
+            "to: {} on {}".format(path, output_file, node))
     try:
-        run_ssh_cmd(node, shell_cmd, timeout=timeout)
+        run_ssh_cmd(node, shell_cmd, user=user, timeout=timeout)
     except ShellError as e:
         errInfo = "\nHit error running shell script {} on {}.  ERROR: {}".format(path, node, e.summary)
         if output_file: # no stderr to print to them it was all redirected
