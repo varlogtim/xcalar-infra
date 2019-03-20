@@ -9,7 +9,7 @@ NVIM_VERSION="0.3.4"
 TMUX_VERSION="2.8-8"
 RUBY_VERSION="2.3.7"
 NODE_VERSION="10.15.0"
-CADDY_VERSION="0.11.1_custom1"
+CADDY_VERSION="0.11.0-103"
 
 FORCE=${FORCE:-false}
 PREFIX="${HOME}/.local"
@@ -68,22 +68,16 @@ have_app() {
 # ** Don't call install_nvim & friends directly **
 # Use app_install nvim
 install_nvim() {
-    curl -fsSL $url | tar zxf - --strip-components=1 -C $app_prefix
-
-    if test -e $HOME/.vimrc && ! test -L $HOME/.vimrc; then
-        mv -v ~/.vimrc ~/vimrc.bak
-        echo >&2 "WARNING: Renamed $HOME/.vimrc to $HOME/vimrc.bak"
+    curl -fsSL "$url" | tar zxf - --strip-components=1 -C $app_prefix
+    local nvimd=$HOME/.config/nvim
+    if test -e $nvimd; then
+        test -L $nvimd && rm -f $nvimd || mv -v $nvimd ${nvimd}.bak
     fi
-    if test -e $HOME/.vim && ! test -L $HOME/.vim; then
-        mv -v ~/.vim ~/vim.bak
-        echo >&2 "WARNING: Renamed $HOME/.vim to $HOME/vim.bak"
-    fi
+    mkdir -p $HOME/.config $HOME/.vim/backup $HOME/.vim/tmp
+    touch $HOME/.vimrc
+    ln -sfn ../.vim $nvimd
+    ln -sfn ../.vimrc $HOME/.vim/init.vim
 
-    mkdir -p $HOME/.config/nvim
-    touch $HOME/.config/nvim/init.vim
-
-    ln -sfn .config/nvim $HOME/.vim
-    ln -sfn .config/nvim/init.vim $HOME/.vimrc
     ln_r $app_prefix/bin/nvim $PREFIX/bin/
     ln -sfn nvim $PREFIX/bin/vim
     ln -sfn nvim $PREFIX/bin/vi
@@ -98,8 +92,11 @@ install_tmux() {
 }
 
 install_caddy() {
-    curl -fsSL "$url" | tar zxf - -C ${app_prefix}
-    ln_r ${app_prefix}/caddy ${PREFIX}/bin/
+    curl -fsSL -o caddy.tar.gz "$url" && \
+    tar zxf caddy.tar.gz -C ${app_prefix} && \
+    rm -f caddy.tar.gz && \
+    ln_r ${app_prefix}/caddy ${PREFIX}/bin/ && \
+    sudo setcap cap_net_bind_service=+ep $(readlink -f $PREFIX/bin/caddy)
 }
 
 install_ruby() {
