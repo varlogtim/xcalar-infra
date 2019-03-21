@@ -232,11 +232,16 @@ caddyPid=$!
 echo "Caddy pid $caddyPid"
 sleep 5
 
-cd $XLRGUIDIR/assets/dev/unitTest
-# Please don't ask me why I have to independently install this package.
-# This is the only way I've found to make it work.
-npm install node-bin-setup
-npm install
+if [ $JOB_NAME = "XDEndToEndTest" ]; then
+    cd $XLRGUIDIR/assets/dev/unitTest
+    # Please don't ask me why I have to independently install this package.
+    # This is the only way I've found to make it work.
+    npm install node-bin-setup
+    npm install
+else
+    cd $XLRGUIDIR/assets/dev/e2eTest
+    npm install
+fi
 
 exitCode=1
 echo "Starting test driver"
@@ -250,6 +255,9 @@ elif [ $JOB_NAME = "XDUnitTest" ]; then
 #     npm test -- expServer https://localhost:8443
 elif [ $JOB_NAME = "XDTestSuite" ]; then
     npm test -- testSuite https://localhost:8443
+    exitCode=$?
+elif [ $JOB_NAME = "XDEndToEndTest" ]; then
+    npm test -- --tag "allTests"
     exitCode=$?
 fi
 
