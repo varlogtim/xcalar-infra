@@ -2853,7 +2853,7 @@ Validate final result.
 '''
 def get_validate_installer_url():
 
-    if ARGS.noinstaller:
+    if not will_install():
         return None
 
     installer_header = 'http://'
@@ -3315,7 +3315,7 @@ if __name__ == "__main__":
         unique_generated_basename, vmnames = generate_vm_names(ARGS.vmbasename, int(ARGS.count), no_rand=ARGS.norand)
         vmids = provision_vms(vmnames, ARGS.ovirtcluster, convert_mem_size(int(ARGS.ram)), int(ARGS.cores), tryotherclusters=ARGS.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
-        if not ARGS.noinstaller:
+        if will_install():
             # if you supply a value to 'createcluster' arg of setup_xcalar,
             # then once xcalar install compled on all nodes will form the vms in
             # to a cluster by that name
