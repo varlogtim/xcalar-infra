@@ -233,13 +233,13 @@ echo "Caddy pid $caddyPid"
 sleep 5
 
 if [ $JOB_NAME = "XDEndToEndTest" ]; then
+    cd $XLRGUIDIR/assets/dev/e2eTest
+    npm install
+else
     cd $XLRGUIDIR/assets/dev/unitTest
     # Please don't ask me why I have to independently install this package.
     # This is the only way I've found to make it work.
     npm install node-bin-setup
-    npm install
-else
-    cd $XLRGUIDIR/assets/dev/e2eTest
     npm install
 fi
 
