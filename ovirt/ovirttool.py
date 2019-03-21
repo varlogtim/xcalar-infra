@@ -1802,7 +1802,7 @@ def install_xcalar(vm_name, uncompressed_xcalar_license_string, installer, node_
     # cluster creation will overwrite this but happens after install_xcalar
     node_param="Node.0.IpAddr"
     sed_cmd="sudo sed -i 's@^{}=.*$@{}={}@g' {}".format(node_param, node_param, node_0_val, DEFAULT_CFG_PATH)
-    debug_log("Set {} in {} as: {}, using sed cmd: {} (will get reset if " \
+    info_log("Set {} in {} as: {}, using sed cmd: {} (will get reset if " \
         "node becomes part of cluster)".format(node_param, DEFAULT_CFG_PATH, node_0_val, sed_cmd))
     run_ssh_cmd(vm_ip, sed_cmd)
 
@@ -1868,7 +1868,7 @@ def setup_xcalar(vmids, uncompressed_xcalar_license_string, installer, ldap_conf
         time.sleep(sleep_between)
 
     # wait
-    process_wait(procs, timeout=1500+sleep_between*len(vmids))
+    process_wait(procs, timeout=8000+sleep_between*len(vmids))
 
     # form the nodes in to a cluster if requested (will need to start Xcalar on nodes to take effect)
     setup_admin_account_on = ips
@@ -2374,7 +2374,12 @@ def process_wait(procs, timeout=None, valid_exit_codes=[0]):
 
         if timeout and not time_remaining:
             raise TimeoutError("Timed out waiting for processes to complete! " \
-                "{}/{} processes remain!".format(len(procs), numProcsStart))
+                "{}/{} processes remain!\n(NOTE: This error does NOT come from " \
+                "an individual ssh command that timed out on a VM, rather, it means an " \
+                "entire section of the ovirttool setup timed out as a whole, " \
+                "i.e., installing Xcalar, " \
+                "provisioning VMs, etc.  It could be that just one of the commands " \
+                "in that entire process was running long.)".format(len(procs), numProcsStart))
 
     debug_log("All processes completed with valid exit codes")
 
