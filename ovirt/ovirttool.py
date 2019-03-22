@@ -451,7 +451,7 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
         wait_for_vm_to_come_up(vmid, power_on_timeout=power_on_timeout)
 
     if waitForIP:
-        info_log("Wait until IP has been assigned to {}".format(name))
+        info_log("Wait until IP has been assigned to {} (up to 5 minutes)".format(name))
         assigned_ip = wait_for_ip(vmid, ip_assign_timeout)
         info_log("IP {} has been assigned to {}".format(assigned_ip, name))
         return assigned_ip
@@ -1794,6 +1794,7 @@ def install_xcalar(vm_name, uncompressed_xcalar_license_string, installer, node_
 
     # install using bld requested
     run_sh_script(vm_ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, script_args=[installer, vm_ip], timeout=XCALAR_INSTALL_TIMEOUT)
+    info_log("Install complete on {}.  Running follow-up commands (see the debug log for more info)".format(vm_ip))
 
     # set Node.0.IpAddr val in default.cfg::
     # In default.cfg, default val of Node.0.IpAddr in SINGLE NODE case is
@@ -1805,8 +1806,12 @@ def install_xcalar(vm_name, uncompressed_xcalar_license_string, installer, node_
     # cluster creation will overwrite this but happens after install_xcalar
     node_param="Node.0.IpAddr"
     sed_cmd="sudo sed -i 's@^{}=.*$@{}={}@g' {}".format(node_param, node_param, node_0_val, DEFAULT_CFG_PATH)
-    info_log("Set {} in {} as: {}, using sed cmd: {} (will get reset if " \
-        "node becomes part of cluster)".format(node_param, DEFAULT_CFG_PATH, node_0_val, sed_cmd))
+    debug_log("Set {} value in {} as {} on {}, using sed cmd: {} " \
+        "\n(This value has impact on ability to listen to outside requests " \
+        "for single-node cases, and will be adjusted based on if you ran " \
+        "with this --list option.  if this VM " \
+        "gets formed in to a larger cluster, this value will get overwritten " \
+        "at that time)".format(node_param, DEFAULT_CFG_PATH, node_0_val, vm_ip, sed_cmd))
     run_ssh_cmd(vm_ip, sed_cmd)
 
     if startXcalar:
