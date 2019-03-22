@@ -3141,13 +3141,23 @@ def get_multi_param_values(param_name, param_value, error_on_dupes=True):
     return list(values.keys())
 
 '''
+Returns String of how script was invoked
+i.e., ovirt/ovirttool.py --count=1 --vmbasename=myvm
+'''
+def get_arg_string():
+    arg_string=""
+    for cmd_arg in sys.argv:
+        arg_string += " " + cmd_arg
+    return arg_string
+
+'''
 Generates a summary String with information about the job.
 '''
 def get_data_file_summary(vms_created, vms_deleted, vms_shutdown, vms_powered_on):
     file_str = ""
-    file_str += "\ncmd args:"
-    for cmd_arg in sys.argv:
-        file_str += "\n" + cmd_arg
+
+    arg_string = get_arg_string()
+    file_str += "\n\nArgs to script:\n" + arg_string
 
     file_str += "\n\ntags:"
     tags = get_multi_param_values("--tags", ARGS.tags)
@@ -3201,6 +3211,7 @@ if __name__ == "__main__":
     # - append data to this file at any time in this script by calling:
     #   data_file_write(<string>)
     data_file_write()
+    debug_log("\nArguments to script: " + get_arg_string() + "\n")
 
     '''
     Parse and validate cmd arguments
