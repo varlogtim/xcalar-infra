@@ -14,7 +14,7 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
-sudo chown jenkins:jenkins /home/jenkins/.config
+sudo chown jenkins:jenkins $HOME/.config
 source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
 
