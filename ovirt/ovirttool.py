@@ -588,11 +588,21 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
 
 def setup_hostname(ip, name):
 
-    debug_log("Set hostname of VM {} to {}".format(ip, name))
+    info_log("Set hostname of {} to {}".format(ip, name))
     fqdn = "{}.int.xcalar.com".format(name)
     run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
-    run_ssh_cmd(ip, 'systemctl restart network', timeout=500)
-    run_ssh_cmd(ip, 'systemctl restart autofs')
+    # systemctl restart network is taking 4+ minutes to return,
+    # intermitently.  This cmd should return quickly.
+    # assign a low timeout, and if it errors out reissue the command
+    network_restarted=False
+    while not network_restarted:
+        try:
+            run_ssh_cmd(ip, 'systemctl restart network', user='root', timeout=60)
+            network_restarted=True
+        except Exception as e:
+            info_log("Hit network restart timeout issue on {}!  Try again".format(ip))
+            info_log(str(e))
+    run_ssh_cmd(ip, 'systemctl restart autofs', user='root')
 
 def get_hostname(ip):
 
