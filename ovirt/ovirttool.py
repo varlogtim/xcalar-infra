@@ -3348,7 +3348,7 @@ if __name__ == "__main__":
 
     # TEMPORARY: running puppet results in issue with ldapConfig which was set up.
     # need to restart xcalar service post-puppet install for ldap to take effect.
-    if not ARGS.noinstaller:
+    if will_install():
         restart_xcalar_in_parallel(ips, restart_expserver=True)
 
     '''
