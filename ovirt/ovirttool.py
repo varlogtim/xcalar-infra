@@ -2219,7 +2219,12 @@ def scp_file(node, localfilepath, remotefilepath, keyfile=OVIRT_KEYFILE_DEST):
 
     # adding -i option back in for new employees that dont have vault set up
     # todo : remove the ovirt public key from authorized_keys of generated vms
-    cmd = 'scp -i ' + keyfile + ' -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
+
+    # -q option: will suppress warnings - important -
+    # scp cmds are printing "permenantly added host" warnings to stderr, which is
+    # bubbling up in the main logs, as the wrapper script is only able to
+    # filter console output emitted by info_log/debug_log,etc functions in this script
+    cmd = 'scp -q -i ' + keyfile + ' -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no ' + localfilepath + ' root@' + node + ':' + remotefilepath
     run_system_cmd(cmd)
 
 '''
