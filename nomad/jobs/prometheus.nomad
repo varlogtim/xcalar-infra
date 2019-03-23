@@ -2,6 +2,11 @@ job "prometheus" {
   datacenters = ["xcalar-sjc"]
   type        = "service"
 
+  constraint {
+    attribute    = "${meta.localstore}"
+    set_contains = "ssd"
+  }
+
   update {
     max_parallel     = 1
     min_healthy_time = "10s"
@@ -17,11 +22,11 @@ job "prometheus" {
       attempts = 10
       interval = "5m"
       delay    = "25s"
-      mode     = "delay"
+      mode     = "fail"
     }
 
     ephemeral_disk {
-      size   = "3000"
+      size   = "300"
       sticky = true
     }
 
@@ -29,38 +34,35 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image      = "grafana/loki:master"
-        force_pull = true
+        image = "grafana/loki:master"
 
-        port_map {
-          loki = 3100
-        }
+        force_pull = true
 
         args = ["-config.file=/etc/loki/local-config.yaml"]
       }
 
       resources {
         network {
-          port "loki" {
+          port "loki_ui" {
             static = "3100"
           }
         }
 
-        cpu    = 1000
-        memory = 512
+        cpu    = 7000
+        memory = 128
       }
 
       service {
-        name = "loki"
-        port = "loki"
+        name = "loki-ui"
+        port = "loki_ui"
 
-        tags = ["urlprefix-loki.nomad:9999/", "urlprefix-loki.service.consul:9999/"]
+        tags = ["urlprefix-loki-ui.nomad:9999/", "urlprefix-loki-ui.service.consul:9999/"]
 
         check {
-          name     = "loki port alive"
+          name     = "loki_ui port alive"
           type     = "tcp"
-          interval = "10s"
-          timeout  = "2s"
+          interval = "20s"
+          timeout  = "5s"
         }
       }
     }
@@ -69,7 +71,8 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image      = "grafana/grafana:master"
+        image = "grafana/grafana:master"
+
         force_pull = true
 
         port_map {
@@ -87,8 +90,8 @@ job "prometheus" {
           port "grafana_ui" {}
         }
 
-        cpu    = 1000
-        memory = 512
+        cpu    = 6000
+        memory = 128
       }
 
       service {
@@ -99,95 +102,26 @@ job "prometheus" {
 
         check {
           name     = "grafana_ui port alive"
-          type     = "tcp"
-          interval = "10s"
-          timeout  = "2s"
+          type     = "http"
+          path     = "/api/health"
+          interval = "20s"
+          timeout  = "5s"
         }
       }
     }
 
     task "prometheus" {
-      template {
-        change_mode = "restart"
-        destination = "local/prometheus.yml"
-
-        data = <<EOH
----
-global:
-  scrape_interval: 15s
-scrape_configs:
-  - job_name: prometheus
-    scrape_interval: 5s
-    static_configs:
-      - targets:
-          - localhost:9090
-  - job_name: node-exporter
-    scrape_interval: 5s
-    params:
-      format:
-        - prometheus
-    consul_sd_configs:
-      - server: 10.10.5.18:8500
-        datacenter: xcalar-sjc
-        services: ["node-exporter"]
-  - job_name: nomad
-    scrape_interval: 10s
-    metrics_path: /v1/metrics
-    params:
-      format:
-        - prometheus
-    consul_sd_configs:
-      - server: 10.10.5.18:8500
-        datacenter: xcalar-sjc
-        services:
-          - nomad
-          - nomad-client
-    relabel_configs:
-      - source_labels:
-          - __meta_consul_tags
-        regex: .*,http,.*
-        action: keep
-  - job_name: nomad_metrics
-    scrape_interval: 5s
-    metrics_path: /v1/metrics
-    params:
-      format:
-        - prometheus
-    consul_sd_configs:
-      - server: 10.10.5.18:8500
-        datacenter: xcalar-sjc
-        scheme: http
-        services:
-          - nomad-client
-          - nomad
-    tls_config:
-      insecure_skip_verify: true
-    relabel_configs:
-      - source_labels:
-          - __meta_consul_tags
-        separator: ;
-        regex: (.*)http(.*)
-        replacement: $1
-        action: keep
-      - source_labels:
-          - __meta_consul_address
-        separator: ;
-        regex: (.*)
-        target_label: __meta_consul_service_address
-        replacement: $1
-        action: replace
-EOH
-      }
-
       driver = "docker"
 
       config {
-        image = "prom/prometheus:v2.7.1"
+        image = "prom/prometheus:v2.8.0"
+
+        # force_pull = true
 
         volumes = [
           "local/prometheus.yml:/etc/prometheus/prometheus.yml",
+          "/mnt/data/prometheus:/prometheus",
         ]
-
         port_map {
           prometheus_ui = 9090
         }
@@ -195,7 +129,7 @@ EOH
 
       resources {
         cpu    = 4000
-        memory = 2048
+        memory = 1024
 
         network {
           port "prometheus_ui" {}
@@ -209,11 +143,102 @@ EOH
 
         check {
           name     = "prometheus_ui port alive"
-          type     = "tcp"
-          interval = "10s"
-          timeout  = "2s"
+          type     = "http"
+          path     = "/-/healthy"
+          interval = "20s"
+          timeout  = "5s"
         }
+      }
+
+      template {
+        change_mode = "restart"
+
+        #        change_mode   = "signal"
+        #        change_signal = "SIGHUP"
+        destination = "local/prometheus.yml"
+
+        data = <<EOH
+---
+global:
+  scrape_interval: 5s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+  - job_name: loki
+    metrics_path: /metrics
+    params:
+      format:
+        - prometheus
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services: ["loki-ui"]
+  - job_name: node-exporter
+    params:
+      format:
+        - prometheus
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services: ["node-exporter"]
+  - job_name: nomad
+    metrics_path: /v1/metrics
+    params:
+      format:
+        - prometheus
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services:
+          - nomad
+          - nomad-client
+    relabel_configs:
+    - source_labels: ['__meta_consul_tags']
+      regex: '(.*)http(.*)'
+      action: keep
+
+EOH
       }
     }
   }
 }
+
+#    relabel_configs:
+#      - source_labels:
+#          - __meta_consul_tags
+#        regex: .*,http,.*
+#        action: keep
+#  - job_name: nomad_metrics
+#    scrape_interval: 5s
+#    metrics_path: /v1/metrics
+#    params:
+#      format:
+#        - prometheus
+#    consul_sd_configs:
+#      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+#        datacenter: xcalar-sjc
+#        scheme: http
+#        services:
+#          - nomad-client
+#          - nomad
+#    tls_config:
+#      insecure_skip_verify: true
+#    relabel_configs:
+#      - source_labels:
+#          - __meta_consul_tags
+#        separator: ;
+#        regex: (.*)http(.*)
+#        replacement: $1
+#        action: keep
+#      - source_labels:
+#          - __meta_consul_address
+#        separator: ;
+#        regex: (.*)
+#        target_label: __meta_consul_service_address
+#        replacement: $1
+#        action: replace
+

@@ -22,15 +22,14 @@ job "jenkins2" {
       delay    = "25s"
       mode     = "delay"
     }
-    task "jenkins-docker-sidecar" {
-      driver = "docker"
-
 
     task "jenkins-master" {
       driver = "docker"
 
       config {
-        image = "jenkins/jenkins:2.150.3"
+        image = "jenkins/jenkins:lts"
+
+        force_pull = true
 
         port_map {
           http = 8080
@@ -91,8 +90,7 @@ job "jenkins2" {
         memory = 8000
 
         network {
-          port "http" {
-          }
+          port "http" {}
 
           port "jnlp" {
             static = 50000

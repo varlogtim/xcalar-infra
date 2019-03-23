@@ -18,14 +18,13 @@ job "redis" {
     healthy_deadline = "5m"
   }
 
-  group "cache" {
+  group "redis" {
     count = 1
 
     restart {
-      attempts = 2
-      interval = "30m"
+      attempts = 5
+      interval = "5m"
       delay    = "15s"
-      mode     = "fail"
     }
 
     ephemeral_disk {
@@ -40,6 +39,10 @@ job "redis" {
       config {
         image = "redis:3.2"
 
+        volumes = [
+          "/netstore/infra/redis:/data",
+        ]
+
         port_map {
           db = 6379
         }
@@ -50,14 +53,13 @@ job "redis" {
         memory = 256 # 256MB
 
         network {
-          #mbits = 10
           port "db" {}
         }
       }
 
       service {
-        name = "redis-cache"
-        tags = ["global", "cache"]
+        name = "redis"
+        tags = ["global", "cache", "kv"]
         port = "db"
 
         check {

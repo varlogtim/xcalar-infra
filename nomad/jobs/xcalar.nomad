@@ -50,21 +50,21 @@ job "amit-xcalar-1" {
 
         port_map {
           monitor = 8000
-          https   = 8443
+          https   = 443
           api     = 18552
           comms   = 5000
         }
 
-        shm_size     = 8000000000
-        privileged   = true
-        network_mode = "host"
+        shm_size   = 8000000000
+        privileged = true
+
+        # network_mode = "host"
 
         ulimit {
           nproc   = "50000:50000"
           nofile  = "50000:50000"
           memlock = "-1:-1"
         }
-
         volumes = [
           "/netstore/cluster/${NOMAD_JOB_NAME}:/mnt/xcalar",
           "/sys/fs/cgroup:/sys/fs/cgroup:ro",

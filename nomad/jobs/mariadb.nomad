@@ -22,8 +22,8 @@ job "mariadb" {
     count = 1
 
     restart {
-      attempts = 2
-      interval = "30m"
+      attempts = 10
+      interval = "5m"
       delay    = "15s"
       mode     = "fail"
     }
@@ -40,6 +40,10 @@ job "mariadb" {
       config {
         image = "mariadb:5.5"
 
+        volumes = [
+          "/netstore/infra/mariadb:/var/lib/mysql",
+        ]
+
         port_map {
           db = 3306
         }
@@ -51,17 +55,16 @@ job "mariadb" {
       }
 
       resources {
-        cpu    = 2000 # 500 MHz
-        memory = 1200 # 256MB
+        cpu    = 500
+        memory = 256
 
         network {
-          #mbits = 10
           port "db" {}
         }
       }
 
       service {
-        name = "mariadb"
+        name = "mysql"
         tags = ["global", "sql"]
         port = "db"
 

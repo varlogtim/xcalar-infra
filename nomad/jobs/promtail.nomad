@@ -30,10 +30,17 @@ job "promtail" {
 
         #args    = ["-config.file=/etc/promtail/docker-config.yaml"]
         args = ["-config.file=/etc/promtail/config.yaml"]
+      }
 
-        port_map {
-          http = 9080
+      resources {
+        network {
+          port "http" {
+            static = "9080"
+          }
         }
+
+        cpu    = 1000
+        memory = 512
       }
 
       template {
@@ -46,7 +53,7 @@ positions:
   filename: /tmp/positions.yaml
 
 client:
-  url: http://loki.service.consul:3100/api/prom/push
+  url: http://loki-ui.service.consul:3100/api/prom/push
 
 scrape_configs:
 - job_name: system
@@ -61,17 +68,6 @@ EOT
 
         change_mode = "restart"
         destination = "local/config.yaml"
-      }
-
-      resources {
-        network {
-          port "http" {
-            static = "9080"
-          }
-        }
-
-        cpu    = 1000
-        memory = 512
       }
     }
   }
