@@ -11,6 +11,7 @@ DEBUG=${DEBUG:-0}
 NOW=$(date +%s)
 FORCE=false
 CLEAN=true
+fpmextra=()
 #PREFIX=/usr
 
 die() {
@@ -371,6 +372,9 @@ pkgmain() {
     FPM_COMMON+=(-C "$pkgdir${prefix}")
     info "building $pkgname rpm ..."
     run fpm -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
+    if test -e "${pkgdir}"/etc/sysconfig; then
+        mv "${pkgdir}"/etc/sysconfig "${pkgdir}"/etc/default
+    fi
     info "building $pkgname deb ..."
     run fpm -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}"
 

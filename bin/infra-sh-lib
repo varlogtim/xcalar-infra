@@ -1,14 +1,13 @@
 #!/bin/bash
 #
-#
-#
+# Collection of random shell functions
 
 if [ -z "$XLRINFRADIR" ]; then
-    export XLRINFRADIR="$(cd $(dirname ${BASH_SOURCE[0]})/.. && pwd)"
-    export PATH=$XLRINFRADIR/bin:$PATH
+    export XLRINFRADIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    export PATH="$XLRINFRADIR/bin:$PATH"
 fi
 
-XREGISTRY="${XREGISTRY:-https://registry.int.xcalar.com}"
+REGISTRY="${REGISTRY:-https://registry.int.xcalar.com}"
 
 # When a script is sourced, you can use this function to get the caller / origin
 env_script_file() {
@@ -337,13 +336,13 @@ with_lock() {
 ##
 
 registry_repos() {
-    curl -s ${XREGISTRY}/v2/_catalog | jq -r '.repositories[]'
+    curl -s ${REGISTRY}/v2/_catalog | jq -r '.repositories[]'
 }
 
 registry_repo_tags() {
     local repo
     for repo in $(registry_repos); do
-        curl -s ${XREGISTRY}/v2/${repo}/tags/list | jq -r .
+        curl -s ${REGISTRY}/v2/${repo}/tags/list | jq -r .
     done | jq -s -r '.'
 }
 
@@ -377,6 +376,9 @@ jenkins_wait_for_node() {
     echo ""
 }
 
+# Attempt to convert a string into a legal hostname
+# Makes the string lowercase, replaces [._ ] with dashes.
+# Removes dashes at the start and end
 cleanhostname() {
     if [ $# -gt 0 ]; then
         local name
@@ -386,4 +388,16 @@ cleanhostname() {
     else
         sed -r 's/_/-/g; s/([A-Z])/\L\1/g; s/\./-/g; s/^-//; s/-$//;'
     fi
+}
+
+download_hashitool() {
+    local tool="$1"
+    local version="$2"
+    if test -e "$tool"; then
+        echo >&2 "$tool already exists"
+        return 1
+    fi
+    curl -fsSL "http://repo.xcalar.net/deps/${tool}_${version}_linux_amd64.zip" -o ${tool}-$$.zip >&2 && \
+    unzip -o -q ${tool}-$$.zip >&2 && \
+    rm -vf ${tool}-$$.zip
 }

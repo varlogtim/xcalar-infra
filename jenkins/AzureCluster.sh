@@ -1,9 +1,14 @@
 #!/bin/bash
 set -x
 
-source $XLRINFRADIR/azure/azure-sh-lib || exit 1
+if [ -z "$XLRINFRADIR" ]; then
+    XLRINFRADIR="$(cd $(dirname ${BASH_SOURCE[0]})/.. && pwd)"
+fi
+export XLRINFRADIR
+export PATH=$XLRINFRADIR/bin:$PATH
 
-cd $XLRINFRADIR/azure
+source $XLRINFRADIR/bin/infra-sh-lib || exit 1
+source $XLRINFRADIR/azure/azure-sh-lib || exit 1
 
 az_login
 
@@ -36,8 +41,17 @@ if ! az group show -g $GROUP > /dev/null 2>&1; then
     trap "az group delete -g $GROUP --no-wait -y" EXIT
 fi
 
+ADMIN_USERNAME=${ADMIN_USERNAME:-xdpadmin}
+ADMIN_PASSWORD=${ADMIN_PASSWORD:-Welcome1}
+
+cd $XLRINFRADIR/azure
+
 if ! az_deploy -g $GROUP -l $LOCATION -i "$INSTALLER_URL" --count $NUM_NODES \
-    --size $INSTANCE_TYPE --name "$APP" --parameters adminEmail="$BUILD_USER_EMAIL" appUsername="${ADMIN_USERNAME:-xdpadmin}" appPassword="${ADMIN_PASSWORD:-Welcome1}" \
+    --size $INSTANCE_TYPE --name "$APP" \
+    --parameters \
+    adminEmail="$BUILD_USER_EMAIL" \
+    appUsername="$ADMIN_USERNAME" \
+    appPassword="$ADMIN_PASSWORD" \
     licenseKey="$LICENSE_KEY" > output.json; then
     cat output.json >&2
     echo >&2 "Failed to deploy your template"
@@ -46,7 +60,7 @@ fi
 
 URL="https://${APP}.${LOCATION}.cloudapp.azure.com"
 
-echo "Login at $URL using User: xdpadmin, Password: Welcome1"
+echo "Login at $URL using User: ${ADMIN_USERNAME}, Password: ${ADMIN_PASSWORD}"
 
 echo $URL > url.txt
 
