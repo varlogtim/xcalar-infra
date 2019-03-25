@@ -1804,7 +1804,7 @@ def install_xcalar(vm_name, uncompressed_xcalar_license_string, installer, node_
 
     # install using bld requested
     run_sh_script(vm_ip, TMPDIR_VM + '/' + INSTALLER_SH_SCRIPT, script_args=[installer, vm_ip], timeout=XCALAR_INSTALL_TIMEOUT)
-    info_log("Install complete on {}.  Running follow-up commands (see the debug log for more info)".format(vm_ip))
+    info_log("Install complete on {}.  Running follow-up commands (see the debug log for more info)".format(vm_name))
 
     # set Node.0.IpAddr val in default.cfg::
     # In default.cfg, default val of Node.0.IpAddr in SINGLE NODE case is
@@ -2477,20 +2477,24 @@ def get_access_url(ip):
         display_url = "{}:{}".format(access_url_base, caddy_port)
     return display_url
 
+# for summary string at end of build
 solid_line = "====================================================="
 dotted_line = "-----------------------------------------------------"
+# OvirtToolBuilder Jenkins job will grep these and send what's in between in email via email-ext plugin
 jenkins_summary_grep_start = "-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-"
 jenkins_summary_grep_stop = "~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~-~"
 
 '''
-    Returns a summary string with debugrmation about vms
+Returns string with summary of information about provisioned vms
 '''
 def summary_str_created_vms(vmids, ram, cores, ovirt_cluster, installer=None, cluster_name=None):
 
     notes = []
     # add note and return a (see note) text with corresponding amount of * so itll match in summary
     def add_note(note):
-        notes.append(note)
+        # don't print same note for each vm if multiple being created
+        if note not in notes:
+            notes.append(note)
         return "*"*(len(notes)) + " (see note)"
 
     created_vms_summary = solid_line + "\n" \
