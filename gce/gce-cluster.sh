@@ -269,13 +269,14 @@ disk_setup_script() {
 	            until mkswap -f \${PART}; do
 	                sleep 3
 	            done
-	            swapon \${PART}
+	            swapon -v \${PART}
 	            ;;
 	    esac
 	}
+	mkpart /dev/sdc swap none
+	free -m
 	mkpart /dev/sdb ext4 $XCE_XDBSERDESPATH
 	chmod o+w $XCE_XDBSERDESPATH
-	mkpart /dev/sdc swap none
 	if [ $DATA_SIZE -gt 0 ]; then
 	    mkdir -p $XC_DEMO_DATASET_DIR
 	    mkpart /dev/sdd ext4 $XC_DEMO_DATASET_DIR
