@@ -64,8 +64,10 @@ MAX_VMS_ALLOWED=1024
 #DEFAULT_PUPPET_CLUSTER="ovirt"
 DEFAULT_PUPPET_ROLE_INSTALL="xcalar_qa"
 DEFAULT_PUPPET_ROLE_NO_INSTALL="jenkins_slave"
+DEFAULT_PUPPET_ROLE_DEV_STATION="devstation"
 DEFAULT_CORES=4
-DEFAULT_RAM=8
+DEFAULT_RAM_NON_DEV_STATION=8
+DEFAULT_RAM_DEV_STATION=32 # 8 GB makes build Xcalar, etc. far too slow on dev machine
 
 # want a way to distinguish VMs created by ovirttool;
 # will use 'comment' field - it shows up in the official Ovirt GUI,
@@ -96,6 +98,10 @@ LOGIN_UNAME = "admin"
 LOGIN_PWORD = "admin"
 LICENSE_KEY = "H4sIAAAAAAAAA22OyXaCMABF93yF+1YLSKssWDAKiBRR1LrpCSTWVEhCCIN/Xzu46/JN575AIA4EpsRQJ7IU4QKRBsEtNQ4FKAF/HAWkkBJOYVsID1S4vP4lIwcIMEpKIE6UV/fK/+EO8eYboUy0G+RuG1EQZ4f3w4smuQPDvzduQ2Sosjofm4yPp7IUU4hs2hJhKLL6LGUN4ncpS6/kZ3k19oATKYR54RKQlwgagrdIavAHAaLlyNALsVwhk9nHM7apnvbrc73q9BCh2duxPZbJ4GtPpjy4U6/uHKrBU6U4ijazYekVRDBrEyvJcpUTD+2UB9RfTNtleb0OPbjFl21PqgDvFStyQ2HFrtr7rb/2mZDpYtqmGasTPez0xYAzkeaxmaXFJtj0XiTPmW/lnd5r7NO2ehg4zuULQvloNpIBAAA="
 DEFAULT_CFG_PATH="/etc/xcalar/default.cfg"
+
+# for devstations: location, on VM, of dev setup script that will be copied
+# for user to run post-tool
+SETUP_SCRIPT_VM_DEST = "/home/jenkins/dev_station_vm.sh"
 
 # names of env vars that can hold ovirt credentials to make this script non-interactive
 # (--user arg will take precedence over username env var if both supplied)
@@ -1911,6 +1917,43 @@ def setup_xcalar(vmids, uncompressed_xcalar_license_string, installer, ldap_conf
     restart_xcalar_in_parallel(ips)
 
 '''
+Additional setup required for VMs intended to be dev stations, in parallel
+
+@vm_ids: list of unique vm ids in Ovirt of VMs to do devstation setup on
+'''
+def setup_devstations(vm_ids):
+
+    debug_log("Setup newly provisioned VM(s) to be devstations, in parallel")
+
+    procs = []
+    sleep_between = 15
+    for vm_id in vm_ids:
+        proc = multiprocessing.Process(target=devstation_setup, args=(vm_id,))
+        procs.append(proc)
+        proc.start()
+        time.sleep(sleep_between)
+
+    # wait
+    process_wait(procs, timeout=8000+sleep_between*len(vm_ids))
+
+'''
+Does additional setup required for a VM intended to be a devstation.
+
+@vm_id: unique vm id in Ovirt of VM to do devsetation setup on
+'''
+def devstation_setup(vm_id):
+
+    ip = get_vm_ip(vm_id)
+    name = get_vm_name(vm_id)
+    info_log("Additional setup for {}/{} to be a devstation".format(name, ip))
+
+    # copy in the devstation setup script user will need to run manually
+    setup_script_local_src = SCRIPT_DIR + "/../scripts/dev_vm_setup.sh"
+    info_log("Copy dev station setup script on to {} at {}".format(name, SETUP_SCRIPT_VM_DEST))
+    scp_file(ip, setup_script_local_src, SETUP_SCRIPT_VM_DEST)
+
+
+'''
         FOR CLUSTER SETUP
 '''
 
@@ -2154,7 +2197,7 @@ then go in OVIRT_TEMPLATE_MAPPING and find Ovirt clusters it can use, based on t
 '''
 def get_request_type():
     job_type = None
-    if will_install():
+    if will_install() or ARGS.devstation:
         job_type = 'dev'
     else:
         job_type = 'qa'
@@ -2672,6 +2715,75 @@ def get_summary_string(vmids, ram, cores, installer=None, cluster_name=None):
 
         summary_str += "\n|\n" + solid_line
 
+    # dev stations will require manual follow up
+    if ARGS.devstation:
+        summary_message = '''
+ You have elected to create a VM for development purposes.
+ Please read the instructions below, to finish setting up
+ your dev station. This is a one-time setup. (Note: these
+ instructions must be performed by whoever the dev station
+ is intended for - i.e., the gerrit user who the git repos
+ will be checked out to).
+
+ (1) ssh in to the devstation, as user 'jenkins', from a machine that:
+
+     [a] has an SSH key associated with your gerrit account
+     [b] has SSH key forwarding enabled
+
+     Note - if you have already set up your gerrit account, and
+     work with git repos on your regular workstation, then that
+     workstation's SSH key is probably already associated with
+     your gerrit account (satisfying condition [a]). If you have
+     not yet set up your gerrit account, see note * below.
+
+     For key forwarding (condition[b]), do the following, to
+     ensure it is enabled on a machine:
+
+     - On Linux distributions:
+
+        1. Add the following lines to /etc/ssh/ssh_config:
+           (if that file does not exist, touch /etc/ssh/ssh_config)
+
+            Host *
+               ForwardAgent yes
+
+     - If the machine is a Mac:
+
+        1. Add the following lines to ~/.ssh/config:
+             (if that file does not exist, touch ~/.ssh/config first)
+
+            Host *
+             UseKeychain yes
+             AddKeysToAgent yes
+             ForwardAgent yes
+
+        2. Add the following line to ~/.bash_profile :
+
+            ssh-add -K ~/.ssh/id_rsa
+
+        3. Log out/log in, or open a new terminal.
+           SSH key forwarding should be enabled now.
+
+     * If you have not yet set up your gerrit account, or this dev
+     station is intended to be your main work station, please contact
+     'devtools' slack channel before continuing.  You can copy/paste
+     this message, along with the hostname of your new dev machine,
+     to give them the appropriate context.
+
+ (2) Once SSH'd in to the VM from a qualifying machine,
+     run the following command:
+
+     bash {} <gerrit username> <Xcalar email address>
+
+     That script will set up a new development environment,
+     and check out all relevant git repos for you.
+
+ Once the appropriate user has completed the above steps,
+ the dev machine will be ready for use.
+'''.format(SETUP_SCRIPT_VM_DEST)
+
+        summary_str += "\n\n" + summary_message + "\n\n" + solid_line
+
     # put strings around it for Jenkins to grep in the console log
     full_str = jenkins_summary_grep_start + "\n" + summary_str + "\n" + jenkins_summary_grep_stop
 
@@ -2849,6 +2961,15 @@ def get_uncompressed_license(compressed_license):
     debug_log("Get uncompressed license with command: {}".format(command))
     output = run_system_cmd(command).strip()
     return output
+
+'''
+Returns int: RAM (in GB) to set on new VMs
+'''
+def get_validate_ram():
+    if ARGS.devstation:
+        return DEFAULT_RAM_DEV_STATION
+    else:
+        return DEFAULT_RAM_NON_DEV_STATION
 
 '''
 Return an uncompressed Xcalar license.
@@ -3061,7 +3182,10 @@ def get_validate_puppet_role():
         if will_install():
             puppet_role = DEFAULT_PUPPET_ROLE_INSTALL
         else:
-            puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
+            if ARGS.devstation:
+                puppet_role = DEFAULT_PUPPET_ROLE_DEV_STATION
+            else:
+                puppet_role = DEFAULT_PUPPET_ROLE_NO_INSTALL
 
     # validate.
     # warn if installing and puppet role is not jenkins_slave
@@ -3073,6 +3197,10 @@ def get_validate_puppet_role():
             "If not desired, re-run with another puppet role, " \
             "(--puppet_role option), or " \
             "--noinstaller option.\n".format(DEFAULT_PUPPET_ROLE_INSTALL))
+
+    if ARGS.devstation and puppet_role != DEFAULT_PUPPET_ROLE_DEV_STATION:
+        raise ValueError("\n\nERROR: --devstation is selected, but puppet role "
+            "has been set as a value other than {}\n".format(DEFAULT_PUPPET_ROLE_DEV_STATION))
 
     return puppet_role
 
@@ -3154,6 +3282,15 @@ def validate_params():
                     "must have an entry in that hash for ovirttool to be " \
                     "able to use it)\n".format(ARGS.ovirtcluster, ", ".join(valid_clusters), ARGS.ovirtcluster))
 
+        if ARGS.devstation:
+            # ARGS.installer should NOT get a default,
+            # so it should only be defined if user passed it explicitly
+            if ARGS.installer:
+                raise ValueError("\n\nERROR: Both --devstation and --installer " \
+                    "supplied; (--installer means this tool will RPM install " \
+                    "Xcalar on the new VM(s); --devstations are for VMs " \
+                    "where you wish to set up git repos and build Xcalar directly)")
+
         if ARGS.noinstaller:
             if ARGS.installer:
                 raise AttributeError("\n\nERROR: You have specified not to " \
@@ -3166,8 +3303,8 @@ def validate_params():
             # do NOT check for ARGS.installer in this block to do that;
             # (--installer doesn't get an automatic default, so it might not be set
             # yet, even though an install will be done.)
-            # if here : ARGS.count + ~ notinstaller --> an install is going to be done!
-            # there is also a function 'will_install' which can be used.
+            # there is a function 'will_install' which will give True/False if
+            # install will be done, based on all the cmd args
             pass
     else:
         '''
@@ -3207,10 +3344,14 @@ def will_install():
     # note: not sufficient to check ARGS.installer to determine if installing;
     # install is done by default but no default given to --installer arg
     # due to how it's being error checked.
-    # if --count > 0 and --noinstaller was NOT supplied, this is sufficient
+    # if --count > 0 and --noinstaller was NOT supplied, and it's not marked
+    # as a devstation (--devstation flag), this is sufficient
     # to determine an install will be done.
-    if ARGS.count and not ARGS.noinstaller:
-        return True
+    if ARGS.count:
+        if ARGS.devstation:
+            return False
+        if not ARGS.noinstaller:
+            return True
     return False
 
 '''
@@ -3359,8 +3500,8 @@ if __name__ == "__main__":
         help="Basename to use for naming the new VM(s) (If creating a single VM, will name VMBASENAME, if multiple, will name them VMBASENAME-vm0, VMBASENAME-vm1, .., VMBASENAME-vm(n-1) )")
     parser.add_argument("--cores", type=int, default=DEFAULT_CORES,
         help="Number of cores per VM. (Defaults to {} cores)".format(DEFAULT_CORES))
-    parser.add_argument("--ram", type=int, default=DEFAULT_RAM,
-        help="RAM on VM(s) (in GB).  (Defaults to {})".format(DEFAULT_RAM))
+    parser.add_argument("--ram", type=int, #default=DEFAULT_RAM,
+        help="RAM on VM(s) (in GB).  (Defaults to {} for dev machines; {} for all others)".format(DEFAULT_RAM_DEV_STATION, DEFAULT_RAM_NON_DEV_STATION))
     parser.add_argument("--nocluster", action='store_true',
         help="Do not create a Xcalar cluster of the new VMs.")
     parser.add_argument("--installer", type=str, #default='builds/Release/xcalar-latest-installer-prod',
@@ -3369,6 +3510,8 @@ if __name__ == "__main__":
         help="Don't install Xcalar on provisioned VM(s)")
     parser.add_argument("--ovirtcluster", type=str, #default=DEFAULT_OVIRT_CLUSTER,
         help="Which ovirt cluster to create the VM(s) on.")
+    parser.add_argument("--devstation", action="store_true", default=False,
+        help="Enable the VM(s) as dev machine(s).")
     parser.add_argument("--tryotherclusters", action="store_true", default=False,
         help="If supplied, then if unable to create the VM on the given Ovirt cluster, will try other clusters on Ovirt before giving up")
     parser.add_argument("--tags", type=str,
@@ -3405,8 +3548,10 @@ if __name__ == "__main__":
 
     # get params needed for this run, which have values based on user params.
     # (can't use from ARGS.<param> directly).
-
-    installer = get_validate_installer_url() # note: just because it has a value doesnt mean install is being done (will have value in ARGS.delete, etc. cases, only returns None if --noinstaller)
+    ram_GB = get_validate_ram()
+    # (user specifies RAM in GB; most functions will require it in bytes)
+    ram_bytes = convert_mem_size(ram_GB)
+    installer = get_validate_installer_url()
     ldap_config_url = get_validate_ldap_config_url()
     xcalar_license_uncompressed = get_validate_xcalar_uncompressed_license()
     puppet_role = None
@@ -3476,10 +3621,9 @@ if __name__ == "__main__":
         # job type (qa, dev, etc.) and user params (--ovirtclusters, --tryotherclusters),
         # which are estimated to have enough memory to handle the request.
         # provisioning should be attempted in the order specified.
-        ram_bytes = convert_mem_size(int(ARGS.ram))
         ovirt_clusters = get_ovirt_clusters(int(ARGS.count), ram_bytes)
 
-        vmids = provision_vms(vmnames, ovirt_clusters, ram_bytes, int(ARGS.cores), tryotherclusters=ARGS.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+        vmids = provision_vms(vmnames, ovirt_clusters, ram_bytes, int(ARGS.cores), tryotherclusters=ARGS.tryotherclusters)
 
         if will_install():
             # if you supply a value to 'createcluster' arg of setup_xcalar,
@@ -3489,6 +3633,9 @@ if __name__ == "__main__":
                 cluster_name = unique_generated_basename
             setup_xcalar(vmids, xcalar_license_uncompressed, installer, ldap_config_url, ARGS.listen, createcluster=cluster_name)
 
+        if ARGS.devstation:
+            setup_devstations(vmids)
+
         # get hostnames to print to stdout, and ips for restart
         for vmid in vmids:
             next_ip = get_vm_ip(vmid)
@@ -3496,7 +3643,7 @@ if __name__ == "__main__":
             hostnames.append(get_hostname(next_ip))
 
     # get summary of work done, while VMs are still ssh'able by ovirttool
-    summary_string = get_summary_string(vmids, int(ARGS.ram), int(ARGS.cores), installer=installer, cluster_name=cluster_name)
+    summary_string = get_summary_string(vmids, ram_GB, int(ARGS.cores), installer=installer, cluster_name=cluster_name)
 
     # setup puppet on all the VMs
     # you can not make any more root ssh calls to the VMs after this;
