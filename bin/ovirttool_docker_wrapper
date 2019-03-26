@@ -66,4 +66,11 @@ do
    docker_run_args="$docker_run_args -e $i"
 done
 
-docker run $docker_run_args --rm ovirttool ovirt/ovirttool.py "$@"
+# need write permissions on /var/run/docker.sock.
+# run Docker w sudo, if no write permissions on /var/run/docker.sock,
+# to avoid user having to add themselves to Docker group and log out/log of
+# their stormtrooper as part of ovirttool setup.
+# (Doing that would put them in Docker group which would automatically
+# grant write permissions to this file.)
+test -w /var/run/docker.sock || sudo=sudo
+$sudo docker run $docker_run_args --rm ovirttool ovirt/ovirttool.py "$@"
