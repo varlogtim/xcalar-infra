@@ -76,7 +76,7 @@ Parameters:
     MaxLength: '2047'
     ConstraintDescription: Location of the bootstrap script. For example, https://s3.amazonaws.com/xcrepoe1/cfn/prod/v2/scripts/user-data.sh
     Type: String
-    Default: https://s3.amazonaws.com/xcrepoe1/cfn/prod/xdp-standard/1.4.1-release/scripts/user-data.sh
+    Default: {{ bootstrapUrl }}
   CustomScriptUrl:
     MaxLength: '2047'
     ConstraintDescription: Optional. Location of a custom script to run after bootstrap.
@@ -133,19 +133,26 @@ Parameters:
   ExistingShare:
     Description: Existing EFS Share
     Type: String
-    Default: NONE
+    Default: ''
   ExistingMount:
     Description: Existing EFS Mount Point
     Type: String
-    Default: NONE
+    Default: ''
+  ExistingVPC:
+    Description: Existing VPC
+    Type: String
+    Default: ''
+
 Conditions:
-  CreateNewShare: !Equals [!Ref ExistingShare, NONE]
-  CreateNewMount: !Equals [!Ref ExistingMount, NONE]
+  CreateNewVPC: !Equals [!Ref ExistingVPC, '']
+  CreateVPCResources: !Equals [!Ref ExistingVPC, '']
+  CreateNewShare: !Equals [!Ref ExistingShare, '']
+  CreateNewMount: !Equals [!Ref ExistingMount, '']
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: Instance configuration
+          default: Cluster configuration
         Parameters:
           - InstanceType
           - ClusterSize
@@ -155,6 +162,12 @@ Metadata:
         Parameters:
           - KeyName
       - Label:
+          default: Existing Resources
+        Parameters:
+          - ExistingShare
+          - ExistingMount
+          - ExistingVPC
+      - Label:
           default: Network configuration
         Parameters:
           - VpcId
@@ -162,8 +175,6 @@ Metadata:
           - AssociatePublicIpAddress
           - ClusterAccessSGId
           - AllowedCIDR
-          - ExistingShare
-          - ExistingMount
       - Label:
           default: Xcalar Configuration
         Parameters:
@@ -188,17 +199,23 @@ Metadata:
         default: 'Server size:'
       KeyName:
         default: 'Key pair:'
-  Version: '1.4.1'
-  Release: 'RELEASE'
+  Version: '{{ VERSION }}'
+  Release: '{{ RELEASE }}'
+  Project: '{{ PROJECT }}'
 Mappings:
   AWSAMIRegionMap:
     AMI:
       AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20180811-x86_64-gp2
     us-east-1:
-      AMZN1HVM: ami-0297c8f1f8c963b4d
+      AMZN1HVM: {{ ami_us_east_1 }}
     us-west-2:
-      AMZN1HVM: ami-046824ba3c18f2726
+      AMZN1HVM: {{ ami_us_west_2 }}
 Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      #    BucketName: !Sub '${AWS::StackName}-xdp-${AWS::AccountId}-${AWS::Region}'
   ClusterSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -294,14 +311,16 @@ Resources:
   EfsSharedRoot:
     Type: AWS::EFS::FileSystem
     Condition: CreateNewShare
+    DeletionPolicy: Retain
     Properties:
       Encrypted: false
       FileSystemTags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-EFS'
   EfsMountTarget:
-    Condition: CreateNewMount
     Type: AWS::EFS::MountTarget
+    Condition: CreateNewMount
+    DeletionPolicy: Retain
     Properties:
       FileSystemId: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
       SubnetId: !Ref 'Subnet'
@@ -313,10 +332,12 @@ Resources:
       Strategy: cluster
   ClusterASG:
     Type: AWS::AutoScaling::AutoScalingGroup
-    DependsOn: EfsMountTarget
+    DependsOn: [LaunchTemplate]
     Properties:
       PlacementGroup: !Ref 'PlacementGroup'
-      LaunchConfigurationName: !Ref 'ClusterLC'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
       MinSize: !Ref 'ClusterSize'
       MaxSize: !Ref 'ClusterSize'
       DesiredCapacity: !Ref 'ClusterSize'
@@ -330,100 +351,124 @@ Resources:
       ResourceSignal:
         Timeout: PT20M
         Count: !Ref 'ClusterSize'
-  ClusterLC:
-    Type: AWS::AutoScaling::LaunchConfiguration
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    DependsOn: [IamClusterProfile, EfsMountTarget]
     Properties:
-      InstanceType: !Ref 'InstanceType'
-      AssociatePublicIpAddress: !Ref 'AssociatePublicIpAddress'
-      SecurityGroups:
-        - !Ref 'ClusterSG'
-      KeyName: !Ref 'KeyName'
-      ImageId: !FindInMap
-        - AWSAMIRegionMap
-        - !Ref 'AWS::Region'
-        - AMZN1HVM
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeSize: !Ref 'RootSize'
-            VolumeType: gp2
-      IamInstanceProfile: !Ref 'IamClusterProfile'
-      UserData: !Base64
-        Fn::Sub:
-          - |-
-            #!/bin/bash
-            yum clean all --enablerepo='*'
-            RELEASE=$(rpm -qf /etc/system-release --qf "%{RELEASE}")
-            VERSION=$(rpm -qf /etc/system-release --qf "%{VERSION}")
-            yum install -y curl ca-certificates unzip
-            yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
-            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
-            export AWS_DEFAULT_REGION=${AWS::Region}
-            if [[ "${SharedRoot}" =~ ^fs-[0-9a-f]{8}$ ]]; then
-              NFSMOUNT=$(aws efs describe-mount-targets --file-system-id "${SharedRoot}" --query 'MountTargets[?SubnetId==`${Subnet}`].IpAddress' --output text)
-            else
-              NFSMOUNT="${SharedRoot}"
-            fi
-            if [ "${Ec2RetryTagKey}" == "aws:cloudformation:stack-name" ]; then
-              retryTagValue=${AWS::StackName}
-            else
-              retryTagValue=${Ec2RetryTagValue}
-            fi
-            mkdir -p /var/lib/xcalar-installer
-            cd /var/lib/xcalar-installer
-            cat <<EOF >> with_cfn.sh
-            #!/bin/bash
-            script="\$1"
-            shift
-            "\$script" --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" --admin-email "${AdminEmail}" \
-                       --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" \
-                       --nfs-mount "$NFSMOUNT" --license "${LicenseKey}" --installer-url "${InstallerUrl}" "\$@"
-            EOF
-            stage=0
-            for remoteUrl in "${BootstrapUrl}" "${CustomScriptUrl}"; do
-              part="part-${!stage}.sh"
-              if [ -n "$remoteUrl" ] && curl -Lf "$remoteUrl" -o $part; then
-                chmod +x $part
-                bash -x with_cfn.sh ./$part
-                rc=$?
-                if [ $rc != 0 ]; then
-                  break
-                fi
+      LaunchTemplateName: !Sub '${AWS::StackName}-LaunchTemplate'
+      LaunchTemplateData:
+        InstanceType: !Ref 'InstanceType'
+        IamInstanceProfile:
+          Arn: !GetAtt 'IamClusterProfile.Arn'
+        NetworkInterfaces:
+          - Description: Primary interface
+            AssociatePublicIpAddress: !Ref 'AssociatePublicIpAddress'
+            DeleteOnTermination: true
+            DeviceIndex: 0
+            SubnetId: !Ref 'Subnet'
+            Groups:
+              - !Ref 'ClusterSG'
+        KeyName: !Ref 'KeyName'
+        ImageId: !FindInMap
+          - AWSAMIRegionMap
+          - !Ref 'AWS::Region'
+          - AMZN1HVM
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: !Ref 'RootSize'
+              VolumeType: gp2
+        UserData: !Base64
+          Fn::Sub:
+            - |-
+              #!/bin/bash
+              yum clean all --enablerepo='*'
+              RELEASE=$(rpm -qf /etc/system-release --qf "%{RELEASE}")
+              VERSION=$(rpm -qf /etc/system-release --qf "%{VERSION}")
+              yum install -y curl ca-certificates unzip
+              yum install -y https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.amzn1.noarch.rpm
+              /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
+              export AWS_DEFAULT_REGION=${AWS::Region}
+              if [[ "${SharedRoot}" =~ ^fs-[0-9a-f]{8}$ ]]; then
+                NFSMOUNT=$(aws efs describe-mount-targets --file-system-id "${SharedRoot}" --query 'MountTargets[?SubnetId==`${Subnet}`].IpAddress' --output text)
+              else
+                NFSMOUNT="${SharedRoot}"
               fi
-              stage=$((stage+1))
-            done
-            /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
-            exit $rc
-          - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
-            Resource: ClusterASG
+              if [ "${Ec2RetryTagKey}" == "aws:cloudformation:stack-name" ]; then
+                retryTagValue=${AWS::StackName}
+              else
+                retryTagValue=${Ec2RetryTagValue}
+              fi
+              mkdir -p /var/lib/xcalar-installer
+              cd /var/lib/xcalar-installer
+              cat <<EOF >> with_cfn.sh
+              #!/bin/bash
+              script="\$1"
+              shift
+              "\$script" --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" --admin-email "${AdminEmail}" \
+                        --bootstrap-expect "${ClusterSize}" --tag-key "${Ec2RetryTagKey}" --tag-value "$retryTagValue" --stack-name "${AWS::StackName}" \
+                        --nfs-mount "$NFSMOUNT" --license "${LicenseKey}" --installer-url "${InstallerUrl}" "\$@"
+              EOF
+              stage=0
+              for remoteUrl in "${BootstrapUrl}" "${CustomScriptUrl}"; do
+                part="part-${!stage}.sh"
+                if [ -n "$remoteUrl" ] && curl -Lf "$remoteUrl" -o $part; then
+                  chmod +x $part
+                  bash -x with_cfn.sh ./$part
+                  rc=$?
+                  if [ $rc != 0 ]; then
+                    break
+                  fi
+                fi
+                stage=$((stage+1))
+              done
+              /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ${Resource} --region ${AWS::Region}
+              exit $rc
+            - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
+              Resource: ClusterASG
   IamClusterRole:
     Type: AWS::IAM::Role
     Properties:
+      Path: /
+      Policies:
+        - PolicyName: ClusterPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - cloudformation:DescribeStackResource
+                Resource:
+                  - '*'
+#              - Effect: Allow
+#                Action: 'autoscaling:UpdateAutoScalingGroup'
+#                Resource: !Ref ClusterASG
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:DescribeMountTargets
+                Resource: !Sub
+                  - arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${SharedRoot}
+                  - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3Bucket}/*'
       AssumeRolePolicyDocument:
         Statement:
-          - Action: sts:AssumeRole
-            Principal:
-              Service: ec2.amazonaws.com
+          - Action:
+              - sts:AssumeRole
             Effect: Allow
-            Sid: ''
-  IamClusterPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: xcalar-cluster
-      PolicyDocument:
-        Statement:
-          - Effect: Allow
-            Action:
-              - ec2:DescribeInstances
-            Resource: '*'
-          - Effect: Allow
-            Action:
-              - elasticfilesystem:DescribeMountTargets
-            Resource: !Sub
-              - 'arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${SharedRoot}'
-              - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
-      Roles:
-        - !Ref 'IamClusterRole'
+            Principal:
+              Service:
+                - ec2.amazonaws.com
   IamClusterProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -433,8 +478,8 @@ Resources:
 Outputs:
   MountTargetID:
     Description: Mount target ID
-    Value: !If [CreateNewShare, !Ref EfsMountTarget, !Ref ExistingMount]
+    Value: !If [ CreateNewShare, !Ref EfsMountTarget, !Ref ExistingMount]
   FileSystemID:
     Description: File system ID
-    Value: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
+    Value: !If [ CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
 # vim: ft=yaml

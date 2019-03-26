@@ -116,7 +116,9 @@ echo "export PATH=$PATH" > /etc/profile.d/path.sh
 
 set +e
 if [ -e /etc/ec2.env ]; then
+    set -a
     . /etc/ec2.env
+    set +a
 fi
 
 if [ -z "$NFSMOUNT" ]; then
@@ -329,6 +331,10 @@ if [ -n "$XCE_XDBSERDESPATH" ]; then
     echo "Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH" >> $XCE_CONFIG
     echo "Constants.XdbSerDesMode=$XCE_SERDESMODE" >> $XCE_CONFIG
 fi
+
+# You can add and Constants.Foo tag to the instance to have it populate in the config
+# eg, Constants.Cgroup=false
+ec2-tags -t | awk '/^Constants\./{printf "%s=%s\n",$1,$2}' >> $XCE_CONFIG
 
 /etc/init.d/xcalar start
 rc=$?

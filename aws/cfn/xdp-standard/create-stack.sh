@@ -8,7 +8,7 @@ DIR=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
 . aws-sh-lib
 
 
-export AWS_DEFAULT_REGION=us-east-1
+export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
 case "$AWS_DEFAULT_REGION" in
     us-east-1) BUCKET=xcrepoe1;;
     us-west-2) BUCKET=xcrepo;;
@@ -17,10 +17,16 @@ esac
 
 set -u
 
-PREFIX=cfn/prod/v$(cat $DIR/VERSION)
+VERSION=$(cat $DIR/VERSION)
+RELEASE=$(cat $DIR/RELEASE)
+PRODUCT=$(basename $DIR)
+
+TEMPLATE=${TEMPLATE:-xdp-standard.template}
+PREFIX=cfn/prod/${PRODUCT}/${VERSION}-${RELEASE}
 URL_PREFIX=https://$(aws_s3_endpoint ${BUCKET})/${PREFIX%/}
-TemplateUrl=${URL_PREFIX}/xdp-standard.template
+TemplateUrl=${URL_PREFIX}/$(basename ${TEMPLATE} .template).yaml
 BootstrapUrl=${URL_PREFIX}/scripts/user-data.sh
+CustomScriptUrl=
 
 check_url() {
     local http_code
@@ -48,7 +54,7 @@ aws_cfn() {
                     ParameterKey=PrivateSubnetCluster,ParameterValue=subnet-6a7d1641 \
                     ParameterKey=BootstrapUrl,ParameterValue="${BootstrapUrl}" \
                     ${CustomScriptUrl+ParameterKey=CustomScriptUrl,ParameterValue="${CustomScriptUrl}"} \
-                    --template-body file://xdp-standard.template "$@"
+                    --template-body file://${TEMPLATE} "$@"
 }
 
 aws_s3_endpoint $BUCKET

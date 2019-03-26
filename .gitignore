@@ -25,3 +25,4 @@ azure/xdp-standard/temp
 tmp
 tdhtest
 *.qcow2
+node_modules
