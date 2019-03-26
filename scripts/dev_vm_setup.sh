@@ -36,8 +36,16 @@ else
     gerrit_username="$1"
 fi
 
+xcalar_email=""
+if [ -z "$2" ]; then
+    echo "Must supply second arg (your Xcalar email address)" >&2
+    exit 1
+else
+    xcalar_email="$2"
+fi
+
 launch_xd_at_end="false"
-if [ "$2" == "true" ]; then
+if [ "$3" == "true" ]; then
     launch_xd_at_end="true"
 fi
 
@@ -101,6 +109,10 @@ else
     git clone --recurse-submodules -o gerrit ssh://gerrit.int.xcalar.com:29418/xcalar/xcalar-infra.git "$XLRINFRADIR"
     echo "done"
 fi
+
+# set git config
+git config --global user.name "$gerrit_username"
+git config --global user.email "$xcalar_email"
 
 #### SETUP STANDARD BASH ENV ####
 #### (this will put VM user in xcve in each new shell) ###
