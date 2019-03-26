@@ -39,26 +39,26 @@ job "jenkins2" {
 
         volumes = [
           "/var/run/docker.sock:/var/run/docker.sock",
-          "/netstore/infra/jenkins2:/var/jenkins_home",
+          "/netstore/infra/${NOMAD_JOB_NAME}:/var/jenkins_home",
         ]
       }
 
       service {
-        name = "jenkins"
+        name = "${NOMAD_JOB_NAME}"
         port = "http"
 
-        tags = ["jenkins2", "urlprefix-jenkins2.service.consul:9999/", "urlprefix-jenkins2.nomad:9999/", "urlprefix-jenkins2.int.xcalar.com:9999/", "urlprefix-jenkins2:9999/"]
+        tags = ["http", "urlprefix-${NOMAD_JOB_NAME}.service.consul:9999/", "urlprefix-${NOMAD_JOB_NAME}.nomad:9999/", "urlprefix-${NOMAD_JOB_NAME}.int.xcalar.com:9999/", "urlprefix-${NOMAD_JOB_NAME}:9999/"]
 
         check {
-          name     = "alive"
+          name     = "http port is alive"
           type     = "tcp"
-          interval = "60s"
+          interval = "20s"
           timeout  = "5s"
         }
       }
 
       service {
-        name = "jenkins-ssh"
+        name = "${NOMAD_JOB_NAME}-ssh"
         port = "ssh"
 
         tags = ["ssh"] #, "urlprefix-:22022 proto=tcp"]
@@ -72,7 +72,7 @@ job "jenkins2" {
       }
 
       service {
-        name = "jenkins-jnlp"
+        name = "${NOMAD_JOB_NAME}-jnlp"
         port = "jnlp"
 
         tags = ["jnlp"] #, "urlprefix-:22022 proto=tcp"]
