@@ -374,6 +374,9 @@ pkgmain() {
     run fpm -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
     if test -e "${pkgdir}"/etc/sysconfig; then
         mv "${pkgdir}"/etc/sysconfig "${pkgdir}"/etc/default
+        for ii in "${pkgdir}"/usr/lib/systemd/system/* "${pkgdir}"/etc/init.d/* "${pkgbuild}"/etc/init/*; do
+            sed -i 's@/etc/sysconfig@/etc/default@g' $ii
+        done
     fi
     info "building $pkgname deb ..."
     run fpm -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}"

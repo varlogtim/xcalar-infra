@@ -110,6 +110,49 @@ job "prometheus" {
       }
     }
 
+    task "pushgateway" {
+      driver = "docker"
+
+      config {
+        image      = "prom/pushgateway:latest"
+        force_pull = true
+
+        volumes = [
+          "/mnt/data/prometheus:/prometheus",
+        ]
+
+        args = ["--persistence.file=/prometheus/${NOMAD_JOB_NAME}-${NOMAD_GROUP_NAME}-${NOMAD_TASK_NAME}.pushgw"]
+
+        port_map {
+          pushgateway_ui = 9091
+        }
+      }
+
+      resources {
+        cpu    = 200
+        memory = 100
+
+        network {
+          port "pushgateway_ui" {
+            static = "9091"
+          }
+        }
+      }
+
+      service {
+        name = "pushgateway-ui"
+        port = "pushgateway_ui"
+        tags = ["urlprefix-pushgateway-ui.nomad:9999/", "urlprefix-pushgateway-ui.service.consul:9999/"]
+
+        check {
+          name     = "pushgateway_ui port alive"
+          type     = "tcp"
+          interval = "20s"
+          timeout  = "5s"
+        }
+      }
+    }
+
     task "prometheus" {
       driver = "docker"
 
@@ -151,16 +194,15 @@ job "prometheus" {
       }
 
       template {
-        change_mode = "restart"
-
-        #        change_mode   = "signal"
-        #        change_signal = "SIGHUP"
-        destination = "local/prometheus.yml"
+        change_mode   = "signal"
+        change_signal = "SIGHUP"
+        destination   = "local/prometheus.yml"
 
         data = <<EOH
 ---
 global:
-  scrape_interval: 5s
+  scrape_interval: 10s
+  scrape_timeout: 5s
   evaluation_interval: 10s
 
 scrape_configs:
@@ -168,6 +210,15 @@ scrape_configs:
     static_configs:
       - targets:
           - localhost:9090
+  - job_name: pushgateway
+    params:
+      format:
+        - prometheus
+    metrics_path: /metrics
+    honor_labels: true
+    static_configs:
+      - targets:
+          - '{{ env "NOMAD_IP_pushgateway_ui" }}:9091'
   - job_name: loki
     metrics_path: /metrics
     params:

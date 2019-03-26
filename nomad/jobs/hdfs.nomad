@@ -2,7 +2,7 @@ job "hdfs" {
   datacenters = ["xcalar-sjc"]
 
   group "NameNode" {
-    count = 3
+    count = 2
 
     constraint {
       operator = "distinct_hosts"
@@ -24,8 +24,6 @@ job "hdfs" {
         }
       }
 
-      tags = ["urlprefix-hdfs:9999/"]
-
       resources {
         memory = 1000
 
@@ -43,12 +41,13 @@ job "hdfs" {
       service {
         name = "hdfs"
         port = "ipc"
+        tags = ["urlprefix-hdfs:9999/"]
       }
     }
   }
 
   group "DataNode" {
-    count = 6
+    count = 4
 
     constraint {
       operator = "distinct_hosts"

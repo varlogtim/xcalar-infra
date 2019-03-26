@@ -51,4 +51,4 @@ clean:
 # Used for running testing/verifying sources and json data
 include mk/check.mk
 include mk/convert.mk
-include local.mk
+-include local.mk
