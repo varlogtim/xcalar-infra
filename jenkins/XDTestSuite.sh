@@ -260,6 +260,11 @@ elif [ $JOB_NAME = "XDEndToEndTest" ]; then
     npm test -- --tag "allTests"
     exitCode=$?
 fi
+elif [ $JOB_NAME = "XDFuncTest" ]; then
+    npm test -- XDFuncTest https://localhost:8443 $NUM_USERS $ITERATIONS
+    exitCode=$?
+fi
+
 
 sudo unlink /var/www/xcalar-gui || true
 kill $caddyPid || true
