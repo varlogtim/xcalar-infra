@@ -2165,7 +2165,7 @@ def get_cluster_priority(prioritize=None):
 
     # try the clusters in this order
     devClusters = ['ovirt-node-1-cluster', 'einstein-cluster2' ]
-    qaClusters = ['node3-cluster', 'node2-cluster', 'node1-cluster']
+    qaClusters = ['ceph-osd1-cluster', 'ceph-osd2', 'node3-cluster', 'node2-cluster', 'node1-cluster']
     clusterPriority = devClusters
     validClusters = []
     if prioritize:
