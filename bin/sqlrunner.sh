@@ -8,6 +8,7 @@ myName=$(basename $0)
 
 XLRINFRADIR=${XLRINFRADIR-$HOME/xcalar-infra}
 
+
 optClusterName=""
 optKeep=false
 optUseExisting=false
@@ -22,10 +23,12 @@ optSetupOnly=false
 optResultsPath="."
 optTimeoutSec=$(( 10 * 60 ))
 optEnableSpark=false
+optEnableAnswer=false
 optBucket="sqlscaletest"
 optHours=0
 optSupportBundle=false
 optTcpdump=false
+SPARK_DOCKER_DIR="$XLRDIR/docker/spark/master"
 
 usage()
 {
@@ -59,12 +62,13 @@ usage()
         -u              Use an existing cluster instead of creating one
         -x <instpath>   Path to Xcalar install directory on cluster
         -X <xlrpath>    Path to Xcalar root on cluster
-        -b <bucket>     gcloud storage bucket
-        -d              enable spark
+        -b <bucket>     Gcloud storage bucket
+        -d              Enable spark
+        -A              Enable docker container, and generate spark answer files.
 EOF
 }
 
-while getopts "c:di:I:kn:Npr:sSt:T:ux:X:b:d" opt; do
+while getopts "c:di:I:kn:Npr:sSt:T:ux:X:b:dA" opt; do
   case $opt in
       c) optClusterName="$OPTARG";;
       d) optTcpdump=true;;
@@ -84,6 +88,7 @@ while getopts "c:di:I:kn:Npr:sSt:T:ux:X:b:d" opt; do
       X) optRemoteXlrRoot="$OPTARG";;
       b) optBucket="$OPTARG";;
       d) optEnableSpark=true;;
+      A) optEnableAnswer=true;;
       --) break;; # Pass all following to test_jdbc
       *) usage; exit 0;;
   esac
@@ -101,6 +106,7 @@ fi
 # GCE requires lower case names
 optClusterName=$(echo "$optClusterName" | tr '[:upper:]' '[:lower:]')
 clusterLeadName="$optClusterName-1"
+SPARKRESULTPATH="/tmp/$optClusterName/"
 
 if [ "$IS_RC" = "true" ]; then
     prodLicense=`cat $XLRDIR/src/data/XcalarLic.key.prod | gzip | base64 -w0`
@@ -235,6 +241,7 @@ installDeps() {
     # XXX: Fix in test_jdbc
     local imdTestDir="/opt/xcalar/src/sqldf/tests/IMDTest/"
     rcmd mkdir -p "$optRemotePwd"
+    rcmd mkdir -p "$optRemotePwd/result/"
     rcmd sudo mkdir -p "$imdTestDir"
     rcmd sudo chmod a+rwx "$imdTestDir"
     gscpTo "$XLRDIR/src/sqldf/tests/*.py" "$optRemotePwd"
@@ -246,6 +253,12 @@ installDeps() {
     gscpTo "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" /tmp
     gscpToAll "$XLRINFRADIR/misc/sqlrunner/LocalUtils.sh" /tmp
     rcmdAll echo "source /tmp/LocalUtils.sh >> $HOME/.bashrc"
+
+    if $optEnableAnswer
+    then
+    gcloud compute scp ${SPARKRESULTPATH}result*.json "$clusterLeadName:$optRemotePwd/result/"
+    rm -rf "$SPARKRESULTPATH"
+    fi
 
     rcmd sudo mv "/tmp/jodbc.xml" "$optRemoteXlrRoot/config"
     rcmd sudo mv "/tmp/supervisor.conf" "/etc/xcalar/"
@@ -268,6 +281,14 @@ installDeps() {
 dumpStats() {
     rcmdAll dumpNodeOSStats
     rcmd /opt/xcalar/bin/xccli -c top
+
+generateAnswer(){
+    (cd "$SPARK_DOCKER_DIR" && make rm && make run)
+    mkdir -p $SPARKRESULTPATH
+    local SPARK_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' spark-master-jdbc)
+    waitCmd "nc $SPARK_IP 10000 </dev/null 2>/dev/null" $optTimeoutSec
+    $XLRDIR/src/sqldf/tests/test_jdbc.py \
+     -p "$XLRGUIDIR/assets/test/json/"  -S $SPARK_IP $optsTestJdbc -w 1 -P admin -U admin --ignore-xcalar --spark_result "$SPARKRESULTPATH/result"
 }
 
 runTest() {
@@ -283,9 +304,9 @@ runTest() {
         gscpFrom "${results_spark}*.json" "$optResultsPath"
     fi
 
-    local results_xcalar="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter"
+    local results_xcalar="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter-xcalar"
     rcmd "XLRDIR=$optRemoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
-        -p "$optRemotePwd" -o $results_xcalar -n "$optNumNodes,$optInstanceType" $optsTestJdbc
+        -p "$optRemotePwd" -o $results_xcalar -n "$optNumNodes,$optInstanceType" $optsTestJdbc --spark_file_verify "$optRemotePwd/result/result"
 
     # IMD test doesn't generate a perf file
     gscpFrom "${results_xcalar}*.json" "$optResultsPath" || true
@@ -324,9 +345,15 @@ destroyCluster() {
     fi
 
     echo "Test artifacts left in $optResultsPath"
+    rm -rf "$SPARKRESULTPATH"
 }
 
 trap destroyCluster EXIT
+
+if $optEnableAnswer
+then
+    generateAnswer
+fi
 
 if ! $optUseExisting
 then
