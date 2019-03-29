@@ -854,10 +854,6 @@ def get_cluster_available_memory(name):
     hosts_service = CONN.system_service().hosts_service()
     hosts = hosts_service.list()
     for host in hosts:
-        if host.status != types.HostStatus.UP:
-            debug_log("Host {} is not UP.  Do not figure in to available memory estimates...".format(host.name))
-            continue
-
         if host.cluster:
             # cluster attr is a link.  follow link to retrieve data about the cluster
             cluster = CONN.follow_link(host.cluster)
@@ -865,10 +861,14 @@ def get_cluster_available_memory(name):
             if cluster.name and cluster.name == name:
                 found_cluster = True
                 debug_log("Host {} is part of requested cluster, {}".format(host.name, cluster.name))
-                # add this hosts available memory to cnt
-                if host.max_scheduling_memory:
-                    debug_log("Host {}'s max scheduling memory (in bytes): {}".format(host.name, str(host.max_scheduling_memory)))
-                    mem_found = mem_found + host.max_scheduling_memory
+                if host.status == types.HostStatus.UP:
+                    # add this hosts available memory to cnt
+                    if host.max_scheduling_memory:
+                        debug_log("Host {}'s max scheduling memory (in bytes): {}".format(host.name, str(host.max_scheduling_memory)))
+                        mem_found += host.max_scheduling_memory
+                else:
+                    info_log("Host {} is not UP. Do not figure in "
+                        "to available memory estimates...".format(host.name))
 
     if found_cluster:
         debug_log("Available memory found on cluster {}: {} bytes".format(name, mem_found))
