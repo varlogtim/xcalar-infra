@@ -867,7 +867,7 @@ def get_cluster_available_memory(name):
                         debug_log("Host {}'s max scheduling memory (in bytes): {}".format(host.name, str(host.max_scheduling_memory)))
                         mem_found += host.max_scheduling_memory
                 else:
-                    info_log("Host {} is not UP. Do not figure in "
+                    debug_log("Host {} is not UP. Do not figure in "
                         "to available memory estimates...".format(host.name))
 
     if found_cluster:
