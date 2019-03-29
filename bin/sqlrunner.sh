@@ -23,6 +23,7 @@ optResultsPath="."
 optTimeoutSec=$(( 10 * 60 ))
 optEnableSpark=false
 optBucket="sqlscaletest"
+optHours=0
 
 usage()
 {
@@ -50,6 +51,7 @@ usage()
         -r <results>    Directory to store perf results
         -S              Set up and configure cluster but skip SQL tests
         -t <timeout>    Cluster startup timeout (seconds)
+        -T <hours>      Iterate test for at least this many hours
         -u              Use an existing cluster instead of creating one
         -x <instpath>   Path to Xcalar install directory on cluster
         -X <xlrpath>    Path to Xcalar root on cluster
@@ -58,7 +60,7 @@ usage()
 EOF
 }
 
-while getopts "c:i:I:kn:Npr:St:ux:X:b:d" opt; do
+while getopts "c:i:I:kn:Npr:St:T:ux:X:b:d" opt; do
   case $opt in
       c) optClusterName="$OPTARG";;
       i) optXcalarImage="$OPTARG";;
@@ -70,6 +72,7 @@ while getopts "c:i:I:kn:Npr:St:ux:X:b:d" opt; do
       r) optResultsPath="$OPTARG";;
       S) optSetupOnly=true;;
       t) optTimeoutSec="$OPTARG";;
+      T) optHours="$OPTARG";;
       u) optUseExisting=true;;
       x) optRemoteXlrDir="$OPTARG";;
       X) optRemoteXlrRoot="$OPTARG";;
@@ -189,20 +192,26 @@ installDeps() {
 }
 
 runTest() {
+    local testIter="$1"
+
+    echo "######## Starting iteration $testIter ########"
+
     if $optEnableSpark
     then
-        local results_spark="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-spark"
+        local results_spark="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter-spark"
         rcmd "XLRDIR=$optRemoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
             -p "$optRemotePwd" -o $results_spark -n "$optNumNodes,$optInstanceType" -S $SPARK_IP --bucket "gs://$optBucket/" $optsTestJdbc --ignore-xcalar
         gcloud compute scp "$clusterLeadName:${results_spark}*.json" "$optResultsPath"
     fi
 
-    local results_xcalar="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType"
+    local results_xcalar="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter"
     rcmd "XLRDIR=$optRemoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
         -p "$optRemotePwd" -o $results_xcalar -n "$optNumNodes,$optInstanceType" $optsTestJdbc
 
     # IMD test doesn't generate a perf file
     gcloud compute scp "$clusterLeadName:${results_xcalar}*.json" "$optResultsPath" || true
+
+    echo "######## Ending iteration $testIter ########"
 }
 
 destroyCluster() {
@@ -227,5 +236,17 @@ installDeps
 
 if ! $optSetupOnly
 then
-    runTest
+    testIter=0
+
+    runTest $testIter
+    testIter=$((testIter + 1))
+
+    endTime=$(($(date +%s) + optHours * 60 * 60))
+    while [[ "$(date +%s)" -lt "$endTime" ]]
+    do
+        echo "Current time: $(date +%s), End time: $endTime, remaining: $((endTime - $(date +%s)))"
+        runTest $testIter
+        testIter=$((testIter + 1))
+    done
+
 fi
