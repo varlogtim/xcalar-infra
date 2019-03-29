@@ -1605,7 +1605,7 @@ def provision_vms(vmnames, ovirt_cluster, ram, cores, tryotherclusters=True):
             " (perhaps default values changed for the --ram or --cores options?)\n")
 
     info_log("Provision {} vms ({}), "
-        "in parallel".format(len(vmnames), ovirt_cluster, ", ".join(vmnames)))
+        "in parallel".format(len(vmnames), ", ".join(vmnames)))
 
     '''
         get list of cluster we can try to provision the VMs on.
