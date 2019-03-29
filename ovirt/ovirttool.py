@@ -793,6 +793,10 @@ def enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=None, pu
 '''
 def enough_memory(n, ram, clusters):
 
+    debug_log("Check which Ovirt clusters of this list: {} "
+        "have enough available memory to handle at least VM of the following "
+        "request: [{} VMs w/ {} RAM (in bytes)]".format(clusters, n, ram))
+
     '''
         initialize request size at n (the number of VMs they want)
         go through list of clusters available.
@@ -1523,24 +1527,25 @@ def get_pem_cert():
     return tmpfilepath
 
 '''
-    Attempt to provision a vm
-    Set jenkins user password to jenkins on the new VM
+Attempt to provision a vm
+Set jenkins user password to jenkins on the new VM
 
-    :param name: name of vm
-    :param ram: (int) memory (in bytes)
-    :param cores: (int) number of cores
-    :param availableClusters: (list of Strings of names of clusters)
-        if fail to make on one of the clusters, try on the others
+@name: (String) name of vm
+@ram: (int) memory (in bytes)
+@cores: (int) number of cores
+@available_clusters: (list of Strings) names of Ovirt clusters to try to
+  provision the VM on, in order. (If unable to create on one of the clusters,
+  will keep trying on others until list is exhausted.)
 '''
-def provision_vm(name, ram, cores, availableClusters):
+def provision_vm(name, ram, cores, available_clusters):
 
-    debug_log("Try to provision VM {} on one of the following clusters: {}".format(name, availableClusters))
+    debug_log("Try to provision VM {} on one of the following clusters: {}".format(name, available_clusters))
 
-    for orderedcluster in availableClusters:
-        template = get_template(orderedcluster)
-        info_log("Attempt to provision {} on {}...".format(name, orderedcluster))
+    for ordered_cluster in available_clusters:
+        template = get_template(ordered_cluster)
+        info_log("Attempt to provision {} on {}...".format(name, ordered_cluster))
         try:
-            vmid = create_vm(name, orderedcluster, template, ram, cores)
+            vmid = create_vm(name, ordered_cluster, template, ram, cores)
 
             if not vmid:
                 raise RuntimeError("ERROR: Ovirt seems to have successfully created VM {}, but no id generated\n".format(name))
@@ -1565,7 +1570,7 @@ def provision_vm(name, ram, cores, availableClusters):
             if 'available memory is too low' in str(e):
                 info_log("Hit memory error!! :"
                     " Not enough memory on {} to create requested VM"
-                    "\nTry to delete it and try on next cluster (if any)...".format(orderedcluster))
+                    "\nTry to delete it and try on next cluster (if any)...".format(ordered_cluster))
                 remove_vm(name, releaseIP=False) # set releaseIP as False - else, it's going to try and bring the VM up again to get the IP! and will fail for same reason
             else:
                 debug_log("VM provisioning failed for a reason other than memory too low")
@@ -1575,27 +1580,27 @@ def provision_vm(name, ram, cores, availableClusters):
     # hit this problem in all of them
     err_msg = "\n\nERROR: There are not enough resources available " \
         " to provision the next VM of {} bytes RAM, {} cores\n" \
-        " Tried on clusters: {}".format(ram, cores, availableClusters)
+        " Tried on clusters: {}".format(ram, cores, available_clusters)
     debug_log(err_msg)
     sys.exit(1) # do a sys exit instead of raising exception because then this process will terminate
     # elses if its being called as a subprocess you're going to have to wait for it to time out
     #raise Exception(err_msg)
 
 '''
-    provisions n vms in parallel.
-    waits for all vms to come up with ips displaying
-    Return a list of names of vms created in Ovirt
+provisions n vms in parallel.
+waits for all vms to come up with ips displaying
+Return a list ids in Ovirt for each VM created
 
-    :param vmnames: names to give to the VMs
-    :param ovirt_cluster: which cluster in Ovirt to create VMs from
-    :param ram: (int) memory (in GB) on each VM
-    :param cores: (int) num cores on each VM
+@vmnames: (list of Strings) names to give to the VMs
+@ovirt_cluster: (list of Strings) names of Ovirt clusters to attempt
+    provisioning on, in order
+@ram: (int) memory (in bytes) on each VM
+@cores: (int) num cores on each VM
 
-    :returns: list of unique vm ids for each VM created
-        (this is distinct from name; its id attr of Type:Vm Object)
-
+:returns: list of unique vm ids for each VM created
+    (this is distinct from name; its id attr of Type:Vm Object)
 '''
-def provision_vms(vmnames, ovirt_cluster, ram, cores, tryotherclusters=True):
+def provision_vms(vmnames, ovirt_clusters, ram, cores, tryotherclusters=True):
 
     if not vmnames: # no vms to create
         return None
@@ -1607,50 +1612,11 @@ def provision_vms(vmnames, ovirt_cluster, ram, cores, tryotherclusters=True):
     info_log("Provision {} vms ({}), "
         "in parallel".format(len(vmnames), ", ".join(vmnames)))
 
-    '''
-        get list of cluster we can try to provision the VMs on.
-        (if tryotherclusters is True, then can try on other clusters
-        other than one specified by ovirt_cluster param, in case something
-        goes wrong on that cluster)
-    '''
-    availableClusters = [ovirt_cluster]
-    if tryotherclusters:
-        availableClusters = get_cluster_priority(prioritize=ovirt_cluster)
-    info_log("Ovirt clusters that will be made available for this job "
-        "(in this order): {}".format(availableClusters))
-
-    # will check for memory constraints and fail script if determined we can't handle the VM request.
-    # bypass if force specified and try to provision anyway
-    if not ARGS.force:
-        '''
-            Before attempting to provision the VMs, make a best guess
-            if there is enough memory available amongst the clusters
-            for provisioning all of the requested VMs,
-            so can fail quickly if not and not.
-            ('enough_memory' function, if it guesses that it's possible to handle the VM request,
-            will return filtered list - those clusters of the clusters passed in,
-            which can provision at least 1 VM in the request.
-            this way skip trying on clusters you know it's going to fail on.)
-        '''
-        debug_log("Check first if enough memory available...")
-        fullClusList = availableClusters # if fail want to print out the original list of clusters in err message
-        availableClusters = enough_memory(len(vmnames), ram, availableClusters)
-        info_log("Ovirt clusters determined to have enough memory to handle the provisioning: {}".format(str(availableClusters)))
-        if not availableClusters:
-            errmsg = "\n\nError: There is not enough memory on cluster(s) {}, " \
-                "to provision the requested VMs\n" \
-                "Try to free up memory on the cluster(s).\n".format(fullClusList)
-            if not tryotherclusters:
-                errmsg = errmsg + "You can also run this tool with --tryotherclusters option, " \
-                    " to make other clusters available to you during provisioning\n"
-            errmsg = errmsg + "\nTo ignore this error and try to provision anyway, re-run with --force option\n"
-            raise RuntimeError(errmsg)
-
     procs = []
     sleep_between = 20
     for nextvmname in vmnames:
         debug_log("Fork new process to create a new VM by name {}".format(nextvmname))
-        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, availableClusters))
+        proc = multiprocessing.Process(target=provision_vm, args=(nextvmname, ram, cores, ovirt_clusters))
         #proc = multiprocessing.Process(target=create_vm, args=(newvm, ovirt_cluster, template, ram, cores)) # 'cluster' here refers to cluster the VM is on in Ovirt
         # it will fail if you try to create VMs at exact same time so sleep
         proc.start()
@@ -2173,23 +2139,20 @@ def path_exists_on_node(node, path):
         return False
 
 '''
-What type of Ovirt cluster should VMs made from this run of the ovirttool be built on?
-
-Context: The clusters in Ovirt are assigned a particular 'type' within this script. (qa, dev, etc.)
+Context: Ovirt clusters are designated to hold VMs of a particular type
 i.e., 'dev' clusters should be used for developers, 'qa' for keeping
 Jekins slaves, etc.
 These types are all set in the global hash OVIRT_TEMPLATE_MAPPING.
-Determine which type the current provisioning request is, so can know
-what other Ovirt clusters to try building on, if the current one is
-out of resources.
+This function makes a best guess at what type new VMs in this request would be,
+based on user specified params, and returns that value,
+so can know which Ovirt clusters new VMs should be cloned on.
 
-!! The values returned from this function, need to correspond
+** The Strings returned from this function, need to correspond
 to the keys in OVIRT_TEMPLATE_MAPPING !
-(ovirttool, if it discovers the current cluster is out of resources,
-will ask "what type of VM job" by calling this function, then will go in to
-OVIRT_TEMPLATE_MAPPING and find all Ovirt clusters of that type)
+(ovirttool will call this function to determine what type of VMs the new VMs will be,
+then go in OVIRT_TEMPLATE_MAPPING and find Ovirt clusters it can use, based on that value)
 '''
-def get_job_request_cluster_type():
+def get_request_type():
     job_type = None
     if will_install():
         job_type = 'dev'
@@ -2246,77 +2209,48 @@ def get_template(ovirt_cluster):
         "'OVIRT_TEMPLATE_MAPPING'\n".format(ovirt_cluster, ", ".join(valid_clusters), ovirt_cluster))
 
 '''
-Return the default Ovirt cluster for a particular type of clusters
+Return list of all Ovirt clusters that should be made available to clone new
+VMs on, based on user specified params --ovirtcluster and --tryotherclusters,
+and type of VMs they will be (qa vs. dev),
+in order they should be tried.
 '''
-def get_default_ovirt_cluster(cluster_type):
-    if cluster_type in OVIRT_TEMPLATE_MAPPING:
-        # each el in list is tuple [<cluster name>, <template for cluster>, [is default]]
-        # the default for that type has that third arg only
-        for ovirt_cluster_tuple in OVIRT_TEMPLATE_MAPPING[cluster_type]:
-            if len(ovirt_cluster_tuple) == 3 and ovirt_cluster_tuple[2] == True:
-                return ovirt_cluster_tuple[0]
-    else:
-        raise RuntimeError("\n\nERROR: Can't determine default Ovirt cluster "
-            "for type: '{}'; OVIRT_TEMPLATE_MAPPING does not have any entries "
-            "for clusters of this type.\n".format(cluster_type))
+def get_all_matching_ovirt_clusters():
 
-    raise RuntimeError("\n\nERROR: Could not determine default Ovirt cluster "
-        "to clone from!"
-        "\nVMs this run should be cloned from Ovirt clusters of type: {}, "
-        "but no cluster of this type has been set as a default in "
-        "OVIRT_TEMPLATE_MAPPING.\n"
-        "If you've recently added a new type of clusters to OVIRT_TEMPLATE_MAPPING, "
-        "make sure you've set one of the clusters for that type as the default.\n".format(cluster_type))
+    debug_log("Determine all Ovirt clusters eligible to provision VMs, "
+        "regardless of health or memory constraints")
 
-'''
-    get priority of clusters to try.
-    Can pass an optional arg that will force a particular cluster
-    to front of priority list.
-    if that cluster is not valid will raise exception
+    # corner case: user specified --ovirtcluster and not --tryotherclusters;
+    # only make --ovirtcluster avaialble regardless of job type
+    if ARGS.ovirtcluster and not ARGS.tryotherclusters:
+        return [ARGS.ovirtcluster]
 
-    :param prioritize: (optional String)
-        if given, should be a valid cluster name with template.
-        In the list returned, will prioritize this cluster by setting as first el in the list
-        (so that if caller of this method trying VM provisioning on clusters by iterating
-        through list will end up trying that one first. For use case, that user wants
-        to --tryotherclusters but would want to try on the default cluster or one they passed in
-        with --ovirtcluster option first, others are just backup in case that one fails)
-'''
-def get_cluster_priority(prioritize=None):
+    # determine what 'type' of VMs these would be (dev machines, qa machines, etc.)
+    job_type = get_request_type()
 
-    # will try to provision VMs on Ovirt clusters in the order
-    # set by this list.
+    # go through all Ovirt clusters designated for that job type; find default for this type
+    matching_clusters = []
+    default_for_type = None
+    for ordered_cluster_tuple in OVIRT_TEMPLATE_MAPPING[job_type]:
+        # each tuple is <cluster name>, <template for cluster>, [True]
+        # (optional third arg is true if it's the default cluster for that type)
+        cluster_name = ordered_cluster_tuple[0]
+        matching_clusters.append(cluster_name)
+        if len(ordered_cluster_tuple) == 3 and ordered_cluster_tuple[2] == True:
+            default_for_type = cluster_name
+            # corner case 2: user didn't specify --ovirtcluster or --tryothersclusters;
+            # only make default for this type available
+            if not ARGS.ovirtcluster and not ARGS.tryotherclusters:
+                return [default_for_type]
+
+    # --tryotherclusters must have been specified;
+    # return all Ovirt clusters of this job type
     cluster_priority = []
+    # if user gave --ovirtcluster, set as first element in list;
+    # want to try provisioning on this cluster first, regardless of job type
+    if ARGS.ovirtcluster and ARGS.ovirtcluster not in matching_clusters:
+        cluster_priority.append(ARGS.ovirtcluster)
+    cluster_priority.extend(matching_clusters)
 
-    # what type of provisioning job is this? (qa, dev, etc.)
-    new_vm_type = get_job_request_cluster_type()
-
-    # get all Ovirt clusters of that type
-    ordered_clusters_of_type = []
-    if new_vm_type in OVIRT_TEMPLATE_MAPPING:
-        for ordered_cluster_tuple in OVIRT_TEMPLATE_MAPPING[new_vm_type]:
-            ordered_clusters_of_type.append(ordered_cluster_tuple[0])
-    else:
-        raise RuntimeError("Type of provisioning request determined as '{}', "
-            "but no key of this type is found in OVIRT_TEMPLATE_MAPPING "
-            "Can not determine other Ovirt clusters to build VMs on!".format(new_vm_type))
-
-    # set the list, with priority
-    if prioritize:
-        valid_clusters = valid_ovirt_clusters()
-        if prioritize in valid_clusters:
-            cluster_priority.append(prioritize)
-        else:
-            raise RuntimeError("\n\nERROR: While collecting list of available "
-                "Ovirt clusters to provision VMs on, "
-                "was instructed to prioritize {}, but no "
-                "entry for this Ovirt cluster is found in "
-                "OVIRT_TEMPLATE_MAPPING\n"
-                "These are the Ovirt clusters that ovirttool "
-                "is aware of: {}\n".format(prioritize, ", ".join(valid_clusters)))
-    for ordered_cluster in ordered_clusters_of_type:
-        if ordered_cluster != prioritize:
-            cluster_priority.append(ordered_cluster)
     return cluster_priority
 
 
@@ -3001,27 +2935,57 @@ def get_validate_xcalar_uncompressed_license():
     return uncompressed_license_data_final
 
 '''
-Return default Ovirt cluster to try and clone VMs on for this run.
+Returns list of Ovirt clusters that should be used to clone any new VMs on.
+The order of the list indicates which order to attempt provsioning the VMs on.
+Ovirt clusters in list:
+* are ones designated to handle the type of VMs requested
+  (i.e., dev machines, Jenkins slaves, etc.)
+  ** EXCEPTION, If user gave --ovirtcluster option, that Ovirt cluster will be
+     considered regardless if it's one of the designated types
+* have enough memory to handle at least one VM in the request
+  (unless --force given)
+* If --tryotherclusters given, all Ovirt clusters for the designated type
+  will be considered (else, at most one considered; either default for job
+  type, or --ovirtcluster, if it was supplied)
+
+@count: (int) number of Vms in request
+@ram: (int) RAM (in bytes) for requested VMs. (for ensuring which Ovirt clusters
+  have enough memory)
 '''
-def get_validate_default_ovirt_cluster():
+def get_ovirt_clusters(count, ram):
 
-    if ARGS.ovirtcluster:
-        # make sure they supplied a valid cluster with a template
-        valid_clusters = valid_ovirt_clusters()
-        if ARGS.ovirtcluster not in valid_clusters:
-            raise ValueError("\n\nERROR: --ovirtcluster must be one of " \
-                "the following: {}\n" \
-                "(If '{}' is a valid cluster in Ovirt, " \
-                "probably there is no supported template for it " \
-                "yet in this tool)\n".format(", ".join(valid_clusters), ARGS.ovirtcluster))
-        return ARGS.ovirtcluster
+    info_log("Determine which Ovirt clusters to use to clone the VM(s) on")
 
-    # user didn't supply an ovirt cluster to build from; determine default.
-    # default cluster to clone from depends on type of VM(s) to be provisioned
-    # (jenkins slaves - 'qa' type; machines with Xcalar installed - 'dev' type; etc.)
-    job_type = get_job_request_cluster_type()
-    default_cluster_for_type = get_default_ovirt_cluster(job_type)
-    return default_cluster_for_type
+    # all Ovirt clusters designated to handle jobs of this type
+    matching_clusters_all = get_all_matching_ovirt_clusters()
+    info_log("All Ovirt clusters with matching requirements: {}".format(matching_clusters_all))
+
+    # filter list to clusters with enough RAM to handle at least 1 Vm in the request
+    matching_clusters_enough_memory = enough_memory(count, ram, matching_clusters_all)
+
+    if not matching_clusters_enough_memory:
+        # create a warn/error msg (will only warn if --force given)
+        mem_msg = "\n\nError: There is not enough memory on cluster(s) {}, " \
+            "to provision requested VMs\n" \
+            "Try to free up memory on those " \
+            "cluster(s).\n".format(matching_clusters_all)
+        if not ARGS.tryotherclusters:
+            mem_msg += "You can also run this tool with --tryotherclusters " \
+                "option, to make other clusters available during provisioning\n"
+
+        if ARGS.force:
+            warn_log(mem_msg)
+            # in --force case, force trying on all matching clusters, not just
+            # ones with enough memory.
+            return matching_clusters_all
+        else:
+            mem_msg += "\nTo ignore this error and try to provision anyway, re-run with --force option\n"
+            raise RuntimeError(mem_msg)
+
+    info_log("Clusters in that list which have enough memory to handle "
+        "at least one VM in the request (will try them "
+        "in this order): {}".format(matching_clusters_enough_memory))
+    return matching_clusters_enough_memory
 
 '''
 Return installer URL to use based on cmd args pasesd in.
@@ -3174,6 +3138,21 @@ def validate_params():
                 modules.OvirtUtils.validate_hostname(ARGS.vmbasename)
             except ValueError as e:
                 raise ValueError("\n\nERROR: --vmbasename: {}\n".format(str(e)))
+
+        if ARGS.ovirtcluster:
+            # ensure they supplied an Ovirt cluster that ovirttool supports
+            valid_clusters = valid_ovirt_clusters()
+            if ARGS.ovirtcluster not in valid_clusters:
+                raise ValueError("\n\nERROR: '{}' is not a valid Ovirt cluster " \
+                    "known to ovirttool.\n" \
+                    "--ovirtcluster must be one of " \
+                    "the following: {}\n" \
+                    "(If '{}' is a valid cluster in Ovirt, " \
+                    "probably no one has added an entry for it " \
+                    "in OVIRT_TEMPLATE_MAPPING yet;\n" \
+                    "every Ovirt cluster/template " \
+                    "must have an entry in that hash for ovirttool to be " \
+                    "able to use it)\n".format(ARGS.ovirtcluster, ", ".join(valid_clusters), ARGS.ovirtcluster))
 
         if ARGS.noinstaller:
             if ARGS.installer:
@@ -3426,7 +3405,7 @@ if __name__ == "__main__":
 
     # get params needed for this run, which have values based on user params.
     # (can't use from ARGS.<param> directly).
-    default_ovirt_cluster = get_validate_default_ovirt_cluster() # this is just default; if you specify --tryotherclusters, if this ends up out of resoures will try other clusters
+
     installer = get_validate_installer_url() # note: just because it has a value doesnt mean install is being done (will have value in ARGS.delete, etc. cases, only returns None if --noinstaller)
     ldap_config_url = get_validate_ldap_config_url()
     xcalar_license_uncompressed = get_validate_xcalar_uncompressed_license()
@@ -3492,7 +3471,15 @@ if __name__ == "__main__":
         # create --count number of VM names from <another basename>.  It returns those Vm names,
         # and <another basename> (if creating cluster, will name the cluster <another basename>)
         unique_generated_basename, vmnames = generate_vm_names(ARGS.vmbasename, int(ARGS.count), no_rand=ARGS.norand)
-        vmids = provision_vms(vmnames, default_ovirt_cluster, convert_mem_size(int(ARGS.ram)), int(ARGS.cores), tryotherclusters=ARGS.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
+
+        # get list of Ovirt clusters that can be used for provsioing the new VMs, based on
+        # job type (qa, dev, etc.) and user params (--ovirtclusters, --tryotherclusters),
+        # which are estimated to have enough memory to handle the request.
+        # provisioning should be attempted in the order specified.
+        ram_bytes = convert_mem_size(int(ARGS.ram))
+        ovirt_clusters = get_ovirt_clusters(int(ARGS.count), ram_bytes)
+
+        vmids = provision_vms(vmnames, ovirt_clusters, ram_bytes, int(ARGS.cores), tryotherclusters=ARGS.tryotherclusters) # user gives RAM in GB but provision VMs needs Bytes
 
         if will_install():
             # if you supply a value to 'createcluster' arg of setup_xcalar,
