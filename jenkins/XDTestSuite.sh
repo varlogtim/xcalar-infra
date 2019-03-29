@@ -181,7 +181,12 @@ cmBuild
 
 echo "Building XD"
 cd $XLRGUIDIR
-make debug PRODUCT="$GUI_PRODUCT"
+
+if [ $JOB_NAME = "XDFuncTest" ]; then
+    make dev PRODUCT="$GUI_PRODUCT"
+else
+    make debug PRODUCT="$GUI_PRODUCT"
+fi
 
 if [ "$GUI_PRODUCT" = "XI" ]; then
     GUI_FOLDER=xcalar-insight
