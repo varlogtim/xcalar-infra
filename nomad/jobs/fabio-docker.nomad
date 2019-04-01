@@ -21,9 +21,32 @@ job "fabio" {
       config {
         image        = "fabiolb/fabio"
         network_mode = "host"
-        force_pull   = true
+        force_pull   = false
 
-        args = ["-registry.consul.addr=${NOMAD_IP_lb}:8500"]
+        args = ["-cfg", "/local/fabio.properties"]
+      }
+
+      vault {
+        policies = ["fabiolb"]
+        env      = true
+      }
+
+      template {
+        data = <<EOT
+registry.consul.addr = {{ env "NOMAD_IP_lb" }}:8500
+
+proxy.cs = cs=vaultcs;type=vault-pki;cert=xcalar_ca/issue/int-xcalar-com
+
+proxy.addr = :{{ env "NOMAD_PORT_ssl" }};cs=vaultcs,\
+             :{{ env "NOMAD_PORT_lb" }};proto=http
+EOT
+
+        destination = "local/fabio.properties"
+        change_mode = "restart"
+      }
+
+      env {
+        VAULT_ADDR = "https://vault.service.consul:8200"
       }
 
       resources {
@@ -37,6 +60,10 @@ job "fabio" {
 
           port "ui" {
             static = 9998
+          }
+
+          port "ssl" {
+            static = 9443
           }
         }
       }

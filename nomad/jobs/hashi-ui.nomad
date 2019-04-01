@@ -42,7 +42,14 @@ job "hashi-ui" {
 
       service {
         name = "hashi-ui"
-        tags = ["urlprefix-hashi-ui.nomad:9999/", "urlprefix-hashi-ui.service.consul:9999/", "webapp"]
+
+        tags = [
+          "urlprefix-hashi-ui.nomad:9999/",
+          "urlprefix-hashi-ui.service.consul:9999/",
+          "urlprefix-hashi-ui.service.consul:9443/",
+          "urlprefix-hashi-ui.nomad:9443/",
+        ]
+
         port = "http"
 
         check {
