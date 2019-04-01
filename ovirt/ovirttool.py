@@ -2966,10 +2966,15 @@ def get_uncompressed_license(compressed_license):
 Returns int: RAM (in GB) to set on new VMs
 '''
 def get_validate_ram():
-    if ARGS.devstation:
-        return DEFAULT_RAM_DEV_STATION
+    if ARGS.ram:
+        return int(ARGS.ram)
     else:
-        return DEFAULT_RAM_NON_DEV_STATION
+        # user didn't supply, get default value depending on what
+        # type of VM this is.
+        if ARGS.devstation:
+            return DEFAULT_RAM_DEV_STATION
+        else:
+            return DEFAULT_RAM_NON_DEV_STATION
 
 '''
 Return an uncompressed Xcalar license.
@@ -3500,7 +3505,7 @@ if __name__ == "__main__":
         help="Basename to use for naming the new VM(s) (If creating a single VM, will name VMBASENAME, if multiple, will name them VMBASENAME-vm0, VMBASENAME-vm1, .., VMBASENAME-vm(n-1) )")
     parser.add_argument("--cores", type=int, default=DEFAULT_CORES,
         help="Number of cores per VM. (Defaults to {} cores)".format(DEFAULT_CORES))
-    parser.add_argument("--ram", type=int, #default=DEFAULT_RAM,
+    parser.add_argument("--ram", type=int, # DO NOT SUPPLY A DEFAULT VALUE HERE IT WILL MESS THINGS UP.
         help="RAM on VM(s) (in GB).  (Defaults to {} for dev machines; {} for all others)".format(DEFAULT_RAM_DEV_STATION, DEFAULT_RAM_NON_DEV_STATION))
     parser.add_argument("--nocluster", action='store_true',
         help="Do not create a Xcalar cluster of the new VMs.")
