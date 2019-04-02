@@ -119,6 +119,7 @@ while [[ $# -gt 0 ]]; do
         --release|-r) RELEASE="$1"; shift;;
         --version|-v) VERSION="$1"; shift;;
         --build-id) BUILD_ID="$1"; shift;;
+        --
         --dryrun|--dry-run|-n) DRY=true;;
         --find-ami) FIND_AMI=true;;
         --force) FORCE=true;;
@@ -165,7 +166,7 @@ cat > $DIR/vars/deploy.yaml <<EOF
 VERSION: '$VERSION'
 PROJECT: '$PROJECT'
 RELEASE: '$RELEASE'
-bootstrapUrl: "$BOOTSTRAP_URL"
+bootstrapUrl: '$BOOTSTRAP_URL'
 EOF
 
 for J2TEMPLATE in "$DIR"/*.template.j2; do

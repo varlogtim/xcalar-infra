@@ -76,7 +76,7 @@ Parameters:
     MaxLength: '2047'
     ConstraintDescription: Location of the bootstrap script. For example, https://s3.amazonaws.com/xcrepoe1/cfn/prod/v2/scripts/user-data.sh
     Type: String
-    Default: {{ bootstrapUrl }}
+    Default: '{{ bootstrapUrl }}'
   CustomScriptUrl:
     MaxLength: '2047'
     ConstraintDescription: Optional. Location of a custom script to run after bootstrap.
@@ -207,9 +207,9 @@ Mappings:
     AMI:
       AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20180811-x86_64-gp2
     us-east-1:
-      AMZN1HVM: {{ ami_us_east_1 }}
+      AMZN1HVM: '{{ ami_us_east_1 }}'
     us-west-2:
-      AMZN1HVM: {{ ami_us_west_2 }}
+      AMZN1HVM: '{{ ami_us_west_2 }}'
 Resources:
   S3Bucket:
     Type: AWS::S3::Bucket

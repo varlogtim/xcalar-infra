@@ -47,7 +47,14 @@ job "jenkins2" {
         name = "${NOMAD_JOB_NAME}"
         port = "http"
 
-        tags = ["http", "urlprefix-${NOMAD_JOB_NAME}.service.consul:9999/", "urlprefix-${NOMAD_JOB_NAME}.nomad:9999/", "urlprefix-${NOMAD_JOB_NAME}.int.xcalar.com:9999/", "urlprefix-${NOMAD_JOB_NAME}:9999/"]
+        tags = [
+          "http",
+          "urlprefix-${NOMAD_JOB_NAME}.service.consul:9999/",
+          "urlprefix-${NOMAD_JOB_NAME}.nomad:9999/",
+          "urlprefix-${NOMAD_JOB_NAME}.service.consul:443/",
+          "urlprefix-${NOMAD_JOB_NAME}.int.xcalar.com:443/",
+          "urlprefix-${NOMAD_JOB_NAME}.int.xcalar.com:9999/",
+        ]
 
         check {
           name     = "http port is alive"
@@ -61,7 +68,7 @@ job "jenkins2" {
         name = "${NOMAD_JOB_NAME}-ssh"
         port = "ssh"
 
-        tags = ["ssh"] #, "urlprefix-:22022 proto=tcp"]
+        tags = ["ssh", "urlprefix-${NOMAD_JOB_NAME}-ssh:22022 proto=tcp"]
 
         check {
           name     = "alive"

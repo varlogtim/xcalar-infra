@@ -29,8 +29,8 @@ job "vsphere-prom" {
       }
 
       resources {
-        memory = 256
-        cpu    = 800
+        memory = 512
+        cpu    = 1000
 
         network {
           port "scrape" {

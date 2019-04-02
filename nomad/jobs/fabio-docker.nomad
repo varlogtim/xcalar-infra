@@ -34,21 +34,28 @@ job "fabio" {
       template {
         data = <<EOT
 registry.consul.addr = {{ env "NOMAD_IP_lb" }}:8500
+proxy.cs = cs=vault-pki;type=vault-pki;cert=xcalar_ca/issue/int-xcalar-com;refresh=24h
+proxy.addr = :{{ env "NOMAD_PORT_lb" }},:{{ env "NOMAD_PORT_ssl" }};cs=vault-pki;tlsmin=tls12;tlsmax=tls12
 
-proxy.cs = cs=vaultcs;type=vault-pki;cert=xcalar_ca/issue/int-xcalar-com
-
-proxy.addr = :{{ env "NOMAD_PORT_ssl" }};cs=vaultcs,\
-             :{{ env "NOMAD_PORT_lb" }};proto=http
+#registry.consul.register.enabled = false
 EOT
 
         destination = "local/fabio.properties"
         change_mode = "restart"
       }
 
+      #      template {
+      #        data = <<EOT
+      #            VAULT_TOKEN={{ env "VAULT_TOKEN" }}
+      #EOT
+      #
+      #        destination = "local/vault_token.env"
+      #        change_mode = "noop"
+      #      }
+
       env {
         VAULT_ADDR = "https://vault.service.consul:8200"
       }
-
       resources {
         cpu    = 500
         memory = 250

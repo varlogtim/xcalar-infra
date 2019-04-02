@@ -331,6 +331,12 @@ with_lock() {
     destroy_session "${session_id}"
 }
 
+tmpdir_with_cleanup() {
+    export TMPDIR="$(mktemp -d -t "${1:-${BASH_SOURCE[0]}}.XXXXXX")"
+    trap "rm -rf $TMPDIR" EXIT
+}
+
+
 ##
 ## Docker registry API
 ##

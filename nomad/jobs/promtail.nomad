@@ -39,8 +39,8 @@ job "promtail" {
           }
         }
 
-        cpu    = 1000
-        memory = 512
+        cpu    = 1800
+        memory = 32
       }
 
       template {

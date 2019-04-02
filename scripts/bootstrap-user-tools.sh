@@ -2,6 +2,8 @@
 #
 # Installs common packages as static binaries into ~/.local
 # to allow for portable container "dev environments"
+#
+# shellcheck disable=SC2086,SC2046,SC2015
 
 BASE_URL="${BASE_URL:-http://repo.xcalar.net/deps}"
 
@@ -38,6 +40,7 @@ app_install() {
     version="${VERSIONS[$prog]}"
     url="$(eval echo ${URLS[$prog]})"
     app_prefix=${PREFIX}/apps/${prog}-${version}
+
     mkdir -p "$app_prefix"
     echo >&2 " ==> Installing $1 ($version) from $url"
     install_${prog}
@@ -79,9 +82,23 @@ install_nvim() {
     ln -sfn ../.vimrc $HOME/.vim/init.vim
 
     ln_r $app_prefix/bin/nvim $PREFIX/bin/
-    ln -sfn nvim $PREFIX/bin/vim
-    ln -sfn nvim $PREFIX/bin/vi
-    echo -e 'exec nvim -d "$@"' > $PREFIX/bin/vimdiff
+    cat > $PREFIX/bin/vim <<'VEOF'
+#!/bin/bash
+DIR="$(cd $(dirname $(readlink -f ${BASH_SOURCE[0]})) && pwd)"
+if ldd "$DIR"/nvim 2>&1 | grep -q 'not found'; then
+    if test -x /usr/bin/vim; then
+        exec /usr/bin/vim "$@"
+    fi
+    if test -x /usr/bin/vi; then
+        exec /usr/bin/vi "$@"
+    fi
+fi
+exec nvim "$@"
+VEOF
+    chmod +x $PREFIX/bin/vim
+    ln -sfn vim $PREFIX/bin/vi
+
+    echo -e 'exec vim -d "$@"' > $PREFIX/bin/vimdiff
     chmod +x $PREFIX/bin/vimdiff
 }
 

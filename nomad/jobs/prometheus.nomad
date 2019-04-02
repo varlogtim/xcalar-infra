@@ -80,7 +80,9 @@ job "prometheus" {
         }
 
         volumes = [
+          #"/netstore/infra/grafana-ui/nomad/tmp:/tmp/grafana",
           "/netstore/infra/grafana-ui/nomad/var/lib/grafana:/var/lib/grafana",
+
           "/netstore/infra/grafana-ui/nomad/etc/grafana:/etc/grafana",
         ]
       }
@@ -98,7 +100,12 @@ job "prometheus" {
         name = "grafana-ui"
         port = "grafana_ui"
 
-        tags = ["urlprefix-grafana-ui.nomad:9999/", "urlprefix-grafana-ui.service.consul:9999/"]
+        tags = [
+          "urlprefix-grafana-ui.nomad:9999/",
+          "urlprefix-grafana-ui.service.consul:9999/",
+          "urlprefix-grafana.service.consul:443/",
+          "urlprefix-grafana.int.xcalar.com:443/",
+        ]
 
         check {
           name     = "grafana_ui port alive"
@@ -142,7 +149,13 @@ job "prometheus" {
       service {
         name = "pushgateway-ui"
         port = "pushgateway_ui"
-        tags = ["urlprefix-pushgateway-ui.nomad:9999/", "urlprefix-pushgateway-ui.service.consul:9999/"]
+
+        tags = [
+          "urlprefix-pushgateway-ui.nomad:9999/",
+          "urlprefix-pushgateway-ui.service.consul:9999/",
+          "urlprefix-pushgateway.service.consul:9999/",
+          "urlprefix-pushgateway.service.consul:443/",
+        ]
 
         check {
           name     = "pushgateway_ui port alive"
@@ -182,7 +195,13 @@ job "prometheus" {
       service {
         name = "prometheus-ui"
         port = "prometheus_ui"
-        tags = ["urlprefix-prometheus-ui.nomad:9999/", "urlprefix-prometheus-ui.service.consul:9999/"]
+
+        tags = [
+          "urlprefix-prometheus-ui.service.consul:9999/",
+          "urlprefix-prometheus-ui.nomad:9999/",
+          "urlprefix-prometheus.service.consul:443/",
+          "urlprefix-prometheus.int.xcalar.com:443/",
+        ]
 
         check {
           name     = "prometheus_ui port alive"
