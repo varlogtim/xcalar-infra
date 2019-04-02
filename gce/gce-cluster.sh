@@ -203,18 +203,18 @@ fi
 
 say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
 set -x
-gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}"
+gcloud compute disks create "${SWAP_DISKS[@]}" --size=${SWAP_SIZE}GB  --type=pd-ssd --zone=$CLOUDSDK_COMPUTE_ZONE
 res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
 fi
-gcloud compute disks create --size=${SERDES_SIZE}GB --type=pd-ssd "${SERDES_DISKS[@]}"
+gcloud compute disks create "${SERDES_DISKS[@]}" --size=${SERDES_SIZE}GB --type=pd-ssd --zone=$CLOUDSDK_COMPUTE_ZONE
 res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
 fi
 if [ $DATA_SIZE -gt 0 ]; then
-    gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
+    gcloud compute disks create "${DATA_DISKS[@]}" --size=${DATA_SIZE}GB --type=pd-ssd --zone=$CLOUDSDK_COMPUTE_ZONE
 fi
 
 gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
