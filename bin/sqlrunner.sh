@@ -171,9 +171,8 @@ installDeps() {
     rcmd sudo mkdir -p "$imdTestDir"
     rcmd sudo chmod a+rwx "$imdTestDir"
     gcloud compute scp "$XLRDIR/src/sqldf/tests/test_jdbc.py" "$clusterLeadName:$optRemotePwd"
-    gcloud compute scp "$XLRGUIDIR/assets/test/json/SQLTest.json" "$clusterLeadName:$optRemotePwd"
-    gcloud compute scp "$XLRGUIDIR/assets/test/json/SQLTestTPCDS.json" "$clusterLeadName:$optRemotePwd"
-    gcloud compute scp "$XLRDIR/src/sqldf/tests/IMDTest/IMDTestPlan.json" "$clusterLeadName:$imdTestDir"
+    gcloud compute scp "$XLRGUIDIR/assets/test/json/"*.json "$clusterLeadName:$optRemotePwd"
+    gcloud compute scp "$XLRDIR/src/sqldf/tests/IMDTest/"*.json "$clusterLeadName:$imdTestDir"
     gcloud compute scp "$XLRDIR/src/sqldf/tests/IMDTest/loadData.py" "$clusterLeadName:$imdTestDir"
 
     gcloud compute scp "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" "$clusterLeadName:/tmp"
