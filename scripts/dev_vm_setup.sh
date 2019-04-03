@@ -113,6 +113,7 @@ fi
 # set git config
 git config --global user.name "$gerrit_username"
 git config --global user.email "$xcalar_email"
+git config --global include.path "$XLRDIR"/doc/env/dot_gitconfig
 
 #### SETUP STANDARD BASH ENV ####
 #### (this will put VM user in xcve in each new shell) ###
@@ -198,11 +199,19 @@ sudo ln -s "$XLRGUIDIR"/xcalar-gui/ /var/www/xcalar-gui >/dev/null 2>&1 || true 
 echo "Install libs needed for gerrit reviews" >&2
 pip install -U git-review
 
+### GDB CONFIGURATION ###
+ln -sfn "$XLRDIR"/.gdbinit "$HOME"/.gdbinit
+
+### JUPYTER CONFIGURATION ###
+ln -sfn "$XLRGUIDIR"/assets/jupyter/jupyter "$HOME"/.jupyter
+ln -sfn "$XLRGUIDIR"/assets/jupyter/ipython "$HOME"/.ipython
+mkdir -p "$HOME"/jupyterNotebooks
+
 ### BUILD PROJECTS IF REQUESTED! ###
 
 if [ "$launch_xd_at_end" == "true" ]; then
     echo "Building xcalar backend..." >&2
-    cd $XLRDIR && xcsetenv && git submodule update && cmBuild clean && cmBuild config debug && cmBuild
+    cd $XLRDIR && xcsetenv && git submodule update && cmBuild clean && cmBuild config debug && cmBuild xce
     echo "done"
 
     echo "Building xcalar frontend..." >&2
