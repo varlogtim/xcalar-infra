@@ -76,7 +76,7 @@ class grDump(object):
             # Error rows are likely due to either a known bug in libunwind or
             # GuardRail's current naughty use of SIGUSR2.  They are rare enough
             # it shouldn't really matter for leak tracking purposes...
-            print "Skipped %d erroneous leak record" % skipped
+            print("Skipped %d erroneous leak record" % skipped)
 
 
     def printLeaks(self):
