@@ -251,7 +251,7 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
 
         if [ $anyfailed -eq 1 ]; then
             # copy out the usrnode binary and retinas
-            now=$(date +"%T")
+            now=$(date +"%Y%m%d_%H%M%S")
             filepath="`pwd`/usrnode.$now"
             retinapath="`pwd`/retina.$now"
             exportpath="`pwd`/export.$now"
