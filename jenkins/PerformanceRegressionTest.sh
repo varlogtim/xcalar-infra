@@ -4,6 +4,11 @@ source doc/env/xc_aliases
 
 trap '(xclean; kill $(jobs -p)) || true' SIGINT SIGTERM EXIT
 
+if [ "$JOB_NAME" != "" ]; then
+    # Don't fail on delayed cluster start
+    export TIME_TO_WAIT_FOR_CLUSTER_START="${TIME_TO_WAIT_FOR_CLUSTER_START:-99999}"
+fi
+
 # Build xcalar-gui so that expServer will run
 export XLRGUIDIR=$PWD/xcalar-gui
 (cd $XLRGUIDIR && make dev)
