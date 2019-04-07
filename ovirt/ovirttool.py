@@ -138,7 +138,7 @@ LDAP_CONFIGS = {
 # that could be set via cmd params?  Right now, it's just 1-1
 OVIRT_TEMPLATE_MAPPING = {
     'dev': [
-        ('ceph-osd1-cluster', 'jenkins-slave-el7-template-20190301-osd1')
+        ('ceph-osd1-cluster', 'jenkins-slave-el7-template-20190301-osd1'),
         ('ceph-osd3-dc', 'jenkins-slave-el7-template-20190301-osd3', True),
         ('ovirt-node-03-cluster','el7-test-template-node-03-1'),
         ('einstein-cluster2', 'ovirt-tool-einstein-updated'),
