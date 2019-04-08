@@ -1,4 +1,4 @@
-xcalar.com. 600 IN A 107.180.41.39
+xcalar.com. 3600 IN A 35.230.47.230
 xcalar.com. 300 IN MX 5 alt1.aspmx.l.google.com.
 xcalar.com. 300 IN MX 5 alt2.aspmx.l.google.com.
 xcalar.com. 300 IN MX 1 aspmx.l.google.com.
@@ -17,8 +17,10 @@ xcalar.com. 3600 IN TXT "google-site-verification=Kkbg8LcviBFSrsBrf0pod65Exrn3eH
 xcalar.com. 3600 IN TXT "google-site-verification=Sd1qZjZZROcnhg1-1Uz4OCGewhMP0NdBIgP2TTxPIq0"
 xcalar.com. 3600 IN TXT "google-site-verification=bpPuHs9cKSbfMOKOBP3TZ_shm_fsctP71tlQW4wmqYA"
 xcalar.com. 3600 IN TXT "keybase-site-verification=x74ZX4GA0Y2iP4LBqGAfgA_MQIfVaRXFET07eFFthvw"
-*.xcalar.com. 600 IN A 130.211.225.110
-_acme-challange.xcalar.com. 120 IN TXT "j-zFyTyWg_8H6BqH_yxmrYHA8ZeiwMUTsLfNdnNw9yU"
+3wpoc.xcalar.com. 300 IN NS ns-156.awsdns-19.com.
+3wpoc.xcalar.com. 300 IN NS ns-1880.awsdns-43.co.uk.
+3wpoc.xcalar.com. 300 IN NS ns-722.awsdns-26.net.
+3wpoc.xcalar.com. 300 IN NS ns-1047.awsdns-02.org.
 _amazonses.xcalar.com. 3600 IN TXT "Qj2CV+YtUddrQ0CBSNVhr7sUaEpbH7nhrgGu9xKrr2s="
 _domainconnect.xcalar.com. 3600 IN CNAME _domainconnect.gd.domaincontrol.com.
 esiyawtav2qorljqmudqyugb6zkyvjag._domainkey.xcalar.com. 3600 IN CNAME esiyawtav2qorljqmudqyugb6zkyvjag.dkim.amazonses.com.
@@ -26,24 +28,38 @@ google._domainkey.xcalar.com. 3600 IN TXT "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQE
 kevpwac72gpntsbgmhchs6kzntvhjerd._domainkey.xcalar.com. 3600 IN CNAME kevpwac72gpntsbgmhchs6kzntvhjerd.dkim.amazonses.com.
 kj533n5vnlvyeguqrgimsamgwsf634lv._domainkey.xcalar.com. 3600 IN CNAME kj533n5vnlvyeguqrgimsamgwsf634lv.dkim.amazonses.com.
 xcalar._domainkey.xcalar.com. 1800 IN TXT "V=DKIM1; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCkEtWeLmpvXF+7EMHe9T4gSAaNZ3toeJiTfpFwMin7LlxIHbHhXwiLfBMjV8ZQDxUMqs41eKixTkoJ29y98B9/dbSfw/fO1BBSuj7POt7DgsxAfXk/271mQPGYh4zXwFb/TfqoOtUtn5NdtJeYrLZ3RywvctXkUYa3mrr1PyLTWwIDAQAB"
+_github-challenge-xcalar.xcalar.com. 300 IN TXT "c2c49b10f6"
 admin.xcalar.com. 600 IN A 107.180.41.39
 webdisk.admin.xcalar.com. 3600 IN CNAME xcalar.com.
 www.admin.xcalar.com. 3600 IN CNAME xcalar.com.
+adventure.xcalar.com. 300 IN A 107.180.41.39
 aws.xcalar.com. 3600 IN NS ns-1675.awsdns-17.co.uk.
+aws.xcalar.com. 3600 IN NS ns-1090.awsdns-08.org.
+aws.xcalar.com. 3600 IN NS ns-591.awsdns-09.net.
+aws.xcalar.com. 3600 IN NS ns-73.awsdns-09.com.
+us-west-2.aws.xcalar.com. 300 IN NS ns-175.awsdns-21.com.
+us-west-2.aws.xcalar.com. 300 IN NS ns-885.awsdns-46.net.
+us-west-2.aws.xcalar.com. 300 IN NS ns-1124.awsdns-12.org.
+us-west-2.aws.xcalar.com. 300 IN NS ns-1629.awsdns-11.co.uk.
 azr.xcalar.com. 3600 IN NS ns1-06.azure-dns.com.
 azr.xcalar.com. 3600 IN NS ns2-06.azure-dns.net.
 blog.xcalar.com. 600 IN A 107.180.41.39
 blogs.xcalar.com. 600 IN A 107.180.41.39
+cdn.xcalar.com. 300 IN CNAME xcrepo.azureedge.net.
 citi.xcalar.com. 600 IN A 52.8.251.149
 clorox.xcalar.com. 300 IN A 52.8.161.75
-documentation.xcalar.com.xcalar.com. 600 IN A 107.180.41.39
 getstarted.xcalar.com.xcalar.com. 600 IN A 107.180.41.39
-support.xcalar.com.xcalar.com. 600 IN A 107.180.41.39
 cpanel.xcalar.com. 3600 IN CNAME xcalar.com.
 customer-upload.xcalar.com. 600 IN A 207.135.66.186
+dev.xcalar.com. 300 IN A 35.230.47.230
 discourse.xcalar.com. 60 IN A 52.183.89.233
-documentation.xcalar.com. 600 IN A 107.180.41.39
+_acme-challenge.discourse.xcalar.com. 30 IN TXT "JMIfkdDerETmmxJIco92H_vHwmXvgDUdDPahe6NlSVg"
+documentation.xcalar.com. 60 IN A 107.180.41.39
 dogfood.xcalar.com. 900 IN A 52.175.224.63
+events.xcalar.com. 300 IN NS ns-cloud-d1.googledomains.com.
+events.xcalar.com. 300 IN NS ns-cloud-d2.googledomains.com.
+events.xcalar.com. 300 IN NS ns-cloud-d3.googledomains.com.
+events.xcalar.com. 300 IN NS ns-cloud-d4.googledomains.com.
 ftp.xcalar.com. 300 IN CNAME xcalar.com.
 gce.xcalar.com. 3600 IN NS ns-cloud-d3.googledomains.com.
 gce.xcalar.com. 3600 IN NS ns-cloud-d1.googledomains.com.
@@ -56,7 +72,6 @@ jobs.xcalar.com. 3600 IN CNAME xcalar.com.
 license-api.xcalar.com. 600 IN CNAME x3xjvoyc6f.execute-api.us-west-2.amazonaws.com.
 livechat.xcalar.com. 900 IN CNAME xcalar-livechat.westus2.cloudapp.azure.com.
 mail.xcalar.com. 600 IN A 107.180.41.39
-<<<<<<< HEAD
 marketplace.xcalar.com. 600 IN A 104.198.211.142
 email.me.xcalar.com. 3600 IN CNAME mailgun.org.
 mg.xcalar.com. 3600 IN TXT "v=spf1 include:mailgun.org ~all"
@@ -65,15 +80,13 @@ email.mg.xcalar.com. 3600 IN CNAME mailgun.org.
 news.xcalar.com. 600 IN A 107.180.41.39
 products.xcalar.com. 600 IN A 107.180.41.39
 repo.xcalar.com. 3600 IN CNAME c.storage.googleapis.com.
-solutions.xcalar.com. 600 IN A 107.180.41.39
-support.xcalar.com. 600 IN A 107.180.41.39
-test1234.xcalar.com. 3600 IN A 3.3.3.3
+sales.xcalar.com. 300 IN NS ns1.sendinblue.com.
+sales.xcalar.com. 300 IN NS ns2.sendinblue.com.
+solutions.xcalar.com. 60 IN A 107.180.41.39
+support.xcalar.com. 60 IN A 107.180.41.39
 university.xcalar.com. 1800 IN A 104.154.244.26
 uploads.xcalar.com. 600 IN A 207.135.66.186
-university.xcalar.com. 300 IN A 104.154.244.26
 vpn.xcalar.com. 600 IN A 207.135.66.186
-webdisk.xcalar.com. 3600 IN CNAME xcalar.com.
-wells-student-01-1.xcalar.com. 1800 IN A 35.188.44.174
-wells-student-02-1.xcalar.com. 1800 IN A 104.197.77.63
-whm.xcalar.com. 3600 IN CNAME xcalar.com.
-www.xcalar.com. 3600 IN CNAME xcalar.com.
+webdisk.xcalar.com. 60 IN CNAME xcalar.com.
+whm.xcalar.com. 60 IN CNAME xcalar.com.
+www.xcalar.com. 60 IN CNAME xcalar.com.
