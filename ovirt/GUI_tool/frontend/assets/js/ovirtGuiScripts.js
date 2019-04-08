@@ -39,6 +39,10 @@ var SING_PLURAL_STRS = {
         0: "Please enter a name for your VM.",
         1: "Please enter a name for your VMs."
     },
+    'dev-machine-label': {
+        0: "This will be a dev machine.",
+        1: "These will be dev machines."
+    },
     'install-type-none-label': {
         0: "I don't want to install Xcalar on this VM.",
         1: "I don't want to install Xcalar on these VMs."
@@ -132,6 +136,8 @@ $( document ).ready(function() {
     $scheduleButton = $("#schedule-button");
     $loginMsgDiv = $("#login-msg");
     $scheduleMsgDiv = $("#schedule-msg");
+    $devMachineCheckbox = $("#dev-machine-check");
+    $installOptionsSection = $("#install-section-wrap");
     $userInstallerOptionSection = $("#my-installer-wrap");
     $userInstallerInput = $("#own-installer");
     $rcInstallerOptionSection = $("#rc-installer-wrap");
@@ -151,6 +157,17 @@ $( document ).ready(function() {
     $('.tooltipped').tooltip({delay: 50});
 
     // setup event handlers
+
+    // Xcalar installs only possible on non-dev machines;
+    // if user toggles option for creating dev machine, unhide
+    // the installation options.
+    $devMachineCheckbox.change(function() {
+        if (isDevStation()) {
+            $installOptionsSection.hide();
+        } else {
+            $installOptionsSection.show();
+        }
+    });
 
     // if user selects a radio button for installer type,
     // hide/show child divs appropriately
@@ -607,22 +624,44 @@ function tryLogin() {
  */ /////////////////////////
 
 /**
- * returns hash with data regarding currently selected installer:
+ * returns hash with data regarding install that will be done
+ * (or if no install will be done.)
  * {
- *    'type': <OWN|STABLE|NO|RC> (installer type selected)
- *    'path': <path to installer for selection>
- *    'url': <url for path>,
+ *    'type': <OWN|STABLE|NO|RC>, # installer type selected; NO covers ALL non-install scenarios, such as devstation, independent of installer radio buttons)
+ *    'path': <path to installer for selection> # if there's goin to be an install
+ *    'url': <url for path>, # if there's going to be an install
  *    'element': <jQuery input element, for the selected, which you'd want to fail if path doesn't validate>
  * }
  *
- * - if no installer type selected, returns undefined
- * - if installer type is selected, but it's selected NO (don't install), returns:
- *    {'type': NO} (nothing else in hash)
+ * This method will get as much data as it can, and return;
+ * it does not validate that in an install scenario, a user has
+ * filled in all needed info (ex: they selected OWN for installer radio button,
+ * but haven't filled in the field where they specify what installer.  Will still
+ * return, just leaving 'ur' and 'path' blank; another function should validate
+ * these things.
+ *
+ * - if non-install scenario (i.e., devstation, or NO selected in installer radio),
+ *   return {'type': NO} (nothing else in hash)
+ * - if install scenario, but no installer radio button is selected,
+ *    returns undefined
  * - if one of the other installer types taking input is selected, but no input yet given,
+ *   leaves those entries blank but still returns.  So check entries returned are valid.
  */
 function getInstallerData() {
     var els = {};
     console.log("Get Installer Elements");
+
+    function nonInstallScenario() {
+        console.log("User won't installer Xcalar - installer verified by default");
+        els['type'] = NO;
+        return els;
+    }
+
+    // dev stations won't have any installation done
+    if (isDevStation()) {
+        return nonInstallScenario();
+    }
+
     var installTypeSelected = getSelectedInstallerType();
     if (typeof installTypeSelected === 'undefined') {
         // they've not yet selected, let natural form error go through
@@ -655,9 +694,7 @@ function getInstallerData() {
             console.log("path: " + rawInstallerPath);
             els['type'] = RC;
         } else if (installTypeSelected === NO) {
-            console.log("User won't installer Xcalar - installer verified by default");
-            els['type'] = NO;
-            return els;
+            return nonInstallScenario();
         } else {
             // none of the expected options.
             throw "Installer elements can't be identified";
@@ -1114,9 +1151,11 @@ function scheduleSubmit() {
  * Note - it does NOT validate the params - only checks they are actually defined, and
  * not empty where required. (i.e., if noXcalar is False, make sure installer is defined, else doesn't matter
  */
-function checkForMissingJenkinsParams(vmbasename="", num="", ram="", cores="", installer="", noXcalar="", formCluster="", emailList="") {
+function checkForMissingJenkinsParams(vmbasename="", num="", devMachine="",
+    ram="", cores="",
+    installer="", noXcalar="", formCluster="", emailList="") {
 
-    var mustHave = [vmbasename, num, ram, cores, emailList];
+    var mustHave = [vmbasename, num, devMachine, ram, cores, emailList];
     for (var avar of mustHave) {
         console.log("check avar: "+ avar);
         if (isEmptyOrUndefined(avar)) {
@@ -1126,7 +1165,7 @@ function checkForMissingJenkinsParams(vmbasename="", num="", ram="", cores="", i
         }
     }
     // vals that must be true/false
-    var bools = [noXcalar, formCluster];
+    var bools = [noXcalar, formCluster, devMachine];
     for (var bool of bools) {
         if (typeof bool !== "boolean") {
             var errMsg = "one of the boolean variables is not a boolean";
@@ -1146,6 +1185,15 @@ function checkForMissingJenkinsParams(vmbasename="", num="", ram="", cores="", i
     return true;
 }
 
+function isDevStation() {
+    var devMachine = $devMachineCheckbox.prop('checked');
+    if (devMachine) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 /**
  * Resolves w/ the hash required by 'triggerJenkins'
  * function (the function which will trigger the Ovirt Jenkins job.),
@@ -1163,83 +1211,86 @@ function getValidatedParamsForJenkinsJob() {
     var numVms = $("option:selected", $numVmsDropdown).text();
     var numRams = $("option:selected", $numRamDropdown).val(); // text will have GB in it
     var numCores = $("option:selected", $numCoresDropdown).text();
+    var formCluster = $clusterCheckbox.prop('checked'); // returns True/False boolean if checked or not
+    var devMachine = isDevStation();
+    var emailList = getEmailList();
     var installerElements = getInstallerData();
     if (typeof installerElements === 'undefined') {
-        console.log("install type hasn't been selected yet; don't continue");
-        deferred.reject("install type hasn't been selected yet");
+        console.log("Can't gather any data on install; don't continue");
+        deferred.reject("install data can not be determined or validated (even non-install scenario)");
     } else {
-    var installerUrl = installerElements['url'];
-    var installerElementToFail = installerElements['element'];
-    var installType = installerElements['type'];
-    var noXcalar = false;
-    if (installType === NO) {
-    // if no install option was selected, this function will return undefined
-    //if (typeof installerUrl === 'undefined') {
-        noXcalar = true;
-    }
-    var formCluster = $clusterCheckbox.prop('checked'); // returns True/False boolean if checked or not
-    var emailList = getEmailList();
-
-    try {
-        // throws err if any of the params/param combinations are missing
-        checkForMissingJenkinsParams(vmbasename=vmbasename, num=numVms,
-            ram=numRams, cores=numCores, installer=installerUrl,
-            noXcalar=noXcalar, formCluster=formCluster, emailList=emailList);
-
-        // validate email list (will send back array of all, including default emails)
-        var validatedNotifyList = getValidatedNotifyList();
-        if (validatedNotifyList) {
-            // validate individual dynamic input fields
-            // ** call wrapper functions of these which fail the divs if validation
-            // fails, since rejects go to a common fail block and need to update
-            // different divs depending on what's being validated
-            validateVmbasenameInputField()
-            .then(function(res) {
-                // if there is an URL to validate
-                if (typeof installerUrl !== 'undefined' && installerUrl !== "") {
-                    // note: installerElementToFail will be undefined, even when installerURL
-                    // is defined, if the URL was generated internally (i.e., latset stable prod)
-                    // rather than collected by user input.
-                    return fieldValidateInstallerData(installerUrl, installerElementToFail);
-                } else {
-                    return dummyPass();
-                }
-            })
-            .then(function(res) {
-                // great everything is here!
-                // send it off
-                // remember - the point of this function ,is to return EXACTLY THE HASH
-                // that 'triggerJenkins' function consumes.  So if you change any params here, you would need to update that function too!
-                // see function doc of 'triggerJenkins' to see what param keys should be
-                var jenkins_job = {
-                    'VMBASENAME': vmbasename,
-                    'COUNT': numVms,
-                    'RPM_INSTALLER_URL': installerUrl,
-                    'RAM': numRams,
-                    'CORES': numCores,
-                    'no_xcalar': noXcalar,
-                    'form_cluster': formCluster,
-                    'ovirtuser': JENKINS_USER, // Jenkins and Ovirt login are same, use the Jenkins login they provided
-                    'ovirtpass': JENKINS_PASS,
-                    'NOTIFY_LIST': validatedNotifyList
-                };
-                deferred.resolve(jenkins_job);
-            })
-            .fail(function(err) {
-                // right now do nothing to DOM on failure - just console.  Else we'll suppress form errors.
-                console.log("Failed to get param hash for 'triggerJenkins': Reason:");
-                console.log(err);
-                deferred.reject(err);
-            });
-        } else {
-            console.log("failed to validate email list");
-            deferred.reject("falied to validate email list");
+        var installerUrl = installerElements['url'];
+        var installerElementToFail = installerElements['element'];
+        var installType = installerElements['type'];
+        var noXcalar = false;
+        if (installType === NO) {
+            // if no install option was selected, this function will return undefined
+            //if (typeof installerUrl === 'undefined') {
+            noXcalar = true;
         }
-    } catch (e) {
-        // there was an issue - some of the params must not be filled in yet.
-        console.log(e);
-        deferred.reject(e);
-    };
+
+        try {
+            // throws err if any of the params/param combinations are missing
+            checkForMissingJenkinsParams(vmbasename=vmbasename, num=numVms,
+                devMachine=devMachine,
+                ram=numRams, cores=numCores, installer=installerUrl,
+                noXcalar=noXcalar, formCluster=formCluster, emailList=emailList);
+
+            // validate email list (will send back array of all, including default emails)
+            var validatedNotifyList = getValidatedNotifyList();
+            if (validatedNotifyList) {
+                // validate individual dynamic input fields
+                // ** call wrapper functions of these which fail the divs if validation
+                // fails, since rejects go to a common fail block and need to update
+                // different divs depending on what's being validated
+                validateVmbasenameInputField()
+                .then(function(res) {
+                    // if there is an URL to validate
+                    if (typeof installerUrl !== 'undefined' && installerUrl !== "") {
+                        // note: installerElementToFail will be undefined, even when installerURL
+                        // is defined, if the URL was generated internally (i.e., latset stable prod)
+                        // rather than collected by user input.
+                    return fieldValidateInstallerData(installerUrl, installerElementToFail);
+                    } else {
+                        return dummyPass();
+                    }
+                })
+                .then(function(res) {
+                    // great everything is here!
+                    // send it off
+                    // remember - the point of this function ,is to return EXACTLY THE HASH
+                    // that 'triggerJenkins' function consumes.  So if you change any params here, you would need to update that function too!
+                    // see function doc of 'triggerJenkins' to see what param keys should be
+                    var jenkins_job = {
+                        'VMBASENAME': vmbasename,
+                        'COUNT': numVms,
+                        'RPM_INSTALLER_URL': installerUrl,
+                        'RAM': numRams,
+                        'CORES': numCores,
+                        'no_xcalar': noXcalar,
+                        'form_cluster': formCluster,
+                        'dev_station': devMachine,
+                        'ovirtuser': JENKINS_USER, // Jenkins and Ovirt login are same, use the Jenkins login they provided
+                        'ovirtpass': JENKINS_PASS,
+                        'NOTIFY_LIST': validatedNotifyList
+                    };
+                    deferred.resolve(jenkins_job);
+                })
+                .fail(function(err) {
+                    // right now do nothing to DOM on failure - just console.  Else we'll suppress form errors.
+                    console.log("Failed to get param hash for 'triggerJenkins': Reason:");
+                    console.log(err);
+                    deferred.reject(err);
+                });
+            } else {
+                console.log("failed to validate email list");
+                deferred.reject("falied to validate email list");
+            }
+        } catch (e) {
+            // there was an issue - some of the params must not be filled in yet.
+            console.log(e);
+            deferred.reject(e);
+        };
     }
     return deferred.promise();
 }
@@ -1321,7 +1372,7 @@ function triggerJenkins(params) {
          * and we're out of sync with  getValidatedParamsForJenkinsJob
          */
         var paramsReqForJob = ['VMBASENAME', 'COUNT', 'RPM_INSTALLER_URL',
-                'RAM', 'CORES', 'no_xcalar', 'form_cluster',
+                'RAM', 'CORES', 'no_xcalar', 'form_cluster', 'dev_station',
                 'ovirtuser', 'ovirtpass', 'NOTIFY_LIST'];
         var jobParams = {};
         var missingParams = [];
