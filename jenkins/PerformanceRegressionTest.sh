@@ -6,8 +6,17 @@ trap '(xclean; kill $(jobs -p)) || true' SIGINT SIGTERM EXIT
 
 if [ "$JOB_NAME" != "" ]; then
     # Tolerate slow cluster start.
-    export TIME_TO_WAIT_FOR_CLUSTER_START="${TIME_TO_WAIT_FOR_CLUSTER_START:1000}"
+    export TIME_TO_WAIT_FOR_CLUSTER_START="${TIME_TO_WAIT_FOR_CLUSTER_START:-1000}"
 fi
+
+# disable cgroups
+# XXX SDK-433 Disabling cgroup as this test is using
+# dev environment to do performance tests. The machine
+# this test is running is not a setup as dev environment.
+# Disabling cgroups, until the test is properly designed
+# to run on a proper dev environment it needs
+export XCE_CONFIG=$XLRDIR/src/data/test.cfg
+echo "Constants.Cgroups=false" | tee -a $XCE_CONFIG
 
 # Build xcalar-gui so that expServer will run
 export XLRGUIDIR=$PWD/xcalar-gui
