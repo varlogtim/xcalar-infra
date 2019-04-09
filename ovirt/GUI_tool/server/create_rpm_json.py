@@ -8,15 +8,19 @@ args to script:
  3rd arg (optional): regex to filter collected dirs by
 
 usage:
-  python create_rpm_json_for_server BUILD_DIR OUTPUT_FILE [regex string]
+  python create_rpm_json.py BUILD_DIR OUTPUT_FILE [regex string]
 
 Example 1:
-  python create_rpm_json_for_server.py /netstore/builds/byJob/BuildTrunk my_json.json
   # entry for each BuildTrunk build (including symlinks)
+  python create_rpm_json.py.py /netstore/builds/byJob/BuildTrunk my_json.json
 
-Example 1:
-  python create_rpm_json_for_server /netstore/builds/ReleaseCandidates my_json.json ".*1\.4.*"
-  # json will only have entries for dirs in which have 1.4. in name (i.e., 1.4.* RC builds)
+Example 2:
+  # only entries for dirs in which have 1.4. in name (i.e., 1.4.* RC builds)
+  python create_rpm_json.py /netstore/builds/ReleaseCandidates my_json.json ".*1\.4.*"
+
+Example 3:
+  # entries for dirs with 1.4.1 or 2.0 in name
+  python create_rpm_json.py /netstore/builds/ReleaseCandidates my_json.json ".*(1\.4\.1|2\.0).*"
 
 (Built for consumption by Ovirt GUIs Flask server)
 '''
