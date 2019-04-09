@@ -600,20 +600,29 @@ EOF
 }
 
 aws_start_and_ssh() {
-    local curState rc dnsAddress
+    local dnsAddress
+    if ! dnsAddress=$(aws_start_and_dns "$@"); then
+        return 1
+    fi
+    ssh ec2-user@${dnsAddress}
+}
+
+aws_start_and_dns() {
+    local curState dnsAddress
     if ! curState=$(aws ec2 start-instances "$@" --query 'StartingInstances[0].CurrentState.Name'); then
         return 1
     fi
     if [ "$curState" != running ]; then
-        aws ec2 wait instance-running "$@"
-        rc=$?
-        [ $rc -eq 0 ] || return $rc
-        dnsAddress=$(aws ec2 describe-instances "$@" --query 'Reservations[].Instances[0].PublicDnsName' --output text)
-        rc=$?
-        [ $rc -eq 0 ] || return $rc
-        ssh ec2-user@${dnsAddress}
+        if ! aws ec2 wait instance-running "$@"; then
+            return 1
+        fi
     fi
+    if ! dnsAddress=$(aws ec2 describe-instances "$@" --query 'Reservations[].Instances[0].PublicDnsName' --output text); then
+        return 1
+    fi
+    echo ${dnsAddress}
 }
+
 
 aws_s3_undelete() {
     local bucket=$(aws_s3_bucket_from_s3url "$1")

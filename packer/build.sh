@@ -19,6 +19,8 @@ packer_do() {
         -var "build_number=$INSTALLER_BUILD_NUMBER" \
         -var "image_build_number=$IMAGE_BUILD_NUMBER" \
         -var "installer_url=$INSTALLER_URL" \
+        ${BUILD_URL+-var "build_url=$BUILD_URL"} \
+        ${JOB_URL+-var "job_url=$JOB_URL"} \
         ${USER_VARS+-var-file $USER_VARS} \
         ${VAR_FILE+-var-file $VAR_FILE} "$@"
 }
@@ -57,76 +59,86 @@ check_or_upload_installer() {
     fi
 }
 
-while [ $# -gt 0 ]; do
-    cmd="$1"
-    case "$cmd" in
-    --osid)
-        OSID="$2"
-        shift 2
-        ;;
-    --installer)
-        INSTALLER="$2"
-        shift 2
-        ;;
-    --installer-url)
-        INSTALLER_URL="$2"
-        shift 2
-        ;;
-    --template)
-        TEMPLATE="$2"
-        shift 2
-        ;;
-    --var-file)
-        VAR_FILE="$2"
-        shift 2
-        ;;
-    --)
-        shift
-        break
-        ;;
-    --*)
-        echo >&2 "ERROR: Unknown parameter $cmd"
-        exit 1
-        ;;
-    -*) break ;;
-    *) if test -e "$1"; then
-        TEMPLATE="$1"
-        shift
-       else
-         echo >&2 "ERROR: Don't understand $cmd ..."
-         exit 1
-       fi
-       ;;
-    esac
-done
+main() {
+    PROVIDER=aws
 
-TMPDIR=$(mktemp -d -t packerXXXXXX)
-trap 'rm -r $TMPDIR' EXIT
+    while [ $# -gt 0 ]; do
+        cmd="$1"
+        case "$cmd" in
+            --provider)
+                PROVIDER="$2"
+                shift 2
+                ;;
+            --osid)
+                OSID="$2"
+                shift 2
+                ;;
+            --installer)
+                INSTALLER="$2"
+                shift 2
+                ;;
+            --installer-url)
+                INSTALLER_URL="$2"
+                shift 2
+                ;;
+            --template)
+                TEMPLATE="$2"
+                shift 2
+                ;;
+            --var-file)
+                VAR_FILE="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            --*)
+                echo >&2 "ERROR: Unknown parameter $cmd"
+                exit 1
+                ;;
+            -*) break ;;
+            *)
+                if test -e "$1"; then
+                    TEMPLATE="$1"
+                    shift
+                else
+                    echo >&2 "ERROR: Don't understand $cmd ..."
+                    exit 1
+                fi
+                ;;
+        esac
+    done
 
-download_packer || exit 1
+    download_packer || exit 1
 
-if [ -n "$TEMPLATE" ]; then
-    if [[ $TEMPLATE =~ .yaml$ ]] || [[ $TEMPLATE =~ .yml$ ]]; then
-        cfn-flip < "$TEMPLATE" > $TMPDIR/template.json
-        TEMPLATE="$TMPDIR/template.json"
+    if [ -n "$TEMPLATE" ]; then
+        if [[ $TEMPLATE =~ .yaml$ ]]; then
+            JSON_TEMPLATE="${TEMPLATE%.yaml}".json
+            cfn-flip < "$TEMPLATE" > "$JSON_TEMPLATE"
+        fi
+        COMBINED_VARS_FILE="${JSON_TEMPLATE%.json}"-vars.json
+        cat $VAR_FILE vars/${OSID}.yaml vars/shared.yaml | cfn-flip > "$COMBINED_VARS_FILE"
+        set -- "$@" -var-file "$COMBINED_VARS_FILE" "$JSON_TEMPLATE"
     fi
-    cat $VAR_FILE  vars/${OSID}.yaml vars/shared.yaml | cfn-flip > $TMPDIR/vars.json
-    VAR_FILE=$TMPDIR/vars.json
-    set -- "$@" "$TEMPLATE"
-fi
 
-check_or_upload_installer
+    if [ -z "$INSTALLER_URL" ]; then
+        INSTALLER_URL="$(installer-url.sh -d s3 "$INSTALLER")"
+    fi
 
-IMAGE_BUILD_NUMBER=${IMAGE_BUILD_NUMBER:-1}
-PRODUCT="${PRODUCT:-xdp-standard}"
+    IMAGE_BUILD_NUMBER=${IMAGE_BUILD_NUMBER:-1}
+    PRODUCT="${PRODUCT:-xdp-standard}"
 
-INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
-INSTALLER_VERSION="${INSTALLER_VERSION_BUILD[0]}"
-INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
+    INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
+    INSTALLER_VERSION="${INSTALLER_VERSION_BUILD[0]}"
+    INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
 
-set +e
-if ! packer_do validate ${*/-color=*/} || ! packer_do build "$@"; then
-    trap - EXIT
-    echo "Failed! See $TMPDIR"
-    exit 1
-fi
+    set +e
+    if ! packer_do validate ${*/-color=*/} || ! packer_do build "$@"; then
+        trap - EXIT
+        echo "Failed! See $TMPDIR"
+        exit 1
+    fi
+}
+
+main "$@"

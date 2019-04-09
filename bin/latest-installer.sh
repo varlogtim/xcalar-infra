@@ -10,7 +10,7 @@ debug() {
 }
 
 latest_installer() {
-    local QUERY="ReleaseCandidates/xcalar-1.4.1/*/"
+    local QUERY="ReleaseCandidates/xcalar-*/*/"
     local BUILD_TYPE="prod"
     local BASE="/netstore/builds"
     local LATEST=true
@@ -38,7 +38,7 @@ latest_installer() {
     if $LATEST; then
         debug ls -t ${BASE}/${QUERY}/${BUILD_TYPE}/xcalar-*-installer | head -1
     else
-        debug ls -t ${BASE}/${QUERY}/*/${BUILD_TYPE}/xcalar-*-installer
+        debug ls -t ${BASE}/${QUERY}/${BUILD_TYPE}/xcalar-*-installer
     fi
 }
 

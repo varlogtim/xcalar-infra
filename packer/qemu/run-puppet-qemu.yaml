@@ -84,9 +84,9 @@ provisioners:
     source: "{{ template_dir }}/../scripts/cloud-init-nocloud.sh"
     destination: /tmp/scripts/
 
-  - type: file
-    source: "{{ template_dir }}/../scripts/repo.tar"
-    destination: /tmp/scripts/
+    #  - type: file
+    #source: "{{ template_dir }}/../scripts/repo.tar"
+    #destination: /tmp/scripts/
 
   - type: file
     source: "{{ template_dir }}/../scripts/centos-updates.sh"

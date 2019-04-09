@@ -19,6 +19,7 @@ variables:
   shared_with: '045297022527,043829555035,364047378361'
   version: '1.0'
   build_number: '1'
+  ssh_username: ec2-user
 builders:
   - type: amazon-ebs
     name: amazon-ebs-{{user `osid`}}
@@ -39,7 +40,7 @@ builders:
       most_recent: true
     instance_type: c5d.xlarge
     iam_instance_profile: ec2-default
-    ssh_username: ec2-user
+    ssh_username: '{{user `ssh_username`}}'
     ssh_pty: true
     ena_support: true
     ebs_optimized: true
@@ -47,15 +48,15 @@ builders:
     force_delete_snapshot: true
     shutdown_behavior: terminate
     ami_name: '{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `baseos` | upper}}'
+    ami_description: '{{user `product_desc`}} ({{user `osid` | upper}} {{user `version`}} {{user `build_number`}} ({{user `today`}})'
     snapshot_tags:
       Name: '{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `baseos` | upper}}'
       BaseOS: '{{user `baseos` | upper}}'
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'
-    ami_description: '{{user `product_desc`}} ({{user `osid` | upper}} {{user `version`}} {{user `build_number`}} ({{user `today`}})'
     tags:
-      Name: '{{user `desc` }} v{{user `version`}} {{user `build_number`}} {{user `baseos` | upper}}'
+      Name: 'v{{user `version`}} {{user `build_number`}} {{user `baseos` | upper}}'
       BaseOS: '{{user `baseos` | upper}}'
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
@@ -79,14 +80,14 @@ provisioners:
       - INSTALLER_URL={{user `installer_url`}}
     execute_command: '{{.Vars}} /usr/bin/sudo -E bash ''{{.Path}}'''
     scripts:
-      - scripts/start.sh
-      - scripts/install-epel.sh
-      - scripts/install-java8.sh
-      - scripts/packages-{{user `osid`}}.sh
-      - scripts/install-xcalar.sh
-      - scripts/fixup-jupyter.sh
+      - '{{ template_dir }}/../scripts/start.sh'
+      - '{{ template_dir }}/../scripts/install-epel.sh'
+      - '{{ template_dir }}/../scripts/install-java8.sh'
+      - '{{ template_dir }}/../scripts/packages-{{user `osid`}}.sh'
+      - '{{ template_dir }}/../scripts/install-xcalar.sh'
+      - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
   - type: file
-    source: scripts/genDefaultAdmin.sh
+    source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
     destination: /tmp/genDefaultAdmin.sh
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -E bash ''{{.Path}}'''
@@ -101,5 +102,5 @@ provisioners:
       - BUILD_TYPE={{build_type}}
     execute_command: '{{.Vars}} /usr/bin/sudo -E bash ''{{.Path}}'''
     scripts:
-      - scripts/finish.sh
+      - '{{ template_dir }}/../scripts/finish.sh'
 

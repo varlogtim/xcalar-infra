@@ -4,7 +4,8 @@ PUPPET_SRC ?= $(HOME)/puppet
 
 VPATH := $(shell pwd)
 
-PACKER_BUILD := /usr/local/bin/packer build -force -on-error=abort
+PACKER ?= packer
+PACKER_BUILD := $(PACKER) build -force -on-error=abort
 
 # We have to pass in an IP here because the host name doesn't
 # resolve inside the VM/container.

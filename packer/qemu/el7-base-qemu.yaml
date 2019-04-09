@@ -11,6 +11,7 @@ variables:
   iso_checksum_type: md5
   headless: "true"
   build_number: '7'
+  kickstart: ks7.cfg
 
 builders:
   - type: qemu
@@ -46,7 +47,7 @@ builders:
         - "mon:stdio"
     boot_wait: 5s
     boot_command:
-      - '<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks7.cfg<enter><wait>'
+      - '<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/{{user `kickstart`}}<enter><wait>'
 
 provisioners:
   - type: shell

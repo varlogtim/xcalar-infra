@@ -5,13 +5,20 @@
 set -ex
 
 export XLRINFRADIR=${XLRINFRADIR:-$PWD}
-export PATH=$XLRINFRADIR/bin:$PATH
+export PATH=$XLRINFRADIR/bin:/opt/xcalar/bin:$HOME/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin:$PATH
 export OUTDIR=${OUTDIR:-$PWD/output}
 
-test -e .venv || virtualenv .venv
-source .venv/bin/activate
-pip install -U cfn-flip
-pip install -U awscli
+if [ -n "$JENKINS_URL" ]; then
+    if [ -n "$REBUILD_VENV" ]; then
+        rm -rf .venv
+    fi
+    test -d ".venv" || python3 -m venv .venv
+    source .venv/bin/activate
+    python3 -m pip install -U pip
+
+    pip3 install -U cfn-flip
+    pip3 install -U awscli
+fi
 
 . infra-sh-lib
 . azure-sh-lib
@@ -31,11 +38,11 @@ do_packer() {
         exit 1
     fi
 
-    cd packer
+    cd $XLRINFRADIR/packer/aws
     #export INSTALLER_URL=$(installer-url.sh -d s3 $INSTALLER)
     #cfn-flip < $PACKERCONFIG > packer.json
 
-    bash -x build.sh --osid amzn1 --template $PACKERCONFIG --installer "$INSTALLER" -- -only=${BUILDER} -color=false 2>&1 | tee $OUTDIR/output.txt
+    bash -x ../build.sh --osid amzn1 --template $PACKERCONFIG --installer "$INSTALLER" -- -only=${BUILDER} -color=false 2>&1 | tee $OUTDIR/output.txt
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         exit 1
     fi

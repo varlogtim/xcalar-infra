@@ -162,12 +162,6 @@ Metadata:
         Parameters:
           - KeyName
       - Label:
-          default: Existing Resources
-        Parameters:
-          - ExistingShare
-          - ExistingMount
-          - ExistingVPC
-      - Label:
           default: Network configuration
         Parameters:
           - VpcId
@@ -190,6 +184,12 @@ Metadata:
           - CustomScriptUrl
           - Ec2RetryTagKey
           - Ec2RetryTagValue
+      - Label:
+          default: Advanced Options (Existing Resources)
+        Parameters:
+          - ExistingShare
+          - ExistingMount
+          - ExistingVPC
     ParameterLabels:
       InstallerUrl:
         default: 'XCE Installer Url:'

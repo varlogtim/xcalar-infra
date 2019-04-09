@@ -198,7 +198,7 @@ if $TESTING || test -f "$INSTALLER"; then
         SA_URI="gs"
         SA_ACCOUNT="${SA_ACCOUNT:-repo.xcalar.net}"
         ;;
-    s3)
+    aws|s3)
         SA_URI="s3"
         case "$AWS_DEFAULT_REGION" in
             us-east-1) SA_ACCOUNT="${SA_ACCOUNT:-xcrepoe1}";;
