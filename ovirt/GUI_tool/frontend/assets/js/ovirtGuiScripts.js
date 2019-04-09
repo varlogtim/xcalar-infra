@@ -370,9 +370,19 @@ function setRCList($dropDown) {
 
     var deferred = jQuery.Deferred();
     // get list of RC builds
-    //sendRequest("GET", SERVER_URL + "/flask/get-rc-list", {"regex": '.*1\.4.*'})
     // This api only accepts @POST, even if you don't want to pass any JSON data, keep it as @POST
-    sendRequest("POST", SERVER_URL + "/flask/get-rc-list", {"regex": '.*1\.4.*'})
+    //sendRequest("POST", SERVER_URL + "/flask/get-rc-list", {"regex": '.*1\.4.*'})
+    // FYI: when you call get-rc-list API, the server isn't determining things dynamically;
+    // it is reading the following file:
+    // <infra>/ovirt/GUI_tool/server/RCs.json  (it's a list of RC candidates and installers)
+    // and just sending back what it finds in that file.
+    // the optional "regex" param to the API allows you to filter results so you return only some of what's in that file.
+    // Taking the filter out of the js here, so that if you update the RCs.json file,
+    // what you update it to is what will end up coming in the dropdown here.
+    // But if you ever want to filter  what comes in the dropdown to less than
+    // what's in RCs.json, without having to
+    // change that file, you can do so when calling the API.  whatevers easiest folks..
+    sendRequest("POST", SERVER_URL + "/flask/get-rc-list")
     .then(function(res) {
         console.log(res);
         if (res.hasOwnProperty("rclist")) {
