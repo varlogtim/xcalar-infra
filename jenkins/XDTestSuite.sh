@@ -26,15 +26,17 @@ genBuildArtifacts() {
 
     taropts="--warning=no-file-changed --warning=no-file-ignored --use-compress-prog=pbzip2"
     PIDS=()
-    for dir in tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
+    dirList=(tmpdir /var/log/xcalar /var/opt/xcalar/kvs)
+    for dir in ${dirList[*]}; do
         if [ -d $dir ]; then
-            if [ "$dir" = "/var/log/xcalar" ]; then
-                tar -cf var_log_xcalar.tar.bz2 $taropts $dir > /dev/null 2>&1 &
-            elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
-                tar -cf xcalar_dataflows.tar.bz2 $taropts $dir > /dev/null 2>&1 &
-            else
-                tar -cf $dir.tar.bz2 $taropts $dir > /dev/null 2>&1 &
-            fi
+            case "$dir" in
+                "/var/log/xcalar")
+                    tar -cf var_log_xcalar.tar.bz2 $taropts $dir > /dev/null 2>&1 & ;;
+                "/var/opt/xcalar/kvs")
+                    tar -cf var_opt_xcalar_kvs.tar.bz2 $taropts $dir > /dev/null 2>&1 & ;;
+                *)
+                    tar -cf $dir.tar.bz2 $taropts $dir > /dev/null 2>&1 & ;;
+            esac
             PIDS+=($!)
         fi
     done
@@ -45,25 +47,28 @@ genBuildArtifacts() {
         echo "tar returned non-zero value"
     fi
 
-    for dir in core tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
-        if [ "$dir" = "/var/log/xcalar" ]; then
-            cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-            rm var_log_xcalar.tar.bz2
-            rm $dir/* 2> /dev/null
-        elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
-            if [ -f xcalar_dataflows.tar.bz2 ]; then
-                cp xcalar_dataflows.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-                rm xcalar_dataflows.tar.bz2
-            fi
-        else
-            if [ -f $dir.tar.bz2 ]; then
-                cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-                rm $dir.tar.bz2
-                if [ -d $dir ]; then
-                    rm -r $dir/* 2> /dev/null
+    for dir in core ${dirList[*]}; do
+        case "$dir" in
+            "/var/log/xcalar")
+                cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+                rm var_log_xcalar.tar.bz2
+                rm $dir/* 2> /dev/null
+                ;;
+            "/var/opt/xcalar/kvs")
+                cp var_opt_xcalar_kvs.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+                rm var_opt_xcalar_kvs.tar.bz2
+                rm $dir/* 2> /dev/null
+                ;;
+            *)
+                if [ -f $dir.tar.bz2 ]; then
+                    cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
+                    rm $dir.tar.bz2
+                    if [ -d $dir ]; then
+                        rm -r $dir/* 2> /dev/null
+                    fi
                 fi
-            fi
-        fi
+                ;;
+        esac
     done
 
     return $corefound
