@@ -2351,7 +2351,7 @@ def run_ssh_cmd(host, command, port=22, user='root', password=None, bufsize=-1, 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-    # try all the known passwords for this user
+    # try all the known passwords for this user if auth errs hit
     connected = False
     for password_to_try in passwords_to_try:
         debug_log("Connection attempt: ssh {}@{} (user/pass {}/{} or keyfile {})".format(user, host, user, password_to_try, keyfile))
@@ -2360,8 +2360,9 @@ def run_ssh_cmd(host, command, port=22, user='root', password=None, bufsize=-1, 
             debug_log("connected to ... {} as user {}".format(host, user))
             connected = True
             break
-        except Exception as e: # except any type of error paramiko might raise
-            debug_log("Caught exception '{}' when trying to connect... "
+        # only catch auth error; let other errs raise
+        except paramiko.ssh_exception.AuthenticationException as e:
+            debug_log("Caught auth exception '{}' when trying to connect... "
                 "attempt again if more passwords available".format(str(e)))
     if not connected:
         raise RuntimeError("Can not establish connection with {}!".format(host))
