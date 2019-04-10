@@ -86,6 +86,7 @@ REBOOT_TIMEOUT=500 # seconds to wait before timing out after waiting to be able 
 SHUTDOWN_TIMEOUT = 600 # seconds to wait before timing out on vms to shut down
 POWER_ON_TIMEOUT = 120 # seconds to wait before timing out waiting for a vm to power on
 IP_ASSIGN_TIMEOUT = 800 # seconds to wait before timing out waiting for IP to be assigned to newly powered on VM
+SSH_UP_TIMEOUT = 500 # seconds to wait to be able to est. SSH connection after IP is showing
 PUPPET_SETUP_TIMEOUT = 2700 # seconds to wait before timing out puppet setup/puppet agent run
 XCALAR_INSTALL_TIMEOUT = 3000 # seconds to wait before timing out on Xcalar install
 XCALAR_START_TIMEOUT = 600 # seconds to wait before timing out on service xcalar start
@@ -327,16 +328,20 @@ def generate_vm_names(basename, n, no_rand=False):
     assigned to the VM by Ovirt.)
 
     :vmid: Ovirt id for the VM
-    :timeout: time in seconds to wait for the IP to be assigned
+    :timeout: seconds to wait for the IP to be assigned
+        (if None will keep waiting indefinetely)
 
     :returns: IP address if found
-    :throws: NoIpException if no valid ip found after timeout
+    :throws: NoIpException if no valid ip found after timeout, if timeout given
 '''
-def wait_for_ip(vmid, timeout):
-    debug_log("Wait until IP displaying in Ovirt for a VM")
+def wait_for_ip(vmid, timeout=None):
+    info_log("Wait until IP displaying in Ovirt for a VM (Up to 5 minutes)")
     timeout_remaining = timeout
+    no_timeout=True
+    if timeout:
+        no_timeout=False
     sleep_seconds_between_checks = 5
-    while timeout_remaining:
+    while timeout_remaining or no_timeout:
         try:
             debug_log("try to get vm ip")
             assigned_ip = get_vm_ip(vmid)
@@ -347,9 +352,59 @@ def wait_for_ip(vmid, timeout):
             debug_log("still no ip")
             time.sleep(sleep_seconds_between_checks)
             timeout_remaining -= sleep_seconds_between_checks
-    if not timeout_remaining:
-        raise NoIpException("Never got IP (might increase timeout, waited {} " \
-            "seconds.  Might try increasing timeout)".format(timeout))
+    raise NoIpException("Never got IP (might increase timeout, waited {} " \
+        "seconds.  Might try increasing timeout)".format(timeout))
+
+'''
+wait until you're able to establish connection to an IP
+(ip could be assigned to the VM, but ssh might not be up yet)
+:timeout: seconds to wait before raising Exception if SSH connection cant be est.
+ (if None, will keep trying indefinetely)
+'''
+def wait_for_ssh(ip, timeout=None):
+    info_log("Wait until SSH connection can be established to {} " \
+        "(Up to 5 minutes)".format(ip))
+
+    timeout_remaining=timeout
+    no_timeout=True
+    if timeout:
+        no_timeout=False
+    sleep_between_checks=10
+    while timeout_remaining or no_timeout:
+        try:
+            debug_log("try to establish SSH connection to {}".format(ip))
+            # try as user jenkins; post puppet, might not be able to ssh as root
+            # connection could be available but would fail on auth
+            run_ssh_cmd(ip, 'echo hello', user="jenkins")
+            return True
+        except Exception as e:
+            debug_log(str(e))
+            if 'Unable to connect' in str(e):
+                debug_log("still unable to ssh...")
+                time.sleep(sleep_between_checks)
+                timeout_remaining-=sleep_between_checks
+            else:
+                debug_log("Exception raised trying to SSh to {} " \
+                    "for reason other than 'Unable to connect.' " \
+                    "err: {}".format(ip, str(e)))
+                raise e
+    raise TimeoutError("Timed out waiting to establish SSH connection " \
+        "to {}.  Waited {} seconds.".format(ip, timeout))
+
+'''
+Waits for an IP to be assigned to a VM, and to be able to establish
+an ssh connection to that IP.
+Returns the IP
+@ip_timeout: seconds to wait before throwing NoIpException if IP doesn't come up
+ (if None, will keep trying indefinetely)
+@ssh_timeout: seconds to wait before throwing Exception if can't SSH to IP after its' assigned
+ (if None, will keep trying indefinietely)
+'''
+def wait_for_connectivity(vmid, ip_timeout=None, ssh_timeout=None):
+    ip = wait_for_ip(vmid, ip_timeout)
+    wait_for_ssh(ip, ssh_timeout)
+    return ip
+
 '''
     wait for a VM with a locked image state to become unlocked
 '''
@@ -451,21 +506,30 @@ def start_vm(vmid):
     Start a VM by given ID,
     and wait until it is up.
     if requested, wait until IP is generated
-    and showing up in Ovirt
+    and showing up in Ovirt, and able to SSH to that IP.
 
     :param vmid: unique id of VM (ovirtsdk4:types:Vm.id attr)
-    :param waitForIP: (optional boolean, default to false)
-        - if True: wait for IP to be assigned and displaying before returning
-            (throws TimeoutError if not up after certain time)
+    :param waitForConnection: (optional boolean, default to false)
+        - if True: wait for IP to be assigned and displaying, and an SSH
+            connection made to that IP, before returning
         - if False, return immediately after vm status is UP; don't
             wait for IP assignment
+    :param ip_ssign_timeout: (optional int)
+        number of seconds to wait before timing out waiting for IP to be assigned
+        if waitForConnection given; if this is None, there will be no timeout limit,
+        will keep waiting indefinitely for IP to be assigned.
+    :param ssh_timeout: (optional int)
+        number of seconds to wait, after an IP is assigned, until a valid SSH
+        connection can be made to that IP, if waitForConnection given;
+        if this is None, there will be no timeout limit; will keep trying indefinietely.
 
     :returns:
-        if waitForIP - the String of the IP that got assigned to the new VM
+        if waitForConnection - the String of the IP that got assigned to the new VM
 
     :throws Exception if any stage not successfull
 '''
-def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_ASSIGN_TIMEOUT, waitForIP=None):
+def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, waitForConnection=True,
+    ip_assign_timeout=None, ssh_timeout=None):
 
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
@@ -480,13 +544,14 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, ip_assign_timeout=IP_AS
         start_vm(vmid)
         wait_for_vm_to_come_up(vmid, power_on_timeout=power_on_timeout)
 
-    if waitForIP:
-        info_log("Wait until IP has been assigned to {} (up to 5 minutes)".format(name))
-        assigned_ip = wait_for_ip(vmid, ip_assign_timeout)
-        info_log("IP {} has been assigned to {}".format(assigned_ip, name))
-        return assigned_ip
+    assigned_ip = None
+    if waitForConnection:
+        # waits until an IP has been assigned, and an SSH connection
+        # can be established to that ip.  returns the ip.
+        assigned_ip = wait_for_connectivity(vmid, ip_assign_timeout, ssh_timeout)
 
     info_log("VM {} successfully brought up.".format(name))
+    return assigned_ip
 
 '''
     Create a new vm and wait until you can get ip
@@ -575,7 +640,7 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
         while triesleft:
             try:
                 time.sleep(5)
-                assigned_ip = bring_up_vm(vmid, waitForIP=True)
+                assigned_ip = bring_up_vm(vmid, waitForConnection=True, ip_assign_timeout=IP_ASSIGN_TIMEOUT)
                 break
             except NoIpException:
                 debug_log("WARNING: Timed out waiting for IP on new VM... will restart and try again...")
@@ -641,7 +706,7 @@ def get_hostname(ip):
     debug_log("\tFound hostname: {}".format(stdout))
     return stdout.strip()
 
-def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_assign_timeout=IP_ASSIGN_TIMEOUT):
+def reboot_node(ip, waitForVmToComeUp=True, ip_assign_timeout=None, ssh_timeout=None):
 
     vmid = get_vm_id(ip)
     try:
@@ -650,34 +715,14 @@ def reboot_node(ip, waitForVmToComeUp=True, reboot_timeout=REBOOT_TIMEOUT, ip_as
         debug_log("expect to hit exception after the reboot")
 
     if waitForVmToComeUp:
-        debug_log("Wait for {} to come up from reboot...".format(ip))
+        info_log("Wait for {} to come up from reboot...".format(ip))
         # wait a few seconds before initial ssh; immediately after reboot
         # was able to make the ssh call
         time.sleep(10)
-        timeout_remaining=reboot_timeout
-        seconds_to_sleep_between_checks=10
-        while timeout_remaining:
-            try:
-                run_ssh_cmd(ip, 'echo hello')
-                debug_log("{}is back up!".format(ip))
-                break
-            except Exception as e:
-                if 'Unable to connect' in str(e):
-                    debug_log("still unable to ssh...")
-                    debug_log(e)
-                    time.sleep(seconds_to_sleep_between_checks)
-                    timeout_remaining-=seconds_to_sleep_between_checks
-                else:
-                    debug_log("Exception thrown waiting for {} to come up " \
-                        " after reboot, for reason other than " \
-                        "'Unable to connect'".format(ip))
-                    raise e
-        if not timeout_remaining:
-            raise TimeoutError("Timed out waiting for {} to come up " \
-                " after reboot.  Waited {} seconds".format(ip, reboot_timeout))
 
-        # wait until IP is displaying again in ovirt
-        assigned_ip = wait_for_ip(vmid, ip_assign_timeout)
+        # wait until IP is displaying again in ovirt,
+        # and able to establish an SSH connection to that ip
+        assigned_ip = wait_for_connectivity(vmid, ip_assign_timeout, ssh_timeout)
         if assigned_ip != ip:
             debug_log("WARNING: node {} came up after reboot, but in Ovirt now is " \
                 " assigned as IP {}".format(ip, assigned_ip))
@@ -1228,17 +1273,15 @@ def remove_vm(identifier, releaseIP=True):
         '''
         info_log("Attempt to release ip before removing {}".format(name))
 
-        if not is_vm_up(vmid):
-            debug_log("Bring up {} so can get IP...".format(name))
-            bring_up_vm(vmid, waitForIP=True)
+        debug_log("Bring up {} so can get IP...".format(name))
 
-        # if vm up, wait until ip displaying in case
-        # this is a vm that was just created and we tried to
-        # remove right away (in which case IP might not be available yet)
         try:
-            assigned_ip = wait_for_ip(vmid, IP_ASSIGN_TIMEOUT)
+            # even if VM up, bring up and wait until ip displaying in case
+            # this is a vm that was just created and we tried to
+            # remove right away (in which case VM up, but IP might not be assigned yet)
+            assigned_ip = bring_up_vm(vmid, waitForConnection=True, ip_assign_timeout=IP_ASSIGN_TIMEOUT)
             if assigned_ip is None:
-                raise Exception("LOGIC ERROR:: wait_for_ip returns without " \
+                raise Exception("LOGIC ERROR:: bring_up_vm returns without " \
                     " NoIpException, but ip returned is none. Please sync code")
             else:
                 info_log("Found IP of VM: {}".format(assigned_ip))
@@ -1404,9 +1447,8 @@ def power_on_vms(vms):
     for vm in vms:
         vmid = find_vm_id_from_identifier(vm)
         proc = multiprocessing.Process(target=bring_up_vm, args=(vmid,), kwargs={
-            'waitForIP':True,
+            'waitForConnection':True,
             'power_on_timeout': POWER_ON_TIMEOUT,
-            'ip_assign_timeout': IP_ASSIGN_TIMEOUT
         })
         proc.start()
         procs.append(proc)
@@ -1430,8 +1472,6 @@ def reboot_nodes(vmids, waitForNodesToComeUp=True):
         ip = get_vm_ip(vmid)
         proc = multiprocessing.Process(target=reboot_node, args=(ip,), kwargs={
             'waitForVmToComeUp': waitForNodesToComeUp,
-            'reboot_timeout': REBOOT_TIMEOUT,
-            'ip_assign_timeout': IP_ASSIGN_TIMEOUT
         })
         proc.start()
         procs.append(proc)
