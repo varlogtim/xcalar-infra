@@ -343,7 +343,7 @@ def wait_for_ip(vmid, timeout=None):
         try:
             debug_log("try to get vm ip")
             assigned_ip = get_vm_ip(vmid)
-            info_log("{} is assigned IP: {}".format(name, assigned_ip))
+            info_log("IP {} assigned to {}".format(assigned_ip, name))
             return assigned_ip
         except NoIpException as e: # let other Exception fail
             # not available yet
