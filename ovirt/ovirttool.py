@@ -332,16 +332,13 @@ def generate_vm_names(basename, n, no_rand=False):
         (if None will keep waiting indefinetely)
 
     :returns: IP address if found
-    :throws: NoIpException if no valid ip found after timeout, if timeout given
+    :throws: NoIpException if no valid ip found after timeout (only if timeout given)
 '''
 def wait_for_ip(vmid, timeout=None):
     info_log("Wait until IP displaying in Ovirt for a VM (Up to 5 minutes)")
     timeout_remaining = timeout
-    no_timeout=True
-    if timeout:
-        no_timeout=False
-    sleep_seconds_between_checks = 5
-    while timeout_remaining or no_timeout:
+    sleep_between = 5
+    while True:
         try:
             debug_log("try to get vm ip")
             assigned_ip = get_vm_ip(vmid)
@@ -350,10 +347,14 @@ def wait_for_ip(vmid, timeout=None):
         except NoIpException as e: # let other Exception fail
             # not available yet
             debug_log("still no ip")
-            time.sleep(sleep_seconds_between_checks)
-            timeout_remaining -= sleep_seconds_between_checks
-    raise NoIpException("Never got IP (might increase timeout, waited {} " \
-        "seconds.  Might try increasing timeout)".format(timeout))
+            time.sleep(sleep_between)
+
+        if timeout:
+            timeout_remaining -= sleep_between
+            if timeout_remaining <= 0:
+                raise NoIpException("Never got IP; waited {} " \
+                    "seconds.  Might try increasing timeout or " \
+                    "setting timeout=None when calling".format(timeout))
 
 '''
 wait until you're able to establish connection to an IP
@@ -364,13 +365,9 @@ wait until you're able to establish connection to an IP
 def wait_for_ssh(ip, timeout=None):
     info_log("Wait until SSH connection can be established to {} " \
         "(Up to 5 minutes)".format(ip))
-
     timeout_remaining=timeout
-    no_timeout=True
-    if timeout:
-        no_timeout=False
-    sleep_between_checks=10
-    while timeout_remaining or no_timeout:
+    sleep_between=10
+    while True:
         try:
             debug_log("try to establish SSH connection to {}".format(ip))
             # try as user jenkins; post puppet, might not be able to ssh as root
@@ -380,16 +377,19 @@ def wait_for_ssh(ip, timeout=None):
         except Exception as e:
             debug_log(str(e))
             if 'Unable to connect' in str(e):
-                debug_log("still unable to ssh...")
-                time.sleep(sleep_between_checks)
-                timeout_remaining-=sleep_between_checks
+                info_log("still unable to ssh...")
+                time.sleep(sleep_between)
             else:
                 debug_log("Exception raised trying to SSh to {} " \
                     "for reason other than 'Unable to connect.' " \
                     "err: {}".format(ip, str(e)))
                 raise e
-    raise TimeoutError("Timed out waiting to establish SSH connection " \
-        "to {}.  Waited {} seconds.".format(ip, timeout))
+
+        if timeout:
+            timeout_remaining-=sleep_between
+            if timeout_remaining <= 0:
+                raise TimeoutError("Timed out waiting to establish SSH connection " \
+                    "to {}.  Waited {} seconds.".format(ip, timeout))
 
 '''
 Waits for an IP to be assigned to a VM, and to be able to establish
@@ -401,50 +401,53 @@ Returns the IP
  (if None, will keep trying indefinietely)
 '''
 def wait_for_connectivity(vmid, ip_timeout=None, ssh_timeout=None):
-    ip = wait_for_ip(vmid, ip_timeout)
-    wait_for_ssh(ip, ssh_timeout)
+    ip = wait_for_ip(vmid, timeout=ip_timeout)
+    wait_for_ssh(ip, timeout=ssh_timeout)
     return ip
 
 '''
     wait for a VM with a locked image state to become unlocked
+    (if timeout=None will wait indefinetely)
 '''
-def wait_for_image_unlock(vmid, image_unlock_timeout=100):
+def wait_for_image_unlock(vmid, timeout=100):
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
     info_log("Wait for image of {} to be unlocked (if locked) (2-3 minutes)".format(name))
 
-    timeout = image_unlock_timeout
-    while timeout:
+    timeout_remaining = timeout
+    while True:
         vm = vm_service.get()
         if vm.status == types.VmStatus.IMAGE_LOCKED:
-            time.sleep(2)
-            timeout-=1
             debug_log("Stil LOCKED.  Wait.")
+            time.sleep(2)
+            if timeout: # check; timeout could be passed as None to try indefinetely
+                timeout_remaining-=1
+                if timeout_remaining <= 0:
+                    raise TimeoutError("Timed out waiting for Image to unlock on {}. " \
+                        " (Waited {} seconds)".format(name, timeout))
         else:
             debug_log("Image is NOT locked.")
             return True
-    if not timeout:
-        raise TimeoutError("Timed out waiting for Image to unlock on {}. " \
-            " (Waited {} seconds)".format(name, image_unlock_timeout))
 
 '''
     wait for a VM to come up
+    (if timeout=None will wait indefinetely)
 '''
-def wait_for_vm_to_come_up(vmid, power_on_timeout=POWER_ON_TIMEOUT):
+def wait_for_vm_to_come_up(vmid, timeout=POWER_ON_TIMEOUT):
     name = get_vm_name(vmid)
     info_log("Wait for {} to come up (2-3 minutes)".format(name))
-    timeout_remaining = power_on_timeout
-    sleep_seconds_between_checks = 5
-    while timeout_remaining:
+    timeout_remaining = timeout
+    sleep_between = 5
+    while True:
         if is_vm_up(vmid):
             debug_log("\t{} is up!".format(name))
-            break
-        else:
-            time.sleep(sleep_seconds_between_checks)
-            timeout_remaining -= sleep_seconds_between_checks
-    if not timeout_remaining:
-        raise TimeoutError("Started service on {}, but VM never came up!" \
-            " Waited {} seconds".format(name, power_on_timeout))
+            return True
+        time.sleep(sleep_between)
+        if timeout: # timeout could be set as None to check indefinetely
+            timeout_remaining -= sleep_between
+            if timeout_remaining <= 0:
+                raise TimeoutError("Started service on {}, but VM never came up!" \
+                    " Waited {} seconds".format(name, timeout))
 
 '''
     checks if VM is in one of states expected if services
@@ -499,7 +502,7 @@ def start_vm(vmid):
         else:
             time.sleep(1)
             timeout-=1
-    if not timeout:
+    if timeout <= 0:
         raise TimeoutError("Powered on {}, but not in powering up state".format(name))
 
 '''
@@ -542,13 +545,13 @@ def bring_up_vm(vmid, power_on_timeout=POWER_ON_TIMEOUT, waitForConnection=True,
         # first make sure image not locked
         wait_for_image_unlock(vmid)
         start_vm(vmid)
-        wait_for_vm_to_come_up(vmid, power_on_timeout=power_on_timeout)
+        wait_for_vm_to_come_up(vmid, timeout=power_on_timeout)
 
     assigned_ip = None
     if waitForConnection:
         # waits until an IP has been assigned, and an SSH connection
         # can be established to that ip.  returns the ip.
-        assigned_ip = wait_for_connectivity(vmid, ip_assign_timeout, ssh_timeout)
+        assigned_ip = wait_for_connectivity(vmid, ip_timeout=ip_assign_timeout, ssh_timeout=ssh_timeout)
 
     info_log("VM {} successfully brought up.".format(name))
     return assigned_ip
@@ -722,7 +725,7 @@ def reboot_node(ip, waitForVmToComeUp=True, ip_assign_timeout=None, ssh_timeout=
 
         # wait until IP is displaying again in ovirt,
         # and able to establish an SSH connection to that ip
-        assigned_ip = wait_for_connectivity(vmid, ip_assign_timeout, ssh_timeout)
+        assigned_ip = wait_for_connectivity(vmid, ip_timeout=ip_assign_timeout, ssh_timeout=ssh_timeout)
         if assigned_ip != ip:
             debug_log("WARNING: node {} came up after reboot, but in Ovirt now is " \
                 " assigned as IP {}".format(ip, assigned_ip))
@@ -1141,6 +1144,7 @@ def is_vm_down(vmid):
         debug_log("VM status: {}".format(vm.status))
     return False
 
+# if timeout is None will wait indefinetely
 def wait_for_service_to_come_down(vmid, timeout=SHUTDOWN_TIMEOUT):
     vm_service = get_vm_service(vmid)
     name = get_vm_name(vmid)
@@ -1149,15 +1153,15 @@ def wait_for_service_to_come_down(vmid, timeout=SHUTDOWN_TIMEOUT):
     # if waiting is for a vm stop, it should be quick, but for shut downs
     # could take several minutes; just give a generic high est time on the log
     info_log("Wait for service to come down (up to 10 minutes)")
-    while time_remaining:
+    while True:
         if is_vm_down(vmid):
-            break
-        else:
-            time.sleep(sleep_between)
+            return True
+        time.sleep(sleep_between)
+        if timeout: # they could pass as None to wait indefinetely
             time_remaining -= sleep_between
-    if not time_remaining:
-        raise TimeoutError("Service never came down on {}, " \
-            " after waiting {} seconds".format(name, timeout))
+            if time_remaining <= 0:
+                raise TimeoutError("Service never came down on {}, " \
+                    " after waiting {} seconds".format(name, timeout))
 
 '''
     Checks if VM is up; if so, brings VM safely in to powered off state
@@ -1178,7 +1182,7 @@ def stop_vm(vmid):
                 timeout-=1
                 time.sleep(5)
                 debug_log("still getting an exception...." + str(e))
-        if not timeout:
+        if timeout <= 0:
             raise TimeoutError("Couldn't stop VM {}".format(name))
 
     wait_for_service_to_come_down(vmid)
@@ -1322,11 +1326,12 @@ def remove_vm(identifier, releaseIP=True):
             break
         except Exception as e:
             time.sleep(5)
+            timeout -= 1
             if 'is running' in str(e):
                 debug_log("vm still running... try again...")
             else:
                 raise SystemExit("unexepcted error when trying to remve vm, {}".format(str(e)))
-    if not timeout:
+    if timeout <= 0:
         raise TimeoutError("Stopped VM {} and service came down, but could not remove from service".format(name))
 
     debug_log("Wait for VM to be gone from vms service...")
@@ -1345,7 +1350,7 @@ def remove_vm(identifier, releaseIP=True):
         except:
             debug_log("VM {} no longer exists to vms".format(name))
             break
-    if not timeout:
+    if timeout <= 0:
         raise TimeoutError("Stopped VM {} and service came down and removed from service, "
             " but still getting a matching id for this vm!".format(name))
 
@@ -1400,7 +1405,7 @@ def shutdown_vm(identifier, timeout=SHUTDOWN_TIMEOUT):
     # wait for service to come down outside shutdown block,
     # in case its in the process of shutdown (not up state)
     # when script begins
-    wait_for_service_to_come_down(vmid, timeout)
+    wait_for_service_to_come_down(vmid, timeout=timeout)
 
     info_log("Successfully shut down {}".format(name))
 
