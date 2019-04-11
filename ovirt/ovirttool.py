@@ -685,22 +685,28 @@ def create_vm(name, cluster, template, ram, cores, feynmanIssueRetries=4, iptrie
             " IPs already registered with Ovirt.  Tried {} times before giving up!"
             .format(feynmanIssueRetries))
 
-def setup_hostname(ip, name):
+def setup_hostname(vmid, name):
+
+    ip = get_vm_ip(vmid)
 
     info_log("Set hostname of {} to {}".format(ip, name))
     fqdn = "{}.int.xcalar.com".format(name)
     run_ssh_cmd(ip, '/bin/hostnamectl set-hostname {}; echo "{} {} {}" >> /etc/hosts; service rsyslog restart'.format(name, ip, fqdn, name))
     # systemctl restart network is taking 4+ minutes to return,
     # intermitently.  This cmd should return quickly.
-    # assign a low timeout, and if it errors out reissue the command
+    # assign a low timeout, and if it errors out reboot then reissue the command
     network_restarted=False
     while not network_restarted:
         try:
             run_ssh_cmd(ip, 'systemctl restart network', user='root', timeout=60)
             network_restarted=True
         except Exception as e:
-            info_log("Hit network restart timeout issue on {}!  Try again".format(ip))
+            info_log("Hit network restart timeout issue on {}!  Try again after system reboot".format(ip))
             info_log(str(e))
+            # did IP get re-assigned?
+            # wait until there's an IP and can establish SSH connection to it
+            ip = wait_for_connectivity(vmid)
+            reboot_vm(vmid)
     run_ssh_cmd(ip, 'systemctl restart autofs', user='root')
 
 def get_hostname(ip):
@@ -1629,7 +1635,7 @@ def provision_vm(name, ram, cores, available_clusters):
             run_ssh_cmd(ip, 'sed -i \'s:TimeoutSec=300:TimeoutSec=30:\' /usr/lib/systemd/system/mariadb.service || true')
 
             # set the hostname now (in case they don't want to install Xcalar)
-            setup_hostname(ip, name)
+            setup_hostname(vmid, name)
             # setup puppet only after hostname is set
 
             return True
