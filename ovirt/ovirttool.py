@@ -335,14 +335,15 @@ def generate_vm_names(basename, n, no_rand=False):
     :throws: NoIpException if no valid ip found after timeout (only if timeout given)
 '''
 def wait_for_ip(vmid, timeout=None):
-    info_log("Wait until IP displaying in Ovirt for a VM (Up to 5 minutes)")
+    name = get_vm_name(vmid)
+    info_log("Wait until IP displaying in Ovirt for {} (Up to 5 minutes)".format(name))
     timeout_remaining = timeout
     sleep_between = 5
     while True:
         try:
             debug_log("try to get vm ip")
             assigned_ip = get_vm_ip(vmid)
-            debug_log("\tIP {} assigned!".format(assigned_ip))
+            info_log("{} is assigned IP: {}".format(name, assigned_ip))
             return assigned_ip
         except NoIpException as e: # let other Exception fail
             # not available yet
@@ -1288,8 +1289,6 @@ def remove_vm(identifier, releaseIP=True):
                 raise Exception("LOGIC ERROR:: bring_up_vm returns without " \
                     " NoIpException, but ip returned is none. Please sync code")
             else:
-                info_log("Found IP of VM: {}".format(assigned_ip))
-
                 info_log("Release {}/{} from consul".format(name, assigned_ip))
                 # if puppet wasn't set up, might not work, just catch and go on
                 try:
