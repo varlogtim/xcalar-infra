@@ -145,7 +145,7 @@ OVIRT_TEMPLATE_MAPPING = {
         ('einstein-cluster2', 'ovirt-tool-einstein-updated'),
     ],
     'qa': [
-        ('ceph-osd2', 'jenkins-slave-el7-template-20190301-osd2', True), # is default for this type
+        ('ceph-osd2', 'el7-template-04092019-osd2', True), # is default for this type
         ('node2-cluster', 'ovirt-cli-tool-node2-template'),
         ('node3-cluster', 'ovirt-cli-tool-node3-template'),
     ]
