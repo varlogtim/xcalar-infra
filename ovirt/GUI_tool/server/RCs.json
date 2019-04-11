@@ -166,5 +166,9 @@
     "xcalar-2.0.0-RC3": {
         "debug": "/netstore/builds/ReleaseCandidates/xcalar-2.0.0-RC3/debug/xcalar-2.0.0-2820-installer",
         "prod": "/netstore/builds/ReleaseCandidates/xcalar-2.0.0-RC3/prod/xcalar-2.0.0-2820-installer"
+    },
+    "xcalar-2.0.0-RC4": {
+        "debug": "/netstore/builds/ReleaseCandidates/xcalar-2.0.0-RC4/debug/xcalar-2.0.0-2834-installer",
+        "prod": "/netstore/builds/ReleaseCandidates/xcalar-2.0.0-RC4/prod/xcalar-2.0.0-2834-installer"
     }
 }
