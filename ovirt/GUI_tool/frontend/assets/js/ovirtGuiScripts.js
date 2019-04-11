@@ -14,7 +14,7 @@ var JOB_URL = "https://jenkins.int.xcalar.com/job/" + OVIRT_JENKINS_JOB;
 var MAX_NUM_VMS = 5;
 var DEFAULT_NUM_VMS = 1;
 var MAX_RAM_VALUES = [8, 16, 32, 64]; // gb
-var DEFAULT_RAM = [MAX_RAM_VALUES[2]];
+var DEFAULT_RAM = [MAX_RAM_VALUES[0]];
 var MAX_CORES = 8;
 var DEFAULT_CORES = 4;
 
