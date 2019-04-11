@@ -3551,16 +3551,16 @@ if __name__ == "__main__":
         help="Basename to use for naming the new VM(s) (If creating a single VM, will name VMBASENAME, if multiple, will name them VMBASENAME-vm0, VMBASENAME-vm1, .., VMBASENAME-vm(n-1) )")
     parser.add_argument("--cores", type=int, default=DEFAULT_CORES,
         help="Number of cores per VM. (Defaults to {} cores)".format(DEFAULT_CORES))
-    parser.add_argument("--ram", type=int, # DO NOT SUPPLY A DEFAULT VALUE HERE IT WILL MESS THINGS UP.
+    parser.add_argument("--ram", type=int, # DONT SET A DEFAULTL VALUE; IT DEPENDS ON OTHER PARAMS.  IT WILL MESS THINGS UP.
         help="RAM on VM(s) (in GB).  (Defaults to {} for dev machines; {} for all others)".format(DEFAULT_RAM_DEV_STATION, DEFAULT_RAM_NON_DEV_STATION))
     parser.add_argument("--nocluster", action='store_true',
         help="Do not create a Xcalar cluster of the new VMs.")
-    parser.add_argument("--installer", type=str, #default='builds/Release/xcalar-latest-installer-prod',
+    parser.add_argument("--installer", type=str, # DONT SET A DEFAULT VALUE; IT DEPENDS ON OTHER PARAMS. WILL MESS THINGS UP. see: get_validate_installer_url()
         help="URL to RPM installer to use for installing Xcalar on your VMs.  (Should be an RPM installer you can curl, example: http://netstore/<netstore's path to the installer>). \nIf not supplied, will use RPM installer for most recent prod version of BuildTrunk without version mismatch.)")
     parser.add_argument("--noinstaller", action="store_true", default=False,
         help="Don't install Xcalar on provisioned VM(s)")
-    parser.add_argument("--ovirtcluster", type=str, #default=DEFAULT_OVIRT_CLUSTER,
-        help="Which ovirt cluster to create the VM(s) on.")
+    parser.add_argument("--ovirtcluster", type=str, #DONT SET A DEFAULT; IT WILL MESS THINGS UP. tool will generate list of ovirt clusters to try cloning on based on various data, this param is just extra only if user supplies it.
+        help="Which ovirt cluster to create the VM(s) on. (if you also supply --tryotherclusters, it will just prioritize this one)")
     parser.add_argument("--devstation", action="store_true", default=False,
         help="Enable the VM(s) as dev machine(s).")
     parser.add_argument("--tryotherclusters", action="store_true", default=False,
