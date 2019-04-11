@@ -710,14 +710,32 @@ def get_hostname(ip):
     debug_log("\tFound hostname: {}".format(stdout))
     return stdout.strip()
 
-def reboot_node(ip, waitForVmToComeUp=True, ip_assign_timeout=None, ssh_timeout=None):
+'''
+reboot Vm of a given Ovirt vmid.
+optionally wait for the VM to come back up, with IP displaying and ability
+to SSH to that IP.
+If waitForVmToComeUp supplied, returns IP displaying once Vm is back up.
+(useful in case IP was re-assigned during reboot)
+'''
+def reboot_vm(vmid, waitForVmToComeUp=True, ip_assign_timeout=None, ssh_timeout=None):
 
-    vmid = get_vm_id(ip)
+    # will need both id and IP of vm.
+    # start with vmid instead of ip, because getting vmid from an IP requires
+    # the IP to be displaying in Ovirt's actual GUI (will fail if not there and you try to get it);
+    # sometimes IPs are assigned to VMs, but they are not displaying in the GUI.
+    # this dependency does not exist for getting a VM'd IP when you have the id
+    ip = get_vm_ip(vmid)
+    info_log("Reboot VM with IP: {}".format(ip))
+
     try:
-        run_ssh_cmd(ip, 'reboot -h')
-    except Exception as e:
-        debug_log("expect to hit exception after the reboot")
+        # give reboot as jenkins user in case this is post-puppet install
+        run_ssh_cmd(ip, 'sudo reboot -h', user='jenkins')
+    except ShellError as e:
+        # cmd should fail with -1 exit code.  Don't take any general Exception
+        # because if you hit an auth error, the reboot would never be issued.
+        debug_log("expected exception after the reboot")
 
+    ip_end = None
     if waitForVmToComeUp:
         info_log("Wait for {} to come up from reboot...".format(ip))
         # wait a few seconds before initial ssh; immediately after reboot
@@ -726,10 +744,12 @@ def reboot_node(ip, waitForVmToComeUp=True, ip_assign_timeout=None, ssh_timeout=
 
         # wait until IP is displaying again in ovirt,
         # and able to establish an SSH connection to that ip
-        assigned_ip = wait_for_connectivity(vmid, ip_timeout=ip_assign_timeout, ssh_timeout=ssh_timeout)
-        if assigned_ip != ip:
-            debug_log("WARNING: node {} came up after reboot, but in Ovirt now is " \
-                " assigned as IP {}".format(ip, assigned_ip))
+        ip_end = wait_for_connectivity(vmid, ip_timeout=ip_assign_timeout, ssh_timeout=ssh_timeout)
+        if ip_end != ip:
+            info_log("WARNING: VM came up after reboot, but IP was re-assigned " \
+                "(IP before reboot: {} ,after: {})".format(ip, ip_end))
+
+    return ip_end
 
 '''
     setup a node to be able to run puppet
@@ -1465,7 +1485,7 @@ def power_on_vms(vms):
 '''
     reboot nodes in parallel.  Optionally wait for all nodes to come up
 '''
-def reboot_nodes(vmids, waitForNodesToComeUp=True):
+def reboot_vms(vmids, waitForVmsToComeUp=True):
 
     debug_log("Reboot nodes in parallel")
 
@@ -1473,9 +1493,8 @@ def reboot_nodes(vmids, waitForNodesToComeUp=True):
     sleep_between = 5
     sleep_offset = 0
     for vmid in vmids:
-        ip = get_vm_ip(vmid)
-        proc = multiprocessing.Process(target=reboot_node, args=(ip,), kwargs={
-            'waitForVmToComeUp': waitForNodesToComeUp,
+        proc = multiprocessing.Process(target=reboot_vm, args=(vmid,), kwargs={
+            'waitForVmToComeUp': waitForVmsToComeUp,
         })
         proc.start()
         procs.append(proc)
