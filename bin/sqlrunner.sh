@@ -104,9 +104,45 @@ else
     export XCE_LICENSE="${XCE_LICENSE:-$devLicense}"
 fi
 
-rcmd() {
+rcmdNode() {
+    local nodeNum="$1"
+    shift
     args="$@"
-    gcloud compute ssh $clusterLeadName --command "$args"
+    gcloud compute ssh "$optClusterName-$nodeNum" --command "$args"
+}
+
+rcmd() {
+    rcmdNode 1 "$@"
+}
+
+rcmdAll() {
+    for nodeNum in $(seq 1 $optNumNodes)
+    do
+        rcmdNode $nodeNum "$@"
+    done
+}
+
+gscpToNode() {
+    local nodeNum="$1"
+    local src="$2"
+    local dst="$3"
+
+    eval gcloud compute scp "$src" "$optClusterName-$nodeNum:$dst"
+}
+
+gscpTo() {
+    local src="$1"
+    local dst="$2"
+    gscpToNode 1 "$src" "$dst"
+}
+
+gscpToAll() {
+    local src="$1"
+    local dst="$2"
+    for nodeNum in $(seq 1 $optNumNodes)
+    do
+        gscpToNode $nodeNum "$src" "$dst"
+    done
 }
 
 getNodeIp() {
@@ -170,13 +206,15 @@ installDeps() {
     rcmd mkdir -p "$optRemotePwd"
     rcmd sudo mkdir -p "$imdTestDir"
     rcmd sudo chmod a+rwx "$imdTestDir"
-    gcloud compute scp "$XLRDIR/src/sqldf/tests/test_jdbc.py" "$clusterLeadName:$optRemotePwd"
-    gcloud compute scp "$XLRGUIDIR/assets/test/json/"*.json "$clusterLeadName:$optRemotePwd"
-    gcloud compute scp "$XLRDIR/src/sqldf/tests/IMDTest/"*.json "$clusterLeadName:$imdTestDir"
-    gcloud compute scp "$XLRDIR/src/sqldf/tests/IMDTest/loadData.py" "$clusterLeadName:$imdTestDir"
+    gscpTo "$XLRDIR/src/sqldf/tests/test_jdbc.py" "$optRemotePwd"
+    gscpTo "$XLRGUIDIR/assets/test/json/*.json" "$optRemotePwd"
+    gscpTo "$XLRDIR/src/sqldf/tests/IMDTest/*.json" "$imdTestDir"
+    gscpTo "$XLRDIR/src/sqldf/tests/IMDTest/loadData.py" "$imdTestDir"
 
-    gcloud compute scp "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" "$clusterLeadName:/tmp"
-    gcloud compute scp "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" "$clusterLeadName:/tmp"
+    gscpTo "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" /tmp
+    gscpTo "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" /tmp
+    gscpToAll "$XLRINFRADIR/misc/sqlrunner/LocalUtils.sh" /tmp
+    rcmdAll echo "source /tmp/LocalUtils.sh >> $HOME/.bashrc"
 
     rcmd sudo mv "/tmp/jodbc.xml" "$optRemoteXlrRoot/config"
     rcmd sudo mv "/tmp/supervisor.conf" "/etc/xcalar/"
@@ -188,6 +226,11 @@ installDeps() {
         waitCmd "rcmd 'nc $SPARK_IP 10000 </dev/null 2>/dev/null'" $optTimeoutSec
     fi
     waitCmd "rcmd 'nc localhost 10000 </dev/null 2>/dev/null'" $optTimeoutSec
+}
+
+dumpStats() {
+    rcmdAll dumpNodeOSStats
+    rcmd /opt/xcalar/bin/xccli -c top
 }
 
 runTest() {
@@ -236,15 +279,18 @@ installDeps
 if ! $optSetupOnly
 then
     testIter=0
+    endTime=$(($(date +%s) + optHours * 60 * 60))
 
+    dumpStats
     runTest $testIter
+    dumpStats
     testIter=$((testIter + 1))
 
-    endTime=$(($(date +%s) + optHours * 60 * 60))
     while [[ "$(date +%s)" -lt "$endTime" ]]
     do
         echo "Current time: $(date +%s), End time: $endTime, remaining: $((endTime - $(date +%s)))"
         runTest $testIter
+        dumpStats
         testIter=$((testIter + 1))
     done
 
