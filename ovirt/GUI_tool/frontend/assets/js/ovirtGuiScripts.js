@@ -163,9 +163,9 @@ $( document ).ready(function() {
     // the installation options.
     $devMachineCheckbox.change(function() {
         if (isDevStation()) {
-            $installOptionsSection.hide();
+            toggleInstallerOptionVisibility(show=false);
         } else {
-            $installOptionsSection.show();
+            toggleInstallerOptionVisibility(show=true);
         }
     });
 
@@ -285,6 +285,22 @@ $( document ).ready(function() {
         $("#general-msg").show();
     });
 });
+
+// if you select dev machine, don't want to display
+// any of the installer related options.
+function toggleInstallerOptionVisibility(show=true) {
+    if (show) {
+        $installOptionsSection.show();
+        // cluster checkbox could have been displaying before toggling off,
+        // want to display again
+        if (clusterCheckboxConditionsMet()) {
+            $clusterCheckboxSection.show();
+        }
+    } else {
+        $installOptionsSection.hide();
+        $clusterCheckboxSection.hide();
+    }
+}
 
 function validate() {
     // check for any fields with errors
@@ -533,12 +549,20 @@ function setupForRCInstaller(use=true) {
 function setWillInstall(install=false) {
     if (install) {
         WILL_INSTALL_XCALAR = true;
-        if ($numVmsDropdown.val() > 1) {
+        if (clusterCheckboxConditionsMet()) {
             $clusterCheckboxSection.show();
         }
     } else {
         WILL_INSTALL_XCALAR = false;
         $clusterCheckboxSection.hide();
+    }
+}
+
+// are conditions for displaying the form in to cluster
+// checkbox met; assuming install options are being displayed.
+function clusterCheckboxConditionsMet() {
+    if ($numVmsDropdown.val() > 1) {
+        $clusterCheckboxSection.show();
     }
 }
 

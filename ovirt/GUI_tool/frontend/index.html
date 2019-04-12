@@ -38,8 +38,8 @@ Welcome to the VM Shop!
     <!-- header -->
     <div class="row">
       <div class="col s12">
-        <div style="text-align: center;">
-          <h1>VM Details</h1>
+        <div>
+          <center><h1>VM Details</h1></center>
         </div>
 
         <form id="schedule-form">
@@ -56,7 +56,7 @@ Welcome to the VM Shop!
 
           <!-- dev machine? (installer section should only show if not dev machine) -->
 
-          <div id="Q-dev-machine" style="margin-bottom: 20px;">
+          <div id="Q-dev-machine" class="extra-bottom-padding">
             <label class="tooltipped" data-position="top" data-tooltip="A 'dev machine' would be a VM you will use to check out git repos on for development purposes.  Xcalar will NOT be installed for you; you will need to build Xcalar manually from the repos you check out.  If your goal is just to test out/familiarize yourself with XD, you probably do not want this option.">
               <input id="dev-machine-check" type="checkbox" class="filled-in" />
               <span id="dev-machine-label">This will be a dev machine.</span>
@@ -134,7 +134,7 @@ Welcome to the VM Shop!
           </div>
 
           <!-- checkbox option to form in to cluster; unhide if count > 1 and installing -->
-          <div id="Q-form-cluster" style="margin-bottom: 20px;" hidden>
+          <div id="Q-form-cluster" class="extra-bottom-padding" hidden>
             <label>
               <input id="cluster-check" type="checkbox" class="filled-in" checked="checked" />
               <span>Form in to Cluster?</span>
