@@ -24,6 +24,10 @@ fieldset {
     margin-bottom: 20px;
 }
 
+.extra-bottom-padding-section {
+    margin-bottom: 50px;
+}
+
 /** user messages */
 .msg {
     size: 12px;

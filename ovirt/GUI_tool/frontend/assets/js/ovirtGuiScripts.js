@@ -7,10 +7,12 @@ var TEST_API_URL = SERVER_URL + "/flask/";
 //var DEFAULT_NOTIFY = ['jolsen@xcalar.com'];
 var DEFAULT_NOTIFY = ['jolsen@xcalar.com', 'abakshi@xcalar.com'];
 
-// name of Jenkins job which will get triggered to build the VMs, when user
-// submits main schedule form
+// name of Jenkins jobs this tool can trigger
+// when user submits main schedule form
+var JENKINS_JOB_CREATE_OVIRT_VMS = "OvirtToolBuilder"; // if switch set for create
+var JENKINS_JOB_DELETE_OVIRT_VMS= "OvirtDestroyer"; // if switch set for delete
+var JENKINS_URL = "https://jenkins.int.xcalar.com";
 var OVIRT_JENKINS_JOB = "OvirtToolBuilder";
-var JOB_URL = "https://jenkins.int.xcalar.com/job/" + OVIRT_JENKINS_JOB;
 var MAX_NUM_VMS = 5;
 var DEFAULT_NUM_VMS = 1;
 var MAX_RAM_VALUES = [8, 16, 32, 64]; // gb
@@ -70,8 +72,8 @@ var $vmBasenameInput;
 var $scheduleForm;
 var $scheduleButton;
 
-var JENKINS_USER;
-var JENKINS_PASS;
+var LDAP_USER;
+var LDAP_PASS;
 
 // installer types, since it will be checked in multiple places.
 // value should be the 'value' attr of the <input
@@ -133,9 +135,13 @@ $( document ).ready(function() {
     $scheduleBlock = $("#vm-schedule-block");
     //$scheduleBlock = $("#schedule-block"); // why?@!?
     $scheduleForm = $("#schedule-form");
+    $taskSwitch = $("#select-task");
+    $deleteOptions = $("#delete-options");
+    $provisionOptions = $("#provision-options");
     $scheduleButton = $("#schedule-button");
     $loginMsgDiv = $("#login-msg");
     $scheduleMsgDiv = $("#schedule-msg");
+    $deleteListInput = $("#delete-list");
     $devMachineCheckbox = $("#dev-machine-check");
     $installOptionsSection = $("#install-section-wrap");
     $userInstallerOptionSection = $("#my-installer-wrap");
@@ -157,6 +163,18 @@ $( document ).ready(function() {
     $('.tooltipped').tooltip({delay: 50});
 
     // setup event handlers
+
+    // task switch to select if you want to create or delete VMs.
+    // hide/show sections of the schedule form based on selected task
+    $taskSwitch.change(function() {
+        if (willCreateVMs()) {
+            $provisionOptions.show();
+            $deleteOptions.hide();
+        } else {
+            $deleteOptions.show();
+            $provisionOptions.hide();
+        }
+    });
 
     // Xcalar installs only possible on non-dev machines;
     // if user toggles option for creating dev machine, unhide
@@ -285,6 +303,16 @@ $( document ).ready(function() {
         $("#general-msg").show();
     });
 });
+
+/**
+ * return true or false if new Vms should be created when clicking submit,
+ * based on tasks selection.
+ * (as opposed to deleting)
+ */
+function willCreateVMs() {
+    // create is the right "unchecked" version of the switch
+    return !$taskSwitch.prop('checked');
+}
 
 // if you select dev machine, don't want to display
 // any of the installer related options.
@@ -613,9 +641,9 @@ function tryLogin() {
         var userVal = $user.val();
         // split on '@' in case they supplied their full xcalar email
         var strSplit = userVal.split("@");
-        JENKINS_USER = strSplit[0];
-        JENKINS_PASS = $p.val();
-        sendRequest("POST", SERVER_URL + "/flask/login", {'user': JENKINS_USER, 'password': JENKINS_PASS})
+        LDAP_USER = strSplit[0];
+        LDAP_PASS = $p.val();
+        sendRequest("POST", SERVER_URL + "/flask/login", {'user': LDAP_USER, 'password': LDAP_PASS})
         .then(function(res) {
             console.log("success");
             console.log(res);
@@ -994,6 +1022,12 @@ function validateVmbasenameInputField() {
     return deferred.promise();
 }
 
+function getDeleteList() {
+    var deleteList = $deleteListInput.val();
+    // collapse whitespace between delims
+    return deleteList.replace(/\s/g, "");
+}
+
 function getEmailList() {
     var emailList = $emailListInput.val();
     // collapse whitespace
@@ -1150,16 +1184,18 @@ function scheduleSubmit() {
     var deferred = jQuery.Deferred();
     // Get hash of params required for triggerJenkins,
     // while validating.  will update divs on failures
-    getValidatedParamsForJenkinsJob() // handles its own failure case.
+    var job = getJenkinsJob();
+    getValidatedParamsForJenkinsJob(job) // handles its own failure case.
     .then(function(res) {
-        // res should be the exact hash 'triggerJenkins' needs
+        // res should be the hash of all params to send to the job
         // updates divs on failures.
-        return triggerJenkinsAndUpdateMessages(res);
+        return triggerJenkinsAndUpdateMessages(job, res);
     })
     .then(function(res) {
         // everything worked!
         // disable the button now
         $scheduleButton.prop("disabled", true);
+        $taskSwitch.prop("disabled", true);
         deferred.resolve(res);
     })
     .fail(function(err) {
@@ -1219,14 +1255,57 @@ function isDevStation() {
 }
 
 /**
- * Resolves w/ the hash required by 'triggerJenkins'
- * function (the function which will trigger the Ovirt Jenkins job.),
- * while validating all params (i.e., hostname, installer URL, etc.)
+ * Returns promise which resolves to a hash of job params required
+ * for the specified parameterized Jenkins job.
+ * i.e., each key in the hash is the name of a parameter to the Jenkins job,
+ * and value is the value for that param. (boolean checkboxes take true/false)
+ * Any params which require validation (email list, vm name, etc.)
+ * should be validated along the way.
  * If any params fail to validate, or fails to find required params, rejects
  * THIS SHOULD HANDLE UPDATING ERR/SUCCESS MESSAGES AS REQUIRED.
- * (We want to handle err case differenlty here than on triggerJenkins)
+ * (want to handle err case differenlty here than when triggering Jenkins)
  */
-function getValidatedParamsForJenkinsJob() {
+function getValidatedParamsForJenkinsJob(job) {
+    if (job === JENKINS_JOB_CREATE_OVIRT_VMS) {
+        return getValidatedParamsForCreate();
+    } else if (job === JENKINS_JOB_DELETE_OVIRT_VMS){
+        return getValidatedParamsForDelete();
+    } else {
+        throw "No logic available to get validated params for Jenkins job " + job;
+    }
+}
+
+// resolves to hash of params required by the OvirtDestroyer Jenkins job
+// all params returned will have been validated.
+// rejects if any params fail to validate or can't get any required params.
+function getValidatedParamsForDelete() {
+    var deferred = jQuery.Deferred();
+    // nothing to validate here.  if its empty UI will error out when clicking
+    // the form submit
+    var deleteList = getDeleteList();
+
+    // validate email list (this could be misconfigured)
+    // (will send back array of all, including default emails)
+    var validatedNotifyList = getValidatedNotifyList();
+    if (validatedNotifyList) {
+        var jobParams = {
+            "DELETE_LIST": deleteList,
+            "NOTIFY_LIST": validatedNotifyList,
+            'ovirtuser': LDAP_USER, // same as LDAP
+            'ovirtpass': LDAP_PASS,
+        };
+        deferred.resolve(jobParams);
+    } else {
+        console.log("failed to validate email list");
+        deferred.reject("falied to validate email list");
+    }
+    return deferred.promise();
+}
+
+// resolves to hash of params required by the OvirtToolBuilder Jenkins job.
+// all params returned will have been validated.
+// rejects if any params fail to validate or can't get any required params.
+function getValidatedParamsForCreate() {
     var deferred = jQuery.Deferred();
 
     // get all the params needed for Jenkins job from user fields,
@@ -1294,8 +1373,8 @@ function getValidatedParamsForJenkinsJob() {
                         'no_xcalar': noXcalar,
                         'form_cluster': formCluster,
                         'dev_station': devMachine,
-                        'ovirtuser': JENKINS_USER, // Jenkins and Ovirt login are same, use the Jenkins login they provided
-                        'ovirtpass': JENKINS_PASS,
+                        'ovirtuser': LDAP_USER, // Jenkins/Ovirt/LDAP auth are same, use LDAP login they provided
+                        'ovirtpass': LDAP_PASS,
                         'NOTIFY_LIST': validatedNotifyList
                     };
                     deferred.resolve(jenkins_job);
@@ -1327,18 +1406,25 @@ function getValidatedParamsForJenkinsJob() {
  * so you don't unintentionally update dom with issues of user not having filled in
  * params, which would suppress normal form errors
  */
-function triggerJenkinsAndUpdateMessages(params) {
+function triggerJenkinsAndUpdateMessages(job, params) {
     var deferred = jQuery.Deferred();
-    triggerJenkins(params)
-    //dummyPass()
+    var jobUrl = getJenkinsJobUrl(job);
+    triggerJenkinsThroughFlask(job, params)
     .then(function(res) {
         // not doing anything yet
-        alert("Your job has been scheduled! " +
+        var alertMsg = "Your job has been scheduled! " +
             "All users listed in the 'Notify upon completion' field will " +
-            "receive an email once the job completes, with the details " +
-            "of any newly created VMs. The process should take about " +
-            "30 minutes.  Jenkins job URL: " + JOB_URL);
-        $scheduleMsgDiv.html("Cool, I think it worked.  go check <a href='" + JOB_URL + "' target='_blank'>" + JOB_URL + "</a> . job should take about 30 mins.");
+            "receive an email once the job completes. ";
+        if (job === JENKINS_JOB_CREATE_OVIRT_VMS) {
+            alertMsg += "Details of any new VMs created will be provided in that email. ";
+            if (isDevStation()) {
+                alertMsg += "In addition, your dev station will require some additional " +
+                    "setup before you can use it; the email " +
+                    "will contain these instructions.";
+            }
+        }
+        alert(alertMsg);
+        $scheduleMsgDiv.html("Cool, I think it worked.  Go check <a href='" + jobUrl + "' target='_blank'>" + jobUrl + "</a> . job should take about 30 mins.");
         $scheduleMsgDiv.addClass("msg-good");
         console.log("success");
         console.log(res);
@@ -1363,71 +1449,38 @@ function triggerJenkinsAndUpdateMessages(params) {
 }
 
 /**
- * Triggers Ovirt Jenkins job with given params.
- * @params: a hash with all required params for the Jenkins job itself.
- * keys must be the same name as the params in the Jenkins job, that is
- * how we'll know what to pass to the job
- * params are NOT validated in this method.  Whatever you send, will get sent to Jenkins
- * {
- *        'VMBASENAME': <vm basename>,
- *        'COUNT': <num vms>,
- *        'RPM_INSTALLER_URL': <url of installer>,
- *        'RAM': <ram per node>,
- *        'CORES': <cores per node>,
- *        'no_xcalar': <boolean install xcalar>,
- *        'form_cluster': <boolean form cluster>,
- *        'ovirtuser': <Ovirt username>, **
- *        'ovirtpass': <Ovirt password>,  **
- *        'NOTIFY_LIST': <comma list of emails>,
- * }
- *        ** note: these Ovirt credentials taht the job requires are same as Jenkins
- *           as its all ldap
+ * Calls the /flask/trigger POST API on the Flask server
+ * which triggers a Jenkins job.
+ *
+ * jobName: name of the Jenkins job to trigger via the flask server
+ * jobParams:
+ * use if the job is paramterized.
+ * hash of parameter name/value for paramters to the Jenkins job.
+ *
  */
-function triggerJenkins(params) {
-    var deferred = jQuery.Deferred();
+function triggerJenkinsThroughFlask(jobName, jobParams) {
+    // these are params required by the /flask/trigger/ POST API
+    var apiParams = {
+        'user': LDAP_USER, // jenkins login (same as LDAP)
+        'password': LDAP_PASS,
+        'job-params': jobParams // params to the Jenkins job itself
+    };
+    //return dummyPass()
+    return sendRequest("POST", SERVER_URL + "/flask/trigger/" + jobName, apiParams);
+}
 
-    // make sure they passed params
-    if (typeof params === 'undefined') {
-        deferred.reject("params was not supplied to triggerJenkins");
+// return name of Jenkins job that should be triggered based
+// on current UI selections.
+function getJenkinsJob() {
+    if (willCreateVMs()) {
+        return JENKINS_JOB_CREATE_OVIRT_VMS;
     } else {
-        /**
-         * make sure all the params were properly supplied to this function,
-         * before triggering Jenkins job.  Could mean there's a logic error here
-         * and we're out of sync with  getValidatedParamsForJenkinsJob
-         */
-        var paramsReqForJob = ['VMBASENAME', 'COUNT', 'RPM_INSTALLER_URL',
-                'RAM', 'CORES', 'no_xcalar', 'form_cluster', 'dev_station',
-                'ovirtuser', 'ovirtpass', 'NOTIFY_LIST'];
-        var jobParams = {};
-        var missingParams = [];
-        for (var reqParam of paramsReqForJob) {
-            if (params.hasOwnProperty(reqParam)) {
-                jobParams[reqParam] = params[reqParam];
-            } else {
-                missingParams.push(reqParam);
-            }
-        }
-        if (missingParams.length > 0) {
-            deferred.reject("Can't schedule Jenkins job - missing params for hash:" + missingParams);
-        } else {
-            // all params are here.
-            // params for the POST to the server api
-            var apiParams = {
-                'user': JENKINS_USER,
-                'password': JENKINS_PASS,
-                'job-params': jobParams
-            }
-            //return dummyPass()
-            sendRequest("POST", SERVER_URL + "/flask/trigger/" + OVIRT_JENKINS_JOB, apiParams)
-            .then(function(res) {
-                deferred.resolve("Job triggered");
-            })
-            .fail(function(res) {
-                deferred.reject(res);
-            });
-        }
+        return JENKINS_JOB_DELETE_OVIRT_VMS;
     }
-    return deferred.promise();
+}
+
+function getJenkinsJobUrl(job) {
+    return JENKINS_URL + "/job/" + job;
 }
 
 // returns True/False if a variable is empty or undefined
@@ -1447,9 +1500,9 @@ function dummyPass() {
 function openSchedulePage() {
     $scheduleBlock.show();
     // set user name as placeholder in the vmbasename field
-    //$vmBasenameInput.val(JENKINS_USER);  // should you set html or text? look in to this!
-    $vmBasenameInput.attr("placeholder", JENKINS_USER);
-    $emailListInput.attr("placeholder", JENKINS_USER + "@xcalar.com");
+    //$vmBasenameInput.val(LDAP_USER);  // should you set html or text? look in to this!
+    $vmBasenameInput.attr("placeholder", LDAP_USER);
+    $emailListInput.attr("placeholder", LDAP_USER + "@xcalar.com");
 }
 
 // takes a JSON obj, or JSON string, and returns a copy
