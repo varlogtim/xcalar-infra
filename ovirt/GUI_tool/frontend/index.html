@@ -20,10 +20,10 @@
 Welcome to the VM Shop!
 
   <!-- div to display if something goes wrong in setup, can display msg here without displaying login or schedule div -->
-  <div class="msg" id="general-msg" style="display: none;"></div>
+  <div class="msg" id="general-msg" hidden></div>
 
   <!-- LOGIN SECTION -->
-  <div class="action-container" id="login-block" style="display: none;">
+  <div class="action-container" id="login-block" hidden>
     <h1>Enter LDAP Credentials</h1>
     <form id="login-form" target="_blank">
       <input type="text" id="user" placeholder="Username" required="required" />
@@ -34,7 +34,7 @@ Welcome to the VM Shop!
   </div>
 
   <!-- VM DETAILS FORM; unhide when login successful -->
-  <div class="container" id="vm-schedule-block" style="display: none;">
+  <div class="container" id="vm-schedule-block" hidden>
     <!-- header -->
     <div class="row">
       <div class="col s12">
@@ -84,7 +84,7 @@ Welcome to the VM Shop!
                 </p>
 
                 <!-- user installer input; unhide if radio button above selected -->
-                <div id="my-installer-wrap" style="display: none;">
+                <div id="my-installer-wrap" hidden>
                   <div class="input-field col s12">
                     <input type="text" id="own-installer" placeholder="/netstore/<path to an RPM installer to install>" />
                     <label for="own-installer" class="tooltipped" data-position="bottom" data-tooltip="An absolute path on netstore to an RPM installer, for example: /netstore/builds/byJob/BuildCustom/10638/prod/xcalar-2.0.0-10638-installer">Installer path</label>
@@ -100,14 +100,14 @@ Welcome to the VM Shop!
                 </p>
 
                 <!-- section containing dropdowns for RC installers; unhide first dropdown if install-type-rc selected -->
-                <div id="rc-installer-wrap" style="display: none;">
+                <div id="rc-installer-wrap" hidden>
                   <div id="rc-installer-main-dropdown" class="input-field col s12">
                     <!-- dropdown with all RC installers -->
                     <select id="rc-installer"> <!-- js will get list of curr installers; make sure server has netstore! -->
                     </select>
                   </div>
                   <!-- dropdown with build flavors for an RC; unhide if an option selected in above dropdown -->
-                  <div id="rc-flavor-wrap" class="input-field col s12" style="display: none;">
+                  <div id="rc-flavor-wrap" class="input-field col s12" hidden>
                     <select id="rc-flavor">
                     <!-- js will populate based on what builds are available -->
                     </select>
@@ -134,7 +134,7 @@ Welcome to the VM Shop!
           </div>
 
           <!-- checkbox option to form in to cluster; unhide if count > 1 and installing -->
-          <div id="Q-form-cluster" style="display: none; margin-bottom: 20px;">
+          <div id="Q-form-cluster" style="margin-bottom: 20px;" hidden>
             <label>
               <input id="cluster-check" type="checkbox" class="filled-in" checked="checked" />
               <span>Form in to Cluster?</span>
