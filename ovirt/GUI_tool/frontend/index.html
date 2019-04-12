@@ -48,7 +48,8 @@ Welcome to the VM Shop!
             <!-- vm basename -->
             <div class="input-field col s12">
               <!-- you need to set the placeholder attr to get the materialize label from being stuck before focusing on the element.  Even if you set it dynamically and rebind it doesn't seem to work. js is going to do something else with eithe rplaceholder or fill in the value-->
-              <input type="text" id="vm-basename" placeholder="username" class="validate" required="required" />
+              <!-- note: removing 'validate' class; when present, if you focus in then focus out on the field, if user hasn't supplied anything yet, 'invalid' class gets auto-added turning the elment red -->
+              <input type="text" id="vm-basename" placeholder="username" class="" required="required" />
               <label for="vm-basename" class="tooltipped" data-position="bottom" data-tooltip="Basename for the hostname that will be assigned to the new VM(s).  It is a 'basename' as the final hostname will have a random sequence of chars appended to the value provided here, to ensure hostname uniqueness.  If more than one VM is requested, a counter will be appended as well. (i.e., yourbasename-vm0, yourbasename-vm1, etc.)  Don't stress; you will be notified with all of these details via email once your request is complete!" >VM Basename</label>
               <span id="vm-basename-label" class="helper-text" for="vm-basename" data-error="" data-success="">Please enter a name for your VM.</span>
             </div>
