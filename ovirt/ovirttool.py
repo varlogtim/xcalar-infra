@@ -142,7 +142,7 @@ OVIRT_TEMPLATE_MAPPING = {
         ('ceph-osd1-cluster', 'el7-template-04092019'),
         ('ceph-osd3-dc', 'el7-template-20190411-osd3', True),
         ('ovirt-node-03-cluster','el7-template-20190411-ovirt-node-03'),
-        ('einstein-cluster2', 'ovirt-tool-einstein-updated'),
+        ('einstein-cluster2', 'el7-template-20190411-einstein'),
     ],
     'qa': [
         ('ceph-osd2', 'el7-template-04092019-osd2', True), # is default for this type
