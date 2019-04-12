@@ -50,7 +50,10 @@ if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
 DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
-TMPDIR="${TMPDIR:-/tmp/$(id -u)}/$(basename ${BASH_SOURCE[0]} .sh)"
+if [ -z "$BUILD_ID" ]; then
+    BUILD_ID=$$
+fi
+TMPDIR="${TMPDIR:-/tmp/$(basename ${BASH_SOURCE[0]} .sh)-${BUILD_ID}}"
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 if [ "$1" == "--no-installer" ]; then
