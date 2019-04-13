@@ -5,7 +5,7 @@ var TEST_API_URL = SERVER_URL + "/flask/";
 
 //  notify these users EVERY job, regardless what's put in the notify input
 //var DEFAULT_NOTIFY = ['jolsen@xcalar.com'];
-var DEFAULT_NOTIFY = ['jolsen@xcalar.com', 'abakshi@xcalar.com'];
+var DEFAULT_NOTIFY = ['abakshi@xcalar.com'];
 
 // name of Jenkins jobs this tool can trigger
 // when user submits main schedule form
