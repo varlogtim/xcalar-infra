@@ -628,3 +628,16 @@ aws_s3_undelete() {
         aws s3api delete-object --bucket $bucket --key $key --version-id $version
     fi
 }
+
+aws_seconds_until_spot_termination() {
+    local action_time action_time_unix now
+    # Returns json like: {"action": "terminate", "time": "2017-09-18T08:22:00Z"}
+    if action_time="$(curl -sf http://169.254.169.254/latest/meta-data/spot/termination-time | jq -r .time)"; then
+        if action_time_unix="$(date -u -d"${action_time}" +%s)"; then
+            now=$(date +%s)
+            echo $(( action_time_unix - now ))
+            return 0
+        fi
+    fi
+    return 1
+}
