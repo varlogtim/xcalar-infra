@@ -24,6 +24,7 @@ optTimeoutSec=$(( 10 * 60 ))
 optEnableSpark=false
 optBucket="sqlscaletest"
 optHours=0
+optSupportBundle=false
 
 usage()
 {
@@ -49,6 +50,7 @@ usage()
         -N              Disable GCE preemption
         -p <wdpath>     Remote working directory
         -r <results>    Directory to store perf results
+        -s              Pull support bundle on exit
         -S              Set up and configure cluster but skip SQL tests
         -t <timeout>    Cluster startup timeout (seconds)
         -T <hours>      Iterate test for at least this many hours
@@ -60,7 +62,7 @@ usage()
 EOF
 }
 
-while getopts "c:i:I:kn:Npr:St:T:ux:X:b:d" opt; do
+while getopts "c:i:I:kn:Npr:sSt:T:ux:X:b:d" opt; do
   case $opt in
       c) optClusterName="$OPTARG";;
       i) optXcalarImage="$OPTARG";;
@@ -70,6 +72,7 @@ while getopts "c:i:I:kn:Npr:St:T:ux:X:b:d" opt; do
       N) optNoPreempt=1;;
       p) optRemotePwd="$OPTARG";;
       r) optResultsPath="$OPTARG";;
+      s) optSupportBundle=true;;
       S) optSetupOnly=true;;
       t) optTimeoutSec="$OPTARG";;
       T) optHours="$OPTARG";;
@@ -118,6 +121,7 @@ rcmd() {
 rcmdAll() {
     for nodeNum in $(seq 1 $optNumNodes)
     do
+        # XXX: run in parallel
         rcmdNode $nodeNum "$@"
     done
 }
@@ -127,7 +131,7 @@ gscpToNode() {
     local src="$2"
     local dst="$3"
 
-    eval gcloud compute scp "$src" "$optClusterName-$nodeNum:$dst"
+    eval gcloud compute scp --recurse "$src" "$optClusterName-$nodeNum:$dst"
 }
 
 gscpTo() {
@@ -141,7 +145,31 @@ gscpToAll() {
     local dst="$2"
     for nodeNum in $(seq 1 $optNumNodes)
     do
+        # XXX: run in parallel
         gscpToNode $nodeNum "$src" "$dst"
+    done
+}
+
+gscpFromNode() {
+    local nodeNum="$1"
+    local src="$2"
+    local dst="$3"
+
+    gcloud compute scp --recurse "$optClusterName-$nodeNum:$src" "$dst"
+}
+
+gscpFrom() {
+    local src="$1"
+    local dst="$2"
+    gscpFromNode 1 "$src" "$dst"
+}
+
+gscpFromAll() {
+    local src="$1"
+    local dst="$2"
+    for nodeNum in $(seq 1 $optNumNodes)
+    do
+        gscpFromNode $nodeNum "$src" "$dst"
     done
 }
 
@@ -243,7 +271,7 @@ runTest() {
         local results_spark="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter-spark"
         rcmd "XLRDIR=$optRemoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
             -p "$optRemotePwd" -o $results_spark -n "$optNumNodes,$optInstanceType" -S $SPARK_IP --bucket "gs://$optBucket/" $optsTestJdbc --ignore-xcalar
-        gcloud compute scp "$clusterLeadName:${results_spark}*.json" "$optResultsPath"
+        gscpFrom "$clusterLeadName:${results_spark}*.json" "$optResultsPath"
     fi
 
     local results_xcalar="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter"
@@ -251,12 +279,19 @@ runTest() {
         -p "$optRemotePwd" -o $results_xcalar -n "$optNumNodes,$optInstanceType" $optsTestJdbc
 
     # IMD test doesn't generate a perf file
-    gcloud compute scp "$clusterLeadName:${results_xcalar}*.json" "$optResultsPath" || true
+    gscpFrom "$clusterLeadName:${results_xcalar}*.json" "$optResultsPath" || true
 
     echo "######## Ending iteration $testIter ########"
 }
 
 destroyCluster() {
+    if $optSupportBundle
+    then
+        # For some reason support-generate.sh doesn't seem to work...
+        rcmdAll 'tar -zcf /tmp/$(hostname)-logs.tar.gz /var/log/xcalar'
+        gscpFromAll '/tmp/$(hostname)-logs.tar.gz' $optResultsPath
+    fi
+
     if ! $optKeep
     then
         $XLRINFRADIR/gce/gce-cluster-delete.sh --all-disks $optClusterName
