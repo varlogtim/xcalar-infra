@@ -103,9 +103,7 @@ done
 TMPDIR=$(mktemp -d -t packerXXXXXX)
 trap 'rm -r $TMPDIR' EXIT
 
-if ! test -x $PACKER; then
-    packer_download || exit 1
-fi
+download_packer || exit 1
 
 if [ -n "$TEMPLATE" ]; then
     if [[ $TEMPLATE =~ .yaml$ ]] || [[ $TEMPLATE =~ .yml$ ]]; then
@@ -127,8 +125,7 @@ INSTALLER_VERSION="${INSTALLER_VERSION_BUILD[0]}"
 INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
 
 set +e
-if ! packer_do validate ${*/-color=*/} \
-    && packer_do build "$@"; then
+if ! packer_do validate ${*/-color=*/} || ! packer_do build "$@"; then
     trap - EXIT
     echo "Failed! See $TMPDIR"
     exit 1
