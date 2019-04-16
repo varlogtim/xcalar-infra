@@ -107,8 +107,6 @@ if ! test -x $PACKER; then
     packer_download || exit 1
 fi
 
-exit
-
 if [ -n "$TEMPLATE" ]; then
     if [[ $TEMPLATE =~ .yaml$ ]] || [[ $TEMPLATE =~ .yml$ ]]; then
         cfn-flip < "$TEMPLATE" > $TMPDIR/template.json
