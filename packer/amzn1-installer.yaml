@@ -24,8 +24,8 @@ builders:
     name: amazon-ebs-{{user `osid`}}
     access_key: '{{user `aws_access_key`}}'
     secret_key: '{{user `aws_secret_key`}}'
-    ssh_keypair_name: 'xcalar-{{user `region`}}'
-    ssh_agent_auth: true
+    #ssh_keypair_name: 'xcalar-{{user `region`}}'
+    #ssh_agent_auth: true
     region: '{{user `region`}}'
     ami_regions: '{{user `destination_regions`}}'
     ami_users: '{{user `shared_with`}}'
