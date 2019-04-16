@@ -287,9 +287,9 @@ runTest() {
 destroyCluster() {
     if $optSupportBundle
     then
-        # For some reason support-generate.sh doesn't seem to work...
-        rcmdAll 'tar -zcf /tmp/$(hostname)-logs.tar.gz /var/log/xcalar'
-        gscpFromAll '/tmp/$(hostname)-logs.tar.gz' $optResultsPath
+        rcmdAll sudo /opt/xcalar/scripts/support-generate.sh
+        # support is on shared storage, so no need for copy from all
+        gscpFrom /mnt/xcalar/support $optResultsPath
     fi
 
     if ! $optKeep
