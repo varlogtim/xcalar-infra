@@ -9,7 +9,7 @@ fi
 sed -i '/^proxy/d' /etc/yum.conf
 
 
-truncate -s 0 /var/log/secure /va/var/log/messages /var/log/dmesg /var/log/audit/audit.log || true
+truncate -s 0 /var/log/secure /var/log/messages /var/log/dmesg /var/log/audit/audit.log || true
 
 rm -f /var/log/startupscript.log /var/log/dmesg.old /var/log/cfn-* /var/log/cloud-init* /var/log/user-data*
 rm -f /etc/hostname /root/.bash_history /home/*/.bash_history

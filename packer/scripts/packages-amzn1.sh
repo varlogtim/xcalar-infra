@@ -14,7 +14,7 @@ fix_cloud_init() {
 
 OSID=$(osid)
 
-yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
+yum install -y "http://repo.xcalar.net/xcalar-release-${OSID}.rpm"
 yum erase -y 'ntp*'
 yum install -y chrony
 service chronyd start
@@ -27,7 +27,7 @@ yum groupinstall -y 'Development tools'
 echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/xcalar/bin:/opt/aws/bin' > /etc/profile.d/paths.sh
 pip install -U pip
 hash -r
-pip2 install ansible
+pip install ansible
 mkdir -p /etc/ansible
 curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg | \
     sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg

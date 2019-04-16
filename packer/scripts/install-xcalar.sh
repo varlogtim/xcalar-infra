@@ -21,7 +21,7 @@ download_file() {
     if [[ $1 =~ ^s3:// ]]; then
         aws s3 cp $1 $2
     else
-        curl -fsSL "${1}" -o "${2}"
+        curl -f -L "${1}" -o "${2}"
     fi
     local rc=$?
     if [ $rc -ne 0 ]; then
@@ -48,18 +48,20 @@ if [ -n "$INSTALLER_URL" ]; then
     set -x
     INSTALLER_FILE=$TMPDIR/xcalar-installer.sh
     if [[ $INSTALLER_URL =~ ^s3:// ]]; then
-        if ! aws s3 cp $INSTALLER_URL $INSTALLER_FILE; then
-            rm -f $INSTALLER_FILE
+        if ! aws s3 cp "$INSTALLER_URL" "$INSTALLER_FILE"; then
+            rm -f "$INSTALLER_FILE"
         fi
+    elif download_file "$INSTALLER_URL" "$INSTALLER"; then
+        :
     elif INSTALLER_S3=$(aws_s3_from_url "$INSTALLER_URL") && [ -n "$INSTALLER_S3" ]; then
-        if ! aws s3 cp $INSTALLER_S3 $INSTALLER_FILE; then
-            rm -f $INSTALLER_FILE
+        if ! aws s3 cp "$INSTALLER_S3" "$INSTALLER_FILE"; then
+            rm -f "$INSTALLER_FILE"
         fi
     fi
-    test -f $INSTALLER_FILE || download_file "$INSTALLER_URL" $INSTALLER_FILE
+    test -f "$INSTALLER_FILE" || download_file "$INSTALLER_URL" "$INSTALLER_FILE"
     rc=$?
     if [ $rc -eq 0 ]; then
-        bash -x "${INSTALLER_FILE}" --nostart
+        bash -x "$INSTALLER_FILE" --nostart
         rc=$?
     fi
     if [ $rc -ne 0 ]; then

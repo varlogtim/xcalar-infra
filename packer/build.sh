@@ -1,8 +1,11 @@
 #!/bin/bash
-set -e
+#
+# shellcheck disable=SC2086,SC1091
 
 . infra-sh-lib
 . aws-sh-lib
+
+set -e
 
 packer_do() {
     local cmd="$1"
@@ -10,7 +13,7 @@ packer_do() {
     if [ -e $HOME/.packer-vars ]; then
         USER_VARS="$HOME/.packer-vars"
     fi
-    packer $cmd \
+    $PACKER $cmd \
         -var "product=$PRODUCT" \
         -var "version=$INSTALLER_VERSION" \
         -var "build_number=$INSTALLER_BUILD_NUMBER" \
@@ -98,7 +101,13 @@ while [ $# -gt 0 ]; do
 done
 
 TMPDIR=$(mktemp -d -t packerXXXXXX)
-trap "rm -rf $TMPDIR" exit
+trap 'rm -r $TMPDIR' EXIT
+
+if ! test -x $PACKER; then
+    packer_download || exit 1
+fi
+
+exit
 
 if [ -n "$TEMPLATE" ]; then
     if [[ $TEMPLATE =~ .yaml$ ]] || [[ $TEMPLATE =~ .yml$ ]]; then
@@ -120,9 +129,8 @@ INSTALLER_VERSION="${INSTALLER_VERSION_BUILD[0]}"
 INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
 
 set +e
-packer_do validate ${*/-color=*/} \
-    && packer_do build "$@"
-if [ $? -ne 0 ]; then
+if ! packer_do validate ${*/-color=*/} \
+    && packer_do build "$@"; then
     trap - EXIT
     echo "Failed! See $TMPDIR"
     exit 1

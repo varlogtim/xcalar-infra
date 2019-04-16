@@ -24,6 +24,8 @@ builders:
     name: amazon-ebs-{{user `osid`}}
     access_key: '{{user `aws_access_key`}}'
     secret_key: '{{user `aws_secret_key`}}'
+    ssh_keypair_name: 'xcalar-{{user `region`}}'
+    ssh_agent_auth: true
     region: '{{user `region`}}'
     ami_regions: '{{user `destination_regions`}}'
     ami_users: '{{user `shared_with`}}'
@@ -78,10 +80,10 @@ provisioners:
     execute_command: '{{.Vars}} /usr/bin/sudo -E bash ''{{.Path}}'''
     scripts:
       - scripts/start.sh
+      - scripts/install-xcalar.sh
       - scripts/install-epel.sh
       - scripts/install-java8.sh
       - scripts/packages-{{user `osid`}}.sh
-      - scripts/install-xcalar.sh
       - scripts/fixup-kpmg.sh
   - type: file
     source: scripts/genDefaultAdmin.sh

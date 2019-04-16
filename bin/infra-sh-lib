@@ -1,6 +1,8 @@
 #!/bin/bash
 #
 # Collection of random shell functions
+#
+# shellcheck disable=SC1091,SC2015,SC2086,SC1090,SC2164
 
 if [ -z "$XLRINFRADIR" ]; then
     export XLRINFRADIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -127,7 +129,7 @@ json_tokv() {
 }
 
 json_parameters_merge() {
-    jq -r -s '.[0] * .[1] | .parameters | {\
+    jq -r -s '.[0] * .[1] | .parameters | {
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize,
                                            dnsLabelPrefix: {value:"'$GROUP'"},
                                            installerUrl: {value:"'$INSTALLER_URL'"},
@@ -247,10 +249,10 @@ vssh() {
             -role=*)
                 role=${cmd#*=}
                 ;;
-            -* | --*)
+            --* | -*)
                 sshargs+=("$cmd")
                 ;;
-            ^[a-z][a-z0-9\.\-]+)
+            ^[a-z][a-z0-9\.-]+)
                 sshargs+=("$cmd")
                 ;;
             *)
@@ -267,13 +269,13 @@ vssh_old() {
         unset SSH_AUTH_SOCK
         if [[ $1 =~ ^-mode ]] || [[ $1 =~ ^-role ]]; then
             vault ssh "$@"
-        elif [[ $@ =~ jenkins ]]; then
+        elif [[ $* =~ jenkins ]]; then
             vault ssh -mode=ca -role=jenkins "$@"
-        elif [[ $@ =~ ec2 ]]; then
+        elif [[ $* =~ ec2 ]]; then
             vault ssh -mode=ca -role=cloud "$@"
-        elif [[ $@ =~ azure ]]; then
+        elif [[ $* =~ azure ]]; then
             vault ssh -mode=ca -role=cloud "$@"
-        elif [[ $@ =~ root ]]; then
+        elif [[ $* =~ root ]]; then
             vault ssh -mode=ca -role=admin "$@"
         else
             echo >&2 "Don't understand your vault ssh command: $*"
@@ -406,4 +408,23 @@ download_hashitool() {
     curl -fsSL "http://repo.xcalar.net/deps/${tool}_${version}_linux_amd64.zip" -o ${tool}-$$.zip >&2 && \
     unzip -o -q ${tool}-$$.zip >&2 && \
     rm -vf ${tool}-$$.zip
+}
+
+download_packer() {
+    export PACKER_VERSION=${PACKER_VERSION:-1.3.5}
+    export PACKER=$HOME/bin/packer-${PACKER_VERSION}
+    mkdir -p $(dirname $PACKER)
+    (
+    cd $(dirname $PACKER)
+    rm -f packer
+    download_hashitool packer $PACKER_VERSION
+    mv packer $PACKER
+    ln -sfn packer-${PACKER_VERSION} packer
+    )
+    if [ "$($PACKER --version)" != "$PACKER_VERSION" ]; then
+        echo "$PACKER version is $($PACKER --version)"
+        return 1
+    fi
+    echo "Packer version $($PACKER version)"
+    return 0
 }
