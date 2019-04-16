@@ -97,12 +97,12 @@ job "prometheus" {
       }
 
       service {
-        name = "grafana-ui"
+        name = "grafana"
         port = "grafana_ui"
 
         tags = [
-          "urlprefix-grafana-ui.nomad:9999/",
-          "urlprefix-grafana-ui.service.consul:9999/",
+          "urlprefix-grafana.nomad:9999/",
+          "urlprefix-grafana.service.consul:9999/",
           "urlprefix-grafana.service.consul:443/",
           "urlprefix-grafana.int.xcalar.com:443/",
         ]
@@ -170,7 +170,7 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image = "prom/prometheus:v2.8.0"
+        image = "prom/prometheus:v2.9.0"
 
         # force_pull = true
 
@@ -193,12 +193,12 @@ job "prometheus" {
       }
 
       service {
-        name = "prometheus-ui"
+        name = "prometheus"
         port = "prometheus_ui"
 
         tags = [
-          "urlprefix-prometheus-ui.service.consul:9999/",
-          "urlprefix-prometheus-ui.nomad:9999/",
+          "urlprefix-prometheus.service.consul:9999/",
+          "urlprefix-prometheus.nomad:9999/",
           "urlprefix-prometheus.service.consul:443/",
           "urlprefix-prometheus.int.xcalar.com:443/",
         ]
