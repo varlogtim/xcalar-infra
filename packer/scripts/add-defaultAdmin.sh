@@ -1,14 +1,14 @@
 #!/bin/bash
 
-set -x
+# Fix local admin login
+if test -e /etc/default/xcalar; then
+    . /etc/default/xcalar
+fi
 
-# 2. Fix allow_remote to jupyter
-JUPYTER_CONF=/var/opt/xcalar/.jupyter/jupyter_notebook_config.py
-sed -i '/c.NotebookApp.allow_remote_access/d' $JUPYTER_CONF
-echo "c.NotebookApp.allow_remote_access = True" >> $JUPYTER_CONF
+XCE_CONFIG=${XCE_CONFIG:-/etc/xcalar/default.cfg}
+XCE_HOME=${XCE_HOME:-$(awk -F'=' '/^Constants.XcalarRootCompletePath/{print $2}' $XCE_CONFIG)}
+CONF=${XCE_HOME:-/var/opt/xcalar}/config
 
-# 3. Fix local admin login
-CONF=/var/opt/xcalar/config
 mkdir -p $CONF
 cat > $CONF/defaultAdmin.json <<'EOF'
 {

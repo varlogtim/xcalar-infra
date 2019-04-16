@@ -80,11 +80,11 @@ provisioners:
     execute_command: '{{.Vars}} /usr/bin/sudo -E bash ''{{.Path}}'''
     scripts:
       - scripts/start.sh
-      - scripts/install-xcalar.sh
       - scripts/install-epel.sh
       - scripts/install-java8.sh
       - scripts/packages-{{user `osid`}}.sh
-      - scripts/fixup-kpmg.sh
+      - scripts/install-xcalar.sh
+      - scripts/fixup-jupyter.sh
   - type: file
     source: scripts/genDefaultAdmin.sh
     destination: /tmp/genDefaultAdmin.sh

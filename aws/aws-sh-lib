@@ -641,3 +641,16 @@ aws_seconds_until_spot_termination() {
     fi
     return 1
 }
+
+# aws_ami_add_account ami_id account_ids ...
+# Grants account_ids permissions to launch ami_id
+# AWS Marketplace = 679593333241
+aws_ami_add_account() {
+    local ami_id="$1" account_id='' snapshot_id=''
+    for account_id in "$@"; do
+        aws ec2 modify-image-attribute --image-id $ami_id --launch-permission "Add=[{UserId=$account_id}]"
+        for snapshot_id in $(aws ec2 describe-images --image-ids $ami_id --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text); do
+            aws ec2 modify-snapshot-attribute --snapshot-id $snapshot_id --attribute createVolumePermission --operation-type add --user-ids $account_id
+        done
+    done
+}

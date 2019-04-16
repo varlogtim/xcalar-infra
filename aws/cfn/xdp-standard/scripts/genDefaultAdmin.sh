@@ -1,8 +1,10 @@
 #!/bin/bash
 set -e
 
+export PATH=/opt/xcalar/bin:$PATH
+
 gen_password() {
-    nodejs -e 'var crypto=require("crypto"); var hmac=crypto.createHmac("sha256", "xcalar-salt").update("'$1'").digest("hex"); process.stdout.write(hmac+"\n")'
+    node -e 'var crypto=require("crypto"); var hmac=crypto.createHmac("sha256", "xcalar-salt").update("'$1'").digest("hex"); process.stdout.write(hmac+"\n")'
 }
 
 test_gen_password() {
