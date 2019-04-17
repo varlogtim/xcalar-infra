@@ -1,14 +1,22 @@
 #!/bin/bash
+
+DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
+
+export XLRINFRADIR="${XLRINFRADIR:-$(cd $DIR/.. && pwd)}"
+export PATH="${XLRINFRADIR}/bin:${PATH}"
+
 export CLOUDSDK_COMPUTE_REGION=${CLOUDSDK_COMPUTE_REGION-us-central1}
 export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
 GCLOUD_SDK_URL="https://sdk.cloud.google.com"
+GC_COMMON_OPTIONS="--zone=$CLOUDSDK_COMPUTE_ZONE"
 
 if [ "$(uname -s)" = Darwin ]; then
     readlink_f () {
         (
+        set -e
         target="$1"
 
-        cd "$(dirname $target)"
+        cd "$(dirname $target)" || exit 1
         target="$(basename $target)"
 
         # Iterate down a (possible) chain of symlinks
@@ -28,6 +36,12 @@ else
     }
 fi
 
+# duped code with disk_setup_script. should be refactored to be in infra-sh-lib and move disk setup and cloud_retry in
+# gce-sh-lib
+gcloud_retry () {
+    retry.sh gcloud "$@" $GC_COMMON_OPTIONS
+}
+
 say () {
     echo >&2 "$*"
 }
@@ -45,15 +59,14 @@ die () {
 }
 
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    say "usage: $0 <installer-url>|--no-installer <count (default: 3)> <cluster (default: `whoami`-xcalar)>"
+    say "usage: $0 <installer-url>|--no-installer <count (default: 3)> <cluster (default: $(whoami)-xcalar)>"
     exit 1
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
-DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 if [ -z "$BUILD_ID" ]; then
     BUILD_ID=$$
 fi
-TMPDIR="${TMPDIR:-/tmp/$(basename ${BASH_SOURCE[0]} .sh)-${BUILD_ID}}"
+TMPDIR="${TMPDIR:-/tmp/$(id -u)}/$(basename ${BASH_SOURCE[0]} .sh)-${BUILD_ID}"
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 if [ "$1" == "--no-installer" ]; then
@@ -77,9 +90,9 @@ fi
 INSTALLER_FNAME="$(basename $INSTALLER)"
 COUNT="${2:-3}"
 CLUSTER="${3:-`whoami`-xcalar}"
-CONFIG=/tmp/$CLUSTER-config.cfg
+CONFIG=$TMPDIR/$CLUSTER-config.cfg
 LDAP_CONFIG="http://repo.xcalar.net/ldap/gceLdapConfig.json"
-UPLOADLOG=/tmp/$CLUSTER-manifest.log
+UPLOADLOG=$TMPDIR/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
 EMAIL="$(git config user.email)"
 XC_DEMO_DATASET_DIR="${XC_DEMO_DATASET_DIR:-/srv/datasets}"
@@ -204,23 +217,23 @@ if [ "$1" != "--no-installer" ]; then
     STARTUP_ARGS+=(startup-script=$DIR/gce-userdata.sh,config=$CONFIG)
 fi
 
-say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
+say "Launching ${#INSTANCES[*]} instances: ${INSTANCES[*]} .."
 set -x
-gcloud compute disks create "${SWAP_DISKS[@]}" --size=${SWAP_SIZE}GB  --type=pd-ssd --zone=$CLOUDSDK_COMPUTE_ZONE
+gcloud_retry compute disks create "${SWAP_DISKS[@]}" --size=${SWAP_SIZE}GB  --type=pd-ssd
 res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
 fi
-gcloud compute disks create "${SERDES_DISKS[@]}" --size=${SERDES_SIZE}GB --type=pd-ssd --zone=$CLOUDSDK_COMPUTE_ZONE
+gcloud_retry compute disks create "${SERDES_DISKS[@]}" --size=${SERDES_SIZE}GB --type=pd-ssd
 res=$?
 if [ $res -ne 0 ]; then
     die $res "Failed to create disks"
 fi
 if [ $DATA_SIZE -gt 0 ]; then
-    gcloud compute disks create "${DATA_DISKS[@]}" --size=${DATA_SIZE}GB --type=pd-ssd --zone=$CLOUDSDK_COMPUTE_ZONE
+    gcloud_retry compute disks create "${DATA_DISKS[@]}" --size=${DATA_SIZE}GB --type=pd-ssd
 fi
 
-gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
+gcloud_retry compute instances create "${INSTANCES[@]}" "${ARGS[@]}" \
     --machine-type ${INSTANCE_TYPE} \
     --network=${NETWORK} \
     --boot-disk-type $DISK_TYPE \
@@ -236,10 +249,10 @@ for ii in `seq 1 $COUNT`; do
     instance=${CLUSTER}-${ii}
     swap=${CLUSTER}-swap-${ii}
     serdes=${CLUSTER}-serdes-${ii}
-    gcloud compute instances attach-disk $instance --disk=$serdes && \
-    gcloud compute instances attach-disk $instance --disk=$swap && \
+    gcloud_retry compute instances attach-disk $instance --disk=$serdes && \
+    gcloud_retry compute instances attach-disk $instance --disk=$swap && \
     if [ $DATA_SIZE -gt 0 ]; then
-        gcloud compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
+        gcloud_retry compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
     fi
     res=$?
     if [ $res -ne 0 ]; then
@@ -250,29 +263,25 @@ done
 # Mount SerDes SSD
 disk_setup_script() {
     cat <<-EOF
-	#/bin/bash
-	set -e
+	#!/bin/bash
+	DIR="\$(cd \$(dirname \${BASH_SOURCE[0]}) && pwd)"
+	cd \${DIR}
 	mkpart() {
-	    parted \$1 -s 'mklabel gpt mkpart primary 1 -1'
 	    PART=\${1}1
-	    until test -b \${PART}; do
-	        echo >&2 "Waiting for \${PART} ..."
-	        sleep 1
-	    done
+	    if ! test -b \${PART}; then
+	        bash retry.sh parted \$1 -s "mklabel gpt mkpart primary 1 -1"
+	        bash retry.sh test -b \${PART}
+	    fi
 	    echo "\${PART} \$3 \$2 defaults 0 0" | tee -a /etc/fstab
 	    case "\$2" in
 	        ext4)
-	            until mkfs.ext4 -m 0 -F \${PART}; do
-	                sleep 3
-	            done
-	            mkdir -p \$3
-	            mount \$3
+	            bash retry.sh mkfs.ext4 -m 0 -F \${PART}
+	            bash retry.sh mkdir -p \$3
+	            bash retry.sh mount \$3
 	            ;;
 	        swap)
-	            until mkswap -f \${PART}; do
-	                sleep 3
-	            done
-	            swapon -v \${PART}
+	            bash retry.sh mkswap -f \${PART}
+	            bash retry.sh swapon -v \${PART}
 	            ;;
 	    esac
 	}
@@ -281,7 +290,7 @@ disk_setup_script() {
 	mkpart /dev/sdb ext4 $XCE_XDBSERDESPATH
 	chmod o+w $XCE_XDBSERDESPATH
 	if [ $DATA_SIZE -gt 0 ]; then
-	    mkdir -p $XC_DEMO_DATASET_DIR
+	    bash retry.sh mkdir -p $XC_DEMO_DATASET_DIR
 	    mkpart /dev/sdd ext4 $XC_DEMO_DATASET_DIR
 	    echo "export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR" | tee -a /etc/default/xcalar
 	fi
@@ -291,7 +300,19 @@ disk_setup_script() {
 
 disk_setup_script > $TMPDIR/disk_setup_script.sh
 for ii in `seq 1 $COUNT`; do
-    gcloud compute scp $TMPDIR/disk_setup_script.sh ${CLUSTER}-${ii}:/tmp/disk_setup_script.sh || die 1 "Failed to copy $TMP/disk_setup_script.sh to ${CLUSTER}-${ii}"
+    gcloud_retry compute scp $XLRINFRADIR/bin/retry.sh ${CLUSTER}-${ii}:/tmp/retry.sh || die 1 "Failed to copy $XLRINFRADIR/bin/retry.sh to ${CLUSTER}-${ii}"
+    gcloud_retry compute scp $TMPDIR/disk_setup_script.sh ${CLUSTER}-${ii}:/tmp/disk_setup_script.sh || die 1 "Failed to copy $TMP/disk_setup_script.sh to ${CLUSTER}-${ii}"
+done
+
+FAILED_DISKS=()
+for ii in `seq 1 $COUNT`; do
+    if ! gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo -H /bin/bash -x /tmp/disk_setup_script.sh"; then
+        FAILED_DISKS+=(${ii})
+        echo >&2 "Cluster instance ${CLUSTER}-${ii} failed to setup disks properly"
+    fi
+done
+
+for ii in "${FAILED_DISKS[@]}"; do
     if ! gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo -H /bin/bash -x /tmp/disk_setup_script.sh"; then
         die 1 "Cluster instance ${CLUSTER}-${ii} failed to setup disks properly"
     fi
