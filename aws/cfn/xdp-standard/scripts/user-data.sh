@@ -297,17 +297,6 @@ if test -x /opt/xcalar/scripts/genDefaultAdmin.sh; then
         && mv $XLRROOT/config/defaultAdmin.json.tmp $XLRROOT/config/defaultAdmin.json
 fi
 
-if ! test -e $XLRROOT/config/defaultAdmin.json; then
-    cat > $XLRROOT/config/defaultAdmin.json << EOF
-{
-"username": "xdpadmin",
-"password": "9021834842451507407c09c7167b1b8b1c76f0608429816478beaf8be17a292b",
-"email": "info@xcalar.com",
-"defaultAdminEnabled": true
-}
-EOF
-fi
-
 chmod 0700 $XLRROOT/config
 chmod 0600 $XLRROOT/config/defaultAdmin.json
 chown -R xcalar:xcalar $XLRROOT
@@ -320,21 +309,25 @@ fi
 
 if test -w $EPHEMERAL; then
     chmod 0777 $EPHEMERAL
-    XCE_XDBSERDESPATH="${EPHEMERAL}/"
-    XCE_SERDESMODE=2
 fi
 
-if [ -n "$XCE_XDBSERDESPATH" ]; then
-    XCE_SERDESMODE=${XCE_SERDESMODE:-1}
-    XCE_CONFIG=${XCE_CONFIG:-/etc/xcalar/default.cfg}
-    sed -i '/^Constants.XdbLocalSerDesPath=/d' $XCE_CONFIG
-    echo "Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH" >> $XCE_CONFIG
-    echo "Constants.XdbSerDesMode=$XCE_SERDESMODE" >> $XCE_CONFIG
-fi
+enable_serdes() {
+    XCE_XDBSERDESPATH="$1"
+    XCE_SERDESMODE="$2"
+    if [ -n "$XCE_XDBSERDESPATH" ]; then
+        XCE_SERDESMODE=${XCE_SERDESMODE:-1}
+        XCE_CONFIG=${XCE_CONFIG:-/etc/xcalar/default.cfg}
+        sed -i '/^Constants.XdbLocalSerDesPath=/d' $XCE_CONFIG
+        echo "Constants.XdbLocalSerDesPath=${XCE_XDBSERDESPATH%/}/" >> $XCE_CONFIG
+        echo "Constants.XdbSerDesMode=$XCE_SERDESMODE" >> $XCE_CONFIG
+    fi
+}
 
-# You can add and Constants.Foo tag to the instance to have it populate in the config
-# eg, Constants.Cgroup=false
-ec2-tags -t | awk '/^Constants\./{printf "%s=%s\n",$1,$2}' >> $XCE_CONFIG
+enable_tags() {
+    # You can add and Constants.Foo tag to the instance to have it populate in the config
+    # eg, Constants.Cgroup=false
+    ec2-tags -t | awk '/^Constants\./{printf "%s=%s\n",$1,$2}' >> $XCE_CONFIG
+}
 
 /etc/init.d/xcalar start
 rc=$?

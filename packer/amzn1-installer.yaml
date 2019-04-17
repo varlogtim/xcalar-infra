@@ -15,10 +15,10 @@ variables:
   product: xdp-standard
   product_desc: Xcalar Data Platform
   installer_url: '{{env `INSTALLER_URL`}}'
-  #baseos_owners: ''
+  baseos_owners: '137112412989'
   shared_with: '045297022527,043829555035,364047378361'
-  #version: '1.0'
-  #build_number: '1'
+  version: '1.0'
+  build_number: '1'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-{{user `osid`}}
