@@ -119,7 +119,7 @@ if have_package cloud-init; then
     svc_cmd enable cloud-init
     svc_cmd enable cloud-init-local
     svc_cmd enable cloud-final
-    rm -f /var/log/cloud*.log
+    truncate -s 0 /var/log/cloud*.log
 fi
 
 if have_package chrony; then
@@ -140,7 +140,8 @@ if have_program consul; then
     consul leave
     svc_cmd stop consul
     svc_cmd disable consul
-    rm -rf /var/lib/consul/*
+    rm -rfv /var/lib/consul/*
+    rm -rfv /etc/consul.d/*
 fi
 
 if have_program caddy; then
@@ -151,14 +152,21 @@ fi
 if have_program nomad; then
     svc_cmd stop nomad
     svc_cmd disable nomad
-    rm -rf /var/lib/nomad/*
+    rm -rfv /var/lib/nomad/*
+fi
+
+if have_program  node_exporter; then
+    svc_cmd stop node_exporter
+    svc_cmd disable node_exporter
+    rm -fv /var/lib/node_exporter/textfile_collector/*
 fi
 
 cat >/etc/sysconfig/network <<EOF
 NETWORKING=yes
 NOZEROCONF=yes
-NETWORKING_IPV6=yes
+NETWORKING_IPV6=no
 ONBOOT=yes
+BOOTPROTO=dhcp
 EOF
 
 sed -r -i '/(HWADDR|UUID|IPADDR|NETWORK|NETMASK|USERCTL)/d' /etc/sysconfig/network-scripts/ifcfg-e*
@@ -169,16 +177,16 @@ DEVICE="eth0"
 NAME="eth0"
 ONBOOT="yes"
 NETBOOT="yes"
-IPV6INIT="yes"
+IPV6INIT="no"
 BOOTPROTO="dhcp"
 TYPE="Ethernet"
 PROXY_METHOD="none"
 BROWSER_ONLY="no"
 DEFROUTE="yes"
 IPV4_FAILURE_FATAL="no"
-IPV6_AUTOCONF="yes"
-IPV6_DEFROUTE="yes"
-IPV6_FAILURE_FATAL="no"
+#IPV6_AUTOCONF="yes"
+#IPV6_DEFROUTE="yes"
+#IPV6_FAILURE_FATAL="no"
 NM_CONTROLLED="no"
 EOF
 
