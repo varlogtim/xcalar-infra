@@ -1,7 +1,9 @@
 #!/bin/bash
 #
-# Copies an installer to S3/GCS, then provides a signed
-# URL with $EXPIRY seconds validity.
+# Copies an installer to S3/GCS/AZBLOB, then provides a signed
+# URL with $EXPIRY seconds validity
+#
+# shellcheck disable=SC2086,SC1091,SC2164
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -91,7 +93,7 @@ test_self () {
             echo "not ok $T - ${DEST}: Failed to upload $INSTALLER to $DEST. $(cat $TMPDIR/output.txt)"
             exit 1
         else
-            echo "ok $T - ${DEST}: Got URL ${URL%\?*}"
+            echo "ok $T - ${DEST}: Got URL ${URL}"
         fi
         T=$((T+1))
 
@@ -235,7 +237,7 @@ if $TESTING || test -f "$INSTALLER"; then
             # S3 eventual consistency at work
             sleep 1
         else
-            echo >&2 "Failed to upload to $INSTALLER to $DEST_URL"
+            say "Failed to upload to $INSTALLER to $DEST_URL"
             exit 1
         fi
         if check_url "$URL"; then
@@ -247,6 +249,11 @@ if $TESTING || test -f "$INSTALLER"; then
         ;;
     gs://*)
         URL="https://storage.googleapis.com/${DEST_URL#gs://}"
+        LOCK="${DEST_URL}.lock"
+        while ! echo "$(hostname) $$ $(date)" | gsutil -q -h "x-goog-if-generation-match:0" cp - "$LOCK"; do
+            say "Waiting for existing upload to complete ..."
+            sleep 10
+        done
         if $FORCE || ! gsutil ls "$DEST_URL" > /dev/null 2>&1; then
             say "Uploading $INSTALLER to $DEST_URL"
             until gsutil -m -o GSUtil:parallel_composite_upload_threshold=100M -q \
@@ -257,6 +264,9 @@ if $TESTING || test -f "$INSTALLER"; then
                 gsutil setmeta -h "Cache-Control:$CACHE_CONTROL" "$DEST_URL" >&2
             fi
         fi
+        while ! gsutil -q rm "$LOCK"; do
+            sleep 1
+        done
         if check_url "$URL"; then
             echo "$URL"
             exit 0
