@@ -50,7 +50,7 @@ usage()
         -N              Disable GCE preemption
         -p <wdpath>     Remote working directory
         -r <results>    Directory to store perf results
-        -s              Pull support bundle on exit
+        -s              Pull support bundle on failure
         -S              Set up and configure cluster but skip SQL tests
         -t <timeout>    Cluster startup timeout (seconds)
         -T <hours>      Iterate test for at least this many hours
@@ -234,7 +234,7 @@ installDeps() {
     rcmd mkdir -p "$optRemotePwd"
     rcmd sudo mkdir -p "$imdTestDir"
     rcmd sudo chmod a+rwx "$imdTestDir"
-    gscpTo "$XLRDIR/src/sqldf/tests/test_jdbc.py" "$optRemotePwd"
+    gscpTo "$XLRDIR/src/sqldf/tests/*.py" "$optRemotePwd"
     gscpTo "$XLRGUIDIR/assets/test/json/*.json" "$optRemotePwd"
     gscpTo "$XLRDIR/src/sqldf/tests/IMDTest/*.json" "$imdTestDir"
     gscpTo "$XLRDIR/src/sqldf/tests/IMDTest/loadData.py" "$imdTestDir"
@@ -271,7 +271,7 @@ runTest() {
         local results_spark="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter-spark"
         rcmd "XLRDIR=$optRemoteXlrDir" "$optRemoteXlrDir/bin/python3" "$optRemotePwd/test_jdbc.py" \
             -p "$optRemotePwd" -o $results_spark -n "$optNumNodes,$optInstanceType" -S $SPARK_IP --bucket "gs://$optBucket/" $optsTestJdbc --ignore-xcalar
-        gscpFrom "$clusterLeadName:${results_spark}*.json" "$optResultsPath"
+        gscpFrom "${results_spark}*.json" "$optResultsPath"
     fi
 
     local results_xcalar="$optRemotePwd/$optClusterName-${optNumNodes}nodes-$optInstanceType-$testIter"
@@ -279,17 +279,21 @@ runTest() {
         -p "$optRemotePwd" -o $results_xcalar -n "$optNumNodes,$optInstanceType" $optsTestJdbc
 
     # IMD test doesn't generate a perf file
-    gscpFrom "$clusterLeadName:${results_xcalar}*.json" "$optResultsPath" || true
+    gscpFrom "${results_xcalar}*.json" "$optResultsPath" || true
 
     echo "######## Ending iteration $testIter ########"
 }
 
 destroyCluster() {
-    if $optSupportBundle
+    # Preserve the value for use here, but note bash returns the $? value from prior to exit handler invocation.
+    retval=$?
+    if $optSupportBundle && [[ $retval -ne 0 ]]
     then
         rcmdAll sudo /opt/xcalar/scripts/support-generate.sh
         # support is on shared storage, so no need for copy from all
         gscpFrom /mnt/xcalar/support $optResultsPath
+    else
+        echo "NOT collecting support bundle (retval: $retval, -s option: $optSupportBundle)"
     fi
 
     if ! $optKeep
@@ -300,6 +304,8 @@ destroyCluster() {
             $XLRINFRADIR/bin/gce-dataproc-delete.sh -c "$optClusterName-spark" -f "$optClusterName-port"
         fi
     fi
+
+    echo "Test artifacts left in $optResultsPath"
 }
 
 trap destroyCluster EXIT
