@@ -25,6 +25,7 @@ optEnableSpark=false
 optBucket="sqlscaletest"
 optHours=0
 optSupportBundle=false
+optTcpdump=false
 
 usage()
 {
@@ -42,6 +43,7 @@ usage()
 
     Usage: $myName <options> -- <test_jdbc options>
         -c <name>       GCE cluster name
+        -d <tcpdump>    Capture packets from some node 0 ports to pcap file (on failure)
         -i <image>      Path to Xcalar installer image
         -I <type>       GCE instance type (eg n1-standard-8)
         -k              Leave cluster running on exit
@@ -62,9 +64,10 @@ usage()
 EOF
 }
 
-while getopts "c:i:I:kn:Npr:sSt:T:ux:X:b:d" opt; do
+while getopts "c:di:I:kn:Npr:sSt:T:ux:X:b:d" opt; do
   case $opt in
       c) optClusterName="$OPTARG";;
+      d) optTcpdump=true;;
       i) optXcalarImage="$OPTARG";;
       I) optInstanceType="$OPTARG";;
       k) optKeep=true;;
@@ -227,7 +230,7 @@ createCluster() {
 }
 
 installDeps() {
-    rcmd sudo yum install -y tmux nc gcc gcc-c++
+    rcmd sudo yum install -y tmux nc gcc gcc-c++ tcpdump pbzip2
     rcmd sudo "$optRemoteXlrDir/bin/pip" install gnureadline multiset jaydebeapi
     # XXX: Fix in test_jdbc
     local imdTestDir="/opt/xcalar/src/sqldf/tests/IMDTest/"
@@ -249,6 +252,12 @@ installDeps() {
     rcmd sudo /opt/xcalar/bin/supervisorctl -s unix:///var/tmp/xcalar-root/supervisor.sock reread || true
     rcmd sudo /opt/xcalar/bin/supervisorctl -s unix:///var/tmp/xcalar-root/supervisor.sock reload || true
     rcmd sudo /opt/xcalar/bin/supervisorctl -s unix:///var/tmp/xcalar-root/supervisor.sock restart xcalar:sqldf || true
+
+    if $optTcpdump
+    then
+        rcmd 'sudo nohup tcpdump -ni any -w $(hostname).pcap port 9090 or port 12124 or port 10000 >tcpdump-stdout.out 2>tcpdump-stderr.out < /dev/null &'
+    fi
+
     if $optEnableSpark
     then
         waitCmd "rcmd 'nc $SPARK_IP 10000 </dev/null 2>/dev/null'" $optTimeoutSec
@@ -287,6 +296,9 @@ runTest() {
 destroyCluster() {
     # Preserve the value for use here, but note bash returns the $? value from prior to exit handler invocation.
     retval=$?
+
+    set +e # allow exit handler to proceed with errors
+
     if $optSupportBundle && [[ $retval -ne 0 ]]
     then
         rcmdAll sudo /opt/xcalar/scripts/support-generate.sh
@@ -294,6 +306,12 @@ destroyCluster() {
         gscpFrom /mnt/xcalar/support $optResultsPath
     else
         echo "NOT collecting support bundle (retval: $retval, -s option: $optSupportBundle)"
+    fi
+
+    if $optTcpdump && [[ $retval -ne 0 ]] # Only download pcap file on failure
+    then
+        rcmd 'sudo pkill -SIGTERM tcpdump && sleep 5 && pbzip2 *.pcap'
+        gscpFrom "*.pcap.bz2" "$optResultsPath"
     fi
 
     if ! $optKeep
