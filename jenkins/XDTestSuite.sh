@@ -245,6 +245,7 @@ sleep 5
 if [ $JOB_NAME = "XDEndToEndTest" ]; then
     cd $XLRGUIDIR/assets/dev/e2eTest
     npm install
+    npm install chromedriver --save-dev
 else
     cd $XLRGUIDIR/assets/dev/unitTest
     # Please don't ask me why I have to independently install this package.
