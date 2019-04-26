@@ -4,9 +4,23 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin:/opt/aws/bin:
 
 XCE_CONFDIR="${XCE_CONFDIR:-/etc/xcalar}"
 
+EPHEMERAL=/ephemeral/data
+
+NOW=$(date +%s)
+if test -x /usr/bin/ephemeral-disk; then
+    until mountpoint -q $EPHEMERAL; do
+        echo >&2 "Waiting for $EPHEMERAL mount point to show up ..."
+        sleep 5
+        if [[ $(( $(date +%s) - NOW )) -gt 120 ]]; then
+            echo >&2 "Giving up on $EPHEMERAL"
+            break
+        fi
+    done
+fi
+
 if [ -z "$TMPDIR" ]; then
-    if [ -e /ephemeral/data ]; then
-        export TMPDIR=/ephemeral/data/tmp
+    if [ -w "$EPHEMERAL" ]; then
+        export TMPDIR=$EPHEMERAL/tmp
     elif [ -e /mnt/resource ]; then
         export TMPDIR=/mnt/resource/tmp
     elif [ -e /mnt ]; then
@@ -51,8 +65,6 @@ if [ -n "$INSTALLER_URL" ]; then
         if ! aws s3 cp "$INSTALLER_URL" "$INSTALLER_FILE"; then
             rm -f "$INSTALLER_FILE"
         fi
-    elif download_file "$INSTALLER_URL" "$INSTALLER"; then
-        :
     elif INSTALLER_S3=$(aws_s3_from_url "$INSTALLER_URL") && [ -n "$INSTALLER_S3" ]; then
         if ! aws s3 cp "$INSTALLER_S3" "$INSTALLER_FILE"; then
             rm -f "$INSTALLER_FILE"
@@ -74,13 +86,22 @@ if [ -n "$INSTALLER_URL" ]; then
     rm -v -f "${INSTALLER_FILE}"
 fi
 
-if [ -n "$LICENSE_URL" ]; then
+LICENSE_FILE="${XCE_CONFDIR}/XcalarLic.key"
+if [ -z "$LICENSE" ] && [ -n "$LICENSE_URL" ]; then
     set +e
-    set -x
-    LICENSE_FILE="${XCE_CONFDIR}/XcalarLic.key"
-    curl -fsSL "${LICENSE_URL}" -o "${LICENSE_URL}"
+    case "$LICENSE_URL" in
+        https://*)
+            LICENSE="$(curl -fsSL "$LICENSE_URL")"
+            ;;
+        s3://*)
+            LICENSE="$(aws s3 cp "$LICENSE_URL" -)"
+            ;;
+        *)
+            LICENSE="$(cat "${LICENSE_URL#file://}")"
+            ;;
+    esac
     rc=$?
-    if [ $rc -ne 0 ]; then
+    if [ $rc -ne 0 ] || [ -z "$LICENSE" ]; then
         echo >&2 "!!! FAILED TO DOWNLOAD LICENSE !!!"
         echo >&2 "!!! $LICENSE_URL -> $LICENSE_FILE"
         echo >&2 "!!! rc=$rc"
@@ -88,6 +109,13 @@ if [ -n "$LICENSE_URL" ]; then
         exit $rc
     fi
 fi
+touch "$LICENSE_FILE"
+if [ -n "$LICENSE" ]; then
+    (set -o pipefail; echo "$LICENSE" | base64 -d | gzip -dc) > "$LICENSE_FILE".tmp \
+        && mv "$LICENSE_FILE".tmp "$LICENSE_FILE"
+fi
+chmod 0600 "$LICENSE_FILE"
+chown xcalar:xcalar "$LICENSE_FILE"
 
 set +e
 set -x

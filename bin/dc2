@@ -1,0 +1,443 @@
+#!/bin/bash
+#
+# dc2 is a tool to deploy our software to the cloud.
+#
+#  $ dc2 upload --project xdp-awsmp --version 2.0.0 --release 100
+#
+# Will package and upload the cloudformation template to s3 and optionally
+# invoke the template.
+#
+#  $ dc2 installer -d s3 --upload /netstore/builds/ReleaseCandidates/xcalar-latest/prod
+#
+# shellcheck disable=SC1091,SC2086,SC2046
+
+set -e
+
+. infra-sh-lib
+. aws-sh-lib
+
+set -u
+
+dc2_help() {
+    cat << EOF
+    usage: dc2 cmd
+
+    $0 can upload and deploy Cloud resources
+
+    Parameters:
+    cmd             One of deploy, upload
+EOF
+    exit 1
+}
+
+dc2_upload_help() {
+    cat << EOF
+    usage: dc2 upload --project PROJECT [--version VERSION] [--release|-r RELEASE]
+              [--environment|-e  ENVIRONMENT]
+              [--flavors FLAVORS]
+              [--dry-run]  [--force] [--debug] [--render]
+              [--find-ami Look for newest AMI in each supported region]
+
+    $0 takes CloudFormation stack templates, applies some preprocessing on it then
+    publish the templates/scripts to the appropriate directories in S3. The S3 URLs
+    can then be used by customers for their own deployment.
+
+    --flavors   FLAVORS     What flavors to build (eg, default,withvpc)
+EOF
+    exit 2
+}
+
+dc2_deploy_help() {
+    cat << EOF
+    usage: dc2 deploy --name STACK_NAME --mode MODE
+                    [--template-url URL] [--params params.yaml]
+                    [--no-wait] [--project PROJECT] [--version VERSION] [--release|-r RELEASE] [--environment|-e  ENVIRONMENT]
+                    [--dry-run]  [--force] [--debug]
+
+    $0 deploys or updates the CloudFormation provided and creates/updates the
+    given stack.
+
+    --name NAME           The CloudFormation stack name
+    --mode MODE           create or update
+    --no-wait             Don't wait for stack to finish
+EOF
+    exit 2
+}
+
+s3_sync() {
+    (
+        local quiet='--quiet'
+        if ((DEBUG)); then
+            quiet=''
+            set -x
+        fi
+        aws s3 sync $quiet \
+            --acl public-read \
+            --metadata-directive REPLACE \
+            --content-disposition inline \
+            --content-type application/json \
+            --cache-control 'private, no-cache, no-store, must-revalidate, max-age=0, no-transform' "$@" >&2
+    )
+}
+
+ec2_find_ami() {
+    aws ec2 describe-images \
+        --query 'Images[].[CreationDate, Name, ImageId]' \
+        --output text "$@" | sort -rn | head -1 | awk '{print $(NF)}'
+}
+
+ec2_image_tags() {
+    aws ec2 describe-images --image-ids "${1}" --query 'Images[].Tags[]' | jq -r 'map({(.Key): .Value}) | add | {Image: { Id: "'$1'", Tags: .} }'
+}
+
+xcalar_latest() {
+    AMZN1HVM_US_EAST_1=$(ec2_find_ami --filters 'Name=name,Values=xdp-*' --owner self --region us-east-1)
+    AMZN1HVM_US_WEST_2=$(ec2_find_ami --filters 'Name=name,Values=xdp-*' --owner self --region us-west-2)
+    echo "ami_us_east_1: $AMZN1HVM_US_EAST_1" > $TEMPLATEDIR/vars/amis.yaml
+    echo "ami_us_west_2: $AMZN1HVM_US_WEST_2" >> $TEMPLATEDIR/vars/amis.yaml
+}
+
+jq_get_userata_from_lc() {
+    jq -r '.Resources.LaunchConfiguration.Properties.UserData."Fn::Base64"."Fn::Sub"[0]'
+}
+
+jq_get_userata_from_lt() {
+    jq -r '.Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64"."Fn::Sub"[0]'
+}
+
+jq_put_userata_in_lc() {
+    # STDIN = template $1 = Resource path to UserData $2 = shell script to inject
+    # Eg, jq_put_userata_in_lc ClusterLC.Properties.UserData deploy.sh < xdp-standard.json
+    #jq -r ".Resources.ClusterLC.Properties.UserData.\"Fn::Base64\".\"Fn::Sub\"[0] = $(jq -R -s . < scripts/user-data.sh)" < xdp-standard.json
+    jq -r ".Resources.ClusterLC.Properties.UserData.\"Fn::Base64\".\"Fn::Sub\"[0] = $(cat "$@" | jq -R -s .)"
+}
+
+jq_put_userata_in_lt() {
+    #jq -r ".Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData.\"Fn::Base64\".\"Fn::Sub\"[0] = $(jq -R -s . < scripts/user-data.sh)" < xdp-standard.json
+    jq -r ".Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData.\"Fn::Base64\".\"Fn::Sub\"[0] = $(cat "$@" | jq -R -s .)"
+}
+
+# Turn [ { "ParameterKey": "Foo", "ParameterValue":"Bar"}, .. ]
+# into { "Foo": "Bar", .. }
+# and pipe to |to_entries to get it back
+jq_kv_to_object() {
+    jq -r '.Parameters| map_values({(.ParameterKey): (.ParameterValue)}) | add'
+}
+
+# Convert stdin, a raw text file into a JS object
+jq_from_text() {
+    jq -R -s -c '{'${1:-user_data}': split("\n")}'
+}
+
+save_tmpdir() {
+    local saveDir
+    saveDir="$(dirname $TMPDIR)/save"
+    rm -r "$saveDir"
+    mv "${TMPDIR}" "$saveDir"
+    echo >&2 "Results will be saved in $saveDir"
+}
+
+j2transform() {
+    if ! cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "${J2DEFS[@]}" "$@"; then
+        return 1
+    fi
+    return 0
+}
+
+dc2_parse_common() {
+    local cmd="$1"
+    shift
+    case "$cmd" in
+        --debug | -d) DEBUG=1 ;;
+        --project | -p)
+            PROJECT="$1"
+            #PROJDIR="$(cd $PROJECT && pwd || { cd $TEMPLATEDIR && pwd} )"
+            echo 2
+            ;;
+        --release | -r)
+            RELEASE="$1"
+            echo 2
+            ;;
+        --cloud)
+            CLOUD="$1"
+            echo 2
+            ;;
+        --version | -V)
+            VERSION="$1"
+            echo 2
+            ;;
+        --environment | --env | -e)
+            ENVIRONMENT="$1"
+            echo 2
+            ;;
+        --template)
+            TEMPLATE="$1"
+            echo 2
+            ;;
+        --keep | -k) KEEP=1 ;;
+        --dryrun | --dry-run | -n)
+            DRY=1
+            KEEP=1
+            ;;
+        --name)
+            NAME="$1"
+            echo 2
+            ;;
+        --force) FORCE=true ;;
+        --quiet | -q) QUIET=true ;;
+        --create) MODE=create ;;
+        --update) MODE=update ;;
+        --verbose | -v) VERBOSE=true ;;
+        --url-file)
+            URL_FILE="$1"
+            echo 2
+            ;;
+        *)
+            echo "0"
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+dc2_deploy() {
+    PARAMS="$TEMPLATEDIR"/params/$AWS_DEFAULT_REGION.yaml
+    WAIT=1
+    while [[ $# -gt 0 ]]; do
+        local cmd="$1" shift_amount
+        if dc2_parse_common "$@" > $TMPDIR/shift.txt; then
+            shift_amount=$(cat $TMPDIR/shift.txt)
+            shift "${shift_amount:-1}"
+            continue
+        fi
+        shift
+        case "$cmd" in
+            --help | -h) dc2_deploy_help ;;
+            --mode)
+                MODE="$1"
+                shift
+                ;;
+            --params)
+                PARAMS="$1"
+                shift
+                ;;
+            --no-wait) WAIT=0;;
+            --template-url)
+                templateUrl="$1"
+                shift
+                ;;
+            --) break ;;
+            -*)
+                echo >&2 "ERROR: Unknown argument $cmd"
+                dc2_deploy_help
+                ;;
+            *) break ;;
+        esac
+    done
+
+    case "$MODE" in
+        create)
+            if ! aws cloudformation create-stack --stack-name "$NAME" --capabilities CAPABILITY_IAM --template-url "${templateUrl}" --parameters "$(cfn-flip < "$PARAMS" | jq -r '.Parameters')"; then
+                die "Failed to create stack $NAME"
+            fi
+            if ((WAIT)); then
+                say "Waiting for $NAME to come up ..."
+                if ! aws cloudformation wait stack-create-complete --stack-name $NAME; then
+                    die "Failed waiting for $NAME to come up ..."
+                fi
+            fi
+            ;;
+        update)
+            changeSet="${NAME}-$(date +%Y%m%d%H%M%S)"
+            local changeSetID
+            if changeSetID="$(aws cloudformation create-change-set --stack-name "$NAME" --capabilities CAPABILITY_IAM --template-url "${templateUrl}" --parameters "$(cfn-flip < "$PARAMS" | jq -r '.Parameters')" \
+                --change-set-name $changeSet --query 'Id' --output text)"; then
+                until aws cloudformation describe-change-set --change-set-name "$changeSetID"; do
+                    sleep 3
+                done
+                aws cloudformation execute-change-set --change-set-name "$changeSetID"
+            fi
+            ;;
+        *)
+            die "No deployment mode specified. Use --create or --update"
+            ;;
+    esac
+
+}
+
+dc2_upload() {
+    FLAVORS="default,withvpc"
+    while [[ $# -gt 0 ]]; do
+        local cmd="$1" shift_amount
+        if dc2_parse_common "$@" > $TMPDIR/shift.txt; then
+            shift_amount=$(cat $TMPDIR/shift.txt)
+            shift "${shift_amount:-1}"
+            continue
+        fi
+        shift
+        case "$cmd" in
+            --help | -h) dc2_upload_help ;;
+            --find-ami) FIND_AMI=1 ;;
+            --flavors) FLAVORS="$1"; shift;;
+            -D)
+                J2DEFS+=("-D" "$1")
+                shift
+                ;;
+            --) break ;;
+            *)
+                say "ERROR: Unknown argument $cmd"
+                dc2_upload_help
+                ;;
+        esac
+    done
+
+    test -n "$PROJECT" || die "Need to set --project"
+    test -n "$VERSION" || VERSION=$(cat $PORJECT/VERSION) || die "Need to set --version"
+    PROJDIR="${TEMPLATEDIR}/${PROJECT}"
+    CONTEXT="${ENVIRONMENT}/${PROJECT}/${VERSION}"
+    if test -z "${RELEASE:-}"; then
+        RELEASE=$(consul kv get "$CONTEXT/next") || RELEASE=1
+        consul kv put $CONTEXT/next $((RELEASE + 1))
+    fi
+    test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
+
+    GENDIR="$TMPDIR"/gen
+    mkdir -p "$GENDIR"/scripts/
+    cd "$GENDIR" || die "Failed to cd to $GENDIR"
+    for ii in "$PROJDIR"/scripts/*; do
+        if [[ $ii =~ .j2$ ]]; then
+            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "$ii" > $GENDIR/scripts/$(basename $ii .j2)
+        else
+            cp $ii $GENDIR/scripts/
+        fi
+    done
+
+    case "$AWS_DEFAULT_REGION" in
+        us-west-2) BUCKET=xcrepo ;;
+        us-east-1) BUCKET=xcrepoe1 ;;
+        *)
+            export AWS_DEFAULT_REGION=us-east-1
+            BUCKET=xcrepoe1
+            ;;
+    esac
+
+    BUCKET_ENDPOINT="https://$(aws_s3_endpoint $BUCKET)"
+    TARGET=cfn/${CONTEXT}-${RELEASE}
+    BASE_URL="${BUCKET_ENDPOINT}/${TARGET}"
+    bootstrapUrl="${BASE_URL}/scripts/user-data.sh"
+
+    mkdir -p "$TMPDIR"/vars
+    rm -fv "$TMPDIR"/vars/*
+
+    cat > "$PROJDIR"/vars/deploy.yaml <<- EOF
+	VERSION: $VERSION
+	PROJECT: $PROJECT
+	RELEASE: $RELEASE
+	baseUrl: '$BASE_URL'
+	bootstrapUrl: '$bootstrapUrl'
+	EOF
+    cat > "$TMPDIR"/vars/build.yaml <<- EOF
+	Date: $(date +%FT%T%z)"
+	EOF
+    # jq_from_text user_data < "$PROJDIR"/scripts/user-data.sh | cfn-flip >> "$PROJDIR"/vars/deploy.yaml
+
+    local -a urls=()
+    test -n "${URL_FILE:-}" && rm -f "${URL_FILE}" || true
+    local ami_id=$(cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml  | cfn-flip | jq -r '.ami_us_west_2')
+    aws ec2 describe-images --region us-west-2 --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TEMPLATEDIR"/vars/image.yaml
+    for J2TEMPLATE in "$PROJDIR"/*.template.j2; do
+        TEMPLATE=$(basename $J2TEMPLATE .template.j2)
+        for flavor in ${FLAVORS//,/ }; do
+            case "$flavor" in
+                default) TEMPLATEOUT=${TEMPLATE};;
+                *) TEMPLATEOUT=${TEMPLATE}-${flavor};;
+            esac
+            templateUrl="${BASE_URL}/${TEMPLATEOUT}.json"
+            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml "$TEMPLATEDIR"/flavor/${flavor}.yaml > $TMPDIR/allvars.yaml
+
+            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "templateUrl=$templateUrl" "$J2TEMPLATE" | tee ${TMPDIR}/${TEMPLATEOUT}.yaml | cfn-flip > ${GENDIR}/${TEMPLATEOUT}.json; then
+                die "Failed to apply jinja template ${GENDIR}/${TEMPLATEOUT}.json"
+            fi
+            if ! aws cloudformation validate-template --template-body file://${GENDIR}/${TEMPLATEOUT}.json > "$TMPDIR/${TEMPLATEOUT}.parameters.json"; then
+                die "Failed to validate ${GENDIR}/${TEMPLATEOUT}.json"
+            fi
+            if [ -n "${URL_FILE:-}" ]; then
+                echo "$templateUrl" >> "$URL_FILE"
+            fi
+            echo "$templateUrl"
+            urls+=("$templateUrl")
+        done
+    done
+
+
+    if ((DRY)); then
+        s3_sync --dryrun "${GENDIR}/" "s3://${BUCKET}/${TARGET}/" >&2
+    else
+        local -i would_delete
+        would_delete=$(s3_sync --dryrun ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" | grep delete: | wc -l) || die "Failed to access s3://${BUCKET}/${TARGET}"
+        if [ $would_delete -gt 10 ]; then
+            warn "You would delete $would_delete objects from s3://${BUCKET}/${TARGET}/!!"
+            die "Manually remove the destination first, aws s3 rm --recursive s3://${BUCKET}/${TARGET}/ if you're sure"
+        fi
+        s3_sync ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" >&2
+    fi
+
+    cd - > /dev/null
+}
+
+dc2_cleanup() {
+    local rc=$1
+    if [ $rc -eq 0 ]; then
+        if ! [[ "$TMPDIR" =~ ^/tmp/ ]]; then
+            warn "Leaving suspicious looking TMPDIR=$TMPDIR !!"
+        elif ((KEEP)); then
+            local keepDir="$(dirname "$TMPDIR")"/keep
+            rm -rf $keepDir
+            mv "$TMPDIR" "$keepDir"
+            TMPDIR="$keepDir"
+            say "Keeping $TMPDIR due to KEEP setting"
+        else
+            rm -rf $TMPDIR
+        fi
+        exit 0
+    fi
+    warn "Keeping $TMPDIR due to error exit"
+    exit $rc
+}
+
+dc2_defaults() {
+    declare -g FIND_AMI='' DRY=0 KEEP=0 DEBUG='' CLOUD=aws MODE=''
+    declare -g ENVIRONMENT=${ENVIRONMENT:-dev}
+    declare -g TMPBASE="${TMPDIR:-/tmp}/$(basename $0 .sh)-$(id -u)" # EG /tmp/dc2-1000/
+
+    declare -g -a J2DEFS=()
+    case "$CLOUD" in
+        aws) declare -g TEMPLATEDIR="$XLRINFRADIR"/aws/cfn ;;
+        azure) declare -g TEMPLATEDIR="$XLRINFRADIR"/azure ;;
+        *) die "Unsupported cloud $CLOUD";;
+    esac
+    mkdir -p "$TMPBASE" || die "Failed to create $TMPBASE"
+    export TMPDIR="$(mktemp -d "$TMPBASE"/dc2.XXXXXX)" || die "Failed to create $TMPDIR"
+    trap "dc2_cleanup \$?" EXIT INT TERM HUP
+}
+
+dc2_main() {
+    dc2_defaults
+
+    local cmd="$1"
+    shift
+    case "$cmd" in
+        deploy)
+            dc2_deploy "$@"
+            ;;
+        upload)
+            dc2_upload "$@"
+            ;;
+        *)
+            say "Unknown command $cmd"
+            dc2_help
+            ;;
+    esac
+}
+
+dc2_main "$@"

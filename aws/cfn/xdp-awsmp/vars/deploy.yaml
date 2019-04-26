@@ -1,0 +1,5 @@
+VERSION: 2.0.0
+PROJECT: xdp-awsmp
+RELEASE: RC15-2
+baseUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/prod/xdp-awsmp/2.0.0-RC15-2'
+bootstrapUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/prod/xdp-awsmp/2.0.0-RC15-2/scripts/user-data.sh'

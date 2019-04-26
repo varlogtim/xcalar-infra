@@ -11,14 +11,14 @@ sed -i '/^proxy/d' /etc/yum.conf
 
 truncate -s 0 /var/log/secure /var/log/messages /var/log/dmesg /var/log/audit/audit.log || true
 
-rm -f /var/log/startupscript.log /var/log/dmesg.old /var/log/cfn-* /var/log/cloud-init* /var/log/user-data*
-rm -f /etc/hostname /root/.bash_history /home/*/.bash_history
-if [[ "$BUILD_TYPE" =~ amazon ]] || [[ "$BUILD_TYPE" =~ azure ]]; then
-    echo >&2 "Detected $BUILD_TYPE, deleting authorized_keys"
+rm -fv /var/log/startupscript.log /var/log/dmesg.old /var/log/cfn-* /var/log/cloud-init* /var/log/user-data*
+rm -fv /etc/hostname /root/.bash_history /home/*/.bash_history
+if [[ "$PACKER_BUILDER_TYPE" =~ amazon ]] || [[ "$PACKER_BUILDER_TYPE" =~ azure ]]; then
+    echo >&2 "Detected PACKER_BUILDER_TYPE=$PACKER_BUILDER_TYPE, deleting authorized_keys"
     rm -fv /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
 fi
 
-rm -rf /var/lib/cloud/instances/*
+rm -rfv /var/lib/cloud/instances/*
 
 : >/var/log/lastlog
 : >/var/log/wtmp

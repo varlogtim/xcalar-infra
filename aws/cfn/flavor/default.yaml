@@ -1,0 +1,3 @@
+createVpc: False
+retainPolicy: True
+licenseArg: False

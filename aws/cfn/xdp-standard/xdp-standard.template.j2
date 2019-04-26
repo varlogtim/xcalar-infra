@@ -302,12 +302,12 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-EfsSecurityGroup'
-  EfsSecurityGroupIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref 'EfsSecurityGroup'
-      IpProtocol: '-1'
-      SourceSecurityGroupId: !Ref 'EfsSecurityGroup'
+          #  EfsSecurityGroupIngress:
+          #    Type: AWS::EC2::SecurityGroupIngress
+          #    Properties:
+          #      GroupId: !Ref 'EfsSecurityGroup'
+          #      IpProtocol: '-1'
+          #      SourceSecurityGroupId: !Ref 'EfsSecurityGroup'
   EfsSharedRoot:
     Type: AWS::EFS::FileSystem
     Condition: CreateNewShare

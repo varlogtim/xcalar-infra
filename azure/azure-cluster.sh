@@ -95,7 +95,7 @@ if [ $DEPLOY_COUNT -eq 0 ]; then
 else
     DEPLOY="$CLUSTER-deploy-${NOW}-$DEPLOY_COUNT"
 fi
-EMAIL="`id -un`@xcalar.com"
+EMAIL="${BUILD_USER_EMAIL:-$(id -un)@xcalar.com}"
 set -e
 for op in validate create; do
     deploy_name=

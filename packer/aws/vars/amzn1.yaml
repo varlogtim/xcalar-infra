@@ -1,4 +1,4 @@
 osid: amzn1
 device_name: /dev/xvda
-baseos: amzn-ami-hvm-2018.03
-baseos_owners: '137112412989'
+baseos: xdp-amzn1-base
+baseos_owners: '559166403383'

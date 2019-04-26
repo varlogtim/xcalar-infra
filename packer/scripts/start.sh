@@ -18,7 +18,7 @@ get_meta_data() {
 
 get_cloud_cfg() {
     # Check for metadata service
-    CLOUD= INSTANCE_ID= INSTANCE_TYPE=
+    CLOUD='' INSTANCE_ID='' INSTANCE_TYPE=''
     if INSTANCE_ID="$(get_meta_data latest/meta-data/instance-id)"; then
         CLOUD=aws
         INSTANCE_TYPE="$(get_meta_data latest/meta-data/instance-type)"
@@ -53,7 +53,7 @@ keep_trying() {
     return 0
 }
 
-curl -fsSL http://repo.xcalar.net/scripts/osid -o /usr/bin/osid
+curl -fsSL http:/repo.xcalar.net/scripts/osid-201904 -o /usr/bin/osid
 chmod +x /usr/bin/osid
 OSID=$(osid)
 

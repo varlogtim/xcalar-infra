@@ -1,27 +1,23 @@
 ---
 variables:
   uid: '1000'
-  osid: 'amzn1'
   disk_size: '8'
   device_name: /dev/xvda
-  baseos: xdp-amzn1-base
+  baseos: amzn-ami-hvm-2018.03
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
   destination_regions: 'us-east-1,us-west-2'
   today: '{{isotime "20060102"}}'
   image_build_number: '1'
-  build_id: '{{env `BUILD_ID`}}'
-  product: xdp-standard
-  product_desc: Xcalar Data Platform
-  description: Xcalar Data Platform
-  installer_url: '{{env `INSTALLER_URL`}}'
-  baseos_owners: '559166403383'
-  shared_with: '045297022527,043829555035,364047378361'
-  version: '1.0'
-  license: '{{env `LICENSE`}}'
-  build_number: '1'
+  product: xdp-amzn1-base
+  product_desc: Xcalar Base Image
+  description: Xcalar Base Image
+  baseos_owners: '137112412989'
+  version: '2018.03'
+  build_number: '{{env `BUILD_NUMBER`}}'
   ssh_username: ec2-user
+  osid: 'amzn1'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-{{user `osid`}}
@@ -49,17 +45,15 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `baseos` | upper}}'
-    ami_description: '{{user `product_desc`}} ({{user `osid` | upper}} {{user `version`}} {{user `build_number`}} ({{user `today`}}))'
+    ami_name: '{{user `product`}}-{{user `version`}}-{{user `today`}}-{{user `build_number`}}'
+    ami_description: '{{user `product_desc`}} ({{user `osid` | upper}})'
     snapshot_tags:
-      Name: '{{user `product`}} v{{user `version`}} {{user `build_number`}} {{user `today`}} {{user `baseos` | upper}}'
-      BaseOS: '{{user `baseos` | upper}}'
+      BaseOS: '{{user `baseos`}}'
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'
     tags:
-      Name: '{{user `product`}} v{{user `version`}} {{user `build_number`}} {{user `baseos` | upper}}'
-      BaseOS: '{{user `baseos` | upper}}'
+      BaseOS: '{{user `baseos`}}'
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'
@@ -77,21 +71,21 @@ provisioners:
   - type: shell
     environment_vars:
       - OSID={{user `osid`}}
-      - INSTALLER_URL={{user `installer_url`}}
-      - LICENSE={{user `license`}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
-      - '{{ template_dir }}/../scripts/install-xcalar.sh'
-      - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
+      - '{{ template_dir }}/../scripts/start.sh'
+      - '{{ template_dir }}/../scripts/install-epel.sh'
+      - '{{ template_dir }}/../scripts/install-java8.sh'
+      - '{{ template_dir }}/../scripts/packages-{{user `osid`}}.sh'
   - type: file
-    source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
-    destination: /tmp/genDefaultAdmin.sh
+    source: '{{ template_dir }}/../scripts/aws-verify.sh'
+    destination: /tmp/aws-verify.sh
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     inline:
-      - chmod +x /tmp/genDefaultAdmin.sh
-      - chown root:root /tmp/genDefaultAdmin.sh
-      - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
+      - chmod 0755 /tmp/aws-verify.sh
+      - chown root:root /tmp/aws-verify.sh
+      - mv /tmp/aws-verify.sh /usr/local/bin/
   - type: shell
     environment_vars:
       - OSID={{user `osid`}}
