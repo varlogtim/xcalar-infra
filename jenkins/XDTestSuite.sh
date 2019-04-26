@@ -268,7 +268,7 @@ elif [ $JOB_NAME = "XDTestSuite" ]; then
     npm test -- testSuite https://localhost:8443
     exitCode=$?
 elif [ $JOB_NAME = "XDEndToEndTest" ]; then
-    npm test -- --tag "allTests"
+    npm test -- --tag "allTests" --env jenkins
     exitCode=$?
 elif [ $JOB_NAME = "XDFuncTest" ]; then
     npm test -- XDFuncTest https://localhost:8443 $NUM_USERS $ITERATIONS
