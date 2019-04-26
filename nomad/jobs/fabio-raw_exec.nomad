@@ -21,7 +21,7 @@ job "fabio" {
       config {
         command = "fabio-1.5.11-go1.11.5-linux_amd64"
 
-        args = ["-cfg", "local/fabio.properties"]
+        args = ["-insecure", "-cfg", "local/fabio.properties"]
       }
 
       vault {

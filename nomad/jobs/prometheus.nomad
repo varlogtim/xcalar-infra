@@ -170,7 +170,7 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image = "prom/prometheus:v2.9.0"
+        image = "prom/prometheus:v2.9.2"
 
         # force_pull = true
 

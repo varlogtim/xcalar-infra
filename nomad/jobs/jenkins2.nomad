@@ -68,7 +68,7 @@ job "jenkins2" {
         name = "${NOMAD_JOB_NAME}-ssh"
         port = "ssh"
 
-        tags = ["ssh", "urlprefix-${NOMAD_JOB_NAME}-ssh:22022 proto=tcp"]
+        tags = ["ssh", "urlprefix-${NOMAD_JOB_NAME}-ssh:22022/ proto=tcp"]
 
         check {
           name     = "alive"
