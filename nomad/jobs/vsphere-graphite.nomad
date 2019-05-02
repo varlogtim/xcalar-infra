@@ -13,15 +13,14 @@ job "vsphere-graphite" {
       mode     = "fail"
     }
 
-    constraint {
-      distinct_hosts = true
-    }
+    #    constraint {
+    #      distinct_hosts = true
+    #    }
 
     constraint {
       attribute    = "${meta.cluster}"
       set_contains = "newton"
     }
-
     task "vsphere-graphite" {
       driver = "docker"
 
@@ -46,7 +45,7 @@ EOT
       }
 
       resources {
-        memory = 256
+        memory = 512
         cpu    = 800
       }
     }

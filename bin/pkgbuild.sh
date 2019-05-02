@@ -130,6 +130,13 @@ download() {
     echo "$cache"
 }
 
+gh_latest() {
+    # pass in gh repo name (eg, BurntSushi/ripgrep, direnv/direnv, etc)
+    curl -fsSL -H 'Accept: application/json' "https://github.com/$1/releases/latest" | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/'
+    return ${PIPESTATUS[0]}
+}
+
+
 pkggenerate() {
     local pkg="${1#https://}"
     url="https://$pkg"
@@ -261,14 +268,14 @@ pkgmain() {
     . $PKGBUILD
 
     PKGBUILDdir=$(cd $(dirname $PKGBUILD) && pwd)
-    TMPDIR="${TMPDIR:-/tmp}/pkgbuild-$(id -u)/$pkgname"
+    TMPDIR="${TMPDIR:-/tmp/$(id -un)-$(id -u)}/pkgbuild-$(id -u)/$pkgname"
     pkgdir="${TMPDIR}/rootfs"
     srcdir="${TMPDIR}/srcdir"
     if $CLEAN; then
-        rm -rf $TMPDIR
+        rm -rf "$TMPDIR"
     fi
-    mkdir -p $pkgdir $srcdir
-    sources+=($source)
+    mkdir -p "$pkgdir" "$srcdir"
+    sources+=("$source")
     local nsources=${#sources[@]}
     for ii in $(seq 0 $((nsources - 1))); do
         cd $srcdir
@@ -308,6 +315,12 @@ pkgmain() {
     done
 
     if [ -z "$srcpkgdir" ]; then
+        for srcpkgdir in \
+            "${srcdir}/${pkgname}-${pkgver}" "${srcdir}/${pkgname}_${pkgver}" "${srcdir}/${pkgname}" \
+            "${srcdir}/${pkgver}" "${srcdir}/v${pkgver}" $(ls -1d "$srcdir"/* | head -1); do
+            test -d "$srcpkgdir" && break
+        done
+
         srcpkgdir="${pkgname}-${pkgver}"
     fi
     if [ "${srcpkgdir:0:1}" != / ]; then
@@ -374,7 +387,7 @@ pkgmain() {
     run fpm -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
     if test -e "${pkgdir}"/etc/sysconfig; then
         mv "${pkgdir}"/etc/sysconfig "${pkgdir}"/etc/default
-        for ii in "${pkgdir}"/usr/lib/systemd/system/* "${pkgdir}"/etc/init.d/* "${pkgbuild}"/etc/init/*; do
+        for ii in "${pkgdir}"/{usr/,}lib/systemd/system/* "${pkgdir}"/etc/init.d/* "${pkgbuild}"/etc/init/*; do
             sed -i 's@/etc/sysconfig@/etc/default@g' $ii
         done
     fi
@@ -384,7 +397,7 @@ pkgmain() {
     if ((DEBUG)); then
         info "Build remenants in $TMPDIR"
     else
-        rm -rf $TMPDIR
+        rm -rf "$TMPDIR"
     fi
 }
 
