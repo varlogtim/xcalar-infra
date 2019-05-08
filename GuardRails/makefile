@@ -2,7 +2,7 @@ LIBDIRS=-Llibunwind-1.3-rc1/src/.libs/
 INCDIRS=-Ilibunwind-1.3-rc1/include/
 CFLAGS=-std=gnu99 -O2 -fno-omit-frame-pointer -fno-builtin-malloc -ggdb -Wall -fPIC -D_GNU_SOURCE $(LIBDIRS) $(INCDIRS) -Werror=implicit-function-declaration
 
-LUNWIND:=/netstore/users/ecohen/public/guardrails/deps/libunwind-1.3-rc1.tar.gz
+LUNWIND:=http://netstore/users/ecohen/public/guardrails/deps/libunwind-1.3-rc1.tar.gz
 
 CC=gcc
 AR=ar
@@ -34,7 +34,7 @@ clean:
 
 deps:
 	# See http://download.savannah.nongnu.org/releases/libunwind/
-	tar -xf $(LUNWIND)
+	curl $(LUNWIND) | tar -zxf -
 	cd libunwind-1.3-rc1 && ./configure --with-pic && patch -p2 < ../libunwindcfg.patch && make
 
 clean-deps:
