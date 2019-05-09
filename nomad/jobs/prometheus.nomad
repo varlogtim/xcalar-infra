@@ -80,9 +80,7 @@ job "prometheus" {
         }
 
         volumes = [
-          #"/netstore/infra/grafana-ui/nomad/tmp:/tmp/grafana",
           "/netstore/infra/grafana-ui/nomad/var/lib/grafana:/var/lib/grafana",
-
           "/netstore/infra/grafana-ui/nomad/etc/grafana:/etc/grafana",
         ]
       }
@@ -185,7 +183,7 @@ job "prometheus" {
 
       resources {
         cpu    = 4000
-        memory = 1024
+        memory = 2000
 
         network {
           port "prometheus_ui" {}
