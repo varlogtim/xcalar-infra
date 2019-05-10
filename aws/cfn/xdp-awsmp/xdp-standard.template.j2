@@ -245,7 +245,6 @@ Resources:
 {%- endif %}
     Properties:
       AccessControl: Private
-      BucketName: !Sub '${AWS::StackName}-xdp-${AWS::AccountId}-${AWS::Region}'
   ClusterSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
