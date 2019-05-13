@@ -252,10 +252,17 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
         if [ $anyfailed -eq 1 ]; then
             # copy out the usrnode binary and retinas
             now=$(date +"%Y%m%d_%H%M%S")
-            filepath="`pwd`/usrnode.$now"
-            retinapath="`pwd`/retina.$now"
-            exportpath="`pwd`/export.$now"
-            pubTablepath="`pwd`/pubTable.$now"
+            artdir="`pwd`/${now}_${BUILD_ID}"
+            mkdir -p $artdir
+            filepath="${artdir}/usrnode.$now"
+            retinapath="${artdir}/retina.$now"
+            exportpath="${artdir}/export.$now"
+            pubTablepath="${artdir}/pubTable.$now"
+            # XXXrs - Can race if multiple builds running on same node.
+            #         Blindly sweeps up any cores left-over from other
+            #         builds which failed to properly clean up. :/
+            mv core.childnode.* "$artdir"
+            mv core.usrnode.* "$artdir"
             cp $XLRDIR/bin/usrnode "$filepath"
             cp -r /var/opt/xcalar/dataflows/ "$retinapath"
             cp -r /var/opt/xcalar/export/ "$exportpath"
