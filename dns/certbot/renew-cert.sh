@@ -90,7 +90,7 @@ if [[ $IMAGE == certbot/dns-google ]]; then
     )
 elif [[ $IMAGE == certbot/dns-route53 ]]; then
     (
-        eval $(vault-aws-credentials-provider.sh --export-env --ttl 15m) || exit 1
+        eval $(vault-aws-credentials-provider.sh --account aws-xcalar --export-env --ttl 15m) || exit 1
         set -x
         docker run $DOCKER_FLAGS \
             -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
