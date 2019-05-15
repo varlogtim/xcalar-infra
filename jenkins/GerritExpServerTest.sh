@@ -1,1 +1,1 @@
-XDUnitTest.sh
+XDTestSuite.sh

@@ -90,6 +90,43 @@ onExit() {
 
 trap onExit SIGINT SIGTERM EXIT
 
+storeExpServerCodeCoverage() {
+    outputDir=/netstore/qa/coverage/${JOB_NAME}/${BUILD_ID}
+    mkdir -p "$outputDir"
+    covReportDir=$XLRGUIDIR/xcalar-gui/services/expServer/test/report
+
+    if [ -d "$covReportDir" ]; then
+        echo "expServer code coverage report copied to ${outputDir}"
+        cp -r "$covReportDir"/* "${outputDir}"
+    else
+        echo "code coverage report folder doesn't exist on ${covReportDir}"
+    fi
+}
+
+runExpServerIntegrationTest() {
+    set +e
+
+    currentDir=$PWD
+    local retval=0
+
+    cd $XLRDIR/src/bin/tests/pyTestNew
+    testCases=("test_dataflow_service.py" "test_workbooks_new" "test_dfworkbooks_execute.py")
+
+    echo "running integration test for expServer"
+    for testCase in "${testCases[@]}"; do
+        echo "running test $testCase"
+        ./PyTest.sh -k "$testCase"
+        local ret=$?
+        if [ $ret -ne "0" ]; then
+            retval=1
+        fi
+    done
+
+    cd $currentDir
+    set -e
+    return $retval
+}
+
 # Make symbolic link
 sudo mkdir /var/www || true
 sudo ln -sfn $WORKSPACE/xcalar-gui/xcalar-gui /var/www/xcalar-gui
@@ -182,7 +219,11 @@ xclean
 set -e
 cmBuild clean
 cmBuild config prod
-cmBuild
+if [ $JOB_NAME = "GerritExpServerTest" ]; then
+    cmBuild qa
+else
+    cmBuild
+fi
 
 echo "Building XD"
 cd $XLRGUIDIR
@@ -262,8 +303,16 @@ if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
 elif [ $JOB_NAME = "XDUnitTest" ]; then
     npm test -- unitTest https://localhost:8443
     exitCode=$?
-# elif [ $JOB_NAME = "GerritExpServerTest" ]; then
-#     npm test -- expServer https://localhost:8443
+elif [ $JOB_NAME = "GerritExpServerTest" ]; then
+    npm test -- expServer https://localhost:8443
+    exitCode=$?
+    if [ "$STORE_COVERAGE" = "true" ]; then
+        storeExpServerCodeCoverage
+    fi
+    if [ $exitCode = "0" ]; then
+        runExpServerIntegrationTest
+        exitCode=$?
+    fi
 elif [ $JOB_NAME = "XDTestSuite" ]; then
     npm test -- testSuite https://localhost:8443
     exitCode=$?
