@@ -14,7 +14,7 @@
 # From then on when calling `awscli --profile vault`, this script is called, which
 # in turn calls vault
 
-# <-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------``````````````````````````````````````````````````````````````
+# <-----------------------------------------------------------------------------
 # Vault gives us this format:
 #
 # {
@@ -25,7 +25,7 @@
 #   "data": {
 #     "access_key": "ASIAJEGZPHIMPZHJHIMQ",
 #     "secret_key": "6chW+auMR53SFjrlhknxQohogp5xe7BFYuC8Kk23",
-#     "security_token": "FQoDYXdzENj//////////wEaDNSxT0hN2kESqT1U/iL6AVrZFwmD0VWbNui+salnSrEuNTeVKwQacSzlQmlg4uCpuMSmhZb81GRn1mbkAE7iT/nr7TRJUoHBC75mMovLfjWBTNGfFSv8+Vq4plbHbKbigKznucSic+9o/TmzvxUtjvjEmHqYOQWPbvix6krSWVxbinL29AVpgV4A6hUro0FuGaQNGfjAPrb3D0xYgDt2UXV65v0ufiRcS0Ql4o8Rtepx9p8QUIZnMcbVlYWO+//Fh1A/SqBJQIMWIppZrtwHfjnNHqlqQLGI3Nz6rPCttTbhaZ7FJMW6TJ3jWrsQXCo68zdarVeDsjjVeTqsppr7jOpBzMT2+Ment9EopP6t1gU="
+#     "security_token": "FQoDYXdzENj//////////wEaDNSxT0hN2kESqT1U/iL6AVrZFwm"
 #   },
 #   "warnings": null
 # }
