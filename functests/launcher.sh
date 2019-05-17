@@ -80,7 +80,7 @@ for ii in $(seq 0 $(( $NumNodes - 1 ))); do
 done
 
 backendUp="false"
-sleepTime=3
+sleepTime=10
 for ii in $(seq 60); do
     if xccli -c version 2>&1 | grep -q 'Backend Version:'; then
         backendUp="true"
