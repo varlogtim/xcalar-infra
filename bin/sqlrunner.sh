@@ -255,7 +255,7 @@ installDeps() {
 
     if $optTcpdump
     then
-        rcmd 'sudo nohup tcpdump -ni any -w $(hostname).pcap port 9090 or port 12124 or port 10000 >tcpdump-stdout.out 2>tcpdump-stderr.out < /dev/null &'
+        rcmd 'sudo nohup tcpdump -W 5 -C 200 -ni any -w $(hostname).pcap port 9090 or port 12124 or port 10000 >tcpdump-stdout.out 2>tcpdump-stderr.out < /dev/null &'
     fi
 
     if $optEnableSpark
@@ -310,8 +310,8 @@ destroyCluster() {
 
     if $optTcpdump && [[ $retval -ne 0 ]] # Only download pcap file on failure
     then
-        rcmd 'sudo pkill -SIGTERM tcpdump && sleep 5 && pbzip2 *.pcap'
-        gscpFrom "*.pcap.bz2" "$optResultsPath"
+        rcmd 'sudo pkill -SIGTERM tcpdump && sleep 5 && pbzip2 *.pcap*'
+        gscpFrom "*.bz2" "$optResultsPath"
     fi
 
     if ! $optKeep
