@@ -255,7 +255,7 @@ installDeps() {
 
     if $optTcpdump
     then
-        rcmd 'sudo nohup tcpdump -W 5 -C 200 -ni any -w $(hostname).pcap port 9090 or port 12124 or port 10000 >tcpdump-stdout.out 2>tcpdump-stderr.out < /dev/null &'
+        rcmd 'sudo nohup tcpdump -W 2 -C 500 -ni any -w $(hostname).pcap port 9090 or port 12124 or port 10000 >tcpdump-stdout.out 2>tcpdump-stderr.out < /dev/null &'
     fi
 
     if $optEnableSpark
