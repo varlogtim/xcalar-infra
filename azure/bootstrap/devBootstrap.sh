@@ -122,6 +122,12 @@ EOF
     fi
 }
 
+mount_netstore_nfs() {
+    mountpoint -q /netstore && umount /netstore
+    mkdir -p /netstore/datasets
+    mount -t nfs -o _netdev,defaults netstore:/data/nfs/datasets /netstore/datasets
+}
+
 # netstore is a storage container. We use blobfuse to mount it
 mount_netstore() {
     safe_curl -sSL https://packages.microsoft.com/config/rhel/7/prod.repo > microsoft-prod.repo
@@ -761,7 +767,10 @@ ssh-keyscan localhost | tee -a /etc/ssh/ssh_known_hosts
 cat ${XCE_HOME}/members/* | awk '{print $(NF)}' | tee /etc/ansible/hosts
 
 # Let's mount netstore
-mount_netstore
+if ! mount_netstore_nfs; then
+    # If nfs didn't work, use blobstore
+    mount_netstore
+fi
 
 systemctl enable xcalar
 systemctl start xcalar
