@@ -292,7 +292,7 @@ setup_swap() {
         echo "Waiting for UUID of $PART to become available..."
         sleep 1
     done
-    echo "UUID=$UUID   swap     swap    pri=-2    0       0" | tee -a /etc/fstab >/dev/null
+    echo "UUID=$UUID	swap	swap	pri=0	0	0" | tee -a /etc/fstab >/dev/null
     swapon -a
     sleep 1
     swapon -a
