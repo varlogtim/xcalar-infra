@@ -281,6 +281,7 @@ installDeps() {
 dumpStats() {
     rcmdAll dumpNodeOSStats
     rcmd /opt/xcalar/bin/xccli -c top
+}
 
 generateAnswer(){
     (cd "$SPARK_DOCKER_DIR" && make rm && make run)
