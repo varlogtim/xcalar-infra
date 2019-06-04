@@ -313,6 +313,9 @@ elif [ $JOB_NAME = "GerritExpServerTest" ]; then
         runExpServerIntegrationTest
         exitCode=$?
     fi
+elif [ $JOB_NAME = "GerritXcrpcIntegrationTest" ]; then
+    npm test -- xcrpcTest https://localhost:8443
+    exitCode=$?
 elif [ $JOB_NAME = "XDTestSuite" ]; then
     npm test -- testSuite https://localhost:8443
     exitCode=$?
