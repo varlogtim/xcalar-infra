@@ -74,12 +74,23 @@ genBuildArtifacts() {
     return $corefound
 }
 
+collectFaildLogs() {
+    mkdir -p /var/log/xcalar/failedLogs || true
+    if [ "$useXc2" == "true" ]; then
+        cp -r "/tmp/xce-`id -u`"/* /var/log/xcalar/failedLogs/
+    else
+        cp $XLRDIR/$TmpSqlDfLogs /var/log/xcalar/failedLogs/
+    fi
+    cp $XLRDIR/$TmpCaddyLogs /var/log/xcalar/failedLogs/
+}
+
 onExit() {
     local retval=$?
     set +e
 
     if [[ $retval != 0 ]]
     then
+        collectFaildLogs
         genBuildArtifacts
         echo "Build artifacts copied to ${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
     fi
@@ -341,14 +352,4 @@ if [ "$useXc2" == "true" ]; then
     xc2 cluster stop
 fi
 
-
-if [ $exitCode -ne "0" ]; then
-    mkdir -p /var/log/xcalar/failedLogs || true
-    if [ "$useXc2" == "true" ]; then
-        cp -r "/tmp/xce-`id -u`"/* /var/log/xcalar/failedLogs/
-    else
-        cp $XLRDIR/$TmpSqlDfLogs /var/log/xcalar/failedLogs/
-    fi
-    cp $XLRDIR/$TmpCaddyLogs /var/log/xcalar/failedLogs/
-fi
 exit $exitCode
