@@ -245,9 +245,7 @@ fi
 cd $XLRDIR
 
 mkdir -p src/sqldf/sbt/target
-SQLDF_VERSION="$(. ${XLRDIR}/src/3rd/spark/BUILD_ENV; echo $SQLDF_VERSION)"
-export SQLDF_VERSION
-${XLRDIR}/bin/download-sqldf.sh > $XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
+tar --wildcards -xOf /netstore/builds/byJob/BuildSqldf-with-spark-branch/lastSuccessful/archive.tar xcalar-sqldf-*.noarch.rpm | rpm2cpio | cpio --to-stdout -i ./opt/xcalar/lib/xcalar-sqldf.jar >$XLRDIR/src/sqldf/sbt/target/xcalar-sqldf.jar
 
 export NODE_ENV=dev
 if [ "`xc2 --version`" == "xc2, version 1.4.1" ]; then
