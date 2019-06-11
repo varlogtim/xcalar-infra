@@ -92,7 +92,8 @@ XCALAR_INSTALL_TIMEOUT = 3000 # seconds to wait before timing out on Xcalar inst
 XCALAR_START_TIMEOUT = 600 # seconds to wait before timing out on service xcalar start
 XCALAR_STOP_TIMEOUT = 600 # seconds to wait before timing out on service xcalar stop
 
-NETSTORE_IP='10.10.1.107'
+NETSTORE_IP='10.10.3.199'
+NETSTORE_EXPORT='/mnt/pool0/netstore'
 XUID = '1001' # xcalar group uid. hacky fix later
 JENKINS_USER_PASS = "Welcome1" # password to set for user 'jenkins' on provisioned VMs
 LOGIN_UNAME = "admin"
@@ -111,8 +112,8 @@ PASS_ENV="OVIRT_PASSWORD"
 # URLs for ldapConfig files that can be curld in to xcalar root after an install
 # (can specify key to --ldap, and will use that key's value)
 LDAP_CONFIGS = {
-    'test': "http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/ldapConfig.json",
-    'xcalar': "http://freenas2.int.xcalar.com:8080/netstore/infra/ldap/sso/ldapConfig.json" # using this ldapConfig will allow any Xcalar employee to log in with ldap credentials
+    'test': "http://freenas3.int.xcalar.com:8080/netstore/infra/ldap/ldapConfig.json",
+    'xcalar': "http://freenas3.int.xcalar.com:8080/netstore/infra/ldap/sso/ldapConfig.json" # using this ldapConfig will allow any Xcalar employee to log in with ldap credentials
 }
 
 # This hash specifies which template in Ovirt to clone new VMs from,
@@ -2065,7 +2066,7 @@ def create_cluster(nodeips, cluster_name):
         Note: The order of the ips in nodeips list is important!!
         Will be node 0 (root cluster node), node1, etc., in order of list
         '''
-        proc = multiprocessing.Process(target=configure_cluster_node, args=(ip, nodeips, NETSTORE_IP, shared_remote_storage_path))
+        proc = multiprocessing.Process(target=configure_cluster_node, args=(ip, nodeips, NETSTORE_IP, NETSTORE_EXPORT, shared_remote_storage_path))
         procs.append(proc)
         proc.start()
         time.sleep(sleep_between)
@@ -2078,7 +2079,7 @@ def create_cluster(nodeips, cluster_name):
     storage by all nodes in the cluster.
 
     :param remote_path: (String)
-        path on the remote_IP to use as the shared cluster storage
+        path on the export_IP to use as the shared cluster storage
 
     @TODO:
         Handle taking a general IP (and credentials?) in case ever want
@@ -2106,18 +2107,20 @@ def create_cluster_dir(remote_path):
             clusternodes[0] : root node (node 0)
             clusternodes[1] : node1
             ... etc
-    :pararm remote_IP: (String)
+    :param export_IP: (String)
         IP of the machine with the shared cluster storage
+    :param export_path: (String)
+        path exported by export_IP for use as shared cluster storage
     :param remoteClusterStoragePath: (String)
-        remote path remote_IP for the shared cluster storage for the nodes
+        path under export_path to shared cluster storage directory
 
 '''
-def configure_cluster_node(node, clusternodes, remote_IP, remoteClusterStoragePath):
+def configure_cluster_node(node, clusternodes, export_IP, export_path, remoteClusterStoragePath):
 
     debug_log("Configure node {} as part of cluster nodes: {}\n".format(node, clusternodes))
 
     debug_log("get node's local path to the shared cluster storage directory on netstore, {}".format(remoteClusterStoragePath))
-    local_cluster_storage_dir = setup_cluster_storage(node, remote_IP, remoteClusterStoragePath)
+    local_cluster_storage_dir = setup_cluster_storage(node, export_IP, export_path, remoteClusterStoragePath)
 
     debug_log("generate cluster template file...")
     generate_cluster_template_file(node, clusternodes, local_cluster_storage_dir)
@@ -2127,16 +2130,17 @@ def configure_cluster_node(node, clusternodes, remote_IP, remoteClusterStoragePa
 
     :paran node: (String)
         IP of the node to set shared storage on
-    :param remote_IP: (String)
+    :param export_IP: (String)
         IP of the machine with the shared storage
-        (right now always using netstore - adding this in so it will be
-        easy to change things)
-    :param remote_path: (String) path on netstore to shared storage
+    :param export_path: (String)
+        path exported by export_IP for use as shared cluster storage
+    :param remote_path: (String)
+        path under export_path to shared cluster storage directory
 
     :returns: (String)
-        local path on the node, to the shared cluster storage
+        local path on the node to shared cluster storage directory
 '''
-def setup_cluster_storage(node, remote_IP, remote_path):
+def setup_cluster_storage(node, export_IP, export_path, remote_path):
 
     debug_log("Determine local path VM {} should use for xcalar home "
         " (Constants.XcalarRootCompletePath var in {}".format(node, DEFAULT_CFG_PATH))
@@ -2164,7 +2168,7 @@ def setup_cluster_storage(node, remote_IP, remote_path):
     # if here, was not able to access through the possible path, even accounting
     # for automount lags.  Mount netstore directly
     # (the method called will return the local dir to the remote shared storage that results after successful mount)
-    return mount_shared_cluster_storage(node, remote_IP, remote_path, netstore_mount_dir)
+    return mount_shared_cluster_storage(node, export_IP, export_path, remote_path, netstore_mount_dir)
 
 '''
     Mount a directory on Netstore provisioned for shared cluster storage,
@@ -2172,19 +2176,22 @@ def setup_cluster_storage(node, remote_IP, remote_path):
 
     :param node: (String)
         IP of node to mount the storage space on
-    :param remote_IP: (String)
+    :param export_IP: (String)
         IP of the machine with the shared storage space
+    :param export_path: (String)
+        path exported by export_IP for use as shared cluster storage
     :param remote_path: (String)
-        Path on on remote_IP to shared storage space
+        path under export_path for use as shared cluster storage
     :param mount_dir: (String)
-        local directory to mount remote_IP to
+        local directory where export_IP:export_path must be mounted
         (NOT local dir to remote_path)
 
     :returns (String)
-        local path on node, to the shared cluster storage (remote_IP's remote_path)
+        full local path on node to the shared cluster storage directory
+        (mount_dir + / + remote_path)
 
 '''
-def mount_shared_cluster_storage(node, remote_IP, remote_path, mount_dir):
+def mount_shared_cluster_storage(node, export_IP, export_path, remote_path, mount_dir):
 
     info_log("Mount netstore directory {} to {} on {} as shared cluster storage\n"
         .format(remote_path, mount_dir, node))
@@ -2194,10 +2201,14 @@ def mount_shared_cluster_storage(node, remote_IP, remote_path, mount_dir):
         then mount from that
         (having the instructions in fstab will mount again if node reboots)
     '''
-    fs_tab_entry = "{}: {} {} nfs rsize=8192,wsize=8192,timeo=14,intr".format(remote_IP, remote_path, mount_dir)
+    fs_tab_entry = "{}:{} {} nfs rsize=8192,wsize=8192,timeo=14,intr".format(export_IP, export_path, mount_dir)
     run_ssh_cmd(node, "echo '{}' >> /etc/fstab".format(fs_tab_entry))
     # now that it's in fstab, can mount via the specified mount point
     # (the mount point must exist first)
+    run_ssh_cmd(node, "mountpoint -q {} && umount {}".format(mount_dir, mount_dir), timeout=400)
+    # the mount point could be a directory or an automount symbolic link
+    run_ssh_cmd(node, "rmdir {} >/dev/null 2>&1 || rm -f {}".format(mount_dir, mount_dir),
+                timeout=400)
     run_ssh_cmd(node, "mkdir -p {}; mount {}".format(mount_dir, mount_dir), timeout=400)
 
     '''
@@ -3727,6 +3738,8 @@ if __name__ == "__main__":
     if ARGS.nopuppet:
         info_log("Skipping puppet setup (tool was run with --nopuppet/-np)")
     else:
+        # stop xcalar so it doesn't interfere with puppet
+        stop_xcalar_in_parallel(ips, stop_supervisor=True)
         enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=ARGS.puppet_cluster)
 
     # TEMPORARY: running puppet results in issue with ldapConfig which was set up.
