@@ -3738,8 +3738,9 @@ if __name__ == "__main__":
     if ARGS.nopuppet:
         info_log("Skipping puppet setup (tool was run with --nopuppet/-np)")
     else:
-        # stop xcalar so it doesn't interfere with puppet
-        stop_xcalar_in_parallel(ips, stop_supervisor=True)
+        # stop xcalar so it doesn't interfere with puppet if we are installing
+        if will_install():
+            stop_xcalar_in_parallel(ips, stop_supervisor=True)
         enable_puppet_on_vms_in_parallel(vmids, puppet_role, puppet_cluster=ARGS.puppet_cluster)
 
     # TEMPORARY: running puppet results in issue with ldapConfig which was set up.
