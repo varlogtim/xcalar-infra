@@ -8,6 +8,9 @@
     "installerUrl": {
       "value": "https://xcrepo.blob.core.windows.net/builds/prod/xcalar-2.0.0-10608-installer-el7"
     },
+    "installerUrlSasToken": {
+      "value": "?st=2019-06-19T21%3A09%3A19Z&se=2020-06-20T21%3A09%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=dg7RKTcDKuFSKQy2llQJ%2FIiLXGRec2rTcQ%2BS1p%2FHpUQ%3D"
+    },
     "location": {
       "value": "westus2"
     },

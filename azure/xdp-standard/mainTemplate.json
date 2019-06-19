@@ -287,7 +287,6 @@
     "vmName": "[concat(toLower(parameters('appName')), '-vm')]",
     "nicName": "[concat(parameters('appName'), '-nic')]",
     "networkSecurityGroupName": "[concat(parameters('appName'),'-nsg')]",
-    "vnetID": "[resourceId(parameters('virtualNetworkRG'), 'Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
     "shareNic": "[concat(parameters('appName'), '-nfs-nic')]",
     "subnetID": "[resourceId(parameters('virtualNetworkRG'), 'Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]",
     "publicIPAddress": {
@@ -448,10 +447,10 @@
             "value": "[parameters('adminPasswordOrKey')]"
           },
           "networkInterfaceId": {
-              "value": "[resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))]"
+            "value": "[resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))]"
           },
           "nfsPrefix": {
-              "value": "[parameters('subnetPrefix')]"
+            "value": "[parameters('subnetPrefix')]"
           },
           "tags": {
             "value": {
@@ -463,17 +462,17 @@
       }
     },
     {
-        "apiVersion": "2018-02-01",
-        "name": "pid-0477ea54-137d-53ee-a010-42e454ef46f9",
-        "type": "Microsoft.Resources/deployments",
-        "properties": {
-            "mode": "Incremental",
-            "template": {
-                "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
-                "contentVersion": "1.0.0.0",
-                "resources": []
-            }
+      "apiVersion": "2018-02-01",
+      "name": "pid-0477ea54-137d-53ee-a010-42e454ef46f9",
+      "type": "Microsoft.Resources/deployments",
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "resources": []
         }
+    }
     },
     {
       "apiVersion": "2018-07-01",
