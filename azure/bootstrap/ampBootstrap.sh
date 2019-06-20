@@ -1,4 +1,6 @@
 #!/bin/bash
+#
+# shellcheck disable=SC2086
 
 LOGFILE=startup.log
 touch $LOGFILE
@@ -184,7 +186,11 @@ fi
 
 yum install -y http://repo.xcalar.net/xcalar-release-el${VERS}.rpm
 
-yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart
+# BEGIN DEBUG
+yum install -enablerepo='xcalar-deps-common' -y xcalar-ssh-ca
+# END DEBUG
+
+yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart java-1.8.0-openjdk-headless
 yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
 
 run_playload () {
@@ -668,15 +674,31 @@ done
 
 # Populate the local host keys with those of the members so we can SSH into them without
 # the hostkey check warning
-cat ${XCE_HOME}/members/* | while read HOSTENTRY; do
-    echo "$HOSTENTRY" | tee -a /etc/hosts >/dev/null
+cat ${XCE_HOME}/members/* | tee -a /etc/hosts
+
+while IFS=$'\n' read HOSTENTRY; do
     ssh-keyscan $HOSTENTRY
-done | tee /etc/ssh/ssh_known_hosts
-ssh-keyscan localhost | tee -a /etc/ssh/ssh_known_hosts
+done < /etc/hosts | tee -a /etc/ssh/ssh_known_hosts
 
 
 # Add the hosts to ansible
-cat ${XCE_HOME}/members/* | awk '{print $(NF)}' | tee /etc/ansible/hosts
+cat ${XCE_HOME}/members/* | awk '{print $(NF)}' | sort -V | tee /etc/ansible/hosts
+mv /etc/ansible/ansible.{cfg,bak} || true
+cat > /etc/ansible/ansible.cfg <<'EOF'
+[defaults]
+inventory    = /etc/ansible/hosts
+forks        = 64
+roles_path   = ./roles:/etc/ansible/roles
+host_key_checking = False
+retry_files_enabled = False
+[privilege_escalation]
+[paramiko_connection]
+[ssh_connection]
+control_path = %(directory)s/ansible-ssh-%%h-%%p-%%r
+[accelerate]
+[selinux]
+special_context_filesystems=nfs,vboxsf,fuse,ramfs
+EOF
 
 # Let's retrieve the xcalar adventure datasets now
 if test -n "$XCALAR_ADVENTURE_DATASET"; then

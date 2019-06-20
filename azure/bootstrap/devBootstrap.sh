@@ -221,7 +221,11 @@ fi
 
 yum install -y http://repo.xcalar.net/xcalar-release-el${VERS}.rpm
 
-yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart
+# BEGIN DEBUG
+yum install -enablerepo='xcalar-deps-common' -y xcalar-ssh-ca
+# END DEBUG
+
+yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart java-1.8.0-openjdk-headless
 yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
 
 # Microsoft's Network testing tool. See: https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-bandwidth-testing
