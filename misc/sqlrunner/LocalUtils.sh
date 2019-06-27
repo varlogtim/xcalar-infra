@@ -3,8 +3,6 @@
 # This file is copied to each node on the cluster and sourced via .bashrc so
 # these functions are available to the test orchastrator via rcmd.
 
-set -e
-
 dumpNodeOSStats() {
     echo "================ Stats for $(hostname) ================"
 
