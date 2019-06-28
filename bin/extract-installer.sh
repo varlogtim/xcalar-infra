@@ -100,7 +100,7 @@ main () {
 
         if [ -n "$UPLOAD" ]; then
             for REPO in ${UPLOAD//,/ }; do
-                installer-url.sh -d $REPO "i think $INSTALLER_OSEXT"
+                installer-url.sh -d $REPO "$INSTALLER_OSEXT"
             done
         fi
         if $SKIP_TESTS; then
@@ -124,12 +124,12 @@ main () {
             if [ $OSEXT == amzn1 ]; then
                 cat > Dockerfile-${OSEXT} <<-EOF
 				FROM $IMAGE
-				RUN yum install -y http://repo.xcalar.net/xcalar-release-amzn1.rpm yum-plugin-fastestmirror && ACCEPT_EULA=Y yum install --enablerepo='xcalar-*' --disableplugin=priorities -y $(cat xcalar-${OSEXT}.txt | tr -d '\r' | tr '\n' ' ') && yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
+				RUN yum install -y http://repo.xcalar.net/xcalar-release-amzn1.rpm yum-plugin-fastestmirror && ACCEPT_EULA=Y yum install --enablerepo='xcalar-*' --disableplugin=priorities -y $(cat xcalar-${OSEXT}.txt | tr -d '\r' | tr '\n' ' ') curl && yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
 				EOF
             else
                 cat > Dockerfile-${OSEXT} <<-EOF
 				FROM $IMAGE
-				RUN yum install -y epel-release && yum install --enablerepo=epel --disableplugin=priorities -y $(cat xcalar-${OSEXT}.txt | tr -d '\r' | tr '\n' ' ') && yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
+				RUN yum install -y epel-release && yum install --enablerepo=epel --disableplugin=priorities -y $(cat xcalar-${OSEXT}.txt | tr -d '\r' | tr '\n' ' ') curl && yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
 				EOF
             fi
             IMAGE=${REGISTRY}/${IMAGEBASE}/xcalar-base-${OSEXT}
