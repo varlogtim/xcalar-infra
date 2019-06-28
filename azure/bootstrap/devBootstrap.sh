@@ -222,7 +222,7 @@ fi
 yum install -y http://repo.xcalar.net/xcalar-release-el${VERS}.rpm
 
 # BEGIN DEBUG
-yum install -enablerepo='xcalar-deps-common' -y xcalar-ssh-ca
+yum install -y --enablerepo='xcalar-deps-common' xcalar-ssh-ca
 # END DEBUG
 
 yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart java-1.8.0-openjdk-headless
