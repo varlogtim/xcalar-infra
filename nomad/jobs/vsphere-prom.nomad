@@ -40,9 +40,9 @@ job "vsphere-prom" {
       }
 
       service {
-        name = "node-exporter"
+        name = "vsphere-exporter"
         port = "scrape"
-        tags = ["vsphere-prom.nomad:9999/", "urlprefix-vsphere-prom.service.consul:9999/", "prometheus"]
+        tags = ["vsphere-prom.nomad:9999/", "urlprefix-vsphere-exporter.service.consul:9999/", "prometheus"]
 
         check {
           name     = "scrape port alive"
