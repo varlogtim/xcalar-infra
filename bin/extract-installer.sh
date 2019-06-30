@@ -57,7 +57,8 @@ main () {
             --image) IMAGE="$1"; shift;;
             --push) COMMIT=true; PUSH=true;;
             --upload) UPLOAD="$1"; shift;;
-            *) echo >&2 "ERROR: Unknown argument $cmd"; exit 1;;
+            -h|--help) usage; exit 0;;
+            *) usage; echo >&2 "ERROR: Unknown argument $cmd"; exit 1;;
         esac
     done
     if test -z "$INSTALLER"; then
@@ -95,7 +96,7 @@ main () {
         echo "Extracting site-specific packages" >&2
         echo "Creating new archive ${INSTALLER_OSEXT} ..." >&2
         (cat $TMPDIR/xcalar-install-top.sh; tar czf - -C $TMPDIR . --exclude "*${EXCOS[0]}*" --exclude "*${EXCOS[1]}*" --exclude "*${EXCOS[2]}*" --transform=s,^./,,g) > "$INSTALLER_OSEXT".tmp \
-            && mv "$INSTALLER_OSEXT".tmp "$INSTALLER_OSEXT" \
+            && mv "$INSTALLER_OSEXT".tmp -f "$INSTALLER_OSEXT" \
             && chmod 0555 "$INSTALLER_OSEXT"
 
         if [ -n "$UPLOAD" ]; then
