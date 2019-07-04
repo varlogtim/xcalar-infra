@@ -1,0 +1,2 @@
+#!/bin/bash
+docker exec -it grafana_sql_tpch_datasource /bin/bash

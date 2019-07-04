@@ -1,0 +1,3 @@
+#!/bin/bash
+cd ../.. # need to be directly under xcalar-infra
+docker build --no-cache -f sql_tpch/grafana/Dockerfile --rm -t grafana_sql_tpch_datasource .
