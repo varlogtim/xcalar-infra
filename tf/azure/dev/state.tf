@@ -15,7 +15,6 @@ terraform {
 #    region = "us-east-1"
 #  }
 #}
-
 ## Doesn't work at all without specifying a global SA key here??
 #terraform {
 #  backend "azurerm" {

@@ -79,7 +79,12 @@ job "mongo" {
       }
 
       env {
-        HOST = "0.0.0.0"
+        CONN_NAME   = "local"
+        DB_USERNAME = "root"
+        DB_PASSWORD = "Welcome1"
+        DB_HOST     = "${NOMAD_IP_db}"
+        DB_PORT     = "${NOMAD_PORT_db}"
+        HOST        = "0.0.0.0"
       }
 
       resources {

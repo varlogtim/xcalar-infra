@@ -49,7 +49,7 @@ job "prometheus" {
         }
 
         cpu    = 7000
-        memory = 128
+        memory = 250
       }
 
       service {
@@ -67,22 +67,49 @@ job "prometheus" {
       }
     }
 
+    #### GRAFANA #####
     task "grafana" {
       driver = "docker"
 
       config {
         image = "grafana/grafana:master"
 
-        force_pull = true
+        #force_pull = true
 
         port_map {
           grafana_ui = 3000
         }
-
         volumes = [
           "/netstore/infra/grafana-ui/nomad/var/lib/grafana:/var/lib/grafana",
           "/netstore/infra/grafana-ui/nomad/etc/grafana:/etc/grafana",
+          "secrets/credentials:/home/grafana/.aws/credentials",
         ]
+      }
+
+      env {
+        VAULT_ADDR         = "https://vault.service.consul:8200"
+        AWS_DEFAULT_REGION = "us-west-2"
+        AWS_REGION         = "us-west-2"
+      }
+
+      vault {
+        policies = ["aws", "aws-xcalar"]
+        env      = true
+
+        #change_mode   = "restart"
+      }
+
+      template {
+        destination = "secrets/credentials"
+        change_mode = "restart"
+
+        data = <<EOT
+[default]
+{{ with secret "aws/sts/grafana-cloudwatch" "ttl=43200"}}
+aws_access_key_id = {{ .Data.access_key }}
+aws_secret_access_key = {{ .Data.secret_key }}
+aws_session_token = {{ .Data.security_token }}{{ end }}
+EOT
       }
 
       resources {
@@ -91,7 +118,7 @@ job "prometheus" {
         }
 
         cpu    = 6000
-        memory = 128
+        memory = 1000
       }
 
       service {
@@ -115,6 +142,8 @@ job "prometheus" {
       }
     }
 
+    #### PUSH GATEWAY #####
+
     task "pushgateway" {
       driver = "docker"
 
@@ -134,8 +163,7 @@ job "prometheus" {
       }
 
       resources {
-        cpu    = 200
-        memory = 100
+        memory = 250
 
         network {
           port "pushgateway_ui" {
@@ -163,19 +191,19 @@ job "prometheus" {
         }
       }
     }
-
     task "prometheus" {
       driver = "docker"
 
       config {
-        image = "prom/prometheus:v2.9.2"
+        image = "prom/prometheus:latest"
 
-        # force_pull = true
+        force_pull = true
 
         volumes = [
           "local/prometheus.yml:/etc/prometheus/prometheus.yml",
           "/mnt/data/prometheus:/prometheus",
         ]
+
         port_map {
           prometheus_ui = 9090
         }
@@ -289,6 +317,7 @@ EOH
 #    consul_sd_configs:
 #      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
 #        datacenter: xcalar-sjc
+#        scheme: http
 #        scheme: http
 #        services:
 #          - nomad-client

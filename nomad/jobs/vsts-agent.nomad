@@ -11,6 +11,15 @@ job "my-vsts-agents" {
       mode     = "fail"
     }
 
+    reschedule {
+      attempts       = 15
+      interval       = "1h"
+      delay          = "30s"
+      delay_function = "exponential"
+      max_delay      = "120s"
+      unlimited      = false
+    }
+
     constraint {
       distinct_hosts = true
     }
@@ -24,7 +33,7 @@ job "my-vsts-agents" {
       driver = "docker"
 
       config {
-        image = "microsoft/vsts-agent:ubuntu-14.04-docker-17.12.0-ce-standard"
+        image = "mcr.microsoft.com/azure-pipelines/vsts-agent:ubuntu-14.04-docker-17.12.0-ce-standard"
 
         volumes = [
           "/var/run/docker.sock:/var/run/docker.sock",
@@ -42,7 +51,7 @@ EOT
       }
 
       resources {
-        memory = 8192
+        memory = 4096
         cpu    = 8000
       }
     }
