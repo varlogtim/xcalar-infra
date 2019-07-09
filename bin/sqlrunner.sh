@@ -120,7 +120,7 @@ rcmdNode() {
     local nodeNum="$1"
     shift
     args="$@"
-    gcloud compute ssh "$optClusterName-$nodeNum" --command "$args"
+    gcloud compute ssh "xcalar@$optClusterName-$nodeNum" --command "$args"
 }
 
 rcmd() {
