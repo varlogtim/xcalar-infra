@@ -120,6 +120,7 @@ rcmdNode() {
     local nodeNum="$1"
     shift
     args="$@"
+    #have to ssh cluster as user "xcalar"
     gcloud compute ssh "xcalar@$optClusterName-$nodeNum" --command "$args"
 }
 
@@ -140,7 +141,9 @@ gscpToNode() {
     local src="$2"
     local dst="$3"
 
-    eval gcloud compute scp --recurse "$src" "$optClusterName-$nodeNum:$dst"
+    #running the script as user "Jenkins"
+    #ssh to the remote cluster as user "xcalar"
+    eval gcloud compute scp --recurse "$src" "xcalar@$optClusterName-$nodeNum:$dst"
 }
 
 gscpTo() {
@@ -163,8 +166,9 @@ gscpFromNode() {
     local nodeNum="$1"
     local src="$2"
     local dst="$3"
-
-    gcloud compute scp --recurse "$optClusterName-$nodeNum:$src" "$dst"
+    #ssh to remote cluster as user "xcalar"
+    #copy file to /home/jenkins/...
+    gcloud compute scp --recurse "xcalar@$optClusterName-$nodeNum:$src" "$dst"
 }
 
 gscpFrom() {
@@ -252,7 +256,8 @@ installDeps() {
     gscpTo "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" /tmp
     gscpTo "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" /tmp
     gscpToAll "$XLRINFRADIR/misc/sqlrunner/LocalUtils.sh" /tmp
-    rcmdAll echo "source /tmp/LocalUtils.sh >> $HOME/.bashrc"
+    #running the command on remote cluster as user "xcalar"
+    rcmdAll echo "source /tmp/LocalUtils.sh >> ~/.bashrc"
 
     if $optEnableAnswer
     then
