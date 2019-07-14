@@ -86,8 +86,8 @@ EOD
         port = "ui_port"
 
         tags = [
-          "urlprefix-nexus-ui.service.consul:9999/",
-          "urlprefix-nexus-ui.service.consul:443/",
+          "urlprefix-nexus.service.consul:443/",
+          "urlprefix-nexus.int.xcalar.com:443/",
         ]
 
         #"urlprefix-nexus.int.xcalar.com:443/",
@@ -106,7 +106,7 @@ EOD
         port = "registry_port"
 
         tags = [
-          "urlprefix-nexus-registry.service.consul:9999/",
+          "urlprefix-nexus-registry.service.consul:5000/",
           "urlprefix-nexus-registry.service.consul:443/",
         ]
 

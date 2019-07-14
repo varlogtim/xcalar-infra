@@ -48,7 +48,7 @@ job "prometheus" {
           }
         }
 
-        cpu    = 7000
+        cpu    = 5000
         memory = 250
       }
 
@@ -67,18 +67,78 @@ job "prometheus" {
       }
     }
 
+    #### GRAPHITE EXPORTER  ####
+    #    task "graphite-exporter" {
+    #      driver = "docker"
+    #
+    #      config {
+    #        image = "prom/graphite-exporter"
+    #
+    #        force_pull = true
+    #
+    #        volumes = [
+    #          "./local/graphite-mapping.conf:/tmp/graphite-mapping.conf",
+    #        ]
+    #
+    #        args = ["--graphite.mapping-config=/tmp/graphite-mapping.conf"]
+    #      }
+    #
+    #      resources {
+    #        network {
+    #          port "graphite_ui" {
+    #            static = "9108"
+    #          }
+    #
+    #          port "mgmnt" {
+    #            static = "9109"
+    #          }
+    #        }
+    #
+    #        cpu    = 1000
+    #        memory = 500
+    #      }
+    #
+    #      service {
+    #        name = "graphite"
+    #        port = "graphite_ui"
+    #
+    #        tags = ["urlprefix-graphite.service.consul:9999/", "urlprefix-graphite.service.consul:9108/"]
+    #
+    #        check {
+    #          name     = "graphite_ui port alive"
+    #          type     = "tcp"
+    #          interval = "20s"
+    #          timeout  = "5s"
+    #        }
+    #      }
+    #
+    #      service {
+    #        name = "mgmnt"
+    #        port = "mgmnt"
+    #
+    #        tags = ["urlprefix-mgmnt.service.consul:9999/", "urlprefix-mgmnt.service.consul:443/"]
+    #
+    #        check {
+    #          name     = "mgmnt port alive"
+    #          type     = "tcp"
+    #          interval = "20s"
+    #          timeout  = "5s"
+    #        }
+    #      }
+    #    }
+    #
     #### GRAFANA #####
     task "grafana" {
       driver = "docker"
 
       config {
-        image = "grafana/grafana:master"
-
-        #force_pull = true
+        image      = "grafana/grafana:master"
+        force_pull = true
 
         port_map {
           grafana_ui = 3000
         }
+
         volumes = [
           "/netstore/infra/grafana-ui/nomad/var/lib/grafana:/var/lib/grafana",
           "/netstore/infra/grafana-ui/nomad/etc/grafana:/etc/grafana",
@@ -204,6 +264,14 @@ EOT
           "/mnt/data/prometheus:/prometheus",
         ]
 
+        args = [
+          "--config.file=/etc/prometheus/prometheus.yml",
+          "--storage.tsdb.path=/prometheus",
+          "--storage.tsdb.retention.time=30d",
+          "--web.console.libraries=/usr/share/prometheus/console_libraries",
+          "--web.console.templates=/usr/share/prometheus/consoles",
+        ]
+
         port_map {
           prometheus_ui = 9090
         }
@@ -246,15 +314,27 @@ EOT
         data = <<EOH
 ---
 global:
-  scrape_interval: 10s
-  scrape_timeout: 5s
-  evaluation_interval: 10s
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
 
 scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets:
           - localhost:9090
+  - job_name: vsphere
+    params:
+      format:
+        - prometheus
+    metrics_path: /metrics
+    scrape_interval: 1m
+    scrape_timeout: 20s
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services: ["vsphere-exporter"]
+
   - job_name: pushgateway
     params:
       format:

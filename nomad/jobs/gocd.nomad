@@ -47,8 +47,8 @@ job "gocd" {
       }
 
       resources {
-        cpu    = 2000
-        memory = 1000
+        cpu    = 4000
+        memory = 2000
 
         network {
           port "ui" {
