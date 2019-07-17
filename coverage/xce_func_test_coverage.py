@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+
+# Copyright 2019 Xcalar, Inc. All rights reserved.
+#
+# No use, or distribution, of this source code is permitted in any form or
+# means without a valid, written license agreement with Xcalar, Inc.
+# Please refer to the included "COPYING" file for terms and conditions
+# regarding the use and redistribution of this software.
+
+import gzip
+import json
+import logging
+import os
+import re
+
+from py_common.mongo import MongoDB
+from py_common.env_configuration import EnvConfiguration
+from py_common.jenkins_artifacts import JenkinsArtifacts, JenkinsArtifactsData
+from py_common.sorts import nat_sort
+
+class ClangCoverageFilenameCollision(Exception):
+    pass
+
+class ClangCoverage(object):
+
+    #ENV_PARAMS = {} # Placeholder
+    GZIPPED = re.compile(r".*\.gz\Z")
+                                                  
+    def __init__(self, *, path):
+        self.logger = logging.getLogger(__name__)
+        #cfg = EnvConfiguration(ClangCoverage.ENV_PARAMS)
+        self.path = path
+        self.coverage_data = self._load_json()
+
+    def _load_json(self):
+        path = self.path
+        if not os.path.exists(path):
+            # Try gzipped form
+            zpath = "{}.gz".format(path)
+            if not os.path.exists(zpath):
+                err = "neither {} nor {} exist".format(path, zpath)
+                self.logger.error(err)
+                raise FileNotFoundError(err)
+            path = zpath
+
+        if self.GZIPPED.match(path):
+            with gzip.open(path, "rb") as fh:
+                return json.loads(fh.read().decode("utf-8"))
+        with open(path, "r") as fh:
+            return json.load(fh)
+
+    def file_summaries(self):
+        """
+        Strip a full coverage results file down to just per-file summary data.
+        Returns dictionary:
+            {<file_path>: {<file_summary_data>},
+             <file_path>: {<file_summary_data>},
+             ...
+             "totals": {<total_summary_data}}
+        """
+        summaries = {}
+        if 'data' not in self.coverage_data:
+            return summaries
+        for info in self.coverage_data['data']:
+            totals = info.get('totals', None)
+            if totals:
+                summaries['totals'] = totals
+            for finfo in info['files']:
+                filename = finfo.get('filename', None)
+                if not filename:
+                    continue # :|
+                if filename in summaries:
+                    raise ClangCoverageFilenameCollision(
+                            "colliding file name: {}".format(filename))
+                summaries[filename] = finfo.get('summary', None)
+        return summaries
+
+
+class XCEFuncTestArtifacts(JenkinsArtifacts):
+
+    ENV_PARAMS = {"XCE_FUNC_TEST_JOB_NAME":
+                        {"default": "XCEFuncTest",
+                         "required":True},
+                  "XCE_FUNC_TEST_ARTIFACTS_ROOT":
+                        {"default": "/netstore/qa/coverage/XCEFuncTest",
+                         "required":True} }
+
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        cfg = EnvConfiguration(XCEFuncTestArtifacts.ENV_PARAMS)
+        super().__init__(job_name=cfg.get("XCE_FUNC_TEST_JOB_NAME"),
+                         dir_path=cfg.get("XCE_FUNC_TEST_ARTIFACTS_ROOT"))
+
+
+class XCEFuncTestArtifactsData(JenkinsArtifactsData):
+
+    ENV_PARAMS = {"XCE_FUNC_TEST_COVERAGE_FILE_NAME":
+                        {"default": "coverage.json",
+                         "required": True} }
+                  
+    def __init__(self, *, artifacts):
+        """
+        Initializer.
+    
+        Required parameters:
+            artifacts:  XCEFuncTestArtifacts instance
+        """
+        self.logger = logging.getLogger(__name__)
+        cfg = EnvConfiguration(XCEFuncTestArtifactsData.ENV_PARAMS)
+        self.cvg_file_name = cfg.get("XCE_FUNC_TEST_COVERAGE_FILE_NAME")
+        self.artifacts = artifacts
+        super().__init__(jenkins_artifacts=self.artifacts, add_commits=True)
+
+    def update_build(self, *, bnum, log=None):
+        """
+        Read the coverage.json file and convert to our preferred index form,
+        filtering for only files of interest (plus totals).
+        """
+        coverage_file_path = os.path.join(self.artifacts.artifacts_directory_path(bnum=bnum),
+                                          self.cvg_file_name)
+        try:
+            summaries = ClangCoverage(path=coverage_file_path).file_summaries()
+        except FileNotFoundError:
+            return None
+
+        data = {}
+        for filename, summary in summaries.items():
+            data.setdefault('coverage', {})[MongoDB.encode_key(filename)] = summary
+        return data
+
+    def xce_versions(self):
+        """
+        Return available XCE versions for which we have data.
+        XXXrs - version/branch :|
+        """
+        return self.branches(repo='XCE_GIT_REPOSITORY')
+
+    def builds(self, *, xce_versions=None,
+                        first_bnum=None,
+                        last_bnum=None,
+                        reverse=False):
+
+        return self.find_builds(repo='XCE_GIT_REPOSITORY',
+                                branches=xce_versions,
+                                first_bnum=first_bnum,
+                                last_bnum=last_bnum,
+                                reverse=reverse)
+
+    def _get_coverage_data(self, *, bnum):
+        data = self.get_data(bnum=bnum)
+        if not data:
+            return None
+        return data.get('coverage', None)
+
+    def filenames(self, *, bnum):
+        coverage = self._get_coverage_data(bnum=bnum)
+        if not coverage:
+            return None
+
+        # Reduce to just final two path components
+        filenames = []
+        for key in coverage.keys():
+            name = MongoDB.decode_key(key)
+            if name == 'totals':
+                continue
+            fields = name.split('/')
+            if len(fields) < 2:
+                raise Exception("Incomprehensible: {}".format(name))
+            filename = "{}/{}".format(fields[-2], fields[-1])
+            if filename in filenames:
+                raise Exception("Duplicate: {}".format(filename))
+            filenames.append(filename)
+        filenames = sorted(filenames)
+        filenames.insert(0, 'totals')
+        return filenames
+
+    def coverage(self, *, bnum, filename):
+        """
+        XXXrs - FUTURE - extend to return other than "lines" percentage.
+        """
+        coverage = self._get_coverage_data(bnum=bnum)
+        if not coverage:
+            return None
+        for key,data in coverage.items():
+            name = MongoDB.decode_key(key)
+            if filename in name:
+                return coverage[key].get('lines', {}).get('percent', None)
+        return None
+
+
+if __name__ == '__main__':
+    print("Compile check A-OK!")
+
+    logging.basicConfig(level=logging.INFO,
+                        format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
+                        handlers=[logging.StreamHandler()])
+    logger = logging.getLogger(__name__)
+
+    art = XCEFuncTestArtifacts()
+    data = XCEFuncTestArtifactsData(artifacts = art)
+    #data.start_update_thread()
+    print("TRUNK builds ==========")
+    print(data.builds(xce_versions=['trunk']))
+    print("TRUNK filenames ==========")
+    files = data.filenames(bnum="20083")
+    for name in files:
+        print("{}: {}".format(name, data.coverage(bnum="20083", filename=name)))
+    #print("2.0 ==========")
+    #print(data.builds(xce_versions=['xcalar-2.0.0']))
+    #for name in files:
+        #print("{}: {}".format(name, data.coverage(bnum=20083, filename=name)))
+    #import time
+    #time.sleep(600)
+    #data.stop_update_thread()

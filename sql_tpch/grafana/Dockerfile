@@ -7,10 +7,10 @@ COPY sql_tpch/grafana/sql_tpch_datasource.py /app/main.py
 COPY sql_tpch/grafana/requirements.txt /app
 
 RUN mkdir -p /app/sql_tpch
-COPY sql_tpch/sql_tpch.py /app/sql_tpch
+COPY sql_tpch/*.py /app/sql_tpch/
 
 RUN mkdir -p /app/py_common
-COPY py_common/env_configuration.py /app/py_common
+COPY py_common/*.py /app/py_common/
 
 RUN pip install -r requirements.txt
 

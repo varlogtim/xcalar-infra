@@ -1,0 +1,2 @@
+#!/bin/bash
+docker run --detach --init --restart always --name grafana_coverage_datasource --hostname grafana_coverage_datasource -p 3334:80 -v /var/tmp:/var/tmp -v /netstore/qa/jenkins/XDUnitTest:/netstore/qa/jenkins/XDUnitTest -v /netstore/qa/coverage/XCEFuncTest:/netstore/qa/coverage/XCEFuncTest grafana_coverage_datasource

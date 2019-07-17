@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # Copyright 2019 Xcalar, Inc. All rights reserved.
 #
@@ -16,9 +16,8 @@ import pytz
 import re
 
 from py_common.env_configuration import EnvConfiguration
-
-def nat_sort(s, nsre=re.compile('([0-9]+)')):
-    return [int(t) if t.isdigit() else t.lower() for t in nsre.split(s)]
+from py_common.jenkins_artifacts import JenkinsArtifacts, JenkinsArtifactsData
+from py_common.sorts import nat_sort
 
 class SqlTpchIter(object):
     """
@@ -287,58 +286,27 @@ class SqlTpchStats(object):
             times.extend(obj.query_vals(qname=qname, mname=mname))
         return times
 
-class SqlTpchStatsDir(object):
+class SqlTpchStatsArtifacts(JenkinsArtifacts):
     """
-    Class representing directory containing multiple per-build sub-directories
-    containing sql tpch statistics results files.
+    Class representing directory containing sql tpch statistics results files.
     """
 
-    ENV_PARAMS = {"SQL_TPCH_RESULTS_ROOT": {"default": "/netstore/qa/jenkins/SqlScaleTest"}}
-    build_dir_pat = re.compile(r"\A(\d*)\Z")
+    ENV_PARAMS = {"SQL_TPCH_JOB_NAME": {"default": "SqlScaleTest"},
+                  "SQL_TPCH_RESULTS_ROOT": {"default": "/netstore/qa/jenkins/SqlScaleTest"}}
 
     def __init__(self):
         """
         Initializer
 
         Environment parameters:
+            SQL_TPCH_JOB_NAME:  Jenkins job name.
             SQL_TPCH_RESULTS_ROOT:  Path to directory containing per-build sql tpch results.
         """
         self.logger = logging.getLogger(__name__)
-        self.cfg = EnvConfiguration(SqlTpchStatsDir.ENV_PARAMS)
-        self.results_root = self.cfg.get("SQL_TPCH_RESULTS_ROOT")
+        self.cfg = EnvConfiguration(SqlTpchStatsArtifacts.ENV_PARAMS)
+        super().__init__(job_name=self.cfg.get("SQL_TPCH_JOB_NAME"),
+                         dir_path=self.cfg.get("SQL_TPCH_RESULTS_ROOT"))
         self.stats_cache = {}
-
-    def all_builds(self):
-        """
-        Return the list of all build directories within the results root directory.
-        List will be sorted into "natural" number order (e.g. "10" comes after "9", not "1")
-        """
-        self.logger.debug("start")
-        builds = []
-        for bnum in os.listdir(self.results_root):
-            if not SqlTpchStatsDir.build_dir_pat.match(bnum):
-                self.logger.debug("skipping: {}".format(bnum))
-                continue
-            builds.append(bnum)
-        self.logger.debug("end")
-        return sorted(builds, key=nat_sort, reverse=True)
-
-    def dir_path(self, *, bnum):
-        """
-        Return the absolute directory path for a specific build number.
-        """
-        return os.path.join(self.results_root, bnum)
-
-    def builds(self):
-        """
-        Return a dictionary of key/val bnum/dir_path.
-        """
-        builds = {}
-        for bnum in self.all_builds():
-            dir_path = self.dir_path(bnum=bnum)
-            if SqlTpchStats.has_results(dir_path=dir_path):
-                builds[bnum] = dir_path
-        return sorted(builds, key=nat_sort, reverse=True)
 
     def stats(self, *, bnum):
         """
@@ -347,106 +315,48 @@ class SqlTpchStatsDir(object):
         """
         if bnum not in self.stats_cache:
             try:
-                stats = SqlTpchStats(bnum=bnum, dir_path=self.dir_path(bnum=bnum))
+                stats = SqlTpchStats(bnum=bnum, dir_path=self.artifacts_directory_path(bnum=bnum))
             except SqlTpchNoStatsError as e:
                 stats = None
             self.stats_cache[bnum] = stats
         return self.stats_cache[bnum]
 
 
-class SqlTpchStatsIndex(object):
+class SqlTpchStatsArtifactsData(JenkinsArtifactsData):
     """
-    Class representing the meta-data index associated with a
-    specified SqlTpchStatsDir.
+    Class representing the meta-data associated with a
+    specified SqlTpchStatsArtifacts.
     """
-    ENV_PARAMS = {"SQL_TPCH_META_FILE_NAME": {"default": ".datasource.meta"},
-                  "SQL_TPCH_META_CACHE_TTL": {"type": EnvConfiguration.NUMBER,
-                                              "default": "300"} }
-
-    def __init__(self, *, stats_dir):
+    def __init__(self, *, artifacts):
         """
         Initializer.
 
         Required parameters:
-            stats_dir:  SqlTpchStats instance
-
-        Environment parameters:
-            SQL_TPCH_META_FILE_NAME:    name of the index meta file within
-                                        the statistics directory
-            SQL_TPCH_META_CACHE_TTL:    time-to-live (in seconds) between update
-                                        of in-memory index file
+            artifacts:  SqlTpchStatsArtifacts instance
         """
         self.logger = logging.getLogger(__name__)
-        self.cfg = EnvConfiguration(SqlTpchStatsIndex.ENV_PARAMS)
-        self.stats_dir = stats_dir
-        self.meta = None
-        self.meta_stale = datetime.now().timestamp()
-        self.meta_path = os.path.join(self.stats_dir.results_root,
-                                      self.cfg.get("SQL_TPCH_META_FILE_NAME"))
-        self.logger.debug("meta_path: {}".format(self.meta_path))
+        self.artifacts = artifacts
+        super().__init__(jenkins_artifacts=artifacts)
 
-    def _update_meta(self):
-        """
-        Scan the associated stats directory and update the meta file
-        with any previously-unseen sub-directories (new results).
-        """
-        self.logger.debug("start")
-        seen = self.meta.keys()
-        for bnum in self.stats_dir.all_builds():
-            if bnum in seen:
-                self.logger.debug("{} already seen, skipping...".format(bnum))
-                continue
-            stats = self.stats_dir.stats(bnum=bnum)
-            if not stats:
-                self.logger.debug("{} empty".format(bnum))
-                # Effectively a null entry indicating no stats available
-                self.meta[bnum] = {'start_ts_ms': 0, 'end_ts_ms': 0,
-                                   'test_type': None, 'xlr_version': None}
-                continue
+    def update_build(self, *, bnum, log=None):
+        stats = self.artifacts.stats(bnum=bnum)
+        if not stats:
+            # Effectively a null entry indicating no stats available
+            return {'start_ts_ms': 0, 'end_ts_ms': 0,
+                    'test_type': None, 'xlr_version': None}
 
-            info = {'start_ts_ms': stats.start_ts_ms,
-                    'end_ts_ms': stats.end_ts_ms,
-                    'test_type': stats.test_type,
-                    'xlr_version': stats.xlr_version}
-            self.logger.debug("{}: {}".format(bnum, info))
-            self.meta[bnum] = info
-
-        # Write the updated information to the meta file.
-        # Should flock for multi-instance access, but not today...
-        with open(self.meta_path, 'w+') as fh:
-            json.dump(self.meta, fh)
-
-    def _read_meta(self):
-        """
-        Read in and update meta file, creating if needed.
-        Cache file content for up to SQL_TPCH_META_CACHE_TTL
-        seconds before re-read/update.
-        """
-        self.logger.info("start")
-        now = datetime.now().timestamp()
-        if self.meta is not None and now < self.meta_stale:
-            self.logger.info("return cached")
-            return self.meta
-        # Should flock for multi-instance access, but not today...
-        with open(self.meta_path, 'a+') as fh:
-            fh.seek(0,2)
-            if not fh.tell():
-                self.meta = {}
-            else:
-                fh.seek(0)
-                self.meta = json.load(fh)
-        self._update_meta()
-        self.meta_stale = now+self.cfg.get("SQL_TPCH_META_CACHE_TTL")
-        self.logger.info("end")
-        return self.meta
+        return {'start_ts_ms': stats.start_ts_ms,
+                'end_ts_ms': stats.end_ts_ms,
+                'test_type': stats.test_type,
+                'xlr_version': stats.xlr_version}
 
     def xlr_versions(self):
         """
         Return all Xcalar versions represented in the index.
         """
         versions = []
-        for bnum,info in self._read_meta().items():
-            v = info.get('xlr_version', None)
+        for bnum,data in self.get_data_by_build().items():
+            v = data.get('xlr_version', None)
             if v and v not in versions:
                 versions.append(v)
         return versions
@@ -471,23 +381,25 @@ class SqlTpchStatsIndex(object):
             end_ts_ms:      matching build end time lte this value
             reverse:        if True, results will be sorted in decending order.
         """
+        # XXXrs - FUTURE - this overrides the new base-class find_builds().
+        #         Should merge with or leverage that code???
         found = []
-        for bnum,info in self._read_meta().items():
-            if not info.get('start_ts_ms', None):
+        for bnum,data in self.get_data_by_build().items():
+            if not data.get('start_ts_ms', None):
                 # no results
                 continue
-            xlr_ver = info.get('xlr_version', None)
+            xlr_ver = data.get('xlr_version', None)
             if xlr_versions and (not xlr_ver or xlr_ver not in xlr_versions):
                 self.logger.debug("xlr_version mismatch want {} build {} has {}"
                                   .format(xlr_versions, bnum, xlr_ver))
                 continue
-            if test_type and info['test_type'] != test_type:
+            if test_type and data['test_type'] != test_type:
                 self.logger.debug("test_type mismatch want {} build {} has {}"
-                                  .format(test_type, bnum, info['test_type']))
+                                  .format(test_type, bnum, data['test_type']))
                 continue
-            if start_ts_ms and info['start_ts_ms'] < start_ts_ms:
+            if start_ts_ms and data['start_ts_ms'] < start_ts_ms:
                 continue
-            if end_ts_ms and info['end_ts_ms'] > end_ts_ms:
+            if end_ts_ms and data['end_ts_ms'] > end_ts_ms:
                 continue
             if first_bnum and int(bnum) < int(first_bnum):
                 continue
@@ -496,28 +408,38 @@ class SqlTpchStatsIndex(object):
             found.append(bnum)
         return sorted(found, key=nat_sort, reverse=reverse)
 
+
 # In-line "unit test"
 if __name__ == '__main__':
     print("Compile check A-OK!")
 
+    import time
     logging.basicConfig(level=logging.INFO,
                         format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    sdir = SqlTpchStatsDir()
-    idx = SqlTpchStatsIndex(stats_dir = sdir)
+    art = SqlTpchStatsArtifacts()
+    meta = SqlTpchStatsArtifactsData(artifacts = art)
+
+    meta.start_update_thread()
+    time.sleep(0.3)
+
     now_ms = datetime.now().timestamp()*1000
     week_ms = 7*24*60*60*1000
-    last_week = idx.find_builds(start_ts_ms=(now_ms-week_ms),
-                                end_ts_ms=now_ms)
+    last_week = meta.find_builds(start_ts_ms=(now_ms-week_ms),
+                                 end_ts_ms=now_ms)
     #logger.info("last week: {}".format([s.build_num for s in last_week]))
     logger.info("last week: {}".format(last_week))
-    last_month = idx.find_builds(start_ts_ms=(now_ms-(4*week_ms)),
-                                 end_ts_ms=now_ms,
-                                 reverse=True)
+    last_month = meta.find_builds(start_ts_ms=(now_ms-(4*week_ms)),
+                                  end_ts_ms=now_ms,
+                                  reverse=True)
     #logger.info("last month: {}".format([s.build_num for s in last_month]))
     logger.info("last month: {}".format(last_month))
 
     for bnum in last_week:
-        stats = sdir.stats(bnum = bnum)
+        stats = art.stats(bnum = bnum)
+        print(stats)
+
+    time.sleep(60)
+    meta.stop_update_thread()

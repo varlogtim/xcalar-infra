@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # Copyright 2019 Xcalar, Inc. All rights reserved.
 #
@@ -16,10 +16,10 @@ import re
 import statistics
 
 from py_common.env_configuration import EnvConfiguration
-ENV_PARAMS = {} # XXXrs Placeholder
+ENV_PARAMS = {} # XXXrs placeholder
 config = EnvConfiguration(ENV_PARAMS)
 
-from sql_tpch.sql_tpch import SqlTpchStatsDir, SqlTpchStatsIndex, SqlTpchStats
+from sql_tpch.sql_tpch import SqlTpchStatsArtifacts, SqlTpchStatsArtifactsData, SqlTpchStats
 
 from flask import Flask, request, jsonify, json, abort
 from flask_cors import CORS, cross_origin
@@ -31,8 +31,13 @@ logging.basicConfig(
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-stats_dir = SqlTpchStatsDir()
-stats_idx = SqlTpchStatsIndex(stats_dir = stats_dir)
+sql_tpch_art = SqlTpchStatsArtifacts()
+sql_tpch_data = SqlTpchStatsArtifactsData(artifacts = sql_tpch_art)
+
+if not os.environ.get("WERKZEUG_RUN_MAIN"):
+    # Only do this on initial load or we'll end up with
+    # multiple overlapping update threads (at least in debug).
+    sql_tpch_data.start_update_thread()
 
 app = Flask(__name__)
 
@@ -69,10 +74,10 @@ def find_metrics():
     target = req.get('target', None)
     logger.info("target: {}".format(target))
     if not target:
-        return jsonify(names) # XXXrs - ERROR?
+        return jsonify(names) # XXXrs - exception?
 
     if target == 'xlr_versions':
-        names = stats_idx.xlr_versions()
+        names = sql_tpch_data.xlr_versions()
 
     # <xlr_vers>:build1
     elif ':build1' in target:
@@ -82,26 +87,26 @@ def find_metrics():
         xlr_vers,rest = target.split(':')
 
         versions = _parse_multi(xlr_vers)
-        names = stats_idx.find_builds(xlr_versions=_parse_multi(xlr_vers),
-                                      reverse=True)
+        names = sql_tpch_data.find_builds(xlr_versions=_parse_multi(xlr_vers),
+                                          reverse=True)
 
     # <xlr_vers>:<bnum1>:build2
     elif ':build2' in target:
         # Build2 list will be all builds available matching the Xcalar version(s)
         # and of same test type as build1 (suitable for comparison).
         xlr_vers,bnum1,rest = target.split(':')
-        b1stats = stats_dir.stats(bnum=bnum1)
+        b1stats = sql_tpch_art.stats(bnum=bnum1)
         # Only display choices where test type (hash of test parameters)
         # is the same as the "base" build (since otherwise comparison is misleading).
-        names = stats_idx.find_builds(test_type=b1stats.test_type,
-                                      xlr_versions=_parse_multi(xlr_vers),
-                                      reverse=True)
+        names = sql_tpch_data.find_builds(test_type=b1stats.test_type,
+                                          xlr_versions=_parse_multi(xlr_vers),
+                                          reverse=True)
 
     # <bnum1>:query
     elif ':query' in target:
         # Return list of all supported query names (as determined by selected build1).
         bnum1,rest = target.split(':')
-        b1stats = stats_dir.stats(bnum=bnum1)
+        b1stats = sql_tpch_art.stats(bnum=bnum1)
         names = b1stats.query_names()
 
     # <bnum1>:metric
@@ -111,7 +116,7 @@ def find_metrics():
         names = SqlTpchStats.metric_names()
 
     else:
-        pass # XXXrs - ERROR?
+        pass # XXXrs - exception?
 
     logger.debug("names: {}".format(names))
     return jsonify(names)
@@ -131,8 +136,8 @@ def _table_results(*, target):
         abort(404, Exception('incomprehensible target: {}'.format(target)))
 
     try:
-        stats1 = stats_dir.stats(bnum=bnum1)
-        stats2 = stats_dir.stats(bnum=bnum2)
+        stats1 = sql_tpch_art.stats(bnum=bnum1)
+        stats2 = sql_tpch_art.stats(bnum=bnum2)
     except Exception as e:
         abort(404, Exception('failed to load stats'))
 
@@ -163,7 +168,7 @@ def _table_results(*, target):
 def _get_datapoints(*, bnum, qname, mname, request_ts_ms=None):
         logger.debug("start")
         try:
-            stats = stats_dir.stats(bnum=bnum)
+            stats = sql_tpch_art.stats(bnum=bnum)
         except Exception as e:
             logger.exception("failed to load stats")
             abort(404, Exception('failed to load stats'))
@@ -222,12 +227,12 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     qname is allowed to be multi e.g. "(q1|q2|q3...)"
     """
     results = []
-    b1stats = stats_dir.stats(bnum=bnum)
-    builds = stats_idx.find_builds(first_bnum=bnum,
-                                   xlr_versions=_parse_multi(xver),
-                                   test_type=b1stats.test_type,
-                                   start_ts_ms=from_ts_ms,
-                                   end_ts_ms=to_ts_ms)
+    b1stats = sql_tpch_art.stats(bnum=bnum)
+    builds = sql_tpch_data.find_builds(first_bnum=bnum,
+                                       xlr_versions=_parse_multi(xver),
+                                       test_type=b1stats.test_type,
+                                       start_ts_ms=from_ts_ms,
+                                       end_ts_ms=to_ts_ms)
 
     qnames = _parse_multi(qname)
     for bnum in builds:
