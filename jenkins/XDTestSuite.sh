@@ -138,6 +138,36 @@ runExpServerIntegrationTest() {
     return $retval
 }
 
+checkApiVersionSig() {
+    local VERSION_SIG="$1"
+    local VERSION_FILE="$2"
+
+    local ret=1
+    if [ -f "$VERSION_FILE" ] && [ -n "$VERSION_SIG" ]; then
+        if grep -q "$VERSION_SIG" $VERSION_FILE; then
+            ret=0
+        fi
+    fi
+    return $ret
+}
+generateXcrpcVersionSig() {
+    local PROTO_DIR="$1"
+
+    local checkFiles=$(find $PROTO_DIR -name "*.proto" | LC_COLLATE=C sort)
+    local totalValue=""
+    local newline=$'\n'
+    local protoFile
+    for protoFile in $checkFiles; do
+        local checkSum=$(md5sum $protoFile | cut -d " " -f 1)
+        totalValue="$totalValue$checkSum${newline}"
+    done
+    echo -n "$totalValue" | md5sum | cut -d " " -f 1
+}
+generateThriftVersionSig() {
+    local DEF_FILE="$1"
+    md5sum $DEF_FILE | cut -d " "  -f 1
+}
+
 # Make symbolic link
 sudo mkdir /var/www || true
 sudo ln -sfn $WORKSPACE/xcalar-gui/xcalar-gui /var/www/xcalar-gui
@@ -187,25 +217,59 @@ fi
 pip install pyvirtualdisplay selenium
 
 if [ "$AUTO_DETECT_XCE" = "true" ]; then
-    foundVersion="false"
+    xcrpcDefDir="$XLRDIR/src/include/pb/xcalar/compute/localtypes"
+    xcrpcVersionFile="$XLRGUIDIR/assets/js/xcrpc/enumMap/XcRpcApiVersion/XcRpcApiVersionToStr.json"
+    thriftDefFile="$XLRDIR/src/include/libapis/LibApisCommon.h"
+    thriftVersionFile="$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"
+
     echo "Detecting version of XCE to use"
     cd $XLRDIR
-    versionSig=`md5sum src/include/libapis/LibApisCommon.h | cut -d\  -f 1`
-    if grep -q "$versionSig" "$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"; then
+    foundVersion="false"
+    isCheckXcrpc="true"
+    checkOutFiles="$thriftDefFile $xcrpcDefDir"
+    if [ ! -f "$xcrpcVersionFile" ]; then
+        isCheckXcrpc="false"
+        checkOutFiles="$thriftDefFile"
+        echo "Skip xcrpc check"
+    fi
+    versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
+    checkApiVersionSig $versionSigThrift $thriftVersionFile
+    foundVerThrift=$?
+    if [ $isCheckXcrpc == "true" ]; then
+        versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
+        checkApiVersionSig $versionSigXcrpc $xcrpcVersionFile
+        foundVerXcrpc=$?
+    else
+        versionSigXcrpc="N/A"
+        foundVerXcrpc=0
+    fi
+    if [ $foundVerThrift -eq 0 ] && [ $foundVerXcrpc -eq 0 ]; then
         echo "Current version of XCE is compatible"
         foundVersion="true"
     else
         echo "Current version of XCE is not compatible. Trying..."
-        gitshas=`git log --format=%H src/include/libapis/LibApisCommon.h`
+        gitshas=`git log --format=%H $checkOutFiles`
         prevSha="HEAD"
         for gitsha in $gitshas; do
-            git checkout "$gitsha" src/include/libapis/LibApisCommon.h
-            versionSig=`md5sum src/include/libapis/LibApisCommon.h | cut -d\  -f 1`
-            echo "$gitsha: VersionSig = $versionSig"
-            if grep -q "$versionSig" "$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"; then
+            if ! git checkout "$gitsha" $checkOutFiles; then
+                break
+            fi
+            versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
+            checkApiVersionSig $versionSigThrift $thriftVersionFile
+            foundVerThrift=$?
+            if [ $isCheckXcrpc == "true" ]; then
+                versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
+                checkApiVersionSig $versionSigXcrpc $xcrpcVersionFile
+                foundVerXcrpc=$?
+            else
+                versionSigXcrpc="N/A"
+                foundVerXcrpc=0
+            fi
+            echo "$gitsha: ThriftVersionSig = $versionSigThrift; XcrpcVersionSig = $versionSigXcrpc"
+            if [ $foundVerThrift -eq 0 ] && [ $foundVerXcrpc -eq 0 ]; then
                 echo "$gitsha is a match"
                 echo "Checking out $prevSha as the last commit with the matching signature"
-                git checkout HEAD src/include/libapis/LibApisCommon.h
+                git checkout HEAD $checkOutFiles
                 git checkout "$prevSha"
                 git submodule update --init --recursive xcalar-idl
                 foundVersion="true"
