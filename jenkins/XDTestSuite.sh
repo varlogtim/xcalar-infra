@@ -114,6 +114,18 @@ storeExpServerCodeCoverage() {
     fi
 }
 
+storeXDUnitTestCodeCoverage() {
+    outputDir=/netstore/qa/coverage/${JOB_NAME}/${BUILD_ID}
+    mkdir -p "$outputDir"
+    covReport=$XLRGUIDIR/assets/dev/unitTest/coverage/coverage.json
+    if [ -f "$covReport" ]; then
+        echo "XDUnitTest coverage report copied to ${outputDir}"
+        cp -r "${covReport}" "${outputDir}"
+    else
+        echo "code coverage report doesn't exist at ${covReport}"
+    fi
+}
+
 runExpServerIntegrationTest() {
     set +e
 
@@ -385,6 +397,9 @@ if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
 elif [ $JOB_NAME = "XDUnitTest" ]; then
     npm test -- unitTest https://localhost:8443
     exitCode=$?
+    if [ "$STORE_COVERAGE" = "true" ]; then
+        storeXDUnitTestCodeCoverage
+    fi
 elif [ $JOB_NAME = "GerritExpServerTest" ]; then
     npm test -- expServer https://localhost:8443
     exitCode=$?
