@@ -231,21 +231,23 @@ pip install pyvirtualdisplay selenium
 if [ "$AUTO_DETECT_XCE" = "true" ]; then
     xcrpcDefDir="$XLRDIR/src/include/pb/xcalar/compute/localtypes"
     xcrpcVersionFile="$XLRGUIDIR/assets/js/xcrpc/enumMap/XcRpcApiVersion/XcRpcApiVersionToStr.json"
-    thriftDefFile="$XLRDIR/src/include/libapis/LibApisCommon.h"
+    thriftDefFileH="$XLRDIR/src/include/libapis/LibApisCommon.h"
+    thriftDefFile="$XLRDIR/src/include/libapis/LibApisCommon.thrift"
     thriftVersionFile="$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"
 
     echo "Detecting version of XCE to use"
     cd $XLRDIR
     foundVersion="false"
     isCheckXcrpc="true"
-    checkOutFiles="$thriftDefFile $xcrpcDefDir"
+    checkOutFiles="$thriftDefFile $thriftDefFileH $xcrpcDefDir"
     if [ ! -f "$xcrpcVersionFile" ]; then
         isCheckXcrpc="false"
-        checkOutFiles="$thriftDefFile"
+        checkOutFiles="$thriftDefFile $thriftDefFileH"
         echo "Skip xcrpc check"
     fi
     versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
-    checkApiVersionSig $versionSigThrift $thriftVersionFile
+    versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
+    checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFileH
     foundVerThrift=$?
     if [ $isCheckXcrpc == "true" ]; then
         versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
@@ -267,7 +269,8 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
                 break
             fi
             versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
-            checkApiVersionSig $versionSigThrift $thriftVersionFile
+            versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
+            checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFileH
             foundVerThrift=$?
             if [ $isCheckXcrpc == "true" ]; then
                 versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
