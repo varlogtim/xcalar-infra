@@ -10,8 +10,8 @@ fi
 
 #INSTALLER="${INSTALLER:-/netstore/qa/Downloads/byJob/BuildTrunk/xcalar-latest-installer-prod}"
 COUNT=1
-INSTANCE_TYPE="Standard_E8s_v3"
-CLUSTER="`id -un`-xcalar"
+INSTANCE_TYPE=''
+CLUSTER="$(id -un)-xcalar"
 LOCATION="westus2"
 TEMPLATE="$XLRINFRADIR/azure/xdp-standard/devTemplate.json"
 
@@ -26,18 +26,18 @@ PARAMETERS_DEFAULTS="${PARAMETERS_DEFAULTS:-$XLRINFRADIR/azure/xdp-standard/defa
 BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://s3-us-west-2.amazonaws.com/$BUCKET/$S3_BOOTSTRAP_KEY}"
 
 # Netstore in xcalardev-net vNET. Avoid having to query DNS for this on boot.
-SHARE_NAME="10.11.1.5:/data/nfs"
+#SHARE_NAME="10.11.1.5:/data/nfs"
 
 usage () {
     cat << EOF
     usage: $0 [-i installer (default: $INSTALLER)] [-t instance-type (default: $INSTANCE_TYPE)] [-c count (default: $COUNT)] [-n clusterName (default: $CLUSTER)]
-            [-l location (default: $LOCATION)] [-k licenseKey] [-s server:/share  (default: $SHARE_NAME)]
+            [-l location (default: $LOCATION)] [-k licenseKey] [-s server:/share]
 
 EOF
     exit 1
 }
 
-while getopts "hi:c:t:n:l:k:s:" opt "$@"; do
+while getopts "hi:c:t:n:l:k:s:p:" opt "$@"; do
     case "$opt" in
         h) usage;;
         i) INSTALLER="$OPTARG";;
@@ -47,6 +47,7 @@ while getopts "hi:c:t:n:l:k:s:" opt "$@"; do
         l) LOCATION="$OPTARG";;
         k) LICENSE="$OPTARG";;
         s) SHARE_NAME="$OPTARG";;
+        p) PARAMETERS_DEFAULTS=$OPTARG;;
         --) break;;
         *) echo >&2 "Unknown option $opt"; usage;;
     esac
@@ -114,10 +115,6 @@ for op in validate create; do
         adminEmail=$EMAIL \
         ${SHARE_NAME+shareName="$SHARE_NAME"} \
         scaleNumber=$COUNT \
-        appName=$CLUSTER \
-        appUsername="xdpadmin" \
-        appPassword="Welcome1" \
-        vmSize="$INSTANCE_TYPE" \
-        osDiskSize=${OS_DISKSIZE:-511} swapDiskSize=${SWAP_SIZE:-255}
+        appName=$CLUSTER ${INSTANCE_TYPE:+vmSize=$INSTANCE_TYPE}
 done
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"

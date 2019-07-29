@@ -208,6 +208,7 @@ setup_instancestore () {
     sed -i 's/^ResourceDisk.Format=y/ResourceDisk.Format=n/g' /etc/waagent.conf
     DISK="$1"
     INSTANCESTORE=$2
+    yum install --enablerepo='xcalar-deps*' -y ephemeral-disk
     if test -b "${DISK}1"; then
         if OLDMOUNT=$(set -o pipefail; findmnt -n ${DISK}1 | awk '{print $1}'); then
             local count=1
@@ -240,7 +241,6 @@ grow_partition $(readlink -f /dev/disk/azure/root) 2
 # does it via /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS*. From
 # all indications, Azure only ever comes with one resource disk.
 setup_instancestore "$(readlink -f /dev/disk/azure/resource)" /ephemeral/data
-run_playload
 
 export TMPDIR=/ephemeral/data/tmp
 mkdir -m 1777 $TMPDIR

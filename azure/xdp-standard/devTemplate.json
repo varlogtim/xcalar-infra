@@ -138,6 +138,14 @@
         "description": "Type of disk for your VM"
       }
     },
+    "vmDiskCaching": {
+      "type": "string",
+      "defaultValue": "ReadWrite",
+      "allowedValues": [
+        "ReadWrite",
+        "ReadOnly"
+      ]
+    },
     "vmSize": {
       "type": "string",
       "defaultValue": "Standard_DS13_v2",
@@ -278,6 +286,13 @@
       "minValue": 127,
       "metadata": {
         "description": "Size of root disk"
+      }
+    },
+    "osDiskEphemeral": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Use an ephemeral OS disk"
       }
     },
     "swapDiskSize": {
@@ -651,10 +666,11 @@
           "osDisk": {
             "name": "[concat(variables('vmName'), copyIndex(), '-osdisk')]",
             "createOption": "FromImage",
-            "caching": "ReadWrite",
+            "diffDiskSettings": "[if(parameters('osDiskEphemeral'), json('{\"option\": \"Local\"}'), json('null'))]",
+            "caching": "[if(parameters('osDiskEphemeral'), 'ReadOnly', parameters('vmDiskCaching'))]",
             "diskSizeGB": "[int(variables('osDiskSize'))]",
             "managedDisk": {
-              "storageAccountType": "[parameters('vmDiskType')]"
+              "storageAccountType": "[if(parameters('osDiskEphemeral'), 'Standard_LRS', parameters('vmDiskType'))]"
             }
           },
           "dataDisks": [

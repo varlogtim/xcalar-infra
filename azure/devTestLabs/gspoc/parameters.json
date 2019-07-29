@@ -3,7 +3,7 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "installerUrl": {
-            "value": "https://xcrepo.blob.core.windows.net/builds/prod/xcalar-1.4.1-2538-installer-el7"
+            "value": "https://xcrepo.blob.core.windows.net/builds/prod/xcalar-2.0.1-3198-installer-el7"
         },
         "installerUrlSasToken": {
             "value": "?st=2019-06-19T21%3A09%3A19Z&se=2020-06-20T21%3A09%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=dg7RKTcDKuFSKQy2llQJ%2FIiLXGRec2rTcQ%2BS1p%2FHpUQ%3D"
@@ -42,54 +42,54 @@
             "value": "new"
         },
         "vmSize": {
-            "value": "Standard_E8s_v3"
+            "value": "Standard_D8s_v3"
         },
         "storageAccountNewOrExisting": {
             "value": "existing"
         },
         "storageAccountRG": {
-            "value": "xcalarroot-rg"
+            "value": "xcalarLab-rg"
         },
         "storageAccountName": {
-            "value": "xcalarroot"
+            "value": "axcalarlab6775"
         },
         "storageAccountType": {
             "value": "Standard_LRS"
         },
         "shareName": {
-          "value" : "10.11.1.5:/data/nfs"
+          "value" : "10.0.0.33:/data/nfs"
         },
         "virtualNetworkNewOrExisting": {
           "value": "existing"
         },
         "virtualNetworkResourceGroupName": {
-          "value": "xcalardev-rg"
+          "value": "xcalarLab-rg"
         },
         "virtualNetworkName": {
-          "value": "xcalardev-vnet"
+          "value": "DtlXcalarLab"
         },
         "subnetName": {
-          "value": "subnet1"
+          "value": "DtlXcalarLabSubnet"
         },
         "addressPrefixes": {
           "value": [
-            "10.11.0.0/16"
+            "10.0.0.0/16"
           ]
         },
         "subnetPrefixCIDR": {
-          "value": "10.11.50.0/24"
+          "value": "10.0.0.0/20"
         },
         "subnetPrefix": {
-          "value": "10.11.50."
+          "value": "10.0.0."
         },
         "osDiskEphemeral" : {
-          "value" : false
+          "value" : true
         },
         "osDiskSize": {
-          "value": 511
+          "value": 127
         },
         "swapDiskSize": {
-          "value": 255
+          "value": 127
         }
     }
 }

@@ -1,4 +1,6 @@
 #!/bin/bash
+#
+# shellcheck disable=SC2006,SC2155,SC2034,SC2164
 
 LOGFILE=startup.log
 touch $LOGFILE
@@ -231,18 +233,17 @@ yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhan
 # Microsoft's Network testing tool. See: https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-bandwidth-testing
 curl -L -f -o /usr/local/bin/ntttcp https://xcrepo.blob.core.windows.net/public/azuremp/v1/ntttcp && chmod +x /usr/local/bin/ntttcp
 
-run_playload () {
-    #(set -o pipefail; extract "${BASH_SOURCE[0]}" | base64 -d | tar zxf - && cd payload && ./install.sh $INSTANCESTORE $DISK)
-    test -e payload.tar.gz && tar zxf payload.tar.gz
-    (test -d payload && cd payload && ./install.sh $INSTANCESTORE $DISK)
-}
-
 setup_instancestore () {
     # Remove waagent's role in managing the disk
     if ! test -b "$1"; then
         log "ERROR: Disk $1 isn't a block device"
         return 1
     fi
+    yum install -y --enablerepo='xcalar-deps-common' ephemeral-disk
+
+    # Ephemeral disks on Azure instances don't have enough space for 2xMEM swap
+    sed -i 's/^LV_SWAP_SIZE=.*$/LV_SWAP_SIZE=MEMSIZE/g' /etc/sysconfig/ephemeral-disk
+
     sed -i 's/^ResourceDisk.Format=y/ResourceDisk.Format=n/g' /etc/waagent.conf
     DISK="$1"
     INSTANCESTORE=$2
@@ -265,7 +266,12 @@ setup_instancestore () {
         sleep 5
         partx -u "${DISK}"
     fi
-
+    if ephemeral-disk; then
+        return 0
+    fi
+    INSTANCESTORE=''
+    DISK=''
+    return 1
 }
 
 setup_swap() {
@@ -317,11 +323,6 @@ grow_partition $(readlink -f /dev/disk/azure/root) 2
 # does it via /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_AWS*. From
 # all indications, Azure only ever comes with one resource disk.
 setup_instancestore "$(readlink -f /dev/disk/azure/resource)" /ephemeral/data
-run_playload
-
-export TMPDIR=/ephemeral/data/tmp
-mkdir -m 1777 $TMPDIR
-
 
 serveError() {
     errorMsg="$1"
@@ -381,12 +382,12 @@ XCE_HOME="${XCE_HOME:-/mnt/xcalar}"
 XCE_CONFIG="${XCE_CONFIG:-/etc/xcalar/default.cfg}"
 XCE_LICENSEDIR="${XCE_LICENSEDIR:-/etc/xcalar}"
 
-INSTALLER=${TMPDIR}/installer.sh
+INSTALLER=installer.sh
 rm -f $INSTALLER
 for retry in $(seq 10); do
-    safe_curl -f "$INSTALLER_URL" -o $TMPDIR/installer.sh
-    rc=$?
-    if [ $rc -eq 0 ] && test -s ${INSTALLER}; then
+    echo >&2 "Downloading $INSTALLER_URL to `pwd`/$INSTALLER"
+    if curl -fsSL "$INSTALLER_URL" -o "$INSTALLER" && test -s "$INSTALLER"; then
+        rc=0
         break
     fi
     sleep 10
@@ -485,19 +486,12 @@ fi
 
 ### Install Xcalar
 if [ -s "$INSTALLER" ]; then
-    # We install our own systemd unit for xcalar in the payload so don't need --startonboot
-    if ! bash -x "$INSTALLER" --stop --nostart; then
+    if ! bash -x "$INSTALLER" --stop --nostart --startonboot; then
         echo >&2 "ERROR: Failed to run installer"
         serveError "Failed to run installer" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
         exit 1
     fi
 fi
-
-safe_curl "$CADDY" | gzip -dc > caddy && \
-chmod 0755 caddy && \
-chown root:root caddy && \
-setcap cap_net_bind_service=+ep caddy && \
-mv caddy ${XLRDIR}/bin/
 
 # az hangs in telemetry.py occasionally casuing the whole cluster bootup sequence to hang
 az_disable_telemetry() {
@@ -532,7 +526,7 @@ az_storage_sas () {
 }
 
 az_storage_share_create () {
-    local exists= created= rc=
+    local exists created rc
     exists="$(az storage share exists --name $1 ${2:+--account-name $2} -ojson --query 'exists')"
     rc=$?
     if [ $rc -ne 0 ]; then
@@ -765,7 +759,6 @@ cat ${XCE_HOME}/members/* | while read HOSTENTRY; do
     ssh-keyscan $HOSTENTRY
 done | tee /etc/ssh/ssh_known_hosts
 ssh-keyscan localhost | tee -a /etc/ssh/ssh_known_hosts
-
 
 # Add the hosts to ansible
 cat ${XCE_HOME}/members/* | awk '{print $(NF)}' | tee /etc/ansible/hosts
