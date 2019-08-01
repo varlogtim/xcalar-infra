@@ -247,7 +247,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     fi
     versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
     versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
-    checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFileH
+    checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
     foundVerThrift=$?
     if [ $isCheckXcrpc == "true" ]; then
         versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
@@ -270,7 +270,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
             fi
             versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
             versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
-            checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFileH
+            checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
             foundVerThrift=$?
             if [ $isCheckXcrpc == "true" ]; then
                 versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
