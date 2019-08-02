@@ -91,6 +91,7 @@ PUPPET_SETUP_TIMEOUT = 2700 # seconds to wait before timing out puppet setup/pup
 XCALAR_INSTALL_TIMEOUT = 3000 # seconds to wait before timing out on Xcalar install
 XCALAR_START_TIMEOUT = 600 # seconds to wait before timing out on service xcalar start
 XCALAR_STOP_TIMEOUT = 600 # seconds to wait before timing out on service xcalar stop
+CADDY_STOP_TIMEOUT = 120 # seconds to wait for caddy to stop
 
 NETSTORE_IP='10.10.3.199'
 NETSTORE_EXPORT='/mnt/pool0/netstore'
@@ -1756,6 +1757,17 @@ def restart_xcalar(node, restart_expserver=False):
     stop_xcalar(node, stop_supervisor=restart_expserver)
     start_xcalar(node)
 
+'''
+    Bring down system caddy on node
+
+    :paran node: (String) ip of node to stop caddy on
+'''
+def stop_caddy(node):
+
+    # sudo in case running after puppet setup, in which case no root ssh
+    stop_cmd = 'if [ -f "/etc/caddy/caddy.conf" ]; then sudo service caddy stop; fi'
+    info_log("Stop caddy on {} via {}".format(node, stop_cmd))
+    run_ssh_cmd(node, stop_cmd, timeout=CADDY_STOP_TIMEOUT)
 
 ''' parallel versions '''
 
@@ -1792,6 +1804,20 @@ def restart_xcalar_in_parallel(nodes, restart_expserver=False):
     info_log("Restart Xcalar in parallel on the following nodes: {}".format(", ".join(nodes)))
     stop_xcalar_in_parallel(nodes, stop_supervisor=restart_expserver)
     start_xcalar_in_parallel(nodes)
+
+
+def stop_caddy_in_parallel(nodes):
+    debug_log("Stop caddy in parallel on the following nodes: {}".format(", ".join(nodes)))
+    procs = []
+    sleep_between = 20
+    for node in nodes:
+        proc = multiprocessing.Process(target=stop_caddy, args=(node,))
+        procs.append(proc)
+        proc.start()
+        time.sleep(sleep_between)
+
+    # wait
+    process_wait(procs, timeout=CADDY_STOP_TIMEOUT+sleep_between*len(nodes))
 
 '''
     Setup admin account and ldap on a node
@@ -1955,6 +1981,9 @@ def setup_xcalar(vmids, uncompressed_xcalar_license_string, installer, ldap_conf
 
     # wait
     process_wait(procs, timeout=8000+sleep_between*len(vmids))
+
+    # if the template image comes up running caddy, turn it off
+    stop_caddy_in_parallel(ips)
 
     # form the nodes in to a cluster if requested (will need to start Xcalar on nodes to take effect)
     setup_admin_account_on = ips
