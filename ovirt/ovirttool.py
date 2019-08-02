@@ -2205,7 +2205,7 @@ def mount_shared_cluster_storage(node, export_IP, export_path, remote_path, moun
     run_ssh_cmd(node, "echo '{}' >> /etc/fstab".format(fs_tab_entry))
     # now that it's in fstab, can mount via the specified mount point
     # (the mount point must exist first)
-    run_ssh_cmd(node, "mountpoint -q {} && umount {}".format(mount_dir, mount_dir), timeout=400)
+    run_ssh_cmd(node, "if mountpoint -q {}; then umount {}; fi".format(mount_dir, mount_dir), timeout=400)
     # the mount point could be a directory or an automount symbolic link
     run_ssh_cmd(node, "rmdir {} >/dev/null 2>&1 || rm -f {}".format(mount_dir, mount_dir),
                 timeout=400)
