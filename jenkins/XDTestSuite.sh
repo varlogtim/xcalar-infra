@@ -115,12 +115,17 @@ storeExpServerCodeCoverage() {
 }
 
 storeXDUnitTestCodeCoverage() {
-    outputDir=/netstore/qa/coverage/${JOB_NAME}/${BUILD_ID}
-    mkdir -p "$outputDir"
     covReport=$XLRGUIDIR/assets/dev/unitTest/coverage/coverage.json
     if [ -f "$covReport" ]; then
+        outputDir=/netstore/qa/coverage/${JOB_NAME}/${BUILD_ID}
+        mkdir -p "$outputDir"
         echo "XDUnitTest coverage report copied to ${outputDir}"
         cp -r "${covReport}" "${outputDir}"
+        gzip "$outputDir/coverage.json"
+        # Record the branch configurations
+        echo "XCE_GIT_BRANCH: $XCE_GIT_BRANCH" > "$outputDir/git_branches.txt"
+        echo "XD_GIT_BRANCH: $XD_GIT_BRANCH" >> "$outputDir/git_branches.txt"
+        echo "INFRA_GIT_BRANCH: $INFRA_GIT_BRANCH" >> "$outputDir/git_branches.txt"
     else
         echo "code coverage report doesn't exist at ${covReport}"
     fi
