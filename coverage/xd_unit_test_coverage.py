@@ -7,6 +7,7 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
+import gzip
 import json
 import logging
 import math
@@ -98,7 +99,7 @@ class XDUnitTestArtifactsData(JenkinsArtifactsData):
         cfg = EnvConfiguration(XDUnitTestArtifactsData.ENV_PARAMS)
         self.coverage_file_name = cfg.get("XD_UNIT_TEST_COVERAGE_FILE_NAME")
         self.artifacts = artifacts
-        super().__init__(jenkins_artifacts=self.artifacts, add_commits=True)
+        super().__init__(jenkins_artifacts=self.artifacts, add_branch_info=True)
 
     def update_build(self, *, bnum, log=None):
         """
@@ -107,11 +108,14 @@ class XDUnitTestArtifactsData(JenkinsArtifactsData):
         try:
             path = os.path.join(self.artifacts.artifacts_directory_path(bnum=bnum),
                                 self.coverage_file_name)
+            self.logger.debug("path: {}".format(path))
             data = {}
             for url,coverage in XDUnitTestCoverage(path=path).get_data().items():
+                self.logger.debug("url: {} coverage: {}".format(url, coverage))
                 data[MongoDB.encode_key(url)] = coverage
             return {'coverage': data}
         except FileNotFoundError as e:
+            self.logger.error("{} not found".format(path))
             return None
 
     def xd_versions(self):
@@ -119,14 +123,14 @@ class XDUnitTestArtifactsData(JenkinsArtifactsData):
         Return available XD versions for which we have data.
         XXXrs - version/branch :|
         """
-        return self.branches(repo='XD_GIT_REPOSITORY')
+        return self.branches(repo='XD')
 
     def builds(self, *, xd_versions=None,
                         first_bnum=None,
                         last_bnum=None,
                         reverse=False):
 
-        return self.find_builds(repo='XD_GIT_REPOSITORY',
+        return self.find_builds(repo='XD',
                                 branches=xd_versions,
                                 first_bnum=first_bnum,
                                 last_bnum=last_bnum,
@@ -194,3 +198,47 @@ if __name__ == '__main__':
     print("stop update thread")
     data.stop_update_thread()
     print("DONE")
+
+    """
+    XXXrs - The following "utility" code was used to pre-populate the git_branches.txt file
+            for builds that didn't have them, using the "old" method of scraping the jenkins
+            log and using git_helper() to find the branches containing the discovered
+            commit sha(s).
+
+    from py_common.git_helper import GitHelper
+    from py_common.jenkins_api import JenkinsApi
+
+    logging.basicConfig(level=logging.INFO,
+                        format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
+                        handlers=[logging.StreamHandler()])
+    logger = logging.getLogger(__name__)
+
+    art = XDUnitTestArtifacts()
+    japi = JenkinsApi()
+    ghelp = GitHelper()
+    data = XDUnitTestArtifactsData(artifacts = art)
+    repo_pat = re.compile(r"\A(.*)_GIT_REPOSITORY\Z")
+
+    for bnum in art.builds():
+        log = japi.console(job_name='XCEFuncTest', build_number=bnum)
+        adp = art.artifacts_directory_path(bnum=bnum)
+        txt_path = os.path.join(adp, 'git_branches.txt')
+        commits = ghelp.commits(log=log)
+        txt = ""
+        for commit, info in commits.items():
+            repo = info.get('repo', None)
+            if not repo:
+                continue
+            repo = repo_pat.match(repo).group(1)
+            branches = info['branches']
+            for branch in branches:
+                if len(txt):
+                    txt += "\n"
+                txt += "{}_GIT_BRANCH: {}".format(repo, branch)
+        if os.path.exists(txt_path):
+            print("{} exists, skip...".format(txt_path))
+            continue
+        print("write {}".format(txt_path))
+        with open(txt_path, "w+") as fh:
+            fh.write(txt)
+    """

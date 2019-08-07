@@ -5,6 +5,7 @@ FROM tiangolo/uwsgi-nginx-flask:python3.6
 # Flask app needs to be in main.py for NGINX container
 COPY sql_tpch/grafana/sql_tpch_datasource.py /app/main.py
 COPY sql_tpch/grafana/requirements.txt /app
+COPY sql_tpch/grafana/uwsgi.ini /app
 
 RUN mkdir -p /app/sql_tpch
 COPY sql_tpch/*.py /app/sql_tpch/

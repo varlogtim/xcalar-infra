@@ -5,6 +5,7 @@ FROM tiangolo/uwsgi-nginx-flask:python3.6
 # Flask app needs to be in main.py for NGINX container
 COPY coverage/grafana/coverage_datasource.py /app/main.py
 COPY coverage/grafana/requirements.txt /app
+COPY coverage/grafana/uwsgi.ini /app
 
 RUN mkdir -p /app/coverage
 COPY coverage/*.py /app/coverage/

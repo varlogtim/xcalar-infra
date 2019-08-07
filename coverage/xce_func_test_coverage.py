@@ -109,7 +109,7 @@ class XCEFuncTestArtifactsData(JenkinsArtifactsData):
         cfg = EnvConfiguration(XCEFuncTestArtifactsData.ENV_PARAMS)
         self.cvg_file_name = cfg.get("XCE_FUNC_TEST_COVERAGE_FILE_NAME")
         self.artifacts = artifacts
-        super().__init__(jenkins_artifacts=self.artifacts, add_commits=True)
+        super().__init__(jenkins_artifacts=self.artifacts, add_branch_info=True)
 
     def update_build(self, *, bnum, log=None):
         """
@@ -133,14 +133,14 @@ class XCEFuncTestArtifactsData(JenkinsArtifactsData):
         Return available XCE versions for which we have data.
         XXXrs - version/branch :|
         """
-        return self.branches(repo='XCE_GIT_REPOSITORY')
+        return self.branches(repo='XCE')
 
     def builds(self, *, xce_versions=None,
                         first_bnum=None,
                         last_bnum=None,
                         reverse=False):
 
-        return self.find_builds(repo='XCE_GIT_REPOSITORY',
+        return self.find_builds(repo='XCE',
                                 branches=xce_versions,
                                 first_bnum=first_bnum,
                                 last_bnum=last_bnum,
@@ -212,3 +212,47 @@ if __name__ == '__main__':
     #import time
     #time.sleep(600)
     #data.stop_update_thread()
+
+    """
+    XXXrs - The following "utility" code was used to pre-populate the git_branches.txt file
+            for builds that didn't have them, using the "old" method of scraping the jenkins
+            log and using git_helper() to find the branches containing the discovered
+            commit sha(s).
+
+    from py_common.git_helper import GitHelper
+    from py_common.jenkins_api import JenkinsApi
+
+    logging.basicConfig(level=logging.INFO,
+                        format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
+                        handlers=[logging.StreamHandler()])
+    logger = logging.getLogger(__name__)
+
+    art = XCEFuncTestArtifacts()
+    japi = JenkinsApi()
+    ghelp = GitHelper()
+    data = XCEFuncTestArtifactsData(artifacts = art)
+    repo_pat = re.compile(r"\A(.*)_GIT_REPOSITORY\Z")
+
+    for bnum in art.builds():
+        log = japi.console(job_name='XCEFuncTest', build_number=bnum)
+        adp = art.artifacts_directory_path(bnum=bnum)
+        txt_path = os.path.join(adp, 'git_branches.txt')
+        commits = ghelp.commits(log=log)
+        txt = ""
+        for commit, info in commits.items():
+            repo = info.get('repo', None)
+            if not repo:
+                continue
+            repo = repo_pat.match(repo).group(1)
+            branches = info['branches']
+            for branch in branches:
+                if len(txt):
+                    txt += "\n"
+                txt += "{}_GIT_BRANCH: {}".format(repo, branch)
+        #if os.path.exists(txt_path):
+            #print("{} exists, skip...")
+            #continue
+        print("write {}".format(txt_path))
+        with open(txt_path, "w+") as fh:
+            fh.write(txt)
+    """

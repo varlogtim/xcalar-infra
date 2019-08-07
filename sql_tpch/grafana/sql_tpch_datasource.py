@@ -14,6 +14,7 @@ import pytz
 import random
 import re
 import statistics
+import time
 
 from py_common.env_configuration import EnvConfiguration
 ENV_PARAMS = {} # XXXrs placeholder
@@ -38,6 +39,11 @@ if not os.environ.get("WERKZEUG_RUN_MAIN"):
     # Only do this on initial load or we'll end up with
     # multiple overlapping update threads (at least in debug).
     sql_tpch_data.start_update_thread()
+
+# Without the following sleep, the main thread seems to be unresponsive
+# "randomly" on start.  Likely (obviously?) some race condition with the
+# threads we just started above that the sleep mitigates. :/
+time.sleep(1)
 
 app = Flask(__name__)
 
@@ -335,4 +341,4 @@ def get_panel():
     abort(404, Exception('not supported'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3003, debug= True)
+    app.run(host='0.0.0.0', port=3001, debug= True)
