@@ -17,15 +17,15 @@ usage() {
     echo >&2 "          [--skip-tests (don't test installer)] [--commit (commit test container)] [--push (push container)] [--upload <comma sep list of clouds to upload to>]"
     echo >&2
     echo >&2 "example: Extract EL7 and AMZN1 from xcalar-2.0.0-100-installer producing xcalar-2.0.0-installer-el7 and -amzn1"
-    echo >&2 " \$ extract-installer.sh -i xcalar-2.0.0-100-installer --osexts el7,amzn1"
+    echo >&2 ' $ extract-installer.sh -i xcalar-2.0.0-100-installer --osexts el7,amzn1'
     exit 1
 }
 
-extract () {
+extract() {
     sed -n '/^__XCALAR_TARBALL__/,$p' "$1" | tail -n+2
 }
 
-extract_top () {
+extract_top() {
     sed -n '1,/^__XCALAR_TARBALL__$/p' "$1"
 }
 
@@ -33,11 +33,11 @@ docker_clean() {
     docker images | grep "^${REGISTRY}/${IMAGEBASE}/xcalar" | awk '{printf "%s:%s\n",$1,$2}' | xargs -r -I{} -n1 docker rmi {}
 }
 
-docker_rpms () {
+docker_rpms() {
     docker run --rm "$1" bash -c 'rpm -qa | xargs -n1 -I{} rpm -q {} --qf "%{NAME}\n"' | sort
 }
 
-main () {
+main() {
     local rc=0 cmd=''
     export http_proxy=${http_proxy-http://cacher:3128}
     if [ -n "$http_proxy" ] && curl -s -L $http_proxy | grep -q squid; then
@@ -109,10 +109,16 @@ main () {
         fi
 
         case $OSEXT in
-            el6) IMAGE=centos:6;;
-            el7) IMAGE=centos/systemd:latest; CMD=;;
-            amzn1) IMAGE=ambakshi/amazon-linux:latest;;
-            *) echo >&2 "ERROR: Unknown image: $OSEXT"; exit 1;;
+            el6) IMAGE=centos:6 ;;
+            el7)
+                IMAGE=centos/systemd:latest
+                CMD=
+                ;;
+            amzn1) IMAGE=ambakshi/amazon-linux:latest ;;
+            *)
+                echo >&2 "ERROR: Unknown image: $OSEXT"
+                exit 1
+                ;;
         esac
         BASE_RPMS="$(echo $IMAGE | sed -r 's,/,-,g; s,:,_,g').txt"
         if ! [ -e $BASE_RPMS ]; then
@@ -120,15 +126,14 @@ main () {
             mv ${BASE_RPMS}.$$ $BASE_RPMS
         fi
 
-
-        if ! docker image inspect xcalar-base-${OSEXT} >/dev/null 2>&1; then
+        if ! docker image inspect xcalar-base-${OSEXT} > /dev/null 2>&1; then
             if [ $OSEXT == amzn1 ]; then
-                cat > Dockerfile-${OSEXT} <<-EOF
+                cat > Dockerfile-${OSEXT} <<- EOF
 				FROM $IMAGE
 				RUN yum install -y http://repo.xcalar.net/xcalar-release-amzn1.rpm yum-plugin-fastestmirror && ACCEPT_EULA=Y yum install --enablerepo='xcalar-*' --disableplugin=priorities -y $(cat xcalar-${OSEXT}.txt | tr -d '\r' | tr '\n' ' ') curl && yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
 				EOF
             else
-                cat > Dockerfile-${OSEXT} <<-EOF
+                cat > Dockerfile-${OSEXT} <<- EOF
 				FROM $IMAGE
 				RUN yum install -y epel-release && yum install --enablerepo=epel --disableplugin=priorities -y $(cat xcalar-${OSEXT}.txt | tr -d '\r' | tr '\n' ' ') curl && yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
 				EOF
@@ -142,30 +147,32 @@ main () {
 
         ## Test the installer
         docker rm -f $NAME || true
-        docker run --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
+        docker run  --privileged \
+                    -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
+                    --tmpfs /run \
                     --ulimit memlock=-1:-1 \
                     --shm-size=15g \
                     --name $NAME \
-                    -p 443 \
-                    -it \
                     -d \
+                    -e container=docker \
                     -e http_proxy \
-                    -v $TMPDIR:$TMPDIR \
                     -e TMPDIR \
-                    -v $INSTALLER:/tmp/installer.sh:ro \
+                    -v $TMPDIR:$TMPDIR \
+                    -v /tmp:/tmp \
                     -v ${PWD}:/host \
                     -w /host \
                     $IMAGE ${CMD-sleep inf} \
             && docker exec $NAME bash -c 'rpm -qa | xargs -n1 -I{} rpm -q {} --qf "%{NAME}\n"' | sort > xcalar-${VERSION}-${BUILD}-rpms-A.txt \
-            && docker exec $NAME bash -x /tmp/installer.sh --start \
-            && docker exec $NAME bash -c 'rpm -qa | xargs -n1 -I{} rpm -q {} --qf "%{NAME}\n"' | sort > xcalar-${VERSION}-${BUILD}-rpms-B.txt \
-            && comm -1 -3 xcalar-${VERSION}-${BUILD}-rpms-{A,B}.txt  | grep -Ev '^(gpg-pubkey|xcalar|systemd)' > xcalar-${OSEXT}.txt \
-            && echo "Output: $OUTPUT" \
-            && echo "Listing: xcalar-${OSEXT}.txt" \
-            && echo "Image: $IMAGE"
-        rc=$?
+            && docker exec $NAME bash -x /tmp/$(basename $INSTALLER) --start \
+            && docker exec $NAME bash -c 'rpm -qa | xargs -n1 -I{} rpm -q {} --qf "%{NAME}\n"' | sort > xcalar-${VERSION}-${BUILD}-rpms-B.txt
+
+            comm -1 -3 xcalar-${VERSION}-${BUILD}-rpms-{A,B}.txt | grep -Ev '^(gpg-pubkey|xcalar|systemd)' > xcalar-${OSEXT}.txt || true
+            echo "Output: $INSTALLER_OSEXT"
+            echo "Listing: xcalar-${OSEXT}.txt"
+            echo "Image: $IMAGE"
+         rc=$?
         if [ $rc -ne 0 ]; then
-            echo >&2 "ERROR: Failed to create installer $OUTPUT from $INSTALLER"
+            echo >&2 "ERROR: Failed to create installer $INSTALLER_OSEXT from $INSTALLER"
             return $rc
         fi
         if $COMMIT; then
