@@ -1,0 +1,2 @@
+#!/bin/bash
+docker exec -it sql_tpch_data_update /bin/bash

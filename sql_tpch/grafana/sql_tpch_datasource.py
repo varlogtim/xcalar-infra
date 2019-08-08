@@ -17,8 +17,7 @@ import statistics
 import time
 
 from py_common.env_configuration import EnvConfiguration
-ENV_PARAMS = {} # XXXrs placeholder
-config = EnvConfiguration(ENV_PARAMS)
+config = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 
 from sql_tpch.sql_tpch import SqlTpchStatsArtifacts, SqlTpchStatsArtifactsData, SqlTpchStats
 
@@ -27,23 +26,13 @@ from flask_cors import CORS, cross_origin
 
 # It's log, it's log... :)
 logging.basicConfig(
-                level=logging.INFO,
+                level=config.get('LOG_LEVEL'),
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
 sql_tpch_art = SqlTpchStatsArtifacts()
 sql_tpch_data = SqlTpchStatsArtifactsData(artifacts = sql_tpch_art)
-
-if not os.environ.get("WERKZEUG_RUN_MAIN"):
-    # Only do this on initial load or we'll end up with
-    # multiple overlapping update threads (at least in debug).
-    sql_tpch_data.start_update_thread()
-
-# Without the following sleep, the main thread seems to be unresponsive
-# "randomly" on start.  Likely (obviously?) some race condition with the
-# threads we just started above that the sleep mitigates. :/
-time.sleep(1)
 
 app = Flask(__name__)
 

@@ -20,16 +20,14 @@ from py_common.env_configuration import EnvConfiguration
 from coverage.xd_unit_test_coverage import XDUnitTestArtifacts, XDUnitTestArtifactsData
 from coverage.xce_func_test_coverage import XCEFuncTestArtifacts, XCEFuncTestArtifactsData
 
-
-ENV_PARAMS = {} # XXXrs placeholder
-config = EnvConfiguration(ENV_PARAMS)
+config = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 
 from flask import Flask, request, jsonify, json, abort
 from flask_cors import CORS, cross_origin
 
 # It's log, it's log... :)
 logging.basicConfig(
-                level=logging.INFO,
+                level=config.get('LOG_LEVEL'),
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
@@ -40,19 +38,7 @@ xce_coverage_data = XCEFuncTestArtifactsData(artifacts = xce_coverage_art)
 xd_coverage_art = XDUnitTestArtifacts()
 xd_coverage_data = XDUnitTestArtifactsData(artifacts = xd_coverage_art)
 
-if not os.environ.get("WERKZEUG_RUN_MAIN"):
-    # Only do this on initial load or we'll end up with
-    # multiple overlapping update threads (at least in debug).
-    xce_coverage_data.start_update_thread()
-    xd_coverage_data.start_update_thread()
-
-# Without the following sleep, the main thread seems to be unresponsive
-# "randomly" on start.  Likely (obviously?) some race condition with the
-# threads we just started above that the sleep mitigates. :/
-time.sleep(1)
-
 app = Flask(__name__)
-
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
