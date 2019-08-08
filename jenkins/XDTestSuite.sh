@@ -138,7 +138,7 @@ runExpServerIntegrationTest() {
     local retval=0
 
     cd $XLRDIR/src/bin/tests/pyTestNew
-    testCases=("test_dataflow_service.py" "test_workbooks_new" "test_dfworkbooks_execute.py" "test_dataflows_execute.py")
+    testCases=("test_dataflow_service.py" "test_workbooks_new" "test_dfworkbooks_execute.py" "test_dataflows_execute.py" "test_imd_table_groups.py")
 
     echo "running integration test for expServer"
     for testCase in "${testCases[@]}"; do
