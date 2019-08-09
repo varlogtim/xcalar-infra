@@ -20,11 +20,10 @@ job "registryv2" {
   }
 
   group "registry" {
-    count = 3
+    count = 1
 
     constraint {
-      operator = "distinct_hosts"
-      value    = "true"
+      distinct_hosts = true
     }
 
     restart {
@@ -46,36 +45,9 @@ job "registryv2" {
         ]
 
         port_map {
-          image = 5000
+          image      = 5000
+          debug_port = 5001
         }
-      }
-
-      template {
-        destination = "local/config.yml"
-
-        data = <<EOD
-version: 0.1
-log:
-  fields:
-    service: registry
-storage:
-  cache:
-    blobdescriptor: redis
-  filesystem:
-    rootdirectory: /var/lib/registry
-redis:
-  addr: {{range $i, $e := service "redis" "any"}}{{$e.Address}}:{{$e.Port}}{{end}}
-  db: 15
-http:
-  addr: :5000
-  headers:
-    X-Content-Type-Options: [nosniff]
-health:
-  storagedriver:
-    enabled: true
-    interval: 10s
-    threshold: 3
-EOD
       }
 
       resources {
@@ -83,26 +55,163 @@ EOD
         cpu    = 1000
 
         network {
-          port "image" {}
+          port "image"{}
+          port "debug_port"{}
         }
       }
 
       service {
         name = "registry"
+        port = "image"
 
         tags = [
           "urlprefix-registry.service.consul:9999/",
-          "urlprefix-registry.service.consul:443/",
-          "urlprefix-registry.int.xcalar.com:443/",
+          "urlprefix-registry.service.consul:443/ proto=https tlsskipverify=true",
+
+          #"urlprefix-registry.int.xcalar.com/",
+          #"urlprefix-registry.int.xcalar.com:443/"
+          "http",
         ]
 
-        port = "image"
+        #"urlprefix-registry.service.consul/",
 
         check {
+          name     = "image port check"
           type     = "tcp"
           interval = "20s"
           timeout  = "10s"
         }
+      }
+
+      service {
+        name = "debug"
+        port = "debug_port"
+
+        tags = [
+          "http",
+          "prometheus",
+        ]
+
+        check {
+          name     = "debug_port check"
+          type     = "tcp"
+          interval = "10s"
+          timeout  = "2s"
+        }
+      }
+
+      env {
+        VAULT_ADDR         = "https://vault.service.consul:8200"
+        AWS_DEFAULT_REGION = "us-west-2"
+        AWS_REGION         = "us-west-2"
+      }
+
+      vault {
+        policies    = ["aws", "aws-xcalar", "ca-int-xcalar-com"]
+        env         = true
+        change_mode = "restart"
+      }
+
+      artifact {
+        source      = "https://vault.service.consul:8200/v1/xcalar_ca/ca_chain"
+        destination = "local/ca.pem"
+        mode        = "file"
+      }
+
+      template {
+        destination = "local/cert.crt"
+
+        data = <<EOH
+{{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
+{{ .Data.certificate }}
+{{ end }}
+      EOH
+      }
+
+      template {
+        destination = "secrets/cert.key"
+
+        data = <<EOH
+{{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
+{{ .Data.private_key }}
+{{ end }}
+      EOH
+      }
+
+      template {
+        data = <<EOH
+            Good morning.
+            <br />
+            <br />
+{{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
+{{ .Data.certificate }}
+            <br />
+            <br />
+{{ .Data.private_key }}
+{{ end }}
+        EOH
+
+        destination = "local/index.html"
+      }
+
+      template {
+        destination = "secrets/creds.env"
+        change_mode = "restart"
+        env         = true
+
+        data = <<EOT
+{{ with secret "aws-xcalar/sts/xcnexus" "ttl=86400"}}
+AWS_ACCESS_KEY_ID={{ .Data.access_key }}
+AWS_SECRET_ACCESS_KEY={{ .Data.secret_key }}
+AWS_SESSION_TOKEN={{ .Data.security_token }}{{ end }}
+EOT
+      }
+
+      template {
+        destination = "local/config.yml"
+        change_mode = "restart"
+
+        data = <<EOD
+version: 0.1
+log:
+  level: "debug"
+  formatter: "json"
+  fields:
+    service: "registry"
+storage:
+  cache:
+    blobdescriptor: redis
+  filesystem:
+    rootdirectory: /var/lib/registry
+  #s3:
+  #  region: "us-west-2"
+  #  bucket: "xcnexus"
+  #  rootdirectory: "registryv2/"
+redis:
+  addr: {{range $i, $e := service "redis" "any"}}{{$e.Address}}:{{$e.Port}}{{end}}
+  db: 15
+http:
+  addr: :5000
+  host: https://registry.service.consul
+  secret: "asekr3t"
+  tls:
+    certificate: /local/cert.crt
+    key: /secrets/cert.key
+    clientcas:
+      - /local/ca.pem
+  debug:
+    addr: :5001
+    prometheus:
+      enabled: true
+      path: "/metrics"
+  headers:
+    X-Content-Type-Options: [nosniff]
+health:
+  storagedriver:
+    enabled: true
+    interval: "10s"
+    threshold: 3
+EOD
       }
     }
   }

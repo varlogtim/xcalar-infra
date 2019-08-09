@@ -48,7 +48,8 @@ job "nexus" {
       driver = "docker"
 
       config {
-        image = "sonatype/nexus3:3.17.0"
+        image      = "sonatype/nexus3"
+        force_pull = true
 
         volumes = [
           "/netstore/infra/nexus3/_data:/nexus-data",

@@ -37,7 +37,7 @@ job "petname" {
       driver = "docker"
 
       config {
-        image      = "registry.int.xcalar.com/xcalar/petname:latest"
+        image      = "registry.service.consul/xcalar/petname:latest"
         force_pull = true
 
         port_map {
@@ -46,22 +46,21 @@ job "petname" {
       }
 
       resources {
-        cpu    = 100 # 500 MHz
-        memory = 20  # 256MB
+        cpu    = 500 # 500 MHz
+        memory = 50  # 256MB
 
         network {
-          #mbits = 10
           port "http" {}
         }
       }
 
       service {
-        name = "http"
-        tags = ["urlprefix-petname:9999/", "urlprefix-petname.nomad:9999/", "urlprefix-petname.service.consul:9999/"]
+        name = "petname"
+        tags = ["urlprefix-petname.service.consul:443/", "urlprefix-petname.nomad:9999/", "urlprefix-petname.service.consul:9999/"]
         port = "http"
 
         check {
-          name     = "alive"
+          name     = "petname is alive"
           type     = "tcp"
           interval = "10s"
           timeout  = "2s"

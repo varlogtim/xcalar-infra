@@ -12,6 +12,9 @@ NOW=$(date +%s)
 FORCE=false
 CLEAN=true
 fpmextra=()
+rpmextra=()
+GENFPM=0
+FPM=${FPM:-fpm}
 #PREFIX=/usr
 
 die() {
@@ -87,16 +90,27 @@ package() {
     if [ -e Makefile ]; then
         run make install DESTDIR=$pkgdir PREFIX=${prefix:-/usr}
     else
-        tool=$(basename "${sources[0]}")
+        tool=$(basename "${sources[0]}") || exit 1
         tool="${tool%%.*}"
         install -v -D ${pkgname}-${pkgver}*/${pkgname}-${pkgver} $pkgdir/usr/bin/${pkgname}
     fi
 }
 
 pkgusage() {
-    cat <<- EOF
-usage: $0 [-b|--build PKGBUILD] [-d|--debug] [-h|--help] [-g|--generate github/user/pkg]
-Build an rpm/deb package from a PKGBUILD definition
+    cat <<EOF
+
+Usage: $(basename $0) [-d | --debug] [-b|--build PKGBUILD] [--gen-fpm] [-o | --output file.tar] [-d|--debug] [-h|--help] [-g|--generate github/user/pkg]
+              [--fpm <path/to/fpm (default: $FPM)]
+
+
+    Build an rpm/deb package from a PKGBUILD definition
+
+    -d, --debug                       - Enable extra debug info during build
+    -b, --build PKGBUILD              - Build the given PKGBUILD file. When left out, --build PKGBUILD is assumed
+    -g, --generate URL                - Automatically generate a PKGBUILD from a github project to stdout
+    --gen-fpm                         - Generate a rootfs tar and the fpm command invocations to build the package
+    --fpm FPM                         - Use given FPM
+    -o, --output rootfs.tar           - Output rootfs tar for --gen-fpm, defaults to \$pkgname-rootfs.tar.gz
 EOF
 }
 
@@ -118,7 +132,7 @@ fetch() {
 
 download() {
     local path="${1#https://}"
-    path="${1#http://}"
+    path="${path#http://}"
     local cache="${HOME}/.cache/pkgbuild/sources/${path}"
     if ! test -e "$cache"; then
         info "cache-miss: downloading $1 to $cache"
@@ -128,6 +142,16 @@ download() {
         info "cache-hit: $1 is in $cache"
     fi
     echo "$cache"
+}
+
+gh_api() {
+    local -a headers=(-H 'Accept: application/vnd.github.v3+json')
+    if [ -n "$GITHUB_API_TOKEN" ]; then
+        headers+=(-H "Authorization: token $GITHUB_API_TOKEN")
+    fi
+    local ep="$1"
+    shift
+    curl -fsSL "${headers}" https://api.github.com"${ep}" "$@"
 }
 
 gh_latest() {
@@ -149,34 +173,37 @@ pkggenerate() {
     local latest="${api}/releases/latest" latest_json=
     pkgname="${pkgname:-$(basename $pkg)}"
 
-    if api_json=$(fetch "$api") && latest_json=$(fetch $latest); then
-        if [ -z "$pkgver" ]; then
-            pkgver="$(jq -r .tag_name $latest_json)"
-        fi
-        pkgver="${pkgver#v}"
+    if api_json=$(fetch "$api"); then
         pkgdesc="$(jq -r .description $api_json)"
-        pkgrel="${pkgrel:-1}"
-
-        local sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'linux' | grep -E '(amd64|x86_64|x64)' | grep -Ev '\.(deb|rpm|pacman)$' | head -1))
-        if [ ${#sources[@]} -eq 0 ]; then
-            sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'amd64' | grep -Ev '(.asc$|SHA)' | head -1))
-        fi
         license="$(jq -r .license.name $api_json)"
-        local sha256sums=() source=
-        for source in "${sources[@]}"; do
-            if [ -n "$source" ]; then
-                local cache="$(download $source)"
-                sha256sums+=($(sha256sum $cache | awk '{print $1}'))
-            else
-                sha256sums+=('')
+        pkgname="$(jq -r .name $api_json)"
+        html_url="$(jq -r .html_url $api_json)"
+        if latest_json=$(fetch $latest); then
+            if [ -z "$pkgver" ]; then
+                pkgver="$(jq -r .tag_name $latest_json)"
             fi
-        done
+            pkgrel="${pkgrel:-1}"
+            pkgver="${pkgver#v}"
+            local sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'linux' | grep -E '(amd64|x86_64|x64)' | grep -Ev '\.(deb|rpm|pacman)$' | head -1))
+            if [ ${#sources[@]} -eq 0 ]; then
+                sources=($(jq -r '.assets[].browser_download_url' $latest_json | grep 'amd64' | grep -Ev '(.asc$|SHA)' | head -1))
+            fi
+            local sha256sums=() source=
+            for source in "${sources[@]}"; do
+                if [ -n "$source" ]; then
+                    local cache="$(download $source)"
+                    sha256sums+=($(sha256sum $cache | awk '{print $1}'))
+                else
+                    sha256sums+=('')
+                fi
+            done
+        fi
         cat << EOF
-pkgname='$pkgname'
+pkgname=('$pkgname')
 pkgver='$pkgver'
 pkgdesc='$pkgdesc'
 pkgrel=$pkgrel
-url='$url'
+url='$html_url'
 license='$license'
 sources=("${sources[@]//$pkgver/\$\{pkgver\}}")
 sha256sums=("${sha256sums[@]}")
@@ -229,6 +256,9 @@ pkgmain() {
         case "$cmd" in
             -d | --debug) DEBUG=1 ;;
             --no-debug) DEBUG=0 ;;
+            --gen-fpm) GENFPM=1 ;;
+            --fpm) FPM="$1"; shift;;
+            -o|--output) OUTPUT="$1"; shift;;
             --prefix)
                 prefix="$1"
                 shift
@@ -237,7 +267,7 @@ pkgmain() {
                 PKGBUILD="$1"
                 shift
                 ;;
-            -h | --help) pkgusage ;;
+            -h | --help) pkgusage ; exit 0;;
             -g | --generate)
                 PKGBUILD="${PKGBUILD:-PKGBUILD}"
                 pkggenerate "$1"
@@ -257,7 +287,7 @@ pkgmain() {
                 FORCE=true
                 ;;
 
-            *) die "Unknown command: $cmd" ;;
+            *) pkgusage; die "Unknown command: $cmd" ;;
         esac
     done
     PKGBUILD="${PKGBUILD:-PKGBUILD}"
@@ -268,11 +298,17 @@ pkgmain() {
     . $PKGBUILD
 
     PKGBUILDdir=$(cd $(dirname $PKGBUILD) && pwd)
-    TMPDIR="${TMPDIR:-/tmp/$(id -un)-$(id -u)}/pkgbuild-$(id -u)/$pkgname"
-    pkgdir="${TMPDIR}/rootfs"
+    TMPDIR="/var/tmp/pkgbuild-$(id -u)/$pkgname"
+    if [ -z "$pkgdir" ]; then
+        if [ "$(pwd)" != "$PKGBUILDdir" ]; then
+            pkgdir="${PKGBUILDdir}/rootfs"
+        else
+            pkgdir="${TMPDIR}/rootfs"
+        fi
+    fi
     srcdir="${TMPDIR}/srcdir"
     if $CLEAN; then
-        rm -rf "$TMPDIR"
+        rm -rf "$pkgdir" "$srcdir"
     fi
     mkdir -p "$pkgdir" "$srcdir"
     sources+=("$source")
@@ -308,7 +344,7 @@ pkgmain() {
             *.tar.gz) tar zxf "$filen" ;;
             *.tar.bz2) tar xf "$filen" ;;
             *.tar) tar xf "$filen" ;;
-            *.zip) unzip -qo "$filen" ;;
+            *.zip) unzip -q -o "$filen" ;;
             *.gz) gzip -dc "$filen" > "$(basename $filen .gz)" ;;
             *.bz2) bzip2 -dc "$filen" > "$(basename $filen .bz2)" ;;
         esac
@@ -365,7 +401,7 @@ pkgmain() {
         ) || die "Failed to package"
     fi
     cd $CURDIR
-    FPM_COMMON=(-s dir --name ${pkgname}
+    FPM_COMMON=(--name ${pkgname}
         --version ${pkgver#v}
         ${prefix+--prefix $prefix}
         ${pkgrel+--iteration $pkgrel}
@@ -382,17 +418,32 @@ pkgmain() {
     if $FORCE; then
         FPM_COMMON+=(-f)
     fi
-    FPM_COMMON+=(-C "$pkgdir${prefix}")
-    info "building $pkgname rpm ..."
-    run fpm -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
+    if ! ((GENFPM)); then
+        FPM_COMMON+=(-C "$pkgdir${prefix}")
+    fi
+    if ! ((GENFPM)); then
+        info "building $pkgname rpm ..."
+        run $FPM -s dir -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
+    else
+        info "bundling ${pkgname}-rpm.tar.gz"
+        run tar czf ${pkgname}-rpm.tar.gz -C $pkgdir ${prefix:-.}
+        printf '%q ' $FPM -s tar -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" ${pkgname}-rpm.tar.gz; echo
+    fi
+
     if test -e "${pkgdir}"/etc/sysconfig; then
         mv "${pkgdir}"/etc/sysconfig "${pkgdir}"/etc/default
-        for ii in "${pkgdir}"/{usr/,}lib/systemd/system/* "${pkgdir}"/etc/init.d/* "${pkgbuild}"/etc/init/*; do
+        for ii in "${pkgdir}"/{usr/,}lib/systemd/system/* "${pkgdir}"/etc/init.d/* "${pkgdir}"/etc/init/*; do
             sed -i 's@/etc/sysconfig@/etc/default@g' $ii
         done
     fi
-    info "building $pkgname deb ..."
-    run fpm -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}"
+    if ! ((GENFPM)); then
+        info "building $pkgname deb ..."
+        run $FPM -s dir -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}"
+    else
+        info "bundling ${pkgname}-deb.tar.gz"
+        run tar czf ${pkgname}-deb.tar.gz -C $pkgdir ${prefix:-.}
+        printf '%q ' $FPM -s tar -t deb "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" ${pkgname}-deb.tar.gz; echo
+    fi
 
     if ((DEBUG)); then
         info "Build remenants in $TMPDIR"

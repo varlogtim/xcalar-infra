@@ -41,6 +41,10 @@ set_hostname() {
 
 set_fact() {
     mkdir -p /etc/facter/facts.d
+    if [ -z "$2" ]; then
+        rm -f /etc/facter/facts.d/${1}.txt
+        return
+    fi
     echo "$1=$2" >/etc/facter/facts.d/${1}.txt
 }
 
@@ -52,6 +56,15 @@ set_puppetconf() {
 
 if test -e /etc/system-release; then
     ELVERSION="$(grep -Eow '([0-9\.])+' /etc/system-release | cut -d'.' -f1)"
+    if [ "$ELVERSION" = 2018 ]; then
+      ELVERSION=6
+      OSID=amzn1
+    elif [ "$ELVERSION" = 2 ]; then
+      ELVERSION=7
+      OSID=amzn2
+    else
+      OSID=el${ELVERSION}
+    fi
     VERSTRING=el${ELVERSION}
 elif test -f /etc/os-release; then
     . /etc/os-release
@@ -63,6 +76,7 @@ elif test -f /etc/os-release; then
                 14) CODENAME=trusty ;;
                 16) CODENAME=xenial ;;
                 18) CODENAME=bionic ;;
+                *) die "Unknown Ubuntu OS: $CODENAME";;
             esac
             ;;
         rhel | ol | centos)
@@ -115,14 +129,14 @@ done
 if test -n "$ELVERSION"; then
     yum install -y epel-release
     yum update -y
-    REPOPKG=puppetlabs-release-pc1-el-${ELVERSION}.noarch.rpm
+    REPOPKG=puppet6-release-el-${ELVERSION}.noarch.rpm
     yum install -y http://yum.puppetlabs.com/$REPOPKG
     yum install -y puppet-agent
     yum clean all --enablerepo='*'
     rm -rf /var/cache/yum/*
 elif test -n "$CODENAME"; then
-    REPOPKG=puppetlabs-release-pc1-${CODENAME}.deb
-    curl -fsSL http://apt.puppetlabs.com/$REPOPKG >/tmp/$REPOPKG
+    REPOPKG=puppet6-release-${CODENAME}.deb
+    curl -fsSL http://apt.puppetlabs.com/$REPOPKG -o /tmp/$REPOPKG
     dpkg -i /tmp/$REPOPKG
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -yqq puppet-agent

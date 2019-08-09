@@ -26,50 +26,50 @@ job "gocd" {
 
       config {
         image = "gocd/gocd-agent-centos-7:v19.6.0"
-        args = [
-             "-e",
-             "GO_SERVER_URL=\"https://<go-server-ip>:8154/go\"",
-        ]
+
+        #args = [ "-e", ]
 
         dns_search_domains = ["int.xcalar.com"]
-        dns_servers        = ["${NOMAD_IP_ui}:8600", "10.10.2.136", "10.10.1.1"]
-
-        port_map {
-          ui = 8153
-          db = 8154
-        }
-
-
+        dns_servers        = ["${NOMAD_IP_cnc}:8600", "10.10.2.136", "10.10.1.1"]
         volumes = [
           "./local:/godata",
-          "/netstore/infra/gocd/home:/home/go:ro",
           "/var/run/docker.sock:/var/run/docker.sock",
         ]
       }
 
       template {
-            env = true
-            destination = "secret/gocd.env"
-            data = << EOT
-X=1
+        env         = true
+        destination = "secret/gocd.env"
+
+        data = <<EOT
+GO_SERVER_URL="https://gocd.service.consul/go"
 EOT
       }
 
+      resources {
+        cpu    = 1000
+        memory = 1000
+
+        network {
+          port "cnc" {}
+        }
+      }
 
       env {
-          GOCD_PLUGIN_INSTALL_docker-elastic-agents = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v3.0.0-222/docker-elastic-agents-3.0.0-222.jar",
-          GO_SERVER_URL = "http://${NOMAD_IP_ui}",
+        "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v3.0.0-222/docker-elastic-agents-3.0.0-222.jar"
+        "GO_SERVER_URL"                             = "https://gocd.service.consul/go"
       }
     }
+  }
 
-    group "gocd" {
-        count = 1
+  group "gocd" {
+    count = 1
 
-        restart {
-        attempts = 10
-        interval = "5m"
-        delay    = "25s"
-        mode     = "delay"
+    restart {
+      attempts = 10
+      interval = "5m"
+      delay    = "25s"
+      mode     = "delay"
     }
 
     ephemeral_disk {
@@ -93,12 +93,13 @@ EOT
         volumes = [
           "/netstore/infra/gocd/data:/godata",
           "/netstore/infra/gocd/home:/home/go",
+          "/netstore/infra/gocd/go-working-dir:/go-working-dir",
           "/var/run/docker.sock:/var/run/docker.sock",
         ]
       }
 
       env {
-        GOCD_PLUGIN_INSTALL_docker-elastic-agents = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v0.8.0/docker-elastic-agents-0.8.0.jar"
+        "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v0.8.0/docker-elastic-agents-0.8.0.jar"
       }
 
       resources {

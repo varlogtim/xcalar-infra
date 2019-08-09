@@ -531,6 +531,14 @@ scrape_configs:
       - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
         datacenter: xcalar-sjc
         services: ["loki-ui"]
+  - job_name: squid-exporter
+    params:
+      format:
+        - prometheus
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services: ["squid-exporter"]
   - job_name: node-exporter
     params:
       format:

@@ -1,4 +1,4 @@
-job "jenkins-qemu-2" {
+job "jenkins-qemu-ci" {
   region      = "global"
   datacenters = ["xcalar-sjc"]
   type        = "service"
@@ -8,19 +8,25 @@ job "jenkins-qemu-2" {
   #    set_contains = "physical"
   #  }
 
-  group "swarm" {
-    count = 2
+  group "jenkins-qemu-ci" {
+    count = 1
 
     constraint {
-      distinct_hosts = true
+      attribute = "${node.class}"
+      operator  = "set_contains"
+      value     = "bigrig"
     }
 
-    task "worker" {
+    #constraint {
+    #  distinct_hosts = true
+    #}
+
+    task "jenkins-slave" {
       driver = "qemu"
 
       resources {
         cpu    = 16000 # MHz
-        memory = 24000 # MB
+        memory = 32000 # MB
 
         network {
           port "ssh"{}
@@ -33,7 +39,7 @@ job "jenkins-qemu-2" {
         data = <<EOT
 NOW={{ timestamp "unix" }}
 VMNAME={{ env "NOMAD_JOB_NAME" }}-{{ env "NOMAD_ALLOC_INDEX" }}
-INSTANCE_ID=i-{{ env "NOMAD_ALLOC_INDEX" }}-{{ env "NOMAD_ALLOC_ID" }}
+INSTANCE_ID=i-{{ env "NOMAD_ALLOC_INDEX" }}-{{ env "NOMAD_ALLOC_ID" | split "-" | index 0}}
 EOT
 
         change_mode = "noop"
@@ -44,7 +50,7 @@ EOT
       config {
         image_path        = "local/tdhtest"
         accelerator       = "kvm"
-        graceful_shutdown = false
+        graceful_shutdown = true
 
         args = [
           "-m",

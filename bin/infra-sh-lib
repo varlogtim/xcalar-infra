@@ -384,6 +384,20 @@ cleanhostname() {
     fi
 }
 
+interface_ip() {
+    local cidr mask ip iface=$1
+    if cidr=$(ip -o -4 addr list $iface | head -1 | awk '{print $4}'); then
+        mask="${cidr#*/}"
+        ip="${cidr%/$mask}"
+        if [ -n "$ip" ]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+
 download_hashitool() {
     local tool="$1"
     local version="$2"
