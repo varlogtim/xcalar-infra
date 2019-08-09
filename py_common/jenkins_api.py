@@ -64,9 +64,14 @@ class JenkinsApi(object):
             return None
         return response.text
 
-    def _get_job_info(self, *, job_name):
+    def _get_job_info(self, *, job_name, force=False):
+        """
+        Return Jenkins job info.  Uses REST API.
+        Pass force=True to invalidate previously-cached data
+        and refresh the cache.
+        """
         info = self.job_info_cache.get(job_name, None)
-        if info is not None:
+        if not force and info is not None:
             self.logger.debug("return cached info: {}".format(info))
             return info
         text = self._rest_cmd(uri="/job/{}/api/json".format(job_name))
@@ -77,10 +82,15 @@ class JenkinsApi(object):
         self.logger.debug("return info: {}".format(info))
         return info
 
-    def _get_build_info(self, *, job_name, build_number):
+    def _get_build_info(self, *, job_name, build_number, force=False):
+        """
+        Return Jenkins build info.  Uses REST API.
+        Pass force=True to invalidate previously-cached data
+        and refresh the cache.
+        """
         key = "{}:{}".format(job_name, build_number)
         info = self.build_info_cache.get(key, None)
-        if info is not None:
+        if not force and info is not None:
             self.logger.debug("return cached info: {}".format(info))
             return info
         text = self._rest_cmd(uri="/job/{}/{}/api/json".format(job_name, build_number))
@@ -114,9 +124,10 @@ class JenkinsApi(object):
         """
         Is the job/build complete?
         """
+        # Time-specific, so ignore any cache
         info = self._get_build_info(job_name = job_name,
-                                    build_number = build_number)
-
+                                    build_number = build_number,
+                                    force = True)
         if not info:
             err = "no info for job: {} build: {}".format(job_name, build_number)
             self.logger.error(err)
