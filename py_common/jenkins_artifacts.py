@@ -432,9 +432,9 @@ class JenkinsArtifactsData(ABC):
             return []
         if first_bnum or last_bnum and not (first_bnum and last_bnum):
             if not first_bnum:
-                first_bnum = all_builds[-1]
+                first_bnum = all_builds[0]
             if not last_bnum:
-                last_bnum = all_builds[0]
+                last_bnum = all_builds[-1]
 
         build_range = None
         if first_bnum:
@@ -464,7 +464,7 @@ class JenkinsArtifactsData(ABC):
         doc = self.meta_coll.find_one({'_id': 'all_builds'})
         if not doc:
             return []
-        return doc.get('builds', [])
+        return sorted(doc.get('builds', []))
 
     def _have_data(self, *, doc):
         return doc and 'data' in doc and 'NODATA' not in doc['data']
