@@ -1,2 +1,2 @@
 #!/bin/bash
-docker exec -it coverage_data_update /bin/bash
+docker exec -it coverage-data-update /bin/bash

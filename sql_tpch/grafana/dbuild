@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build --no-cache -f $XLRINFRADIR/sql_tpch/grafana/Dockerfile --rm -t sql_tpch_grafana_datasource $XLRINFRADIR
+docker build --no-cache -f $XLRINFRADIR/sql_tpch/grafana/Dockerfile --rm -t sql-tpch-grafana-datasource $XLRINFRADIR

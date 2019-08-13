@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build --no-cache -f $XLRINFRADIR/sql_tpch/update/Dockerfile --rm -t sql_tpch_data_update $XLRINFRADIR
+docker build --no-cache -f $XLRINFRADIR/sql_tpch/update/Dockerfile --rm -t sql-tpch-data-update $XLRINFRADIR

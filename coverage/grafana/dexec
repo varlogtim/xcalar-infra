@@ -1,2 +1,2 @@
 #!/bin/bash
-docker exec -it coverage_grafana_datasource /bin/bash
+docker exec -it coverage-grafana-datasource /bin/bash

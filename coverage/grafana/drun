@@ -1,2 +1,2 @@
 #!/bin/bash
-exec docker run --detach --init --restart always --name coverage_grafana_datasource --hostname coverage_grafana_datasource -p 3332:80 -v /var/tmp:/var/tmp -v /netstore/qa/coverage:/netstore/qa/coverage coverage_grafana_datasource
+exec docker run --detach --init --restart always --name coverage-grafana-datasource --hostname coverage-grafana-datasource -p 3332:80 -v /netstore/qa/coverage:/netstore/qa/coverage coverage-grafana-datasource

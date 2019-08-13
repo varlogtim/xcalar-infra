@@ -1,2 +1,2 @@
 #!/bin/bash
-exec docker run --detach --init --restart always --name sql_tpch_grafana_datasource --hostname sql_tpch_grafana_datasource -p 3331:80 -v /var/tmp:/var/tmp -v /netstore/qa/jenkins/SqlScaleTest:/netstore/qa/jenkins/SqlScaleTest sql_tpch_grafana_datasource
+exec docker run --detach --init --restart always --name sql-tpch-grafana-datasource --hostname sql-tpch-grafana-datasource -p 3331:80 -v /netstore/qa/jenkins/SqlScaleTest:/netstore/qa/jenkins/SqlScaleTest sql-tpch-grafana-datasource

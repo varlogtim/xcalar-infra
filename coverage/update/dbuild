@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build --no-cache -f $XLRINFRADIR/coverage/update/Dockerfile --rm -t coverage_data_update $XLRINFRADIR
+docker build --no-cache -f $XLRINFRADIR/coverage/update/Dockerfile --rm -t coverage-data-update $XLRINFRADIR
