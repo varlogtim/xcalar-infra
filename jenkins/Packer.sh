@@ -67,7 +67,7 @@ do_upload_template() {
 	ami_us_east_1: ${AMI_US_EAST_1}
 	ami_us_west_2: ${AMI_US_WEST_2}
 	EOF
-    dc2 upload --project ${PROJECT:-xdp-awsmp} --version 2.0.0 --release ${BUILD_NUMBER} --url-file $OUTDIR/template.url
+    dc2 upload --project ${PROJECT:-xdp-awsmp} --version ${VERSION} --release ${BUILD_NUMBER} --url-file $OUTDIR/template.url
 }
 
 if [ "${DO_PACKER:-true}" == true ]; then
