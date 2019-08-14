@@ -1,4 +1,4 @@
-job "my-vsts-agents" {
+job "vsts" {
   datacenters = ["xcalar-sjc"]
 
   group "vsts" {
@@ -29,21 +29,34 @@ job "my-vsts-agents" {
       set_contains = "newton"
     }
 
-    task "vsts-agent" {
+    task "agent" {
       driver = "docker"
 
       config {
-        image = "mcr.microsoft.com/azure-pipelines/vsts-agent:ubuntu-14.04-docker-17.12.0-ce-standard"
+        image = "registry.int.xcalar.com/xcalar/el7-vsts-agent:v1"
 
         volumes = [
           "/var/run/docker.sock:/var/run/docker.sock",
+          "/netstore:/netstore",
         ]
+      }
+
+      vault {
+        policies = ["jenkins_slave"]
+        env      = true
+      }
+
+      env {
+        VAULT_ADDR = "https://vault.service.consul:8200"
       }
 
       template {
         data = <<EOT
-        VSTS_ACCOUNT = "xcalar"
-        VSTS_TOKEN   = "{{ with secret/data/infra/vsts }}{{ .Data.data.token }}"
+        {{ with secret "secret/data/infra/vsts" }}
+        AZP_URL        = "https://dev.azure.com/xcalar"
+        AZP_TOKEN      = "{{ .Data.data.token }}"
+        AZP_AGENT_NAME = "mydockeragent"
+        DOCKER_HOST    = "unix:///var/run/docker.sock"{{ end }}
 EOT
 
         env         = true
