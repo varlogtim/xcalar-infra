@@ -10,7 +10,7 @@ job "sql-performance-grafana-datasource" {
       driver = "docker"
 
       config {
-        image = "registry.service.consul/xcalar-qa/sql-performance-grafana-datasource:latest"
+        image = "registry.service.consul/xcalar-qa/sql-tpch-grafana-datasource:latest"
 
         port_map {
           http = 80
@@ -24,10 +24,12 @@ job "sql-performance-grafana-datasource" {
       service {
         name = "sql-performance-grafana-datasource"
         port = "http"
+        tags = ["urlprefix-sql-performance-grafana-datasource.service.consul:9999/"]
 
         check {
           name     = "alive"
           type     = "http"
+          path     = "/"
           interval = "60s"
           timeout  = "5s"
         }

@@ -24,10 +24,12 @@ job "coverage-grafana-datasource" {
       service {
         name = "coverage-grafana-datasource"
         port = "http"
+        tags = ["urlprefix-coverage-grafana-datasource.service.consul:9999/"]
 
         check {
           name     = "alive"
           type     = "http"
+          path     = "/"
           interval = "60s"
           timeout  = "5s"
         }

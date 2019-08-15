@@ -19,12 +19,6 @@ job "coverage-data-update" {
 
       service {
         name = "coverage-data-update"
-        check {
-          name     = "alive"
-          type     = "tcp"
-          interval = "60s"
-          timeout  = "5s"
-        }
       }
 
       resources {
