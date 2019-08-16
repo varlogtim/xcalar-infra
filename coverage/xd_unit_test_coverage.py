@@ -48,6 +48,12 @@ class XDUnitTestCoverage(object):
             self.url_to_coverage[url] = {'total_len': totalLen,
                                          'covered_len': coveredLen,
                                          'covered_pct': coveredPct}
+        total_pct = 0
+        if self.total_total_len:
+            total_pct = 100*self.total_covered_len/self.total_total_len
+        self.url_to_coverage['Total'] = {'total_len': self.total_total_len,
+                                         'covered_len': self.total_covered_len,
+                                         'covered_pct': total_pct}
 
     def _load_json(self, *, path):
         if not os.path.exists(path):
@@ -167,7 +173,7 @@ class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
                                 self.coverage_file_name)
             self.logger.debug("path: {}".format(path))
             xdutc = XDUnitTestCoverage(path=path)
-            data = {'Total': xdutc.total_coverage_pct()}
+            data = {}
             for url,coverage in xdutc.get_data().items():
                 self.logger.debug("url: {} coverage: {}".format(url, coverage))
                 data[MongoDB.encode_key(url)] = coverage

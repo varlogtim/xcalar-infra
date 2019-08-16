@@ -139,7 +139,11 @@ class XCEFuncTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
         try:
             summaries = ClangCoverage(path=coverage_file_path).file_summaries()
         except FileNotFoundError:
+            self.logger.exception("file not found: {}".format(coverage_file_path))
             return None
+        except Exception:
+            self.logger.exception("exception loading: {}".format(coverage_file_path))
+            raise
 
         data = {}
         for filename, summary in summaries.items():
