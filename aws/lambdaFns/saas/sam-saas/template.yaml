@@ -38,7 +38,6 @@ Resources:
           Properties:
             Path: /cluster/get
             Method: post
-
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -110,6 +109,37 @@ Resources:
                 - dynamodb:Query
               Resource:
                 !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_billing'
+  S3Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/s3/
+      Handler: s3.lambda_handler
+      Runtime: python3.6
+      Layers:
+        - !Ref LibLayer
+      Events:
+        UploadFile:
+          Type: Api
+          Properties:
+            Path: /s3/put
+            Method: post
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cloudformation:DescribeStacks
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_user'
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                !Sub 'arn:aws:s3:::saas-test*' # For test only
 
 
 Outputs:
@@ -128,4 +158,10 @@ Outputs:
   BillingFunctionIamRole:
     Description: Implicit IAM Role created for Billing function
     Value: !GetAtt 'BillingFunctionRole.Arn'
+  S3Function:
+    Description: S3 Lambda Function ARN
+    Value: !GetAtt 'S3Function.Arn'
+  S3FunctionIamRole:
+    Description: Implicit IAM Role created for S3 function
+    Value: !GetAtt 'S3FunctionRole.Arn'
 
