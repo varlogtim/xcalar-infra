@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Xcalar Cluster Serverless Application\nSAM Template for sam-cluster\n
+Globals:
+  Function:
+    Timeout: 300
+
+Resources:
+  ClusterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: cluster/
+      Handler: app.lambda_handler
+      Runtime: python3.6
+      Events:
+        StartCluster:
+          Type: Api
+          Properties:
+            Path: /cluster/start
+            Method: post
+        StopCluster:
+          Type: Api
+          Properties:
+            Path: /cluster/stop
+            Method: post
+      Policies:
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - cloudformation:UpdateStack
+                - cloudformation:DescribeStackResource
+                - cloudformation:DescribeStacks
+                - ec2:DescribeNetworkInterfaces
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: '*'
+
+Outputs:
+  ClusterApi:
+    Description: API Gateway endpoint URL for Prod stage for Cluster function
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/v1/'
+  ClusterFunction:
+    Description: Cluster Lambda Function ARN
+    Value: !GetAtt 'ClusterFunction.Arn'
+  ClusterFunctionIamRole:
+    Description: Implicit IAM Role created for Cluster function
+    Value: !GetAtt 'ClusterFunctionRole.Arn'
