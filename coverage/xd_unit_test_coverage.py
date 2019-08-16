@@ -30,14 +30,18 @@ class XDUnitTestCoverage(object):
         self.cfg = EnvConfiguration(XDUnitTestCoverage.ENV_PARAMS)
         self.coverage_data = self._load_json(path=path)
         self.url_to_coverage = {}
+        self.total_total_len = 0
+        self.total_covered_len = 0
         for item in self.coverage_data:
             url = item['url']
             self.logger.debug("url: {}".format(url))
             totalLen = len(item['text'])
+            self.total_total_len += totalLen
             self.logger.debug("total length: {}".format(totalLen))
             coveredLen = 0
             for cvrd in item['ranges']:
                 coveredLen += (int(cvrd['end']) - int(cvrd['start']) - 1)
+            self.total_covered_len += coveredLen
             self.logger.debug("covered length: {}".format(coveredLen))
             coveredPct = 100*coveredLen/totalLen
             self.logger.debug("covered pct: {}".format(coveredPct))
@@ -63,6 +67,11 @@ class XDUnitTestCoverage(object):
 
     def get_data(self):
         return self.url_to_coverage
+
+    def total_coverage_pct(self):
+        if not self.total_total_len:
+            return 0
+        return 100*self.total_covered_len/self.total_total_len
 
 class XDUnitTestArtifacts(JenkinsArtifacts):
     ENV_PARAMS = {"XD_UNIT_TEST_JOB_NAME":
@@ -157,8 +166,9 @@ class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
             path = os.path.join(self.artifacts.artifacts_directory_path(bnum=bnum),
                                 self.coverage_file_name)
             self.logger.debug("path: {}".format(path))
-            data = {}
-            for url,coverage in XDUnitTestCoverage(path=path).get_data().items():
+            xdutc = XDUnitTestCoverage(path=path)
+            data = {'Total': xdutc.total_coverage_pct()}
+            for url,coverage in xdutc.get_data().items():
                 self.logger.debug("url: {} coverage: {}".format(url, coverage))
                 data[MongoDB.encode_key(url)] = coverage
             return {'coverage': data}
@@ -196,15 +206,21 @@ class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
             return None
 
         rawnames = []
+        do_sort = False
         if group_name is not None and group_name != "All Files":
             rawnames = self.expand(name=group_name)
         else:
+            do_sort = True
             rawnames = sorted(coverage.keys())
 
-        # Reduce a URL to just a filename:
+        have_total = False
+        # Reduce a URL to just a filename
         filenames = []
         for key in rawnames:
             url = MongoDB.decode_key(key)
+            if url == 'Total':
+                have_total = True
+                continue
             fields = url.split('/')
             if len(fields) < 2:
                 raise Exception("Incomprehensible: {}".format(url))
@@ -212,6 +228,10 @@ class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
             if filename in filenames:
                 raise Exception("Duplicate: {}".format(filename))
             filenames.append(filename)
+        if do_sort:
+            filenames.sort()
+        if have_total:
+            filenames.insert(0, "Total")
         return filenames
 
     def coverage(self, *, bnum, filename):

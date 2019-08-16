@@ -176,18 +176,21 @@ class XCEFuncTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
             return None
 
         rawnames = []
+        do_sort = False
         if group_name is not None and group_name != "All Files":
             rawnames = self.expand(name=group_name)
         else:
             # Load all file names available in coverage
-            rawnames = sorted(coverage.keys())
+            do_sort = True
+            rawnames = coverage.keys()
 
         # Reduce to just final two path components
         filenames = []
+        have_total = False
         for key in rawnames:
             name = MongoDB.decode_key(key)
             if name == 'totals':
-                # Skip this.
+                have_total = True
                 continue
             fields = name.split('/')
             if len(fields) < 2:
@@ -196,13 +199,17 @@ class XCEFuncTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
             if filename in filenames:
                 raise Exception("Duplicate: {}".format(filename))
             filenames.append(filename)
+        if do_sort:
+            filenames.sort()
+        if have_total:
+            filenames.insert(0, "Total")
         return filenames
 
     def coverage(self, *, bnum, filename):
         """
         XXXrs - FUTURE - extend to return other than "lines" percentage.
         """
-        if filename == "Overall Total":
+        if filename == "Total":
             filename = "totals"
         coverage = self._get_coverage_data(bnum=bnum)
         if not coverage:
