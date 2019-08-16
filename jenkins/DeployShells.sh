@@ -20,7 +20,7 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
         --stack-name ${STACK_PREFIX}${SUFFIX} \
         --template-url ${CFN_TEMPLATE_URL} \
         --parameters ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE} \
-                    ParameterKey=AMIUsWest2,ParameterValue=${AMI} \
+                    ParameterKey=ImageId,ParameterValue=${AMI} \
         --tags Key=available,Value=true \
                 Key=deployment,Value=saas \
         --capabilities CAPABILITY_IAM)

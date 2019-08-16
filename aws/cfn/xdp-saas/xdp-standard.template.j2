@@ -90,7 +90,7 @@ Parameters:
     Description: Existing S3 Bucket, leave blank to create one
     Type: String
     Default: ''
-  AMIUsWest2:
+  ImageId:
     Description: AMI for us-west-2 region
     Type: AWS::EC2::Image::Id
     Default: '{{ ami_us_west_2 }}'
@@ -565,7 +565,7 @@ Resources:
             Groups:
               - !Ref 'ClusterSG'
         KeyName: !If [NoKeyName, !Ref 'AWS::NoValue', !Ref KeyName ]
-        ImageId: !Ref 'AMIUsWest2'
+        ImageId: !Ref 'ImageId'
         BlockDeviceMappings:
           - DeviceName: /dev/xvda
             Ebs:
