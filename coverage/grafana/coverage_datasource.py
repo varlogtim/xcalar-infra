@@ -80,31 +80,40 @@ def find_metrics():
     elif target == 'xce_versions':
         names = xce_coverage_data.xce_versions()
 
+    elif target == 'xd_filegroups':
+        names = ["All Files"]
+        names.extend(xd_coverage_data.file_group_names())
+
+    elif target == 'xce_filegroups':
+        names = ["All Files"]
+        names.extend(xce_coverage_data.file_group_names())
+
     # <xd_vers>:xdbuilds
     elif ':xdbuilds' in target:
         # Build list will be all builds available matching the XD version(s).
-        xd_vers,rest = target.split(':')
+        xd_vers,foo = target.split(':')
         names = xd_coverage_data.builds(xd_versions=_parse_multi(xd_vers),
                                         reverse=True)
-    # <build>:xdfiles
+
+    # <build>:<fgroup>:xdfiles
     elif ':xdfiles' in target:
         # xdfiles list will be all files for which we track coverage (based on
         # files tracked for build).
-        bnum1,rest = target.split(':')
-        names = xd_coverage_data.filenames(bnum=bnum1)
+        bnum1,fgroup,foo = target.split(':')
+        names = xd_coverage_data.filenames(bnum=bnum1, group_name=fgroup)
 
     # <xce_vers>:xcebuilds
     elif ':xcebuilds' in target:
         # Build list will be all builds available matching the XCE version(s).
-        xce_vers,rest = target.split(':')
+        xce_vers,foo = target.split(':')
         names = xce_coverage_data.builds(xce_versions=_parse_multi(xce_vers),
                                          reverse=True)
-    # <build>:xcefiles
+    # <build>:<fgroup>:xcefiles
     elif ':xcefiles' in target:
         # xcefiles list will be all files for which we track coverage (based on
         # files tracked for build).
-        bnum1,rest = target.split(':')
-        names = xce_coverage_data.filenames(bnum=bnum1)
+        bnum1,fgroup,foo = target.split(':')
+        names = xce_coverage_data.filenames(bnum=bnum1, group_name=fgroup)
 
     else:
         pass # XXXrs - exception?
@@ -112,23 +121,24 @@ def find_metrics():
     logger.debug("names: {}".format(names))
     return jsonify(names)
 
-def _xd_results(*, xd_vers, first_bnum, filenames, ts):
-    logger.info("xd_vers: {} first_bnum: {} filenames: {}"
-                .format(xd_vers, first_bnum, filenames))
+def _xd_results(*, xd_vers, first_bnum, names, ts):
+    logger.info("xd_vers: {} first_bnum: {} names: {}"
+                .format(xd_vers, first_bnum, names))
     builds = xd_coverage_data.builds(xd_versions=_parse_multi(xd_vers),
                                      first_bnum=first_bnum,
                                      reverse=False)
 
     results = []
     for bnum in builds:
-        for filename in filenames:
-            results.append({'target': '{}'.format(bnum),
-                            'datapoints': [[xd_coverage_data.coverage(
-                                                bnum=bnum, filename=filename), ts]] })
+        for name in names:
+            for filename in xd_coverage_data.expand(name=name):
+                results.append({'target': '{}'.format(bnum),
+                                'datapoints': [[xd_coverage_data.coverage(
+                                                    bnum=bnum, filename=filename), ts]] })
     logger.debug("results: {}".format(results))
     return results
 
-def _xce_results(*, xce_vers, first_bnum, filenames, ts):
+def _xce_results(*, xce_vers, first_bnum, names, ts):
     logger.info("xce_vers: {} first_bnum: {}".format(xce_vers, first_bnum))
     builds = xce_coverage_data.builds(xce_versions=_parse_multi(xce_vers),
                                       first_bnum=first_bnum,
@@ -137,19 +147,20 @@ def _xce_results(*, xce_vers, first_bnum, filenames, ts):
 
     results = []
     for bnum in builds:
-        for filename in filenames:
-            results.append({'target': '{}'.format(bnum),
-                            'datapoints': [[xce_coverage_data.coverage(
-                                                bnum=bnum, filename=filename), ts]] })
+        for name in names:
+            for filename in xce_coverage_data.expand(name=name):
+                results.append({'target': '{}'.format(bnum),
+                                'datapoints': [[xce_coverage_data.coverage(
+                                                    bnum=bnum, filename=filename), ts]] })
     logger.debug("results: {}".format(results))
     return results
 
 def _timeserie_results(*, target, request_ts_ms):
     """
     Target name format:
-        <xd_versions>:<first_bnum>:<filename>:xd
+        <xd_versions>:<first_bnum>:<names>:xd
         or
-        <xce_versions>:<first_bnum>:<filename>:xce
+        <xce_versions>:<first_bnum>:<names>:xce
     """
 
     logger.info("start")
@@ -161,7 +172,7 @@ def _timeserie_results(*, target, request_ts_ms):
         logger.exception(err)
         abort(404, ValueError(err))
     try:
-        vers,first_bnum,filename,mode = t_name.split(':')
+        vers,first_bnum,names,mode = t_name.split(':')
     except Exception as e:
         err = 'incomprehensible target name: {}'.format(t_name)
         logger.exception(err)
@@ -174,12 +185,12 @@ def _timeserie_results(*, target, request_ts_ms):
     if mode == "xd":
         return _xd_results(xd_vers = vers,
                            first_bnum = first_bnum,
-                           filenames = _parse_multi(filename),
+                           names = _parse_multi(names),
                            ts = request_ts_ms)
     elif mode == "xce":
         return _xce_results(xce_vers = vers,
                             first_bnum = first_bnum,
-                            filenames = _parse_multi(filename),
+                            names = _parse_multi(names),
                             ts = request_ts_ms)
 
     err = 'unknown mode: {}'.format(mode)

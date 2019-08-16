@@ -18,6 +18,8 @@ from py_common.env_configuration import EnvConfiguration
 from py_common.jenkins_artifacts import JenkinsArtifacts, JenkinsArtifactsData
 from py_common.sorts import nat_sort
 
+from coverage.file_groups import FileGroupsMixin
+
 class ClangCoverageFilenameCollision(Exception):
     pass
 
@@ -92,11 +94,22 @@ class XCEFuncTestArtifacts(JenkinsArtifacts):
                          dir_path=cfg.get("XCE_FUNC_TEST_ARTIFACTS_ROOT"))
 
 
-class XCEFuncTestArtifactsData(JenkinsArtifactsData):
+class XCEFuncTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
+
+    # XXXrs - temporary static config.
+    FILE_GROUPS = {"Critical Files": ["liboperators/GlobalOperators.cpp",
+                                      "liboperators/LocalOperators.cpp",
+                                      "liboperators/XcalarEval.cpp",
+                                      "liboptimizer/Optimizer.cpp",
+                                      "libxdb/Xdb.cpp",
+                                      "libruntime/Runtime.cpp",
+                                      "libquerymanager/QueryManager.cpp",
+                                      "libqueryeval/QueryEvaluate.cpp",
+                                      "libmsg/TwoPcFuncDefs.cpp"]}
 
     ENV_PARAMS = {"XCE_FUNC_TEST_COVERAGE_FILE_NAME":
                         {"default": "coverage.json",
-                         "required": True} }
+                         "required": True}}
                   
     def __init__(self, *, artifacts):
         """
@@ -110,6 +123,11 @@ class XCEFuncTestArtifactsData(JenkinsArtifactsData):
         self.cvg_file_name = cfg.get("XCE_FUNC_TEST_COVERAGE_FILE_NAME")
         self.artifacts = artifacts
         super().__init__(jenkins_artifacts=self.artifacts, add_branch_info=True)
+        # XXXrs - temporary initialize every time with static configuration.
+        #         Eventually, this configuration sould be managed elsewhere.
+        self.reset_file_groups()
+        for name, files in XCEFuncTestArtifactsData.FILE_GROUPS.items():
+            self.append_file_group(group_name=name, files=files)
 
     def update_build(self, *, bnum, log=None):
         """
@@ -152,16 +170,24 @@ class XCEFuncTestArtifactsData(JenkinsArtifactsData):
             return None
         return data.get('coverage', None)
 
-    def filenames(self, *, bnum):
+    def filenames(self, *, bnum, group_name=None):
         coverage = self._get_coverage_data(bnum=bnum)
         if not coverage:
             return None
 
+        rawnames = []
+        if group_name is not None and group_name != "All Files":
+            rawnames = self.expand(name=group_name)
+        else:
+            # Load all file names available in coverage
+            rawnames = sorted(coverage.keys())
+
         # Reduce to just final two path components
         filenames = []
-        for key in coverage.keys():
+        for key in rawnames:
             name = MongoDB.decode_key(key)
             if name == 'totals':
+                # Skip this.
                 continue
             fields = name.split('/')
             if len(fields) < 2:
@@ -170,14 +196,14 @@ class XCEFuncTestArtifactsData(JenkinsArtifactsData):
             if filename in filenames:
                 raise Exception("Duplicate: {}".format(filename))
             filenames.append(filename)
-        filenames = sorted(filenames)
-        filenames.insert(0, 'totals')
         return filenames
 
     def coverage(self, *, bnum, filename):
         """
         XXXrs - FUTURE - extend to return other than "lines" percentage.
         """
+        if filename == "Overall Total":
+            filename = "totals"
         coverage = self._get_coverage_data(bnum=bnum)
         if not coverage:
             return None
@@ -186,7 +212,6 @@ class XCEFuncTestArtifactsData(JenkinsArtifactsData):
             if filename in name:
                 return coverage[key].get('lines', {}).get('percent', None)
         return None
-
 
 if __name__ == '__main__':
     print("Compile check A-OK!")
@@ -198,20 +223,25 @@ if __name__ == '__main__':
 
     art = XCEFuncTestArtifacts()
     data = XCEFuncTestArtifactsData(artifacts = art)
-    #data.start_update_thread()
+    print("Names: {}".format(data.file_group_names()))
+    print("Groups: {}".format(data.file_groups()))
+
+    """
+    data.start_update_thread()
     print("TRUNK builds ==========")
     print(data.builds(xce_versions=['trunk']))
     print("TRUNK filenames ==========")
     files = data.filenames(bnum="20083")
     for name in files:
         print("{}: {}".format(name, data.coverage(bnum="20083", filename=name)))
-    #print("2.0 ==========")
-    #print(data.builds(xce_versions=['xcalar-2.0.0']))
-    #for name in files:
-        #print("{}: {}".format(name, data.coverage(bnum=20083, filename=name)))
-    #import time
-    #time.sleep(600)
-    #data.stop_update_thread()
+    print("2.0 ==========")
+    print(data.builds(xce_versions=['xcalar-2.0.0']))
+    for name in files:
+        print("{}: {}".format(name, data.coverage(bnum=20083, filename=name)))
+    import time
+    time.sleep(600)
+    data.stop_update_thread()
+    """
 
     """
     XXXrs - The following "utility" code was used to pre-populate the git_branches.txt file

@@ -18,7 +18,8 @@ import re
 from py_common.env_configuration import EnvConfiguration
 from py_common.jenkins_artifacts import JenkinsArtifacts, JenkinsArtifactsData
 from py_common.mongo import MongoDB
-from py_common.sorts import nat_sort
+
+from coverage.file_groups import FileGroupsMixin
 
 class XDUnitTestCoverage(object):
     ENV_PARAMS = {}
@@ -78,7 +79,49 @@ class XDUnitTestArtifacts(JenkinsArtifacts):
                          dir_path=cfg.get("XD_UNIT_TEST_ARTIFACTS_ROOT"))
 
 
-class XDUnitTestArtifactsData(JenkinsArtifactsData):
+class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
+
+    # XXXrs - temporary static config.
+    FILE_GROUPS = {"Critical Files": [
+        "/ts/components/datastore/DS.js",
+        "/ts/components/datastore/DSForm.js",
+        "/ts/components/datastore/DSPreview.js",
+        "/ts/components/datastore/DSTable.js",
+        "/ts/components/datastore/DSTargetManager.js",
+        "/ts/components/datastore/FileBrowser.js",
+
+        "/ts/components/dag/DagGraph.js",
+        "/ts/components/dag/DagGraphExecutor.js",
+        "/ts/components/dag/DagLineage.js",
+        "/ts/components/dag/DagList.js",
+        "/ts/components/dag/DagNodeExecutor.js",
+        "/ts/components/dag/DagNodeMenu.js",
+        "/ts/components/dag/DagPanel.js",
+        "/ts/components/dag/DagParamManager.js",
+        "/ts/components/dag/DagQueryConverter.js",
+        "/ts/components/dag/DagSubGraph.js",
+        "/ts/components/dag/DagTab.js",
+        "/ts/components/dag/DagTabManager.js",
+        "/ts/components/dag/DagTabUser.js",
+        "/ts/components/dag/DagTable.js",
+        "/ts/components/dag/DagTblManager.js",
+        "/ts/components/dag/DagView.js",
+        "/ts/components/dag/DagViewManager.js",
+        "/ts/components/dag/node/DagNode.js",
+
+        "/ts/components/sql/SQLDagExecutor.js",
+        "/ts/components/sql/SQLEditor.js",
+        "/ts/components/sql/SQLExecutor.js",
+        "/ts/components/sql/SQLSnippet.js",
+        "/ts/components/sql/sqlQueryHistory.js",
+        "/ts/components/sql/workspace/SQLEditorSpace.js",
+        "/ts/components/sql/workspace/SQLHistorySpace.js",
+        "/ts/components/sql/workspace/SQLResultSpace.js",
+        "/ts/components/sql/workspace/SQLTable.js",
+        "/ts/components/sql/workspace/SQLTableLister.js",
+        "/ts/components/sql/workspace/SQLTableSchema.js",
+        "/ts/components/sql/workspace/SQLWorkSpace.js"]}
+
 
     ENV_PARAMS = {"XD_UNIT_TEST_COVERAGE_FILE_NAME":
                         {"default": "coverage.json",
@@ -100,6 +143,11 @@ class XDUnitTestArtifactsData(JenkinsArtifactsData):
         self.coverage_file_name = cfg.get("XD_UNIT_TEST_COVERAGE_FILE_NAME")
         self.artifacts = artifacts
         super().__init__(jenkins_artifacts=self.artifacts, add_branch_info=True)
+        # XXXrs - temporary initialize every time with static configuration.
+        #         Eventually, this configuration sould be managed elsewhere.
+        self.reset_file_groups()
+        for name, files in XDUnitTestArtifactsData.FILE_GROUPS.items():
+            self.append_file_group(group_name=name, files=files)
 
     def update_build(self, *, bnum, log=None):
         """
@@ -142,14 +190,20 @@ class XDUnitTestArtifactsData(JenkinsArtifactsData):
             return None
         return data.get('coverage', None)
 
-    def filenames(self, *, bnum):
+    def filenames(self, *, bnum, group_name=None):
         coverage = self._get_coverage_data(bnum=bnum)
         if not coverage:
             return None
 
+        rawnames = []
+        if group_name is not None and group_name != "All Files":
+            rawnames = self.expand(name=group_name)
+        else:
+            rawnames = sorted(coverage.keys())
+
         # Reduce a URL to just a filename:
         filenames = []
-        for key in coverage.keys():
+        for key in rawnames:
             url = MongoDB.decode_key(key)
             fields = url.split('/')
             if len(fields) < 2:
@@ -158,7 +212,7 @@ class XDUnitTestArtifactsData(JenkinsArtifactsData):
             if filename in filenames:
                 raise Exception("Duplicate: {}".format(filename))
             filenames.append(filename)
-        return sorted(filenames)
+        return filenames
 
     def coverage(self, *, bnum, filename):
         coverage = self._get_coverage_data(bnum=bnum)
@@ -181,6 +235,9 @@ if __name__ == '__main__':
 
     art = XDUnitTestArtifacts()
     data = XDUnitTestArtifactsData(artifacts = art)
+    print("Names: {}".format(data.file_group_names()))
+    print("Groups: {}".format(data.file_groups()))
+
     """
     for version in data.xd_versions():
         print("{} ==========".format(version))
@@ -190,7 +247,7 @@ if __name__ == '__main__':
             print("{} ----------".format(bnum))
             for filename in data.filenames(bnum=bnum):
                 print("{}: {}".format(filename, data.coverage(bnum=bnum, filename=filename)))
-    """
+
     print("let update thread run a little...")
     data.start_update_thread()
     import time
@@ -198,6 +255,7 @@ if __name__ == '__main__':
     print("stop update thread")
     data.stop_update_thread()
     print("DONE")
+    """
 
     """
     XXXrs - The following "utility" code was used to pre-populate the git_branches.txt file
