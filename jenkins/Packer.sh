@@ -52,6 +52,9 @@ do_packer() {
     #export INSTALLER_URL=$(installer-url.sh -d s3 $INSTALLER)
     #cfn-flip < $PACKERCONFIG > packer.json
 
+    INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER")"))
+    VERSION=${INSTALLER_VERSION_BUILD[0]}
+
     bash -x ../build.sh --osid amzn1 --template $PACKERCONFIG --installer "$INSTALLER" -- ${BUILDER:+-only=${BUILDER}} -var license="${LICENSE}" -color=false 2>&1 | tee $OUTDIR/output.txt
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         exit 1

@@ -25,14 +25,6 @@ packer_do() {
         ${VAR_FILE+-var-file $VAR_FILE} "$@"
 }
 
-filename_from_url() {
-    basename "$1" | sed -e 's/\?.*$//g'
-}
-
-version_build_from_filename() {
-    grep -Eow '[0-9\.-]+' <<< "$1" | tr - ' '
-}
-
 check_or_upload_installer() {
     if [ -z "$INSTALLER_URL" ]; then
         if [ -z "$INSTALLER" ]; then
