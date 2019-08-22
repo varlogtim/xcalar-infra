@@ -33,6 +33,12 @@ Resources:
           Properties:
             Path: /cluster/stop
             Method: post
+        GetClusterUrl:
+          Type: Api
+          Properties:
+            Path: /cluster/get
+            Method: post
+
       Policies:
         - Version: '2012-10-17' # Policy Document
           Statement:
