@@ -128,6 +128,8 @@ mount_netstore_nfs() {
     mountpoint -q /netstore && umount /netstore
     mkdir -p /netstore/datasets
     mount -t nfs -o _netdev,defaults netstore:/data/nfs/datasets /netstore/datasets
+    mkdir -p /netstore/udf
+    mount -t nfs -o _netdev,defaults netstore:/data/nfs/udf /netstore/udf
 }
 
 # netstore is a storage container. We use blobfuse to mount it
