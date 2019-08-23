@@ -2,7 +2,7 @@ import boto3
 import json
 import time
 import traceback
-from status_enum import Status
+from enums.status_enum import Status
 # To-do all hard-coded values need to be read from enviornemnt variables
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
