@@ -40,18 +40,34 @@ Resources:
             Method: post
 
       Policies:
-        - Version: '2012-10-17' # Policy Document
+        - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action:
                 - cloudformation:UpdateStack
-                - cloudformation:DescribeStackResource
+              Resource:
+                !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/saas-test-*'
+            - Effect: Allow
+              Action:
                 - cloudformation:DescribeStacks
-                - ec2:DescribeNetworkInterfaces
+              Resource: '*'
+            - Effect: Allow
+              Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
                 - dynamodb:UpdateItem
-              Resource: '*'
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_user'
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_billing'
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource:
+                !Sub 'arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationAdmin'
   BillingFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -81,10 +97,19 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - cloudformation:DescribeStacks
+              Resource: '*'
+            - Effect: Allow
+              Action:
                 - dynamodb:GetItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_user'
+            - Effect: Allow
+              Action:
                 - dynamodb:PutItem
                 - dynamodb:Query
-              Resource: '*'
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_billing'
 
 
 Outputs:

@@ -3,5 +3,6 @@ class Status(IntEnum):
     OK = 0
     NO_CREDIT_HISTORY = 1
     NO_RUNNING_CLUSTER = 2
-    NO_STACK_FOUND = 3
-    CLUSTER_NOT_READY = 4
+    NO_STACK = 4
+    STACK_NOT_FOUND = 5
+    CLUSTER_NOT_READY = 6
