@@ -19,6 +19,8 @@ packer_do() {
         -var "build_number=$INSTALLER_BUILD_NUMBER" \
         -var "image_build_number=$IMAGE_BUILD_NUMBER" \
         -var "installer_url=$INSTALLER_URL" \
+        ${REGIONS+-var "destination_regions=$REGIONS"} \
+        ${SHARED_WITH+-var "shared_with=$SHARED_WITH"} \
         ${BUILD_URL+-var "build_url=$BUILD_URL"} \
         ${JOB_URL+-var "job_url=$JOB_URL"} \
         ${USER_VARS+-var-file $USER_VARS} \
@@ -53,6 +55,8 @@ check_or_upload_installer() {
 
 main() {
     PROVIDER=aws
+    SHARED_WITH="${SHARED_WITH-045297022527,043829555035,364047378361,876030232190}"
+    REGIONS="${REGIONS-us-east-1,us-west-2}"
 
     while [ $# -gt 0 ]; do
         cmd="$1"
@@ -63,6 +67,14 @@ main() {
                 ;;
             --osid)
                 OSID="$2"
+                shift 2
+                ;;
+            --shared-with)
+                SHARED_WITH="$2"
+                shift 2
+                ;;
+            --regions)
+                REGIONS="$2"
                 shift 2
                 ;;
             --installer)

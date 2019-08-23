@@ -8,7 +8,7 @@ variables:
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
-  destination_regions: 'us-east-1,us-west-2'
+  destination_regions: '{{env `REGIONS`}}'
   today: '{{isotime "20060102"}}'
   image_build_number: '1'
   build_id: '{{env `BUILD_ID`}}'
@@ -17,7 +17,7 @@ variables:
   description: Xcalar Data Platform
   installer_url: '{{env `INSTALLER_URL`}}'
   baseos_owners: '559166403383'
-  shared_with: '045297022527,043829555035,364047378361'
+  shared_with: '{{env `SHARED_WITH` }}'
   version: '1.0'
   license: '{{env `LICENSE`}}'
   build_number: '1'
