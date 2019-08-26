@@ -23,6 +23,9 @@ from coverage.file_groups import FileGroupsMixin
 class ClangCoverageFilenameCollision(Exception):
     pass
 
+class ClangCoverageEmptyFile(Exception):
+    pass
+
 class ClangCoverage(object):
 
     #ENV_PARAMS = {} # Placeholder
@@ -45,11 +48,17 @@ class ClangCoverage(object):
                 raise FileNotFoundError(err)
             path = zpath
 
+        jstr = ""
         if self.GZIPPED.match(path):
             with gzip.open(path, "rb") as fh:
-                return json.loads(fh.read().decode("utf-8"))
-        with open(path, "r") as fh:
-            return json.load(fh)
+                jstr = fh.read().decode("utf-8")
+        else:
+            with open(path, "r") as fh:
+                jstr = fh.read()
+
+        if not len(jstr):
+            raise ClangCoverageEmptyFile("{} is empty".format(path))
+        return json.loads(jstr)
 
     def file_summaries(self):
         """
@@ -140,6 +149,9 @@ class XCEFuncTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
             summaries = ClangCoverage(path=coverage_file_path).file_summaries()
         except FileNotFoundError:
             self.logger.exception("file not found: {}".format(coverage_file_path))
+            return None
+        except ClangCoverageEmptyFile:
+            self.logger.exception("file is empty: {}".format(coverage_file_path))
             return None
         except Exception:
             self.logger.exception("exception loading: {}".format(coverage_file_path))
