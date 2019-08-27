@@ -246,7 +246,7 @@ class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
             return None
         for key,data in coverage.items():
             url = MongoDB.decode_key(key)
-            if filename in url:
+            if filename.lower() in url.lower():
                 return coverage[key].get('covered_pct', None)
         return None
 
@@ -259,10 +259,22 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
+    """
+    Useful little utility to emit csv coverage for critical files from given build.
+    """
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bnum", help="build number", required=True)
+    args = parser.parse_args()
+
     art = XDUnitTestArtifacts()
     data = XDUnitTestArtifactsData(artifacts = art)
-    print("Names: {}".format(data.file_group_names()))
-    print("Groups: {}".format(data.file_groups()))
+    for fname in data.filenames(bnum=args.bnum, group_name="Critical Files"):
+        coverage = data.coverage(bnum=args.bnum, filename=fname)
+        if coverage is not None:
+            print("{0},{1:.2f}".format(fname, data.coverage(bnum=args.bnum, filename=fname)))
+        else:
+            print("{0},None".format(fname))
 
     """
     for version in data.xd_versions():

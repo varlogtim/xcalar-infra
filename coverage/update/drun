@@ -1,2 +1,2 @@
 #!/bin/bash
-exec docker run --detach --init --restart always --name coverage-data-update --hostname coverage-data-update -v /netstore/qa/coverage:/netstore/qa/coverage coverage-data-update
+exec docker run --init --rm --name coverage-data-update --hostname coverage-data-update -v /netstore/qa/coverage:/netstore/qa/coverage coverage-data-update

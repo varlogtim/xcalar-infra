@@ -1,2 +1,2 @@
 #!/bin/bash
-exec docker run --detach --init --restart always --name sql-tpch-data-update --hostname sql-tpch-data-update -v /netstore/qa/jenkins/SqlScaleTest:/netstore/qa/jenkins/SqlScaleTest sql-tpch-data-update
+exec docker run --init --rm --name sql-tpch-data-update --hostname sql-tpch-data-update -v /netstore/qa/jenkins/SqlScaleTest:/netstore/qa/jenkins/SqlScaleTest sql-tpch-data-update

@@ -24,6 +24,26 @@ logging.basicConfig(
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
+logger.info("Updating XCEFuncTest Data ==============")
+
+xce_coverage_art = XCEFuncTestArtifacts()
+xce_coverage_data = XCEFuncTestArtifactsData(artifacts = xce_coverage_art)
+xce_coverage_data.do_updates()
+
+logger.info("Updating XDUnitTest Data ===============")
+
+xd_coverage_art = XDUnitTestArtifacts()
+xd_coverage_data = XDUnitTestArtifactsData(artifacts = xd_coverage_art)
+xd_coverage_data.do_updates()
+
+logger.info("DONE ===================================")
+
+"""
+XXXrs - For unknown reasons, the "daemon" containers aren't properly updating
+        the data.  Instead of the whole container/nomad/mumble mechanism,
+        modify this script to be periodically callable from Jenkins/cron
+        every few minutes or so...
+
 # Start the coverage data update threads...
 xce_coverage_art = XCEFuncTestArtifacts()
 xce_coverage_data = XCEFuncTestArtifactsData(artifacts = xce_coverage_art)
@@ -36,3 +56,4 @@ xd_coverage_data.start_update_thread()
 while(1): # Spin!
     logger.info("running...")
     time.sleep(60)
+"""

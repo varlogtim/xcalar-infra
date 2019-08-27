@@ -195,6 +195,17 @@ class JenkinsArtifactsData(ABC):
 
         self.update_thread = None
 
+    def do_updates(self):
+        self.logger.info("do updates")
+
+        self.logger.debug("get builds")
+        builds = self.jenkins_artifacts.builds()
+        self.logger.debug("builds: {}".format(builds))
+        for bnum in builds:
+            self._update_build(bnum = bnum)
+            if JenkinsArtifactsData.update_stop:
+                return
+
     def stop_update_thread(self):
         self.logger.info("start")
         if not self.update_thread:
@@ -295,16 +306,9 @@ class JenkinsArtifactsData(ABC):
             self.logger.debug("wait on update_event")
             if first or not JenkinsArtifactsData.update_event.wait(self.refresh_sec):
                 first = False
-                self.logger.info("do updates")
-
-                self.logger.debug("get builds")
-                builds = self.jenkins_artifacts.builds()
-                self.logger.debug("builds: {}".format(builds))
-                for bnum in builds:
-                    self._update_build(bnum = bnum)
-                    if JenkinsArtifactsData.update_stop:
+                self.do_updates() 
+                if JenkinsArtifactsData.update_stop:
                         break
-
         self.logger.info("stop")
 
     def _retry_pending(self, *, bnum):

@@ -28,6 +28,20 @@ logging.basicConfig(
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
+logger.info("Updating SQL TPC-H Data ================")
+
+sql_tpch_art = SqlTpchStatsArtifacts()
+sql_tpch_data = SqlTpchStatsArtifactsData(artifacts = sql_tpch_art)
+sql_tpch_data.do_updates()
+
+logger.info("DONE ===================================")
+
+"""
+XXXrs - For unknown reasons, the "daemon" containers aren't properly updating
+        the data.  Instead of the whole container/nomad/mumble mechanism,
+        modify this script to be periodically callable from Jenkins/cron
+        every few minutes or so...
+
 # Start the sql TPC-H data update threads...
 sql_tpch_art = SqlTpchStatsArtifacts()
 sql_tpch_data = SqlTpchStatsArtifactsData(artifacts = sql_tpch_art)
@@ -36,3 +50,4 @@ sql_tpch_data.start_update_thread()
 while(1): # Spin!
     logger.info("running...")
     time.sleep(60)
+"""
