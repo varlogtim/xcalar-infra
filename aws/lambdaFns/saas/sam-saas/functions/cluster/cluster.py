@@ -34,11 +34,6 @@ def get_available_stack():
                         'cfn_id': stack['StackId'],
                         'tags': stack['Tags']
                     }
-                    for output in stack['Outputs']:
-                        if output['OutputKey'] == 'S3Bucket':
-                            ret_struct['s3_url'] = output['OutputValue']
-                        elif output['OutputKey'] == 'URL':
-                            ret_struct['cluster_url'] = output['OutputValue']
                     return ret_struct
 
 def start_cluster(user_name, cluster_params):
@@ -50,34 +45,23 @@ def start_cluster(user_name, cluster_params):
             'error': "%s does not exist" % user_name
         })
     user_info = response['Item']
-    tags = None
-    s3_url = None
-    cluster_url = None
+    parameters = []
+    is_new = False # whether this is a new user
+    tags = cfn_id = cluster_type = response = None
     if 'cfn_id' in user_info:
         cfn_id = user_info['cfn_id']['S']
-        stack_info = get_stack_info(cfn_client, cfn_id)
-        if 'error' in stack_info:
-            return _make_reply(_http_status(stack_info['error']), {
-                'status': Status.STACK_NOT_FOUND,
-                'error': 'Stack %s not found' % cfn_id
-            })
     else:
-        # or we give him an available one
         stack_info = get_available_stack()
         cfn_id = stack_info['cfn_id']
         tags = stack_info['tags']
+        is_new = True
 
-    if stack_info is not None:
-        s3_url = stack_info['s3_url']
-        cluster_url = stack_info['cluster_url']
-
-    parameters = []
-    cluster_type = None
     if 'clusterType' in cluster_params and cluster_params['clusterType'] in cluster_type_table:
         cluster_type = cluster_type_table[cluster_params['clusterType']]
     else:
         # default to use 'small'
         cluster_type = cluster_type_table['small']
+
     parameters.append(
         {
             'ParameterKey': 'ClusterSize',
@@ -100,8 +84,8 @@ def start_cluster(user_name, cluster_params):
                 'UsePreviousValue': False
             }
         )
-    if tags is None:
-        cfn_client.update_stack(
+    if is_new == False:
+        response = cfn_client.update_stack(
             StackName=cfn_id,
             UsePreviousTemplate=True,
             Parameters=parameters,
@@ -121,18 +105,12 @@ def start_cluster(user_name, cluster_params):
             RoleARN=cfn_role_arn,
             Tags=tags
         )
-    updates = {
-        'cfn_id': {
-            'S': cfn_id
-        },
-        'cluster_url': {
-            'S': cluster_url
-        },
-        's3_url': {
-            'S': s3_url
+        updates = {
+            'cfn_id': {
+                'S': cfn_id
+            }
         }
-    }
-    response = update_user_info(dynamodb_client, user_info, updates, user_table)
+        response = update_user_info(dynamodb_client, user_info, updates, user_table)
 
     return _make_reply(_http_status(response), {
         'status': Status.OK
@@ -151,7 +129,7 @@ def stop_cluster(user_name):
             'error': '%s does not have a stack' % user_name
         })
     cfn_id = user_info['Item']['cfn_id']['S']
-    cfn_client.update_stack(
+    response = cfn_client.update_stack(
         StackName = cfn_id,
         UsePreviousTemplate = True,
         Parameters = [
@@ -166,13 +144,6 @@ def stop_cluster(user_name):
         ],
         RoleARN=cfn_role_arn
     )
-    updates = {
-        'cluster_url': {
-            'NULL': True
-        }
-    }
-    response = update_user_info(dynamodb_client, user_info['Item'], updates, user_table)
-
     return _make_reply(_http_status(response), {'status': Status.OK})
 
 def get_cluster(user_name):
