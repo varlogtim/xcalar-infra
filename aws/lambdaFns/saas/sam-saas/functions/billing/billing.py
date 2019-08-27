@@ -83,7 +83,7 @@ def deduct_credit(user_name):
     # No other configurable params - to avoid potential securty issue with juypter
     # To-do auth logic to make sure the caller is updating his credit only
     user_info = get_user_info(dynamodb_client, user_name, user_table)
-    if 'Item' in user_info and 'S' in user_info['Item']['cfn_id']:
+    if 'Item' in user_info and 'cfn_id' in user_info['Item']:
         cfn_id = user_info['Item']['cfn_id']['S']
     else:
         return _make_reply(_http_status(user_info), {
@@ -110,11 +110,11 @@ def lambda_handler(event, context):
         path = event['path']
         data = json.loads(event['body'])
         if path == '/billing/get':
-            reply = get_credit(data['userName'])
+            reply = get_credit(data['username'])
         elif path == '/billing/update':
-            reply = update_credit(data['userName'], data['creditChange'])
+            reply = update_credit(data['username'], data['creditChange'])
         elif path == '/billing/deduct':
-            reply = deduct_credit(data['userName'])
+            reply = deduct_credit(data['username'])
         else:
             reply = _make_reply(400, "Invalid endpoint: %s" % path)
     except Exception as e:

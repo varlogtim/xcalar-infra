@@ -31,7 +31,7 @@ def get_available_stack():
                 if 'Value' in tag and tag['Key'] == 'available' and tag['Value'] == 'true':
                     del stack['Tags'][i]
                     ret_struct = {
-                        'cfn_id': stack['StackName'],
+                        'cfn_id': stack['StackId'],
                         'tags': stack['Tags']
                     }
                     for output in stack['Outputs']:
@@ -206,11 +206,11 @@ def lambda_handler(event, context):
         data = json.loads(event['body'])
 
         if path == '/cluster/start':
-            reply = start_cluster(data['userName'], data['clusterParams'])
+            reply = start_cluster(data['username'], data['clusterParams'])
         elif path == '/cluster/stop':
-            reply = stop_cluster(data['userName'])
+            reply = stop_cluster(data['username'])
         elif path == '/cluster/get':
-            reply = get_cluster(data['userName'])
+            reply = get_cluster(data['username'])
         else:
             reply = _make_reply(400, "Invalid endpoint: %s" % path)
     except Exception as e:
