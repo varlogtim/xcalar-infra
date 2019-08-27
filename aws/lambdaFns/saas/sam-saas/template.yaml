@@ -72,6 +72,10 @@ Resources:
                 - iam:PassRole
               Resource:
                 !Sub 'arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationAdmin'
+            - Effect: Allow
+              Action:
+                - ec2:DescribeInstances
+              Resource: '*'
   BillingFunction:
     Type: AWS::Serverless::Function
     Properties:

@@ -19,4 +19,5 @@ def get_stack_info(client, cfn_id):
             ret_struct['s3_url'] = output['OutputValue']
         elif output['OutputKey'] == 'URL':
             ret_struct['cluster_url'] = output['OutputValue']
+    ret_struct['stack_status'] = stack_info['StackStatus']
     return ret_struct

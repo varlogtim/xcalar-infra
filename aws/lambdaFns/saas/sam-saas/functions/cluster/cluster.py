@@ -20,7 +20,7 @@ billing_table = 'saas_billing'
 cfn_role_arn = 'arn:aws:iam::043829555035:role/AWSCloudFormationAdmin'
 default_credit = '500'
 
-def get_available_stack():
+def get_available_stack(user_name):
     all_stacks = cfn_client.describe_stacks()['Stacks']
     available_status = ['CREATE_COMPLETE', 'ROLLBACK_COMPLETE',
                         'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE']
@@ -34,6 +34,7 @@ def get_available_stack():
                         'cfn_id': stack['StackId'],
                         'tags': stack['Tags']
                     }
+                    ret_struct['tags'].append({'Key':'Owner', 'Value': user_name})
                     return ret_struct
 
 def start_cluster(user_name, cluster_params):
@@ -51,7 +52,8 @@ def start_cluster(user_name, cluster_params):
     if 'cfn_id' in user_info:
         cfn_id = user_info['cfn_id']['S']
     else:
-        stack_info = get_available_stack()
+        #or we give him an available one
+        stack_info = get_available_stack(user_name)
         if stack_info is None:
             return _make_reply(200, {
                 'status': Status.NO_AVAILABLE_STACK,
@@ -151,30 +153,94 @@ def stop_cluster(user_name):
     )
     return _make_reply(_http_status(response), {'status': Status.OK})
 
+def check_cluster_status(user_name, stack_info):
+    #size = 0, no running cluster
+    #directly return
+    if stack_info['size'] == 0:
+        return {'status' : Status.OK,
+            'isPending' : False}
+    else:
+        cluster_count = stack_info['size']
+        response = ec2_client.describe_instances(
+            Filters = [
+                {
+                    'Name': 'tag:Owner',
+                    'Values': [
+                        user_name
+                    ]
+                }
+            ]
+        )
+        running_count = 0
+        cluster_info = response['Reservations']
+        # listing clusters will also include terminated one
+        # cannot check len(cluster_info) == size
+        # check: running_count == size
+        for i in range(len(cluster_info)):
+            cluster = cluster_info[i]['Instances'][0]
+            #pending case
+            if cluster['State']['Name'] == 'pending':
+                return {'status': Status.OK,
+                        'isPending' : True}
+            #all running, keep counting
+            elif cluster['State']['Name'] == 'running':
+                running_count = running_count + 1
+            elif cluster['State']['Name'] == 'terminated' or cluster['State']['Name'] == 'shutting-down':
+                continue
+            else:
+                # some clusters are "stopped"/ "stopping"
+                # shouldn't happen, something wrong
+                return {'status': Status.CLUSTER_ERROR,
+                        'error': 'Some clusters stop running'}
+        #The number of running cluster must equal to size
+        # else something wrong
+        if running_count == cluster_count:
+            return {'status' : Status.OK,
+                    'clusterUrl' : stack_info['cluster_url'],
+                    'isPending' : False}
+        else:
+            return {'status' : Status.STACK_ERROR,
+                    'error' : 'The number of clusters is wrong'}
+
+
 def get_cluster(user_name):
     user_info = get_user_info(dynamodb_client, user_name, user_table)
     if 'Item' not in user_info:
         response = init_user(dynamodb_client, user_name, default_credit, user_table, billing_table)
         return _make_reply(_http_status(response), {
-            'status': Status.OK
+            'status': Status.OK,
+            'isPending': False
         })
     elif 'cfn_id' not in user_info['Item']:
         return  _make_reply(200, {
-            'status': Status.NO_STACK,
-            'error': '%s does not have a stack' % user_name
+            'status': Status.OK,
+            'isPending': False
         })
     cfn_id = user_info['Item']['cfn_id']['S']
     stack_info = get_stack_info(cfn_client, cfn_id)
     if 'error' in stack_info:
         return _make_reply(_http_status(stack_info['error']), {
             'status': Status.STACK_NOT_FOUND,
-            'error': 'Stack %s not found' % cfn_id
+            'error': 'Stack %s not found' % user_info['cfn_id']['S']
         })
-    # To-do verify cluster is running
-    return _make_reply(200, {
-        'status': Status.OK,
-        'clusterUrl': stack_info['cluster_url']
-    })
+    # To-do more detailed stack status
+    else:
+        # in progresss
+        if stack_info['stack_status'].endswith('IN_PROGRESS'):
+            return _make_reply(200, {
+                'status' : Status.OK,
+                'isPending' : True
+            })
+        #updated completed, then check cluster status
+        elif stack_info['stack_status'] == 'UPDATE_COMPLETE':
+            cluster_status = check_cluster_status(user_name, stack_info)
+            return _make_reply(200, cluster_status)
+        #error(more detailed failure check)
+        else :
+            return _make_reply(200, {
+                'status' : Status.STACK_ERROR,
+                'error' : 'Stack has error: %s' % stack_info['stack_status'],
+            })
 
 def lambda_handler(event, context):
     try:
