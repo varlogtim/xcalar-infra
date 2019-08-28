@@ -130,7 +130,12 @@ Resources:
         UploadFile:
           Type: Api
           Properties:
-            Path: /s3/put
+            Path: /s3/upload
+            Method: post
+        BucketInfo:
+          Type: Api
+          Properties:
+            Path: /s3/describe
             Method: post
       Policies:
         - Version: '2012-10-17'

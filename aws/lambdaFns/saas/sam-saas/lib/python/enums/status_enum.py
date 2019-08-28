@@ -9,3 +9,4 @@ class Status(IntEnum):
     S3_BUCKET_NOT_EXIST = 6
     STACK_ERROR = 7
     CLUSTER_ERROR = 8
+    USER_NOT_FOUND = 9
