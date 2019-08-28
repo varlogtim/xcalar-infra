@@ -4,6 +4,11 @@ Description: Xcalar Cluster Serverless Application\nSAM Template for sam-cluster
 Globals:
   Function:
     Timeout: 300
+  Api:
+    Cors:
+      AllowMethods: "'OPTIONS,POST,GET'"
+      AllowHeaders: "'Content-Type'"
+      AllowOrigin: "'*'"
 
 Resources:
   LibLayer:
