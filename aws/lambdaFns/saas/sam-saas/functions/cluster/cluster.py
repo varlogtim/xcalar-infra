@@ -42,7 +42,7 @@ def start_cluster(user_name, cluster_params):
     if 'Item' not in response:
         return _make_reply(_http_status(response), {
             'status': Status.USER_NOT_FOUND,
-            'error': "%s does not exist" % user_name
+            'error': '%s does not exist' % user_name
         })
     user_info = response['Item']
     parameters = []
@@ -52,6 +52,11 @@ def start_cluster(user_name, cluster_params):
         cfn_id = user_info['cfn_id']['S']
     else:
         stack_info = get_available_stack()
+        if stack_info is None:
+            return _make_reply(200, {
+                'status': Status.NO_AVAILABLE_STACK,
+                'error': 'No available stack at this moment'
+            })
         cfn_id = stack_info['cfn_id']
         tags = stack_info['tags']
         is_new = True
