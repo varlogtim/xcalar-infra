@@ -132,6 +132,11 @@ Resources:
           Properties:
             Path: /s3/upload
             Method: post
+        DeleteFile:
+          Type: Api
+          Properties:
+            Path: /s3/delete
+            Method: post
         BucketInfo:
           Type: Api
           Properties:
@@ -152,6 +157,7 @@ Resources:
             - Effect: Allow
               Action:
                 - s3:PutObject
+                - s3:DeleteObject
               Resource:
                 !Sub 'arn:aws:s3:::saas-test*' # For test only
 

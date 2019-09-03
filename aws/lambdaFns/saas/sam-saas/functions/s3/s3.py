@@ -52,6 +52,19 @@ def upload_file(upload_params):
         'status': Status.OK
     })
 
+def delete_file(delete_params):
+    user_name = delete_params['user_name']
+    file_name = delete_params['file_name']
+    # TODO: varify user cookie and get access keys
+    bucket_resp = get_bucket(user_name)
+    if type(bucket_resp) != str:
+        return bucket_resp
+    s3_client = boto3.client('s3', region_name='us-west-2')#, aws_access_key_id='AKIAQUNDR55NZCQP53QX', aws_secret_access_key='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')
+    s3_client.delete_file(bucket_resp, file_name)
+    return _make_reply(200, {
+        'status': Status.OK
+    })
+
 def bucket_info(user_name):
     bucket_resp = get_bucket(user_name)
     if type(bucket_resp) != str:
@@ -69,6 +82,8 @@ def lambda_handler(event, context):
         data = json.loads(event['body'])
         if path == '/s3/upload':
             reply = upload_file(data)
+        if path == '/s3/delete':
+            reply = delete_file(data)
         elif path == '/s3/describe':
             reply = bucket_info(data['user_name'])
         else:
