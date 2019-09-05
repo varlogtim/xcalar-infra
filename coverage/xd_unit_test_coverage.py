@@ -14,20 +14,26 @@ import math
 import os
 import random
 import re
+import sys
 
+if __name__ == '__main__':
+    sys.path.append(os.environ.get('XLRINFRADIR', ''))
+
+from coverage.file_groups import FileGroups
 from py_common.env_configuration import EnvConfiguration
-from py_common.jenkins_artifacts import JenkinsArtifacts, JenkinsArtifactsData
+from py_common.jenkins_aggregators import JenkinsAggregatorBase
+from py_common.jenkins_aggregators import JenkinsJobDataCollection
+from py_common.jenkins_aggregators import JenkinsJobMetaCollection
+from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
 from py_common.mongo import MongoDB
 
-from coverage.file_groups import FileGroupsMixin
+from coverage.file_groups import FileGroups
 
 class XDUnitTestCoverage(object):
-    ENV_PARAMS = {}
     GZIPPED = re.compile(r".*\.gz\Z")
 
     def __init__(self, *, path):
         self.logger = logging.getLogger(__name__)
-        self.cfg = EnvConfiguration(XDUnitTestCoverage.ENV_PARAMS)
         self.coverage_data = self._load_json(path=path)
         self.url_to_coverage = {}
         self.total_total_len = 0
@@ -79,22 +85,44 @@ class XDUnitTestCoverage(object):
             return 0
         return 100*self.total_covered_len/self.total_total_len
 
-class XDUnitTestArtifacts(JenkinsArtifacts):
-    ENV_PARAMS = {"XD_UNIT_TEST_JOB_NAME":
-                        {"default": "XDUnitTest",
-                         "required":True},
+
+class XDUnitTestCoverageAggregator(JenkinsAggregatorBase):
+
+    ENV_PARAMS = {"XD_UNIT_TEST_COVERAGE_FILE_NAME":
+                        {"default": "coverage.json",
+                         "required": True},
                   "XD_UNIT_TEST_ARTIFACTS_ROOT":
                         {"default": "/netstore/qa/coverage/XDUnitTest",
                          "required":True} }
 
-    def __init__(self):
+    def __init__(self, *, job_name):
         self.logger = logging.getLogger(__name__)
-        cfg = EnvConfiguration(XDUnitTestArtifacts.ENV_PARAMS)
-        super().__init__(job_name=cfg.get("XD_UNIT_TEST_JOB_NAME"),
-                         dir_path=cfg.get("XD_UNIT_TEST_ARTIFACTS_ROOT"))
+        cfg = EnvConfiguration(XDUnitTestCoverageAggregator.ENV_PARAMS)
+        self.coverage_file_name = cfg.get("XD_UNIT_TEST_COVERAGE_FILE_NAME")
+        self.artifacts_root = cfg.get("XD_UNIT_TEST_ARTIFACTS_ROOT")
+        super().__init__(job_name=job_name)
+
+    def update_build(self, *, bnum, log=None):
+        """
+        Return coverage info for a specific build.
+        """
+        try:
+            path = os.path.join(self.artifacts_root, bnum, self.coverage_file_name)
+            self.logger.debug("path: {}".format(path))
+            xdutc = XDUnitTestCoverage(path=path)
+            data = {}
+            for url,coverage in xdutc.get_data().items():
+                self.logger.debug("url: {} coverage: {}".format(url, coverage))
+                data[MongoDB.encode_key(url)] = coverage
+            return {'coverage': data}
+        except FileNotFoundError as e:
+            self.logger.error("{} not found".format(path))
+            return None
 
 
-class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
+class XDUnitTestCoverageData(object):
+
+    ENV_PARAMS = {"XD_UNIT_TEST_JOB_NAME": {"default": "XDUnitTest"}}
 
     # XXXrs - temporary static config.
     FILE_GROUPS = {"Critical Files": [
@@ -138,73 +166,55 @@ class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
         "/ts/components/sql/workspace/SQLWorkSpace.js"]}
 
 
-    ENV_PARAMS = {"XD_UNIT_TEST_COVERAGE_FILE_NAME":
-                        {"default": "coverage.json",
-                         "required": True} }
+    def __init__(self):
 
-    def __init__(self, *, artifacts):
-        """
-        Initializer.
-    
-        Required parameters:
-            artifacts:  XDUnitTestArtifacts instance
-
-        Environment Parameters:
-            XD_UNIT_TEST_COVERAGE_FILE_NAME:
-                    name of coverage file (default: coverage.json)
-        """
         self.logger = logging.getLogger(__name__)
-        cfg = EnvConfiguration(XDUnitTestArtifactsData.ENV_PARAMS)
-        self.coverage_file_name = cfg.get("XD_UNIT_TEST_COVERAGE_FILE_NAME")
-        self.artifacts = artifacts
-        super().__init__(jenkins_artifacts=self.artifacts, add_branch_info=True)
-        # XXXrs - temporary initialize every time with static configuration.
-        #         Eventually, this configuration sould be managed elsewhere.
-        self.reset_file_groups()
-        for name, files in XDUnitTestArtifactsData.FILE_GROUPS.items():
-            self.append_file_group(group_name=name, files=files)
+        cfg = EnvConfiguration(XDUnitTestCoverageData.ENV_PARAMS)
+        self.job_name = cfg.get("XD_UNIT_TEST_JOB_NAME")
+        self.db = MongoDB()
+        self.data = JenkinsJobDataCollection(job_name=self.job_name, db=self.db)
+        self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=self.db)
 
-    def update_build(self, *, bnum, log=None):
-        """
-        Return coverage info for a specific build.
-        """
-        try:
-            path = os.path.join(self.artifacts.artifacts_directory_path(bnum=bnum),
-                                self.coverage_file_name)
-            self.logger.debug("path: {}".format(path))
-            xdutc = XDUnitTestCoverage(path=path)
-            data = {}
-            for url,coverage in xdutc.get_data().items():
-                self.logger.debug("url: {} coverage: {}".format(url, coverage))
-                data[MongoDB.encode_key(url)] = coverage
-            return {'coverage': data}
-        except FileNotFoundError as e:
-            self.logger.error("{} not found".format(path))
-            return None
+        # XXXrs - TEMPORARY (!?!) initialize every time with static configuration.
+        #         Eventually, this configuration should be managed elsewhere.
+
+        self.file_groups = FileGroups(meta=self.meta.coll)
+        self.file_groups.reset()
+        for name, files in XDUnitTestCoverageData.FILE_GROUPS.items():
+            self.file_groups.append_group(name=name, files=files)
+
+        self.file_groups.reset()
+        for name, files in XDUnitTestCoverageData.FILE_GROUPS.items():
+            self.file_groups.append_group(name=name, files=files)
 
     def xd_versions(self):
         """
         Return available XD versions for which we have data.
         XXXrs - version/branch :|
         """
-        return self.branches(repo='XD')
+        return self.meta.branches(repo='XD')
+
+    def _get_coverage_data(self, *, bnum):
+        data = self.data.get_data(bnum=bnum)
+        if not data:
+            return None
+        return data.get('coverage', None)
 
     def builds(self, *, xd_versions=None,
                         first_bnum=None,
                         last_bnum=None,
                         reverse=False):
 
-        return self.find_builds(repo='XD',
-                                branches=xd_versions,
-                                first_bnum=first_bnum,
-                                last_bnum=last_bnum,
-                                reverse=reverse)
-
-    def _get_coverage_data(self, *, bnum):
-        data = self.get_data(bnum=bnum)
-        if not data:
-            return None
-        return data.get('coverage', None)
+        rtn = []
+        for bnum in self.meta.find_builds(repo='XD',
+                                          branches=xd_versions,
+                                          first_bnum=first_bnum,
+                                          last_bnum=last_bnum,
+                                          reverse=reverse):
+            if self._get_coverage_data(bnum = bnum):
+                # Only builds with coverage data please
+                rtn.append(bnum)
+        return rtn
 
     def filenames(self, *, bnum, group_name=None):
         coverage = self._get_coverage_data(bnum=bnum)
@@ -214,7 +224,7 @@ class XDUnitTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
         rawnames = []
         do_sort = False
         if group_name is not None and group_name != "All Files":
-            rawnames = self.expand(name=group_name)
+            rawnames = self.file_groups.expand(name=group_name)
         else:
             do_sort = True
             rawnames = sorted(coverage.keys())
@@ -267,74 +277,10 @@ if __name__ == '__main__':
     parser.add_argument("--bnum", help="build number", required=True)
     args = parser.parse_args()
 
-    art = XDUnitTestArtifacts()
-    data = XDUnitTestArtifactsData(artifacts = art)
+    data = XDUnitTestCoverageData()
     for fname in data.filenames(bnum=args.bnum, group_name="Critical Files"):
         coverage = data.coverage(bnum=args.bnum, filename=fname)
         if coverage is not None:
             print("{0},{1:.2f}".format(fname, data.coverage(bnum=args.bnum, filename=fname)))
         else:
             print("{0},None".format(fname))
-
-    """
-    for version in data.xd_versions():
-        print("{} ==========".format(version))
-        builds = data.builds(xd_versions=[version])
-        print(builds)
-        for bnum in builds:
-            print("{} ----------".format(bnum))
-            for filename in data.filenames(bnum=bnum):
-                print("{}: {}".format(filename, data.coverage(bnum=bnum, filename=filename)))
-
-    print("let update thread run a little...")
-    data.start_update_thread()
-    import time
-    time.sleep(30)
-    print("stop update thread")
-    data.stop_update_thread()
-    print("DONE")
-    """
-
-    """
-    XXXrs - The following "utility" code was used to pre-populate the git_branches.txt file
-            for builds that didn't have them, using the "old" method of scraping the jenkins
-            log and using git_helper() to find the branches containing the discovered
-            commit sha(s).
-
-    from py_common.git_helper import GitHelper
-    from py_common.jenkins_api import JenkinsApi
-
-    logging.basicConfig(level=logging.INFO,
-                        format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
-                        handlers=[logging.StreamHandler()])
-    logger = logging.getLogger(__name__)
-
-    art = XDUnitTestArtifacts()
-    japi = JenkinsApi()
-    ghelp = GitHelper()
-    data = XDUnitTestArtifactsData(artifacts = art)
-    repo_pat = re.compile(r"\A(.*)_GIT_REPOSITORY\Z")
-
-    for bnum in art.builds():
-        log = japi.console(job_name='XCEFuncTest', build_number=bnum)
-        adp = art.artifacts_directory_path(bnum=bnum)
-        txt_path = os.path.join(adp, 'git_branches.txt')
-        commits = ghelp.commits(log=log)
-        txt = ""
-        for commit, info in commits.items():
-            repo = info.get('repo', None)
-            if not repo:
-                continue
-            repo = repo_pat.match(repo).group(1)
-            branches = info['branches']
-            for branch in branches:
-                if len(txt):
-                    txt += "\n"
-                txt += "{}_GIT_BRANCH: {}".format(repo, branch)
-        if os.path.exists(txt_path):
-            print("{} exists, skip...".format(txt_path))
-            continue
-        print("write {}".format(txt_path))
-        with open(txt_path, "w+") as fh:
-            fh.write(txt)
-    """

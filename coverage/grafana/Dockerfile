@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY coverage/grafana/coverage_datasource.py /app/main.py
 
 RUN mkdir -p /app/coverage
-COPY coverage/*.py /app/coverage/
+COPY coverage /app/coverage/
 
 RUN mkdir -p /app/py_common
-COPY py_common/*.py /app/py_common/
+COPY py_common /app/py_common/

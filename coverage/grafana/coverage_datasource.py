@@ -14,11 +14,15 @@ import pytz
 import random
 import re
 import statistics
+import sys
 import time
 
+if __name__ == '__main__':
+    sys.path.append(os.environ.get('XLRINFRADIR', ''))
+
 from py_common.env_configuration import EnvConfiguration
-from coverage.xd_unit_test_coverage import XDUnitTestArtifacts, XDUnitTestArtifactsData
-from coverage.xce_func_test_coverage import XCEFuncTestArtifacts, XCEFuncTestArtifactsData
+from coverage.xce_func_test_coverage import XCEFuncTestCoverageData
+from coverage.xd_unit_test_coverage import XDUnitTestCoverageData
 
 config = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 
@@ -32,11 +36,8 @@ logging.basicConfig(
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-xce_coverage_art = XCEFuncTestArtifacts()
-xce_coverage_data = XCEFuncTestArtifactsData(artifacts = xce_coverage_art)
-
-xd_coverage_art = XDUnitTestArtifacts()
-xd_coverage_data = XDUnitTestArtifactsData(artifacts = xd_coverage_art)
+xce_coverage_data = XCEFuncTestCoverageData()
+xd_coverage_data = XDUnitTestCoverageData()
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -82,11 +83,11 @@ def find_metrics():
 
     elif target == 'xd_filegroups':
         names = ["All Files"]
-        names.extend(xd_coverage_data.file_group_names())
+        names.extend(xd_coverage_data.file_groups.group_names())
 
     elif target == 'xce_filegroups':
         names = ["All Files"]
-        names.extend(xce_coverage_data.file_group_names())
+        names.extend(xce_coverage_data.file_groups.group_names())
 
     # <xd_vers>:xdbuilds
     elif ':xdbuilds' in target:
@@ -131,7 +132,7 @@ def _xd_results(*, xd_vers, first_bnum, names, ts):
     results = []
     for bnum in builds:
         for name in names:
-            for filename in xd_coverage_data.expand(name=name):
+            for filename in xd_coverage_data.file_groups.expand(name=name):
                 results.append({'target': '{}'.format(bnum),
                                 'datapoints': [[xd_coverage_data.coverage(
                                                     bnum=bnum, filename=filename), ts]] })
@@ -148,7 +149,7 @@ def _xce_results(*, xce_vers, first_bnum, names, ts):
     results = []
     for bnum in builds:
         for name in names:
-            for filename in xce_coverage_data.expand(name=name):
+            for filename in xce_coverage_data.file_groups.expand(name=name):
                 results.append({'target': '{}'.format(bnum),
                                 'datapoints': [[xce_coverage_data.coverage(
                                                     bnum=bnum, filename=filename), ts]] })

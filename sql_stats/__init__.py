@@ -7,6 +7,8 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
+__all__=[]
+
 from datetime import datetime
 import hashlib
 import json
@@ -14,14 +16,16 @@ import logging
 import os
 import pytz
 import re
+import sys
 
-from py_common.env_configuration import EnvConfiguration
-from py_common.jenkins_artifacts import JenkinsArtifacts, JenkinsArtifactsData
+if __name__ == '__main__':
+    sys.path.append(os.environ.get('XLRINFRADIR', ''))
+
 from py_common.sorts import nat_sort
 
-class SqlTpchIter(object):
+class SqlStatsIter(object):
     """
-    Class representing a single TPCH test iteration file.
+    Class representing a single test iteration file.
     """
     version_pat = re.compile(r".*\(version=\'xcalar-(.*?)-.*")
 
@@ -64,7 +68,7 @@ class SqlTpchIter(object):
         data_source = os.path.basename(os.path.abspath(ds))
 
         # XXXrs - screen scrape
-        self.xlr_version = SqlTpchIter.version_pat.match(self.data['xlrVersion']).group(1) or 'unknown'
+        self.xlr_version = SqlStatsIter.version_pat.match(self.data['xlrVersion']).group(1) or 'unknown'
 
         for tnum, queryStats in self.data['threads'].items():
             self.logger.debug("tnum: {}, queryStats: {}".format(tnum, queryStats))
@@ -168,28 +172,16 @@ class SqlTpchIter(object):
                 raise ValueError("unknown metric {}".format(mname))
         return results
 
-
-class SqlTpchNoStatsError(Exception):
+class SqlNoStatsError(Exception):
     pass
 
-
-class SqlTpchStats(object):
+class SqlStats(object):
     """
     Class representing the collection of all TPCH test iterations associated
     with a particular build (test run).
     """
 
-    result_file_pat = re.compile(r"(.*)-(\d+)_tpchTest\.json\Z")
-    result_file_pat_two = re.compile(r"(.*)-(\d+)-xcalar_tpchTest\.json\Z")
-
-    @staticmethod
-    def has_results(*, dir_path):
-        for name in os.listdir(dir_path):
-            if SqlTpchStats.result_file_pat.match(name) or SqlTpchStats.result_file_pat_two.match(name):
-                return True
-        return False
-
-    def __init__(self, *, bnum, dir_path):
+    def __init__(self, *, bnum, dir_path, result_file_pats):
         """
         Initializer
 
@@ -206,20 +198,25 @@ class SqlTpchStats(object):
         if not dir_path:
             raise ValueError("no directory path")
 
-        # Load each of the iteration files...
 
+        if not os.path.exists(dir_path):
+            raise SqlNoStatsError("directory does not exist: {}".format(dir_path))
+
+        # Load each of the iteration files...
         for name in os.listdir(dir_path):
             path = os.path.join(dir_path, name)
             self.logger.debug("path: {}".format(path))
-            m = SqlTpchStats.result_file_pat.match(name)
-            if not m:
-                m = SqlTpchStats.result_file_pat_two.match(name)
-            if not m:
+            m = None
+            for pat in result_file_pats:
+                m = pat.match(name)
+                if m:
+                    break
+            else:
                 self.logger.debug("skipping: {}".format(path))
                 continue
             try:
                 iteration = m.group(2)
-                self.iters[iteration] = SqlTpchIter(bnum=bnum, iteration=iteration, path=path)
+                self.iters[iteration] = SqlStatsIter(bnum=bnum, iteration=iteration, path=path)
             except Exception as e:
                 self.logger.exception("error loading {}".format(path))
                 continue
@@ -231,7 +228,7 @@ class SqlTpchStats(object):
             self.test_type = self.iters[iter_nos[0]].test_type # XXXrs - assume all same
             self.xlr_version = self.iters[iter_nos[0]].xlr_version # XXXrs - assume all same
         else:
-            raise SqlTpchNoStatsError("no results found: {}".format(dir_path))
+            raise SqlNoStatsError("no results found: {}".format(dir_path))
 
         self.logger.debug("end")
 
@@ -286,129 +283,6 @@ class SqlTpchStats(object):
             times.extend(obj.query_vals(qname=qname, mname=mname))
         return times
 
-class SqlTpchStatsArtifacts(JenkinsArtifacts):
-    """
-    Class representing directory containing sql tpch statistics results files.
-    """
-
-    ENV_PARAMS = {"SQL_TPCH_JOB_NAME": {"default": "SqlScaleTest"},
-                  "SQL_TPCH_RESULTS_ROOT": {"default": "/netstore/qa/jenkins/SqlScaleTest"}}
-
-    def __init__(self):
-        """
-        Initializer
-
-        Environment parameters:
-            SQL_TPCH_JOB_NAME:  Jenkins job name.
-            SQL_TPCH_RESULTS_ROOT:  Path to directory containing per-build sql tpch results.
-        """
-        self.logger = logging.getLogger(__name__)
-        self.cfg = EnvConfiguration(SqlTpchStatsArtifacts.ENV_PARAMS)
-        super().__init__(job_name=self.cfg.get("SQL_TPCH_JOB_NAME"),
-                         dir_path=self.cfg.get("SQL_TPCH_RESULTS_ROOT"))
-        self.stats_cache = {}
-
-    def stats(self, *, bnum):
-        """
-        Return a SqlTpchStats instance containing all results for a
-        specified build number.
-        """
-        if bnum not in self.stats_cache:
-            try:
-                stats = SqlTpchStats(bnum=bnum, dir_path=self.artifacts_directory_path(bnum=bnum))
-            except SqlTpchNoStatsError as e:
-                stats = None
-            self.stats_cache[bnum] = stats
-        return self.stats_cache[bnum]
-
-
-class SqlTpchStatsArtifactsData(JenkinsArtifactsData):
-    """
-    Class representing the meta-data associated with a
-    specified SqlTpchStatsArtifacts.
-    """
-    def __init__(self, *, artifacts):
-        """
-        Initializer.
-
-        Required parameters:
-            artifacts:  SqlTpchStatsArtifacts instance
-        """
-        self.logger = logging.getLogger(__name__)
-        self.artifacts = artifacts
-        super().__init__(jenkins_artifacts=artifacts)
-
-    def update_build(self, *, bnum, log=None):
-        stats = self.artifacts.stats(bnum=bnum)
-        if not stats:
-            # Effectively a null entry indicating no stats available
-            return {'start_ts_ms': 0, 'end_ts_ms': 0,
-                    'test_type': None, 'xlr_version': None}
-
-        return {'start_ts_ms': stats.start_ts_ms,
-                'end_ts_ms': stats.end_ts_ms,
-                'test_type': stats.test_type,
-                'xlr_version': stats.xlr_version}
-
-    def xlr_versions(self):
-        """
-        Return all Xcalar versions represented in the index.
-        """
-        versions = []
-        for bnum,data in self.get_data_by_build().items():
-            v = data.get('xlr_version', None)
-            if v and v not in versions:
-                versions.append(v)
-        return versions
-
-    def find_builds(self, *, xlr_versions=None,
-                             first_bnum=None,
-                             last_bnum=None,
-                             test_type=None,
-                             start_ts_ms=None,
-                             end_ts_ms=None,
-                             reverse=False):
-        """
-        Return list of build numbers matching the given attributes.
-        By default, list is sorted in ascending natural number order.
-
-        Optional parameters:
-            xlr_versions:   list of Xcalar versions
-            first_bnum:     matching build number must be gte this value
-            last_bnum:      matching build number must be lte this value
-            test_type:      results for build must be of this test_type
-            start_ts_ms:    matching build start time gte this value
-            end_ts_ms:      matching build end time lte this value
-            reverse:        if True, results will be sorted in decending order.
-        """
-        # XXXrs - FUTURE - this overrides the new base-class find_builds().
-        #         Should merge with or leverage that code???
-        found = []
-        for bnum,data in self.get_data_by_build().items():
-            if not data.get('start_ts_ms', None):
-                # no results
-                continue
-            xlr_ver = data.get('xlr_version', None)
-            if xlr_versions and (not xlr_ver or xlr_ver not in xlr_versions):
-                self.logger.debug("xlr_version mismatch want {} build {} has {}"
-                                  .format(xlr_versions, bnum, xlr_ver))
-                continue
-            if test_type and data['test_type'] != test_type:
-                self.logger.debug("test_type mismatch want {} build {} has {}"
-                                  .format(test_type, bnum, data['test_type']))
-                continue
-            if start_ts_ms and data['start_ts_ms'] < start_ts_ms:
-                continue
-            if end_ts_ms and data['end_ts_ms'] > end_ts_ms:
-                continue
-            if first_bnum and int(bnum) < int(first_bnum):
-                continue
-            if last_bnum and int(bnum) > int(last_bnum):
-                continue
-            found.append(bnum)
-        return sorted(found, key=nat_sort, reverse=reverse)
-
-
 # In-line "unit test"
 if __name__ == '__main__':
     print("Compile check A-OK!")
@@ -419,27 +293,6 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    art = SqlTpchStatsArtifacts()
-    meta = SqlTpchStatsArtifactsData(artifacts = art)
-
-    meta.start_update_thread()
-    time.sleep(0.3)
-
-    now_ms = datetime.now().timestamp()*1000
-    week_ms = 7*24*60*60*1000
-    last_week = meta.find_builds(start_ts_ms=(now_ms-week_ms),
-                                 end_ts_ms=now_ms)
-    #logger.info("last week: {}".format([s.build_num for s in last_week]))
-    logger.info("last week: {}".format(last_week))
-    last_month = meta.find_builds(start_ts_ms=(now_ms-(4*week_ms)),
-                                  end_ts_ms=now_ms,
-                                  reverse=True)
-    #logger.info("last month: {}".format([s.build_num for s in last_month]))
-    logger.info("last month: {}".format(last_month))
-
-    for bnum in last_week:
-        stats = art.stats(bnum = bnum)
-        print(stats)
-
-    time.sleep(60)
-    meta.stop_update_thread()
+    stats = SqlStats(bnum = None, dir_path = None,
+                     result_file_pats = [re.compile(r"(.*)-(\d+)_tpchTest\.json\Z"),
+                                         re.compile(r"(.*)-(\d+)-xcalar_tpchTest\.json\Z")])

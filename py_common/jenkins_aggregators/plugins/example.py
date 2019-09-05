@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+# Copyright 2019 Xcalar, Inc. All rights reserved.
+#
+# No use, or distribution, of this source code is permitted in any form or
+# means without a valid, written license agreement with Xcalar, Inc.
+# Please refer to the included "COPYING" file for terms and conditions
+# regarding the use and redistribution of this software.
+
+import logging
+
+from py_common.jenkins_aggregators import JenkinsAggregatorBase
+
+# The PLUGIN list registers aggregator classes with Jenkins jobs.
+# Each entry in the list is a dictionary of the form:
+#
+#   {'class': <class name>, 'job_names': [<jenkins job name>, ...]}
+#
+#
+
+PLUGIN = [{'class_name': 'ExampleAggregator', 
+           'job_names': ['BuildTrunk']}]
+
+# Aggregator class must subclass from JenkinsAggregatorBase
+
+class ExampleAggregator(JenkinsAggregatorBase):
+    def __init__(self, *, job_name):
+        """
+        Class-specific initialization.
+        """
+        # MUST call superclass initializer.
+        super().__init__(job_name=job_name)
+        self.logger = logging.getLogger(__name__)
+
+
+    def update_build(self, *, bnum, log=None):
+        """
+        Aggregate and return build-related data and meta-data.
+        Every aggregator must implement the update_build() method.
+        See JenkinsAggregatorBase for details.
+        """
+        self.logger.info("bnum: {}".format(bnum))
+        return None
+
+# In-line "unit test"
+if __name__ == '__main__':
+    print("Compile check A-OK!")

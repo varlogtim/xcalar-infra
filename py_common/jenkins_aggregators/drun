@@ -1,0 +1,2 @@
+#!/bin/bash
+exec docker run --init --rm --name jenkins-aggregators-update --hostname jenkins-aggregators-update -v /netstore:/netstore jenkins-aggregators-update

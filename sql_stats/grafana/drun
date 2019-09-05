@@ -1,0 +1,2 @@
+#!/bin/bash
+exec docker run --detach --init --restart always --name sql-stats-grafana-datasource --hostname sql-stats-grafana-datasource -p 3331:80 -v /netstore/qa/jenkins/SqlScaleTest:/netstore/qa/jenkins/SqlScaleTest sql-stats-grafana-datasource

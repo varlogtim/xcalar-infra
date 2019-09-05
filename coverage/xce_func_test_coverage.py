@@ -12,179 +12,97 @@ import json
 import logging
 import os
 import re
+import sys
 
-from py_common.mongo import MongoDB
+if __name__ == '__main__':
+    sys.path.append(os.environ.get('XLRINFRADIR', ''))
+
+from coverage.file_groups import FileGroups
+from coverage.clang import ClangCoverageAggregator
 from py_common.env_configuration import EnvConfiguration
-from py_common.jenkins_artifacts import JenkinsArtifacts, JenkinsArtifactsData
+from py_common.jenkins_aggregators import JenkinsAggregatorBase
+from py_common.jenkins_aggregators import JenkinsJobDataCollection
+from py_common.jenkins_aggregators import JenkinsJobMetaCollection
+from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
+from py_common.mongo import MongoDB
 from py_common.sorts import nat_sort
 
-from coverage.file_groups import FileGroupsMixin
+class XCEFuncTestCoverageAggregator(ClangCoverageAggregator):
 
-class ClangCoverageFilenameCollision(Exception):
-    pass
-
-class ClangCoverageEmptyFile(Exception):
-    pass
-
-class ClangCoverage(object):
-
-    #ENV_PARAMS = {} # Placeholder
-    GZIPPED = re.compile(r".*\.gz\Z")
-                                                  
-    def __init__(self, *, path):
-        self.logger = logging.getLogger(__name__)
-        #cfg = EnvConfiguration(ClangCoverage.ENV_PARAMS)
-        self.path = path
-        self.coverage_data = self._load_json()
-
-    def _load_json(self):
-        path = self.path
-        if not os.path.exists(path):
-            # Try gzipped form
-            zpath = "{}.gz".format(path)
-            if not os.path.exists(zpath):
-                err = "neither {} nor {} exist".format(path, zpath)
-                self.logger.error(err)
-                raise FileNotFoundError(err)
-            path = zpath
-
-        jstr = ""
-        if self.GZIPPED.match(path):
-            with gzip.open(path, "rb") as fh:
-                jstr = fh.read().decode("utf-8")
-        else:
-            with open(path, "r") as fh:
-                jstr = fh.read()
-
-        if not len(jstr):
-            raise ClangCoverageEmptyFile("{} is empty".format(path))
-        return json.loads(jstr)
-
-    def file_summaries(self):
-        """
-        Strip a full coverage results file down to just per-file summary data.
-        Returns dictionary:
-            {<file_path>: {<file_summary_data>},
-             <file_path>: {<file_summary_data>},
-             ...
-             "totals": {<total_summary_data}}
-        """
-        summaries = {}
-        if 'data' not in self.coverage_data:
-            return summaries
-        for info in self.coverage_data['data']:
-            totals = info.get('totals', None)
-            if totals:
-                summaries['totals'] = totals
-            for finfo in info['files']:
-                filename = finfo.get('filename', None)
-                if not filename:
-                    continue # :|
-                if filename in summaries:
-                    raise ClangCoverageFilenameCollision(
-                            "colliding file name: {}".format(filename))
-                summaries[filename] = finfo.get('summary', None)
-        return summaries
-
-
-class XCEFuncTestArtifacts(JenkinsArtifacts):
-
-    ENV_PARAMS = {"XCE_FUNC_TEST_JOB_NAME":
-                        {"default": "XCEFuncTest",
-                         "required":True},
+    ENV_PARAMS = {"XCE_FUNC_TEST_COVERAGE_FILE_NAME":
+                        {"default": "coverage.json",
+                         "required": True},
                   "XCE_FUNC_TEST_ARTIFACTS_ROOT":
                         {"default": "/netstore/qa/coverage/XCEFuncTest",
                          "required":True} }
 
-    def __init__(self):
+    def __init__(self, *, job_name):
         self.logger = logging.getLogger(__name__)
-        cfg = EnvConfiguration(XCEFuncTestArtifacts.ENV_PARAMS)
-        super().__init__(job_name=cfg.get("XCE_FUNC_TEST_JOB_NAME"),
-                         dir_path=cfg.get("XCE_FUNC_TEST_ARTIFACTS_ROOT"))
+        cfg = EnvConfiguration(XCEFuncTestCoverageAggregator.ENV_PARAMS)
+        super().__init__(job_name=job_name,
+                         coverage_file_name = cfg.get("XCE_FUNC_TEST_COVERAGE_FILE_NAME"),
+                         artifacts_root = cfg.get("XCE_FUNC_TEST_ARTIFACTS_ROOT"))
 
 
-class XCEFuncTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
+class XCEFuncTestCoverageData(object):
+
+    ENV_PARAMS = {"XCE_FUNC_TEST_JOB_NAME": {"default": "XCEFuncTest"}}
 
     # XXXrs - temporary static config.
-    FILE_GROUPS = {"Critical Files": ["liboperators/GlobalOperators.cpp",
-                                      "liboperators/LocalOperators.cpp",
-                                      "liboperators/XcalarEval.cpp",
-                                      "liboptimizer/Optimizer.cpp",
-                                      "libxdb/Xdb.cpp",
-                                      "libruntime/Runtime.cpp",
-                                      "libquerymanager/QueryManager.cpp",
-                                      "libqueryeval/QueryEvaluate.cpp",
-                                      "libmsg/TwoPcFuncDefs.cpp"]}
+    XCE_FUNC_TEST_FILE_GROUPS = \
+            {"Critical Files": ["liboperators/GlobalOperators.cpp",
+                                "liboperators/LocalOperators.cpp",
+                                "liboperators/XcalarEval.cpp",
+                                "liboptimizer/Optimizer.cpp",
+                                "libxdb/Xdb.cpp",
+                                "libruntime/Runtime.cpp",
+                                "libquerymanager/QueryManager.cpp",
+                                "libqueryeval/QueryEvaluate.cpp",
+                                "libmsg/TwoPcFuncDefs.cpp"]}
 
-    ENV_PARAMS = {"XCE_FUNC_TEST_COVERAGE_FILE_NAME":
-                        {"default": "coverage.json",
-                         "required": True}}
-                  
-    def __init__(self, *, artifacts):
-        """
-        Initializer.
-    
-        Required parameters:
-            artifacts:  XCEFuncTestArtifacts instance
-        """
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
-        cfg = EnvConfiguration(XCEFuncTestArtifactsData.ENV_PARAMS)
-        self.cvg_file_name = cfg.get("XCE_FUNC_TEST_COVERAGE_FILE_NAME")
-        self.artifacts = artifacts
-        super().__init__(jenkins_artifacts=self.artifacts, add_branch_info=True)
-        # XXXrs - temporary initialize every time with static configuration.
-        #         Eventually, this configuration sould be managed elsewhere.
-        self.reset_file_groups()
-        for name, files in XCEFuncTestArtifactsData.FILE_GROUPS.items():
-            self.append_file_group(group_name=name, files=files)
+        cfg = EnvConfiguration(XCEFuncTestCoverageData.ENV_PARAMS)
+        self.job_name = cfg.get("XCE_FUNC_TEST_JOB_NAME")
+        self.db = MongoDB()
+        self.data = JenkinsJobDataCollection(job_name=self.job_name, db=self.db)
+        self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=self.db)
 
-    def update_build(self, *, bnum, log=None):
-        """
-        Read the coverage.json file and convert to our preferred index form,
-        filtering for only files of interest (plus totals).
-        """
-        coverage_file_path = os.path.join(self.artifacts.artifacts_directory_path(bnum=bnum),
-                                          self.cvg_file_name)
-        try:
-            summaries = ClangCoverage(path=coverage_file_path).file_summaries()
-        except FileNotFoundError:
-            self.logger.exception("file not found: {}".format(coverage_file_path))
-            return None
-        except ClangCoverageEmptyFile:
-            self.logger.exception("file is empty: {}".format(coverage_file_path))
-            return None
-        except Exception:
-            self.logger.exception("exception loading: {}".format(coverage_file_path))
-            raise
+        # XXXrs - TEMPORARY (!?!) initialize every time with static configuration.
+        #         Eventually, this configuration should be managed elsewhere.
 
-        data = {}
-        for filename, summary in summaries.items():
-            data.setdefault('coverage', {})[MongoDB.encode_key(filename)] = summary
-        return data
+        self.file_groups = FileGroups(meta=self.meta.coll)
+        self.file_groups.reset()
+        for name, files in XCEFuncTestCoverageData.XCE_FUNC_TEST_FILE_GROUPS.items():
+            self.file_groups.append_group(name=name, files=files)
 
     def xce_versions(self):
         """
         Return available XCE versions for which we have data.
         XXXrs - version/branch :|
         """
-        return self.branches(repo='XCE')
+        return self.meta.branches(repo='XCE')
+
+    def _get_coverage_data(self, *, bnum):
+        data = self.data.get_data(bnum=bnum)
+        if not data:
+            return None
+        return data.get('coverage', None)
 
     def builds(self, *, xce_versions=None,
                         first_bnum=None,
                         last_bnum=None,
                         reverse=False):
-
-        return self.find_builds(repo='XCE',
-                                branches=xce_versions,
-                                first_bnum=first_bnum,
-                                last_bnum=last_bnum,
-                                reverse=reverse)
-
-    def _get_coverage_data(self, *, bnum):
-        data = self.get_data(bnum=bnum)
-        if not data:
-            return None
-        return data.get('coverage', None)
+        rtn = []
+        for bnum in self.meta.find_builds(repo='XCE',
+                                          branches=xce_versions,
+                                          first_bnum=first_bnum,
+                                          last_bnum=last_bnum,
+                                          reverse=reverse):
+            if self._get_coverage_data(bnum = bnum):
+                # Only builds with coverage data please
+                rtn.append(bnum)
+        return rtn
 
     def filenames(self, *, bnum, group_name=None):
         coverage = self._get_coverage_data(bnum=bnum)
@@ -194,7 +112,7 @@ class XCEFuncTestArtifactsData(FileGroupsMixin, JenkinsArtifactsData):
         rawnames = []
         do_sort = False
         if group_name is not None and group_name != "All Files":
-            rawnames = self.expand(name=group_name)
+            rawnames = self.file_groups.expand(name=group_name)
         else:
             # Load all file names available in coverage
             do_sort = True
@@ -252,72 +170,10 @@ if __name__ == '__main__':
     parser.add_argument("--bnum", help="build number", required=True)
     args = parser.parse_args()
 
-    art = XCEFuncTestArtifacts()
-    data = XCEFuncTestArtifactsData(artifacts = art)
+    data = XCEFuncTestCoverageData()
     for fname in data.filenames(bnum=args.bnum, group_name="Critical Files"):
         coverage = data.coverage(bnum=args.bnum, filename=fname)
         if coverage is not None:
             print("{0},{1:.2f}".format(fname, data.coverage(bnum=args.bnum, filename=fname)))
         else:
             print("{0},None".format(fname))
-
-    """
-    data.start_update_thread()
-    print("TRUNK builds ==========")
-    print(data.builds(xce_versions=['trunk']))
-    print("TRUNK filenames ==========")
-    files = data.filenames(bnum="20083")
-    for name in files:
-        print("{}: {}".format(name, data.coverage(bnum="20083", filename=name)))
-    print("2.0 ==========")
-    print(data.builds(xce_versions=['xcalar-2.0.0']))
-    for name in files:
-        print("{}: {}".format(name, data.coverage(bnum=20083, filename=name)))
-    import time
-    time.sleep(600)
-    data.stop_update_thread()
-    """
-
-    """
-    XXXrs - The following "utility" code was used to pre-populate the git_branches.txt file
-            for builds that didn't have them, using the "old" method of scraping the jenkins
-            log and using git_helper() to find the branches containing the discovered
-            commit sha(s).
-
-    from py_common.git_helper import GitHelper
-    from py_common.jenkins_api import JenkinsApi
-
-    logging.basicConfig(level=logging.INFO,
-                        format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
-                        handlers=[logging.StreamHandler()])
-    logger = logging.getLogger(__name__)
-
-    art = XCEFuncTestArtifacts()
-    japi = JenkinsApi()
-    ghelp = GitHelper()
-    data = XCEFuncTestArtifactsData(artifacts = art)
-    repo_pat = re.compile(r"\A(.*)_GIT_REPOSITORY\Z")
-
-    for bnum in art.builds():
-        log = japi.console(job_name='XCEFuncTest', build_number=bnum)
-        adp = art.artifacts_directory_path(bnum=bnum)
-        txt_path = os.path.join(adp, 'git_branches.txt')
-        commits = ghelp.commits(log=log)
-        txt = ""
-        for commit, info in commits.items():
-            repo = info.get('repo', None)
-            if not repo:
-                continue
-            repo = repo_pat.match(repo).group(1)
-            branches = info['branches']
-            for branch in branches:
-                if len(txt):
-                    txt += "\n"
-                txt += "{}_GIT_BRANCH: {}".format(repo, branch)
-        #if os.path.exists(txt_path):
-            #print("{} exists, skip...")
-            #continue
-        print("write {}".format(txt_path))
-        with open(txt_path, "w+") as fh:
-            fh.write(txt)
-    """

@@ -10,7 +10,7 @@ job "sql-performance-grafana-datasource" {
       driver = "docker"
 
       config {
-        image = "registry.service.consul/xcalar-qa/sql-tpch-grafana-datasource:latest"
+        image = "registry.service.consul/xcalar-qa/sql-stats-grafana-datasource:latest"
 
         port_map {
           http = 80

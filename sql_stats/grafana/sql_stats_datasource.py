@@ -14,12 +14,17 @@ import pytz
 import random
 import re
 import statistics
+import sys
 import time
+
+if __name__ == '__main__':
+    sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
 config = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 
-from sql_tpch.sql_tpch import SqlTpchStatsArtifacts, SqlTpchStatsArtifactsData, SqlTpchStats
+from sql_stats.sql_tpch import SqlTpchStatsData
+from sql_stats import SqlStats
 
 from flask import Flask, request, jsonify, json, abort
 from flask_cors import CORS, cross_origin
@@ -31,8 +36,7 @@ logging.basicConfig(
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-sql_tpch_art = SqlTpchStatsArtifacts()
-sql_tpch_data = SqlTpchStatsArtifactsData(artifacts = sql_tpch_art)
+sql_tpch_data = SqlTpchStatsData()
 
 app = Flask(__name__)
 
@@ -90,7 +94,7 @@ def find_metrics():
         # Build2 list will be all builds available matching the Xcalar version(s)
         # and of same test type as build1 (suitable for comparison).
         xlr_vers,bnum1,rest = target.split(':')
-        b1stats = sql_tpch_art.stats(bnum=bnum1)
+        b1stats = sql_tpch_data.stats(bnum=bnum1)
         # Only display choices where test type (hash of test parameters)
         # is the same as the "base" build (since otherwise comparison is misleading).
         names = sql_tpch_data.find_builds(test_type=b1stats.test_type,
@@ -101,14 +105,14 @@ def find_metrics():
     elif ':query' in target:
         # Return list of all supported query names (as determined by selected build1).
         bnum1,rest = target.split(':')
-        b1stats = sql_tpch_art.stats(bnum=bnum1)
+        b1stats = sql_tpch_data.stats(bnum=bnum1)
         names = b1stats.query_names()
 
     # <bnum1>:metric
     elif ':metric' in target:
         # Return list of all supported metric names (as determined by selected build1).
         bnum1,rest = target.split(':')
-        names = SqlTpchStats.metric_names()
+        names = SqlStats.metric_names()
 
     else:
         pass # XXXrs - exception?
@@ -131,8 +135,8 @@ def _table_results(*, target):
         abort(404, Exception('incomprehensible target: {}'.format(target)))
 
     try:
-        stats1 = sql_tpch_art.stats(bnum=bnum1)
-        stats2 = sql_tpch_art.stats(bnum=bnum2)
+        stats1 = sql_tpch_data.stats(bnum=bnum1)
+        stats2 = sql_tpch_data.stats(bnum=bnum2)
     except Exception as e:
         abort(404, Exception('failed to load stats'))
 
@@ -163,7 +167,7 @@ def _table_results(*, target):
 def _get_datapoints(*, bnum, qname, mname, request_ts_ms=None):
         logger.debug("start")
         try:
-            stats = sql_tpch_art.stats(bnum=bnum)
+            stats = sql_tpch_data.stats(bnum=bnum)
         except Exception as e:
             logger.exception("failed to load stats")
             abort(404, Exception('failed to load stats'))
@@ -222,7 +226,7 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     qname is allowed to be multi e.g. "(q1|q2|q3...)"
     """
     results = []
-    b1stats = sql_tpch_art.stats(bnum=bnum)
+    b1stats = sql_tpch_data.stats(bnum=bnum)
     builds = sql_tpch_data.find_builds(first_bnum=bnum,
                                        xlr_versions=_parse_multi(xver),
                                        test_type=b1stats.test_type,
