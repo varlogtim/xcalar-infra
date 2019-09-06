@@ -34,8 +34,8 @@ def get_bucket(user_name):
     return stack_info['s3_url']
 
 def upload_file(upload_params):
-    user_name = upload_params['user_name']
-    file_name = upload_params['file_name']
+    user_name = upload_params['username']
+    file_name = upload_params['fileName']
     data = upload_params['data']
     # TODO: varify user cookie and get access keys
     bucket_resp = get_bucket(user_name)
@@ -53,14 +53,14 @@ def upload_file(upload_params):
     })
 
 def delete_file(delete_params):
-    user_name = delete_params['user_name']
-    file_name = delete_params['file_name']
+    user_name = delete_params['username']
+    file_name = delete_params['fileName']
     # TODO: varify user cookie and get access keys
     bucket_resp = get_bucket(user_name)
     if type(bucket_resp) != str:
         return bucket_resp
     s3_client = boto3.client('s3', region_name='us-west-2')#, aws_access_key_id='AKIAQUNDR55NZCQP53QX', aws_secret_access_key='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')
-    s3_client.delete_file(bucket_resp, file_name)
+    s3_client.delete_object(Bucket=bucket_resp, Key=file_name)
     return _make_reply(200, {
         'status': Status.OK
     })
@@ -71,9 +71,7 @@ def bucket_info(user_name):
         return bucket_resp
     return _make_reply(200, {
         'status': Status.OK,
-        'bucket_name': bucket_resp,
-        'access_key': 'AKIAQUNDR55N7SAHSRA3',
-        'secret_key': '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'
+        'bucketName': bucket_resp
     })
 
 def lambda_handler(event, context):
@@ -82,10 +80,10 @@ def lambda_handler(event, context):
         data = json.loads(event['body'])
         if path == '/s3/upload':
             reply = upload_file(data)
-        if path == '/s3/delete':
+        elif path == '/s3/delete':
             reply = delete_file(data)
         elif path == '/s3/describe':
-            reply = bucket_info(data['user_name'])
+            reply = bucket_info(data['username'])
         else:
             reply = _make_reply(400, "Invalid endpoint: %s" % path)
     except Exception as e:
