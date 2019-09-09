@@ -179,11 +179,13 @@ fi
 
 rm -f $CONFIG
 # if CONFIG_TEMPLATE isn't set, use the default template.cfg
+# setting MoneyRescale to false(needed to compare results wit answer set and spark)
 CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
 (echo "Constants.BufferCacheLazyMemLocking=true";
  echo "Constants.XcMonSlaveMasterTimeout=180";
  echo "Constants.XcMonMasterSlaveTimeout=240";
  echo "Constants.XdbLocalSerDesPath=${XCE_XDBSERDESPATH}/";
+ echo "Constants.MoneyRescale=${MoneyAutoRescale:-false}";
  $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}") > $CONFIG
 
 ARGS=()
