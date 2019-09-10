@@ -7,7 +7,7 @@ SAM_SAAS_DIR="$XLRINFRADIR/aws/lambdaFns/saas/sam-saas"
 
 
 if ! aws s3 ls ${S3_BUCKET}; then
-    aws s3 mb ${S3_BUCKET}
+    aws s3 mb "s3://${S3_BUCKET}"
 fi
 
 if ! aws dynamodb describe-table --table-name ${USER_TABLE_NAME}; then
