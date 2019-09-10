@@ -21,6 +21,12 @@ EOF
     exit 2
 }
 
+die() {
+    [ $# -gt 1 ] && rc=$1 && shift || rc=1
+    echo "ERROR: $1"
+    exit $rc
+}
+
 set_hostname() {
     echo >&2 "Setting hostname to $1"
     if command -v hostnamectl >/dev/null; then
@@ -76,7 +82,7 @@ elif test -f /etc/os-release; then
                 14) CODENAME=trusty ;;
                 16) CODENAME=xenial ;;
                 18) CODENAME=bionic ;;
-                *) die "Unknown Ubuntu OS: $CODENAME";;
+                *) die 2 "Unknown Ubuntu OS: $CODENAME";;
             esac
             ;;
         rhel | ol | centos)
@@ -85,7 +91,7 @@ elif test -f /etc/os-release; then
             ;;
     esac
 else
-    die "Unknown operating system"
+    die 2 "Unknown operating system"
 fi
 
 while [ $# -gt 0 ]; do
@@ -165,9 +171,13 @@ if $CHECK_HOSTNAME; then
     fi
 fi
 
-if ! test -e $PUPPETCONF; then
+if ! test -e $PUPPETCONF ||
     mkdir -p $(dirname $PUPPETCONF)
-    echo -e '[main]\n' >$PUPPETCONF
+    touch $PUPPETCONF
+fi
+
+if ! grep -q '^\[main\]' $PUPPETCONF; then
+    echo -e '\n[main]\n' >>$PUPPETCONF
 fi
 
 if [ -n "$CERTNAME" ]; then

@@ -7,6 +7,9 @@ ALL = $(INVENTORY_PY)
 
 all: $(ALL)
 
+clean:
+	rm -f $(INVENTORY_PY)
+
 inventory/%.py:
 	curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/contrib/inventory/$(@F) -o $@
 	[[ $@ =~ .py$$ ]] && chmod +x $@ || :

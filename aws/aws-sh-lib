@@ -347,6 +347,15 @@ aws_cfn_url() {
     echo "https://${AWS_DEFAULT_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_DEFAULT_REGION}#/stack/detail?stackId=$url"
 }
 
+aws_quickcreate() {
+    test -n "${1:-}" || return 1
+    local region=${AWS_DEFAULT_REGION:-us-west-2} templ='' url=''
+    #templ="$(urlencode "$1")"
+    templ="$1"
+    url="https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?stackName=${2:-mystack}&templateUrl=${templ}"
+    echo "$url"
+}
+
 cfn_template_default() {
     local ext
     if ! ext="$(file_ext "$1")"; then
@@ -538,6 +547,16 @@ aws_s3_from_url() {
         return 1
     fi
     echo "s3://${clean_url#*/}"
+}
+
+aws_s3_url() {
+    local bucket_and_key=($(echo "${1#s3://}" | sed 's,/, ,'))
+    local region=$(aws_s3_region ${bucket_and_key[0]})
+    if [ "$region" == us-east-1 ] || [ -z "$region" ]; then
+        echo "https://s3.amazonaws.com/${bucket_and_key[0]}/${bucket_and_key[1]}"
+    else
+        echo "https://s3${region:+.$region}.amazonaws.com/${bucket_and_key[0]}/${bucket_and_key[1]}"
+    fi
 }
 
 aws_s3_configure() {

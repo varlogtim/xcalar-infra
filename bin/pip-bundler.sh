@@ -16,8 +16,9 @@ DIR=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
 USER_INSTALL=
 INSTALL=0
 BUNDLE=0
-TMPENV=
 DEBUG=${DEBUG:-0}
+TMPENV=
+readonly REQS=requirements.txt
 
 say() {
     echo >&2 "$@"
@@ -78,6 +79,10 @@ main() {
         INSTALL=1
     fi
 
+    TMPDIR=$(mktemp -d /tmp/pip.XXXXXX)
+    # shellcheck disable=SC2064
+    trap "rm -rf $TMPDIR" EXIT
+
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -85,17 +90,12 @@ main() {
             install) INSTALL=1 ;;
             bundle) BUNDLE=1 ;;
             -h | --help) usage; exit 0;;
-            -r | --requirements)
-                req="$1"
-                shift
-                ;;
-            -i | --install) say "Where to install symlinks" ;;
-            -o | --output | --output-dir)
-                output="$1"
-                shift
-                ;;
+            -r | --requirements) user_req="$1"; shift ;;
+            -i | --install) install_links="$1"; shift;;
+            -o | --output) output="$1"; shift ;;
             --) break;;
             *)
+                usage >&2
                 die 2 "Unknown command: $cmd"
                 ;;
         esac
@@ -111,27 +111,26 @@ main() {
         else
             USER_INSTALL='--user'
         fi
-        req0dir="$(dirname "$(readlink -f "${req[0]}")")"
-        req0file="$(basename "$req0dir")"
         if [ -z "$output" ]; then
             sha1req="$(sha1 < "${req[@]}")"
             output="${req0dir}/${req0file}-${sha256:0:8}.tar"
         fi
         args=''
-        do_install $USER_INSTALL -r "${reqs[@]}" virtualenv
+        do_install $USER_INSTALL -r ${req:-${DIR}/requirements.txt} virtualenv
     elif ((BUNDLE)); then
-        TMPDIR=$(mktemp -d /tmp/pip.XXXXXX)
         PACKAGES=$TMPDIR/packages
         WHEELS=$TMPDIR/wheels
         mkdir -p "$PACKAGES" "$WHEELS"
         info "Building packages from $req ..."
-        cp $req $TMPDIR/
+        cp $req $TMPDIR/${REQ}
         cp ${BASH_SOURCE[0]} $TMPDIR/install.sh
         do_bundle -r $req virtualenv
         echo >&2 "Creating $output ..."
-        tar caf $output --owner=root --group=root -C "${TMPDIR}" install.sh $(basename $req) wheels
+        tar caf "${output:-pip-bundler.tar.gz}" --owner=root --group=root -C "${TMPDIR}" install.sh $(basename $req) wheels
         rm -rf $TMPDIR
     fi
 }
 
 main "$@"
+exit
+__PAYLOAD__STARTS__

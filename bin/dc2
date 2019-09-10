@@ -9,14 +9,12 @@
 #
 #  $ dc2 installer -d s3 --upload /netstore/builds/ReleaseCandidates/xcalar-latest/prod
 #
-# shellcheck disable=SC1091,SC2086,SC2046
-
-set -e
+# shellcheck disable=SC1091,SC2086,SC2046,SC2155,SC2015
 
 . infra-sh-lib
 . aws-sh-lib
 
-set -u
+set -euo pipefail
 
 dc2_help() {
     cat << EOF
@@ -27,7 +25,6 @@ dc2_help() {
     Parameters:
     cmd             One of deploy, upload
 EOF
-    exit 1
 }
 
 dc2_upload_help() {
@@ -44,7 +41,6 @@ dc2_upload_help() {
     can then be used by customers for their own deployment.
 
 EOF
-    exit 2
 }
 
 dc2_deploy_help() {
@@ -61,23 +57,32 @@ dc2_deploy_help() {
     --mode MODE           create or update
     --no-wait             Don't wait for stack to finish
 EOF
-    exit 2
 }
 
-s3_sync() {
+s3_cmd() {
     (
-        local quiet='--quiet'
+        local quiet='--quiet --only-show-errors'
+        local cmd="$1"
+        shift
         if ((DEBUG)); then
             quiet=''
             set -x
         fi
-        aws s3 sync $quiet \
+        aws s3 $cmd $quiet \
             --acl public-read \
             --metadata-directive REPLACE \
             --content-disposition inline \
             --content-type application/json \
             --cache-control 'private, no-cache, no-store, must-revalidate, max-age=0, no-transform' "$@" >&2
     )
+}
+
+s3_sync() {
+    s3_cmd sync "$@"
+}
+
+s3_cp() {
+    s3_cmd cp "$@"
 }
 
 ec2_find_ami() {
@@ -121,7 +126,8 @@ jq_put_userata_in_lt() {
 # into { "Foo": "Bar", .. }
 # and pipe to |to_entries to get it back
 jq_kv_to_object() {
-    jq -r '.Parameters| map_values({(.ParameterKey): (.ParameterValue)}) | add'
+    local key="${1:-ParameterKey}" value="${2:-ParameterValue}"
+    jq -r '.Parameters| map_values({(.'${key}'): (.'${value}')}) | add'
 }
 
 # Convert stdin, a raw text file into a JS object
@@ -183,11 +189,11 @@ dc2_parse_common() {
             NAME="$1"
             echo 2
             ;;
-        --force) FORCE=true ;;
-        --quiet | -q) QUIET=true ;;
+        --force) FORCE=1 ;;
+        --quiet | -q) QUIET=1 ;;
         --create) MODE=create ;;
         --update) MODE=update ;;
-        --verbose | -v) VERBOSE=true ;;
+        --verbose | -v) VERBOSE=1 ;;
         --url-file)
             URL_FILE="$1"
             echo 2
@@ -212,7 +218,7 @@ dc2_deploy() {
         fi
         shift
         case "$cmd" in
-            --help | -h) dc2_deploy_help ;;
+            --help | -h) dc2_deploy_help ; exit 0;;
             --mode)
                 MODE="$1"
                 shift
@@ -221,7 +227,7 @@ dc2_deploy() {
                 PARAMS="$1"
                 shift
                 ;;
-            --no-wait) WAIT=0;;
+            --no-wait) WAIT=0 ;;
             --template-url)
                 templateUrl="$1"
                 shift
@@ -229,7 +235,8 @@ dc2_deploy() {
             --) break ;;
             -*)
                 echo >&2 "ERROR: Unknown argument $cmd"
-                dc2_deploy_help
+                dc2_deploy_help >&2
+                exit 1
                 ;;
             *) break ;;
         esac
@@ -276,9 +283,12 @@ dc2_upload() {
         fi
         shift
         case "$cmd" in
-            --help | -h) dc2_upload_help ;;
+            --help | -h) dc2_upload_help ; exit 0;;
             --find-ami) FIND_AMI=1 ;;
-            --flavors) FLAVORS="$1"; shift;;
+            --flavors)
+                FLAVORS="$1"
+                shift
+                ;;
             -D)
                 J2DEFS+=("-D" "$1")
                 shift
@@ -286,7 +296,8 @@ dc2_upload() {
             --) break ;;
             *)
                 say "ERROR: Unknown argument $cmd"
-                dc2_upload_help
+                dc2_upload_help >&2
+                exit 1
                 ;;
         esac
     done
@@ -298,6 +309,8 @@ dc2_upload() {
     if test -z "${RELEASE:-}"; then
         if [ -n "${BUILD_NUMBER:-}" ]; then
             RELEASE="${BUILD_NUMBER}"
+        else
+            RELEASE=1
         fi
         #RELEASE=$(consul kv get "$CONTEXT/next") || RELEASE=1
         #consul kv put $CONTEXT/next $((RELEASE + 1))
@@ -306,7 +319,7 @@ dc2_upload() {
 
     GENDIR="$TMPDIR"/gen
     mkdir -p "$GENDIR"/scripts/
-    cd "$GENDIR" || die "Failed to cd to $GENDIR"
+    #cd "$GENDIR" || die "Failed to cd to $GENDIR"
     for ii in "$PROJDIR"/scripts/*; do
         if [[ $ii =~ .j2$ ]]; then
             cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "$ii" > $GENDIR/scripts/$(basename $ii .j2)
@@ -344,54 +357,77 @@ dc2_upload() {
 	EOF
     # jq_from_text user_data < "$PROJDIR"/scripts/user-data.sh | cfn-flip >> "$PROJDIR"/vars/deploy.yaml
 
-    local -a urls=()
+    local -a urls=() quick_urls=()
     test -n "${URL_FILE:-}" && rm -f "${URL_FILE}" || true
-    local ami_id=$(cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml  | cfn-flip | jq -r '.ami_us_west_2')
+    local ami_id=$(cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | cfn-flip | jq -r '.ami_us_west_2')
     aws ec2 describe-images --region us-west-2 --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TEMPLATEDIR"/vars/image.yaml
-    for J2TEMPLATE in "$PROJDIR"/*.template.j2; do
+    for J2TEMPLATE in "$PROJDIR"/*.j2; do
+        if [[ $J2TEMPLATE =~ quickcreate ]]; then
+            continue
+        fi
         TEMPLATE=$(basename $J2TEMPLATE .template.j2)
         for flavor in ${FLAVORS//,/ }; do
             case "$flavor" in
-                default) TEMPLATEOUT=${TEMPLATE};;
-                *) TEMPLATEOUT=${TEMPLATE}-${flavor};;
+                default) TEMPLATEOUT=${TEMPLATE} ;;
+                *) TEMPLATEOUT=${TEMPLATE}-${flavor} ;;
             esac
             templateUrl="${BASE_URL}/${TEMPLATEOUT}.json"
             cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml "$TEMPLATEDIR"/flavor/${flavor}.yaml > $TMPDIR/allvars.yaml
 
-            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "templateUrl=$templateUrl" "$J2TEMPLATE" | tee ${TMPDIR}/${TEMPLATEOUT}.yaml | cfn-flip > ${GENDIR}/${TEMPLATEOUT}.json; then
-                die "Failed to apply jinja template ${GENDIR}/${TEMPLATEOUT}.json"
+            local templateJson=${GENDIR}/${TEMPLATEOUT}.json
+            # shellcheck disable=SC2002
+            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "templateUrl=$templateUrl" "$J2TEMPLATE" | tee ${TMPDIR}/${TEMPLATEOUT}.yaml | cfn-flip > "$templateJson"; then
+                die "Failed to apply jinja template $templateJson"
             fi
-            if ! aws cloudformation validate-template --template-body file://${GENDIR}/${TEMPLATEOUT}.json > "$TMPDIR/${TEMPLATEOUT}.parameters.json"; then
+            local templateMd5
+            if ! templateMd5=$(md5sum "${templateJson}" | awk '{print $1}') || [ -z "$templateMd5" ]; then
+                die "Failed to generate md5 for input"
+            fi
+            validateS3="s3://${BUCKET}/cfn/validation/${templateMd5}/${TEMPLATEOUT}.json"
+            if ! s3_cp "${GENDIR}/${TEMPLATEOUT}.json" "$validateS3"; then
+                die "Failed to upload template for validation to $validateS3"
+            fi
+            if ! aws cloudformation validate-template --template-url "$(aws_s3_url "$validateS3")" | tee deployment.json | tee "$TMPDIR/${TEMPLATEOUT}.parameters.json" > /dev/null; then
                 die "Failed to validate ${GENDIR}/${TEMPLATEOUT}.json"
             fi
             if [ -n "${URL_FILE:-}" ]; then
                 echo "$templateUrl" >> "$URL_FILE"
             fi
-            echo "$templateUrl"
+            quickUrl="$(aws_quickcreate "$templateUrl" myxcalar-${PROJECT}-${RELEASE})"
+            quick_urls+=("$quickUrl")
             urls+=("$templateUrl")
+
+            if [ "$flavor" != default ]; then
+                echo "templateUrl_${flavor}: $templateUrl" | tee -a "$PROJDIR"/vars/deploy.yaml
+                echo "quickUrl_${flavor}: $quickUrl"
+            else
+                echo "templateUrl: $templateUrl" | tee -a "$PROJDIR"/vars/deploy.yaml
+                echo "quickUrl: $quickUrl"
+            fi
         done
     done
-
 
     if ((DRY)); then
         s3_sync --dryrun "${GENDIR}/" "s3://${BUCKET}/${TARGET}/" >&2
     else
         local -i would_delete
-        would_delete=$(s3_sync --dryrun ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" | grep delete: | wc -l) || die "Failed to access s3://${BUCKET}/${TARGET}"
-        if [ $would_delete -gt 10 ]; then
+        if would_delete=$(s3_sync --dryrun ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" | grep delete: | wc -l) \
+            && [ $would_delete -gt 10 ]; then
             warn "You would delete $would_delete objects from s3://${BUCKET}/${TARGET}/!!"
             die "Manually remove the destination first, aws s3 rm --recursive s3://${BUCKET}/${TARGET}/ if you're sure"
         fi
+        #s3_sync s3://${BUCKET}/cfn/ /srv/reposync/${BUCKET}/cfn/
+
         s3_sync ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" >&2
     fi
 
-    cd - > /dev/null
+    #cd - > /dev/null
 }
 
 dc2_cleanup() {
     local rc=$1
     if [ $rc -eq 0 ]; then
-        if ! [[ "$TMPDIR" =~ ^/tmp/ ]]; then
+        if ! [[ $TMPDIR =~ ^/tmp/ ]]; then
             warn "Leaving suspicious looking TMPDIR=$TMPDIR !!"
         elif ((KEEP)); then
             local keepDir="$(dirname "$TMPDIR")"/keep
@@ -417,19 +453,20 @@ dc2_defaults() {
     case "$CLOUD" in
         aws) declare -g TEMPLATEDIR="$XLRINFRADIR"/aws/cfn ;;
         azure) declare -g TEMPLATEDIR="$XLRINFRADIR"/azure ;;
-        *) die "Unsupported cloud $CLOUD";;
+        *) die "Unsupported cloud $CLOUD" ;;
     esac
     mkdir -p "$TMPBASE" || die "Failed to create $TMPBASE"
     export TMPDIR="$(mktemp -d "$TMPBASE"/dc2.XXXXXX)" || die "Failed to create $TMPDIR"
-    trap "dc2_cleanup \$?" EXIT INT TERM HUP
+    trap 'dc2_cleanup $?' EXIT INT TERM HUP
 }
 
 dc2_main() {
     dc2_defaults
 
-    local cmd="$1"
+    local cmd="${1:-}"
     shift
     case "$cmd" in
+        --help) dc2_help; exit 0;;
         deploy)
             dc2_deploy "$@"
             ;;
@@ -438,7 +475,8 @@ dc2_main() {
             ;;
         *)
             say "Unknown command $cmd"
-            dc2_help
+            dc2_help >&2
+            exit 1
             ;;
     esac
 }

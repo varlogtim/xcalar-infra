@@ -1,10 +1,8 @@
 ---
 variables:
   uid: '1000'
-  osid: 'amzn1'
-  disk_size: '8'
+  disk_size: '30'
   device_name: /dev/xvda
-  baseos: xdp-amzn1-base
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
@@ -16,6 +14,7 @@ variables:
   product_desc: Xcalar Data Platform
   description: Xcalar Data Platform
   installer_url: '{{env `INSTALLER_URL`}}'
+  baseos: 'xdp-base'
   baseos_owners: '559166403383'
   shared_with: '{{env `SHARED_WITH` }}'
   version: '1.0'
@@ -24,7 +23,7 @@ variables:
   ssh_username: ec2-user
 builders:
   - type: amazon-ebs
-    name: amazon-ebs-{{user `osid`}}
+    name: amazon-ebs-amzn2
     access_key: '{{user `aws_access_key`}}'
     secret_key: '{{user `aws_secret_key`}}'
     #ssh_keypair_name: 'xcalar-{{user `region`}}'
@@ -37,7 +36,7 @@ builders:
         virtualization-type: hvm
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}*'
+        name: "{{user `baseos` }}*"   #'{{split build_name \"-\" 2}}*"
       owners: '{{user `baseos_owners`}}'
       most_recent: true
     instance_type: c5d.xlarge
@@ -49,17 +48,67 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `baseos` | upper}}'
-    ami_description: '{{user `product_desc`}} ({{user `osid` | upper}} {{user `version`}} {{user `build_number`}} ({{user `today`}}))'
+    ami_name: "{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{split build_name \"-\" 2 | upper}}"
+    ami_description: '{{user `product_desc`}} (AMZN1 {{user `version`}} {{user `build_number`}} ({{user `today`}}))'
     snapshot_tags:
-      Name: '{{user `product`}} v{{user `version`}} {{user `build_number`}} {{user `today`}} {{user `baseos` | upper}}'
-      BaseOS: '{{user `baseos` | upper}}'
+      Name: "{{user `product`}} v{{user `version`}} {{user `build_number`}} {{user `today`}} {{split build_name \"-\" 2 | upper}}"
+      BaseOS: "{{split build_name \"-\" 2 | upper}}"
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'
     tags:
-      Name: '{{user `product`}} v{{user `version`}} {{user `build_number`}} {{user `baseos` | upper}}'
-      BaseOS: '{{user `baseos` | upper}}'
+      Name: "{{user `product`}} v{{user `version`}} {{user `build_number`}} {{split build_name \"-\" 2 | upper}}"
+      BaseOS: "{{split build_name \"-\" 2 | upper}}"
+      Version: '{{user `version`}}'
+      Build: '{{user `build_number`}}'
+      Product: '{{user `product`}}'
+    launch_block_device_mappings:
+      - device_name: '{{user `device_name`}}'
+        volume_size: '{{user `disk_size`}}'
+        volume_type: gp2
+        delete_on_termination: true
+    ami_block_device_mappings:
+      - device_name: /dev/sdb
+        virtual_name: ephemeral0
+      - device_name: /dev/sdc
+        virtual_name: ephemeral1
+  - type: amazon-ebs
+    name: amazon-ebs-amzn1
+    access_key: '{{user `aws_access_key`}}'
+    secret_key: '{{user `aws_secret_key`}}'
+    #ssh_keypair_name: 'xcalar-{{user `region`}}'
+    #ssh_agent_auth: true
+    region: '{{user `region`}}'
+    ami_regions: '{{user `destination_regions`}}'
+    ami_users: '{{user `shared_with`}}'
+    source_ami_filter:
+      filters:
+        virtualization-type: hvm
+        root-device-type: ebs
+        block-device-mapping.volume-type: gp2
+        name: "xdp-{{split build_name \"-\" 2}}*"
+      owners: '{{user `baseos_owners`}}'
+      most_recent: true
+    instance_type: c5d.xlarge
+    iam_instance_profile: ec2-default
+    ssh_username: '{{user `ssh_username`}}'
+    ssh_pty: true
+    ena_support: true
+    ebs_optimized: true
+    force_deregister: true
+    force_delete_snapshot: true
+    shutdown_behavior: terminate
+    ami_name: "{{user `product`}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{split build_name \"-\" 2 | upper}}"
+    ami_description: '{{user `product_desc`}} (AMZN1 {{user `version`}} {{user `build_number`}} ({{user `today`}}))'
+    snapshot_tags:
+      Name: "{{user `product`}} v{{user `version`}} {{user `build_number`}} {{user `today`}} {{split build_name \"-\" 2 | upper}}"
+      BaseOS: "{{split build_name \"-\" 2 | upper}}"
+      Version: '{{user `version`}}'
+      Build: '{{user `build_number`}}'
+      Product: '{{user `product`}}'
+    tags:
+      Name: "{{user `product`}} v{{user `version`}} {{user `build_number`}} {{split build_name \"-\" 2 | upper}}"
+      BaseOS: "{{split build_name \"-\" 2 | upper}}"
       Version: '{{user `version`}}'
       Build: '{{user `build_number`}}'
       Product: '{{user `product`}}'
@@ -76,11 +125,12 @@ builders:
 provisioners:
   - type: shell
     environment_vars:
-      - OSID={{user `osid`}}
+      - OSID={{split build_name "-" 2}}
       - INSTALLER_URL={{user `installer_url`}}
       - LICENSE={{user `license`}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
+      - "{{ template_dir }}/../scripts/packages-{{split build_name \"-\" 2}}.sh"
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
       - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
   - type: file
@@ -94,7 +144,7 @@ provisioners:
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
   - type: shell
     environment_vars:
-      - OSID={{user `osid`}}
+      - OSID={{split build_name "-" 2}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
       - '{{ template_dir }}/../scripts/finish.sh'

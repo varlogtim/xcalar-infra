@@ -18,6 +18,7 @@ PYTHON_VERSION = $(shell $(PYTHON) --version 2>&1 | head -1 | sed 's/^Python //'
 DIRENV_VENV = $(XLRINFRADIR)/.direnv/python-$(PYTHON_VERSION)
 VIRTUAL_ENV = .venv
 REQUIRES = requirements.txt
+FROZEN = frozen.txt
 
 CDUP = cd $(shell -x git rev-parse --show-cdup)
 HOOKS = .git/hooks/pre-commit
@@ -34,11 +35,11 @@ venv: $(VIRTUAL_ENV)/.updated
 $(VIRTUAL_ENV):
 	@echo "Creating new virtualenv in $@ ..."
 	@mkdir -p $@
-	@deactivate 2>/dev/null || true; /opt/xcalar/bin/virtualenv -q --prompt=$(shell basename $(current_dir)) $@
+	@deactivate 2>/dev/null || true; /opt/xcalar/bin/virtualenv -q --prompt='('$(shell basename $(current_dir))') ' $@
 
 $(VIRTUAL_ENV)/.updated: $(VIRTUAL_ENV) requirements.txt
-	@echo "Updating virtualenv in $(VIRTUAL_ENV) with plugins from $(REQUIRES) ..."
-	$(VIRTUAL_ENV)/bin/pip install -q -r $(REQUIRES)
+	@echo "Updating virtualenv in $(VIRTUAL_ENV) with plugins from $(FROZEN) ..."
+	$(VIRTUAL_ENV)/bin/pip install -q -r $(FROZEN)
 	@touch $@
 
 frozen.txt:

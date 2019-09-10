@@ -1,4 +1,4 @@
-#!/bin/bash
+!/bin/bash
 #
 # Script to setup the IUS public repository on your EL server.
 # Tested on CentOS/RHEL 6/7.

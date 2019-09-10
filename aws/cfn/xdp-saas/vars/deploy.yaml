@@ -1,6 +1,0 @@
-VERSION: 2.2.0
-PROJECT: xdp-saas
-RELEASE: GTM
-baseUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/prod/xdp-awsmp/2.0.0-GTM'
-bootstrapUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/prod/xdp-awsmp/2.0.0-GTM/scripts/user-data.sh'
-enableLicense: true

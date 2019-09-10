@@ -28,3 +28,4 @@ tdhtest
 node_modules
 **/.DS_Store
 packaged-sam.yaml
+.terraform

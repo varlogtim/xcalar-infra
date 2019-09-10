@@ -23,10 +23,12 @@
         "autoscaling:*",
         "elasticfilesystem:*",
         "lambda:*",
+        "dynamodb:*",
         "rds:*",
         "route53:*",
         "sns:*",
         "sqs:*",
+        "resource-group:*",
         "ses:*"
       ],
       "Resource": "*"
@@ -53,31 +55,18 @@
         "kms:DescribeKey"
       ],
       "Resource": [
-        "arn:aws:kms:*:559166403383:key/*"
+        "arn:aws:kms:*:*:key/*"
       ]
     },
     {
       "Effect": "Allow",
       "Action": [
         "iam:List*",
-        "iam:Get*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
+        "iam:Get*",
         "iam:PassRole",
         "iam:AssumeRole",
         "iam:AddRoleToInstanceProfile",
-        "iam:AttachRolePolicy"
-      ],
-      "Resource": "arn:aws:iam:::role/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sts:AssumeRole*",
+        "iam:AttachRolePolicy",
         "sts:GetFederationToken",
         "sts:GetSessionToken",
         "sts:DecodeAuthorizationMessage"

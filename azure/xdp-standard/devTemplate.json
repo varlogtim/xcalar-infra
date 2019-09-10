@@ -404,7 +404,9 @@
       "Standard_E64-16s_v3",
       "Standard_E64-32s_v3",
       "Standard_E64is_v3",
-      "Standard_E64s_v3"
+      "Standard_E64s_v3",
+      "Standard_H16m",
+      "Standard_H16mr"
     ],
     "enableAcceleratedNetworking": "[contains(variables('sizesWithAcceleratedNetworking'),parameters('vmSize'))]",
     "storageAccountId": "[variables('storageAccountLookup')[parameters('storageAccountNewOrExisting')]]",

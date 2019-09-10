@@ -512,6 +512,7 @@
     {
       "apiVersion": "2018-11-01",
       "type": "Microsoft.Network/networkSecurityGroups",
+      "condition": "[equals(parameters('shareServerNewOrExisting'),'new')]",
       "name": "[variables('shareNetworkSecurityGroupName')]",
       "location": "[parameters('location')]",
       "tags": {
@@ -567,6 +568,7 @@
     },
     {
       "apiVersion": "2018-11-01",
+      "condition": "[equals(parameters('virtualNetworkNewOrExisting'), 'new')]",
       "type": "Microsoft.Network/networkSecurityGroups",
       "name": "[variables('networkSecurityGroupName')]",
       "location": "[parameters('location')]",
@@ -751,15 +753,11 @@
       },
       "dependsOn": [
         "[variables('publicIpAddress').id]",
-        "[parameters('virtualNetworkName')]",
-        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+        "[parameters('virtualNetworkName')]"
       ],
       "properties": {
         "primary": true,
         "enableAcceleratedNetworking": "[contains(variables('sizesWithAcceleratedNetworking'), parameters('vmSize'))]",
-        "networkSecurityGroup": {
-          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
-        },
         "ipConfigurations": [
           {
             "name": "ipconfig1",

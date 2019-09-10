@@ -22,7 +22,7 @@ az_setup() {
     AZ_PUBLIC_ACCOUNT=${AZ_PUBLIC_ACCOUNT:-xcrepo}
     AZ_PUBLIC_CONTAINER=${AZ_PUBLIC_CONTAINER:-public}
     AZ_PUBKEY="${AZ_PUBKEY:-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b azureuser@xdp-standard}"
-    AZ_DEFAULT_TEMPLATE="$TEMPLATE_URL"
+    AZ_DEFAULT_TEMPLATE="$TEMPLATE"
     az_export_all
 }
 
@@ -496,7 +496,7 @@ az_deploy_usage() {
     done
 
     cat << EOF
-    az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer-url url] [--dnslabel dns]
+    az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer installer] [--dnslabel dns]
               [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
               [-n|--name name] [--dnslabel dns] ${str[*]}
 EOF
@@ -507,10 +507,11 @@ az_deploy() {
     local uid=$((RANDOM % 511)) template ii cmd location=westus2
     local -a extra_params=()
     local email=$(git config user.email) retry ip_address
+    local location=${LOCATION}
     local name group count=1 size=Standard_E8s_v3 template_arg storageAccount_arg
     local template=$AZ_DEFAULT_TEMPLATE
     local parameters_file=${DEFAULTS}
-    local installer_url dnslabel
+    local installer_url installer dnslabel
     while [ $# -gt 0 ]; do
         cmd="$1"
         case "$cmd" in
@@ -518,49 +519,48 @@ az_deploy() {
                 az_deploy_usage
                 return 1
                 ;;
-            --email=)
+            --email=*)
                 email="${1##*=}"
                 shift 1
                 ;;
-            --location=)
+            --location=*)
                 location="${1##*=}"
                 shift 1
                 ;;
-            --group= | --resource-group=)
+            --group=*|--resource-group=*)
                 group="${1##*=}"
                 shift 1
                 ;;
-            --template-file=)
+            --template-file=*)
                 template="${1##*=}"
                 shift 1
                 ;;
-            --template-uri=)
+            --template-uri=*)
                 template="${1##*=}"
                 shift 1
                 ;;
-            --parameters-file=)
+            --parameters-file=*)
                 parameters_file="${1##*=}"
                 shift 1
                 ;;
-            --count=)
+            --count=*)
                 count="${1##*=}"
                 shift 1
                 ;;
-            --dnslabel=)
+            --dnslabel=*)
                 dnslabel="${1##*=}"
                 shift 1
                 ;;
-            --size=)
+            --size=*)
                 size="${1##*=}"
                 shift 1
                 ;;
-            --name=)
+            --name=*)
                 name="${1##*=}"
                 shift 1
                 ;;
-            --installer-url=)
-                installer_url="${1##*=}"
-                extra_params+=(installerUrl="${1##*=}")
+            --installer=*)
+                installer="${1##*=}"
                 shift 1
                 ;;
             -l | --location)
@@ -603,9 +603,8 @@ az_deploy() {
                 size="$2"
                 shift 2
                 ;;
-            -i | --installer-url)
-                installer_url="$2"
-                extra_params+=(installerUrl="$2")
+            -i | --installer)
+                installer="$2"
                 shift 2
                 ;;
             --parameters)
@@ -626,7 +625,8 @@ az_deploy() {
     done
     if [ -n "$group" ] && [ -z "$name" ]; then
         if ! [[ $group =~ -rg$ ]]; then
-            die "Resource group must end in -rg"
+            echo >&2 "Resource group must end in -rg"
+            return 1
         fi
         name="${group%-rg}"
     fi
@@ -637,8 +637,27 @@ az_deploy() {
         say "Must specify resource group with -g <resource group>"
         say "Please create a resource group first, for example:"
         say ""
-        say " az group create -g ${name}-rg -l westus2"
+        say " az group create -g ${name}-rg -l $location"
         say ""
+        return 1
+    fi
+
+    if [ -n "$installer" ]; then
+        if test -f "$installer"; then
+            installer_url="$(installer-url.sh -d az "$installer")"
+            extra_params+=(installerUrl="$installer_url")
+            extra_params+=(installerUrlSasToken="")
+        elif [[ "$installer" =~ ^https:// ]]; then
+            installer_url="$installer"
+            extra_params+=(installerUrl="$installer_url")
+            extra_params+=(installerUrlSasToken="")
+        else
+            echo >&2 "ERROR: Don't know how to upload/use the specified installer: $installer"
+            exit 1
+        fi
+    else
+        echo >&2 "ERROR: Must specify an installer via -i"
+        return 1
     fi
 
     case "$template" in
@@ -715,6 +734,11 @@ az_disk_update() {
     disks=($(az disk list -otsv | grep "$cluster" | awk '{print $5}'))
 
     az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids ${disks[@]}
+}
+
+# List out private DNS entries as an array [{name: "foo", rec: "10.1.1.1"}]
+az_priv_dns_list() {
+    az network private-dns record-set list -g "${1:-xcalardev-rg}" -z "${2:-azure.xcalar.io}" -ojson | tee ~/tmp/dns.json | jq -r '[.[]|{name:.name,rec:.aRecords[0].ipv4Address}|{(.name):.rec}]'
 }
 
 az_setup

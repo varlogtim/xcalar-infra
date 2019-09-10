@@ -135,6 +135,9 @@ while [ $# -gt 0 ]; do
         shift
         ;;
     -f | --file)
+        if [ -n "$INSTALLER_URL" ]; then
+            say "WARNING: Overriding existing environment value of INSTALLER_URL='$INSTALLER_URL' with INSTALLER='$2'"
+        fi
         INSTALLER="$2"
         shift 2
         ;;
@@ -169,7 +172,10 @@ done
 
 if [ $# -gt 0 ]; then
     if [ -n "$INSTALLER" ]; then
-        say "WARNING: INSTALLER=$INSTALLER has already been specified, but is being overwritten by extra argument $1"
+        say "WARNING: INSTALLER='$INSTALLER' has already been specified, but is being overwritten by extra argument $1"
+    fi
+    if [ -n "$INSTALLER_URL" ]; then
+        say "WARNING: INSTALLER_URL='$INSTALLER_URL' has already been specified, but is being overwritten by extra argument $1"
     fi
     INSTALLER="$1"
     shift
