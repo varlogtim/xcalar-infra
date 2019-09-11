@@ -170,7 +170,7 @@ s3_exists() {
     local bucket_key="${1#s3://}"
     local bucket="${bucket_key%%/*}"
     local key="${bucket_key#*/}"
-    aws s3api head-object --bucket $bucket --key $key
+    aws s3api head-object --bucket $bucket --key "$key"
 }
 
 get_sha1() {
@@ -219,56 +219,6 @@ urlencode() {
     else
         tr -d '\n' | jq -s -R -r '@uri'
     fi
-}
-
-vssh() {
-    # try to guess the user's intentions
-    local -a sshargs=()
-    local mode=ca role=admin
-    local cmd
-    while [ $# -gt 0 ]; do
-        cmd="$1"
-        shift
-        case "$cmd" in
-            -mode=*)
-                mode=${cmd#*=}
-                ;;
-            -role=*)
-                role=${cmd#*=}
-                ;;
-            --* | -*)
-                sshargs+=("$cmd")
-                ;;
-            ^[a-z][a-z0-9\.-]+)
-                sshargs+=("$cmd")
-                ;;
-            *)
-                sshargs+=("$cmd")
-                ;;
-        esac
-    done
-    vault write -field=signed_key ssh/sign/$role public_key=@$HOME/.ssh/id_rsa.pub > ~/.ssh/id_rsa-cert.pub
-    ssh "${sshargs[@]}"
-}
-
-vssh_old() {
-    (
-        unset SSH_AUTH_SOCK
-        if [[ $1 =~ ^-mode ]] || [[ $1 =~ ^-role ]]; then
-            vault ssh "$@"
-        elif [[ $* =~ jenkins ]]; then
-            vault ssh -mode=ca -role=jenkins "$@"
-        elif [[ $* =~ ec2 ]]; then
-            vault ssh -mode=ca -role=cloud "$@"
-        elif [[ $* =~ azure ]]; then
-            vault ssh -mode=ca -role=cloud "$@"
-        elif [[ $* =~ root ]]; then
-            vault ssh -mode=ca -role=admin "$@"
-        else
-            echo >&2 "Don't understand your vault ssh command: $*"
-            return 1
-        fi
-    )
 }
 
 consul_session() {
@@ -440,3 +390,6 @@ version_build_from_filename() {
     grep -Eow '[0-9\.-]+' <<< "$1" | tr - ' '
 }
 
+dimages_list() {
+    docker images --format '{{.Size}}\t{{.ID}}\t{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}} {{.CreatedSince}}'   | sort -h | column -t
+}
