@@ -10,15 +10,15 @@ export PYCURL_SSL_LIBRARY=openssl
 export LDFLAGS=-L/usr/local/opt/openssl/lib
 export CPPFLAGS=-I/usr/local/opt/openssl/include
 
-cd $XLRINFRADIR
+cd $XLRINFRADIR || exit 1
 
 #rm -rf .venv
 test -e .venv || /opt/xcalar/bin/virtualenv .venv
-.venv/bin/pip install -q -r requirements.txt
+.venv/bin/pip install -q -r frozen.txt
 source .venv/bin/activate
 source $XLRINFRADIR/bin/infra-sh-lib
 source $XLRINFRADIR/azure/azure-sh-lib
-
+source $XLRINFRADIR/aws/aws-sh-lib
 
 if [ -z "$XLRDIR" ] && [ -e doc/env/xc_aliases ]; then
     export XLRDIR=$PWD
