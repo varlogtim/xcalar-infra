@@ -1,0 +1,96 @@
+#!/bin/bash
+
+vssh() {
+    # try to guess the user's intentions
+    local -a sshargs=()
+    local mode=ca role='' id=''
+    local cmd='' userhost=''
+    while [ $# -gt 0 ]; do
+        cmd="$1"
+        case "$cmd" in
+            -mode=*)
+                mode=${cmd#*=}
+                shift
+                ;;
+            -v)
+                sshargs+=(-v)
+                shift
+                ;;
+            -role=*)
+                role=${cmd#*=}
+                shift
+                ;;
+            -i)
+                id="$2"
+                shift 2
+                ;;
+            --) shift; break;;
+            *)
+                break;;
+#            -* | --*)
+#                sshargs+=("$cmd")
+#                ;;
+#            ^[a-z][a-z0-9\.\-]+)
+#                sshargs+=("$cmd")
+#                ;;
+#            *)
+#                sshargs+=("$cmd")
+#                ;;
+        esac
+    done
+    [ -n "$id" ] || id=$HOME/.ssh/id_rsa
+
+    if ! test -r "${id}"; then
+        test -d "$(dirname "$id")" || mkdir "$(dirname "$id")"
+        chmod 0700 "$(dirname "$id")"
+        echo >&2 "Generating a new vault key ..."
+        ssh-keygen -N '' -q -f "$id" -C "vault-$USER@$HOSTNAME"
+    fi
+    if [ -z "$role" ]; then
+        if [[ "$*" =~ amazonaws ]]; then
+            user=ec2-user
+            role=cloud
+        elif [[ "$*" =~ azure ]]; then
+            user=azureuser
+            role=cloud
+        elif [[ "$*" =~ ec2 ]]; then
+            user=ec2-user
+            role=cloud
+        elif [[ "$*" =~ jenkins ]]; then
+            role=jenkins
+        elif [[ "$*" =~ int.xcalar.com ]]; then
+            role=jenkins
+            user=jenkins
+        elif [[ "$*" =~ root@ ]]; then
+            role=admin
+            user=root
+        else
+            role=jenkins
+            user=jenkins
+        fi
+    fi
+
+    tmpdir="${TMPDIR:-/tmp}/vssh-$(id -u)"
+    mkdir -m 0700 -p "$tmpdir" || exit 1
+    chmod 0700 $tmpdir
+    rm -fv ${id}-cert.pub # clean up old certs
+    local cert="${tmpdir}/$(basename ${id} .pem)-cert.pub" now=$(date +%s) expires='0'
+    expires=$(test -e $cert && date -d $(ssh-keygen -Lf $cert | awk '/Valid: from/{print $(NF)}') +%s || echo 0)
+    if [[ $expires -eq 0 ]] || [[ $(( expires-now )) -lt 100 ]]; then
+        if ! vault write -field=signed_key ssh/sign/$role public_key=@${id%.pem}.pub > ${cert}.tmp; then
+            return 1
+        fi
+        mv -f ${cert}.tmp ${cert}
+    fi
+    sshargs+=(-oIdentitiesOnly=yes)
+    sshargs+=(-oForwardAgent=yes)
+    sshargs+=(-oAddKeysToAgent=yes)
+    sshargs+=(-oIdentityFile=${id})
+    sshargs+=(-oCertificateFile=${cert})
+    if [ -n "$user" ]; then
+        sshargs+=(-oUser=${user})
+    fi
+    ssh "${sshargs[@]}" "$@"
+}
+
+vssh "$@"
