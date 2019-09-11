@@ -137,9 +137,9 @@ class JenkinsJobAggregators(object):
             try:
                 self.logger.debug("call update_build")
                 if agg.send_log_to_update:
-                    data = agg.update_build(bnum=bnum, log=console_log) or {}
+                    data = agg.update_build(bnum=bnum, jbi=jbi, log=console_log) or {}
                 else:
-                    data = agg.update_build(bnum=bnum, log=None) or {}
+                    data = agg.update_build(bnum=bnum, jbi=jbi, log=None) or {}
 
             except JenkinsAggregatorDataUpdateTemporaryError as e:
                 # Subclass update_build() encountered a temporary error
@@ -163,8 +163,9 @@ class JenkinsJobAggregators(object):
 
         self.logger.debug("store/index data")
         self.logger.debug(all_data)
-        self.data_coll.store_data(bnum=bnum, data=all_data)
+        # index_data may extract "private" stuff from all_data so call it first.
         self.meta_coll.index_data(bnum=bnum, data=all_data)
+        self.data_coll.store_data(bnum=bnum, data=all_data)
 
     def update_builds(self):
         self.logger.info("start")

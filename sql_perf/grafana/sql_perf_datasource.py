@@ -17,14 +17,12 @@ import statistics
 import sys
 import time
 
-if __name__ == '__main__':
-    sys.path.append(os.environ.get('XLRINFRADIR', ''))
+sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
 config = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 
-from sql_stats.sql_tpch import SqlTpchStatsData
-from sql_stats import SqlStats
+from sql_perf import SqlPerfResults, SqlPerfResultsData
 
 from flask import Flask, request, jsonify, json, abort
 from flask_cors import CORS, cross_origin
@@ -36,7 +34,7 @@ logging.basicConfig(
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-sql_tpch_data = SqlTpchStatsData()
+sql_perf_results_data = SqlPerfResultsData()
 
 app = Flask(__name__)
 
@@ -69,76 +67,73 @@ def find_metrics():
     logger.info("request: {}".format(request))
     logger.info("payload: {}".format(req))
 
-    names = []
+    values = []
     target = req.get('target', None)
     logger.info("target: {}".format(target))
     if not target:
-        return jsonify(names) # XXXrs - exception?
+        return jsonify(values) # XXXrs - exception?
 
-    if target == 'xlr_versions':
-        names = sql_tpch_data.xlr_versions()
+    if target == 'test_group':
+        values = sql_perf_results_data.test_groups()
 
-    # <xlr_vers>:build1
+    # <test_group>:xce_versions
+    if 'xce_versions' in target:
+        tgroup,rest = target.split(':')
+        values = sql_perf_results_data.xce_versions(test_group=tgroup)
+
+    # <test_group>:<xce_vers>:build1
     elif ':build1' in target:
         # Build1 list will be all builds available matching the Xcalar version(s).
         # Once selected, the remaining metrics will be queried in context of the
         # selected build (comparable builds will have matching test type).
-        xlr_vers,rest = target.split(':')
+        tgroup,xce_vers,rest = target.split(':')
+        values = sql_perf_results_data.find_builds(test_group=tgroup,
+                                                   xce_versions=_parse_multi(xce_vers),
+                                                   reverse=True)
+        logger.info("XXX: {}".format(values))
 
-        versions = _parse_multi(xlr_vers)
-        names = sql_tpch_data.find_builds(xlr_versions=_parse_multi(xlr_vers),
-                                          reverse=True)
-
-    # <xlr_vers>:<bnum1>:build2
+    # <test_group>:<xce_vers>:<bnum1>:build2
     elif ':build2' in target:
         # Build2 list will be all builds available matching the Xcalar version(s)
         # and of same test type as build1 (suitable for comparison).
-        xlr_vers,bnum1,rest = target.split(':')
-        b1stats = sql_tpch_data.stats(bnum=bnum1)
+        tgroup,xce_vers,bnum1,rest = target.split(':')
+        test_type = sql_perf_results_data.test_type(test_group=tgroup, bnum=bnum1)
         # Only display choices where test type (hash of test parameters)
         # is the same as the "base" build (since otherwise comparison is misleading).
-        names = sql_tpch_data.find_builds(test_type=b1stats.test_type,
-                                          xlr_versions=_parse_multi(xlr_vers),
-                                          reverse=True)
+        values = sql_perf_results_data.find_builds(test_group=tgroup,
+                                                   test_type=test_type,
+                                                   xce_versions=_parse_multi(xce_vers),
+                                                   reverse=True)
 
-    # <bnum1>:query
+    # <test_group>:<bnum1>:query
     elif ':query' in target:
         # Return list of all supported query names (as determined by selected build1).
-        bnum1,rest = target.split(':')
-        b1stats = sql_tpch_data.stats(bnum=bnum1)
-        names = b1stats.query_names()
+        tgroup,bnum1,rest = target.split(':')
+        values = sql_perf_results_data.query_names(test_group=tgroup, bnum=bnum1)
 
-    # <bnum1>:metric
-    elif ':metric' in target:
-        # Return list of all supported metric names (as determined by selected build1).
-        bnum1,rest = target.split(':')
-        names = SqlStats.metric_names()
+    # metric
+    elif 'metric' in target:
+        values = SqlPerfResults.metric_names()
 
     else:
         pass # XXXrs - exception?
 
-    logger.debug("names: {}".format(names))
-    return jsonify(names)
+    logger.debug("values: {}".format(values))
+    return jsonify(values)
 
 
 def _table_results(*, target):
     """
     Target name specifes query.
     Format:
-        <build_num_1>:<build_num_2>:<metric_name>
+        <test_group>:<build_num_1>:<build_num_2>:<metric_name>
     """
 
     try:
-        t_name = target.get('target', None)
-        bnum1,bnum2,mname = t_name.split(':')
+        tgt = target.get('target', None)
+        tgroup,bnum1,bnum2,mname = tgt.split(':')
     except Exception as e:
         abort(404, Exception('incomprehensible target: {}'.format(target)))
-
-    try:
-        stats1 = sql_tpch_data.stats(bnum=bnum1)
-        stats2 = sql_tpch_data.stats(bnum=bnum2)
-    except Exception as e:
-        abort(404, Exception('failed to load stats'))
 
     rows = []
     columns = [
@@ -151,11 +146,21 @@ def _table_results(*, target):
 
     # Query names are a component of test_type, so all tests of matching
     # type will have identical sets of query names.
-    for qname in stats1.query_names():
+    for qname in sql_perf_results_data.query_names(test_group=tgroup, bnum=bnum1):
         # Grafana doesn't aggregate into tables, so we have to roll our own...
-        mean1 = statistics.mean(stats1.query_vals(qname=qname, mname=mname))
-        mean2 = statistics.mean(stats2.query_vals(qname=qname, mname=mname))
-        rows.append([qname, mean1, mean2, mean2-mean1, 100*(mean2-mean1)/mean1])
+        b1vals = sql_perf_results_data.query_vals(test_group=tgroup, bnum=bnum1,
+                                                  qname=qname, mname=mname)
+        b1mean = statistics.mean(b1vals)
+
+        b2vals = sql_perf_results_data.query_vals(test_group=tgroup, bnum=bnum2,
+                                                  qname=qname, mname=mname)
+        b2mean = statistics.mean(b2vals)
+
+        delta_pct = 0
+        if b1mean:
+            delta_pct = 100*(b2mean-b1mean)/b1mean
+
+        rows.append([qname, b1mean, b2mean, b2mean-b1mean, delta_pct])
 
     results = [{"columns": columns,
                 "rows": rows,
@@ -164,28 +169,29 @@ def _table_results(*, target):
     return results
 
 
-def _get_datapoints(*, bnum, qname, mname, request_ts_ms=None):
+def _get_datapoints(*, tgroup, bnum, qname, mname, request_ts_ms=None):
         logger.debug("start")
         try:
-            stats = sql_tpch_data.stats(bnum=bnum)
+            data = sql_perf_results_data.results(test_group=tgroup, bnum=bnum)
         except Exception as e:
-            logger.exception("failed to load stats")
-            abort(404, Exception('failed to load stats'))
+            logger.exception("failed to load data")
+            abort(404, Exception('failed to load data'))
         if request_ts_ms:
             ts_ms = request_ts_ms
         else:
-            ts_ms = stats.start_ts_ms
+            ts_ms = data['start_ts_ms']
         logger.debug("get values")
-        data = stats.query_vals(qname=qname, mname=mname)
-        logger.debug("data: {}".format(data))
-        return [[d,ts_ms] for d in data]
+        qvals = sql_perf_results_data.query_vals(test_group=tgroup, bnum=bnum,
+                                                 qname=qname, mname=mname)
+        logger.debug("qvals: {}".format(qvals))
+        return [[qv,ts_ms] for qv in qvals]
 
 
 def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     """
     Target name specifies query.
     Format:
-        <xlr_versions>:<build_num>:<query_names>:<metric_name>:<mode>
+        <test_group>:<xce_versions>:<build_num>:<query_names>:<metric_name>:<mode>
     """
 
     logger.info("start")
@@ -197,7 +203,7 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
         logger.exception(err)
         abort(404, ValueError(err))
     try:
-        xver,bnum,qname,mname,mode = t_name.split(':')
+        tgroup,xver,bnum,qname,mname,mode = t_name.split(':')
     except Exception as e:
         err = 'incomprehensible target name: {}'.format(t_name)
         logger.exception(err)
@@ -211,9 +217,10 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     if mode == 'onebuild':
         """
         only want results from build indicated by bnum
-        xlr_versions is ignored
+        xce_versions is ignored
         """
-        data = _get_datapoints(bnum=bnum, qname=qname, mname=mname,
+        data = _get_datapoints(tgroup=tgroup, bnum=bnum,
+                               qname=qname, mname=mname,
                                request_ts_ms=request_ts_ms)
         if not data:
             return []
@@ -226,17 +233,19 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     qname is allowed to be multi e.g. "(q1|q2|q3...)"
     """
     results = []
-    b1stats = sql_tpch_data.stats(bnum=bnum)
-    builds = sql_tpch_data.find_builds(first_bnum=bnum,
-                                       xlr_versions=_parse_multi(xver),
-                                       test_type=b1stats.test_type,
-                                       start_ts_ms=from_ts_ms,
-                                       end_ts_ms=to_ts_ms)
+    test_type = sql_perf_results_data.test_type(test_group=tgroup, bnum=bnum)
+    builds = sql_perf_results_data.find_builds(test_group=tgroup,
+                                               first_bnum=bnum,
+                                               xce_versions=_parse_multi(xver),
+                                               test_type=test_type,
+                                               start_ts_ms=from_ts_ms,
+                                               end_ts_ms=to_ts_ms)
 
     qnames = _parse_multi(qname)
     for bnum in builds:
         for qname in qnames:
-            data = _get_datapoints(bnum=bnum, qname=qname, mname=mname,
+            data = _get_datapoints(tgroup=tgroup, bnum=bnum,
+                                   qname=qname, mname=mname,
                                    request_ts_ms=request_ts_ms)
             if not data:
                 continue

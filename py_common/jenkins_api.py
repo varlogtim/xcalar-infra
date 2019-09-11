@@ -225,7 +225,9 @@ class JenkinsBuildInfo(object):
             if JenkinsBuildInfo.commit_sha_pat.match(val):
                 self.logger.debug("skipping detached \'{}\'".format(val))
                 continue
-            rtn.setdefault(repo, []).append(val.strip())
+            if repo in rtn:
+                raise Exception("duplicate repo: {}".format(repo))
+            rtn[repo] = val.strip()
         self.logger.debug("rtn: {}".format(rtn))
         return rtn
 

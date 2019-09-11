@@ -96,7 +96,7 @@ class ClangCoverageAggregator(JenkinsAggregatorBase):
         self.artifacts_root = artifacts_root
         super().__init__(job_name=job_name)
 
-    def update_build(self, *, bnum, log=None):
+    def update_build(self, *, bnum, jbi, log):
         """
         Read the coverage.json file and convert to our preferred index form,
         filtering for only files of interest (plus totals).

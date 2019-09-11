@@ -1,2 +1,0 @@
-#!/bin/bash
-docker build --no-cache -f $XLRINFRADIR/sql_stats/grafana/Dockerfile --rm -t sql-stats-grafana-datasource $XLRINFRADIR

@@ -109,25 +109,42 @@ class JenkinsJobMetaCollection(object):
 
         # If we have branch data, add to the builds-by-branch list(s)
         git_branches = data.get('git_branches', {})
-        for repo, branches in git_branches.items():
+        for repo, branch in git_branches.items():
 
             # Add repo to all repos list
             self.coll.find_one_and_update({'_id': 'all_repos'},
                                           {'$addToSet': {'repos': repo}},
                                           upsert = True)
 
-            for branch in branches:
-                # Add branch to list of branches for the repo
-                key = MongoDB.encode_key("{}_branches".format(repo))
-                self.coll.find_one_and_update({'_id': key},
-                                              {'$addToSet': {'branches': branch}},
-                                              upsert = True)
+            # Add branch to list of branches for the repo
+            key = MongoDB.encode_key("{}_branches".format(repo))
+            self.coll.find_one_and_update({'_id': key},
+                                          {'$addToSet': {'branches': branch}},
+                                          upsert = True)
 
-                # Add build to the list of builds for the repo/branch pair
-                key = MongoDB.encode_key("{}_{}_builds".format(repo, branch))
-                self.coll.find_one_and_update({'_id': key},
-                                              {'$addToSet': {'builds': bnum}},
-                                              upsert = True)
+            # Add build to the list of builds for the repo/branch pair
+            key = MongoDB.encode_key("{}_{}_builds".format(repo, branch))
+            self.coll.find_one_and_update({'_id': key},
+                                          {'$addToSet': {'builds': bnum}},
+                                           upsert = True)
+
+        # _add_to_meta_list is a list of key/val pairs.  The key will define a document,
+        # and the val will be appended to the 'values' list in that document.
+        add_to_meta_list = data.pop('_add_to_meta_list', [])
+        for key,val in add_to_meta_list:
+            self.coll.find_one_and_update({'_id': key},
+                                          {'$push': {'values': val}},
+                                          upsert = True)
+
+        # _add_to_meta_set is a list of key/val pairs.  The key will define a document,
+        # and the val will be added to the 'values' set in that document iff it is not
+        # already present.
+        add_to_meta_set = data.pop('_add_to_meta_set', [])
+        for key,val in add_to_meta_set:
+            self.coll.find_one_and_update({'_id': key},
+                                          {'$addToSet': {'values': val}},
+                                          upsert = True)
+
 
     def all_builds(self):
         """
@@ -270,23 +287,23 @@ class JenkinsAggregatorBase(ABC):
         self.job_name = job_name
         self.send_log_to_update = send_log_to_update
 
-
     @abstractmethod
-    def update_build(self, *, bnum, log=None):
+    def update_build(self, *, bnum, jbi, log):
         """
         Aggregate and return build-related data and meta-data.
         Every aggregator must implement the update_build() method.
 
-        Required Parameter:
-            bnum:   build number
+        Required Parameters:
+            bnum: build number
+            jbi:  JenkinsBuildInfo instance (if not available will be passed as None)
+            log:  the associated console log if requested via send_log_to_update
+                  initializer parameter.  Will be set to None if not requested.
 
-        Optional Parameter:
-            log:    the associated console log if requested via send_log_to_update
-                    initializer parameter
         Returns:
             Data structure to be associated with the build number (if any).
         """
         pass
+
 
 class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
     """
@@ -297,12 +314,20 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
     def __init__(self, *, job_name):
         super().__init__(job_name=job_name)
         self.logger = logging.getLogger(__name__)
+        self.jbi_by_bnum = {}
 
-    def update_build(self, *, bnum, log=None):
+    def build_info(self, *, bnum):
+        jbi = self.jbi_by_bnum.get(bnum, None)
+        if jbi:
+            return jbi
+        jbi = JenkinsApi().get_build_info(job_name = self.job_name,
+                                          build_number = bnum)
+        self.jbi_by_bnum[bnum] = jbi
+        return jbi
+
+    def update_build(self, *, bnum, jbi, log):
         rtn = {}
         try:
-            jbi = JenkinsApi().get_build_info(job_name = self.job_name,
-                                              build_number = bnum)
             rtn = {'parameters': jbi.parameters(),
                    'git_branches': jbi.git_branches(),
                    'built_on': jbi.built_on(),
@@ -312,13 +337,13 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
             upstream = jbi.upstream()
             if upstream:
                 rtn['upstream'] = upstream
+            self.jbi = jbi
         except Exception as e:
             self.logger.exception("failed to get build info")
             raise JenkinsAggregatorDataUpdateTemporaryError("try again") from None
 
         self.logger.debug("rtn: {}".format(rtn))
         return rtn
-
 
 from importlib import import_module
 

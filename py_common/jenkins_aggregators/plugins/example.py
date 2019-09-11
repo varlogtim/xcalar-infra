@@ -33,13 +33,15 @@ class ExampleAggregator(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
 
 
-    def update_build(self, *, bnum, log=None):
+    def update_build(self, *, bnum, jbi, log):
         """
         Aggregate and return build-related data and meta-data.
         Every aggregator must implement the update_build() method.
         See JenkinsAggregatorBase for details.
         """
         self.logger.info("bnum: {}".format(bnum))
+        self.logger.info("jbi: {}".format(jbi))
+        self.logger.info("log: {}".format(log))
         return None
 
 # In-line "unit test"

@@ -102,7 +102,7 @@ class XDUnitTestCoverageAggregator(JenkinsAggregatorBase):
         self.artifacts_root = cfg.get("XD_UNIT_TEST_ARTIFACTS_ROOT")
         super().__init__(job_name=job_name)
 
-    def update_build(self, *, bnum, log=None):
+    def update_build(self, *, bnum, jbi, log):
         """
         Return coverage info for a specific build.
         """
