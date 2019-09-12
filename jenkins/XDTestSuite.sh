@@ -143,7 +143,7 @@ runExpServerIntegrationTest() {
     echo "running integration test for expServer"
     for testCase in "${testCases[@]}"; do
         echo "running test $testCase"
-        ./PyTest.sh -k "$testCase"
+        ./PyTestNew.sh -k "$testCase"
         local ret=$?
         if [ $ret -ne "0" ]; then
             retval=1
