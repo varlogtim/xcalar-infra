@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SSH_VERSION=$(ssh -V 2>&1 | sed -r 's/^OpenSSH_([0-9])\.([0-9]).*$/\1\2/g')
+
 vssh() {
     # try to guess the user's intentions
     local -a sshargs=()
@@ -84,9 +86,11 @@ vssh() {
     fi
     sshargs+=(-oIdentitiesOnly=yes)
     sshargs+=(-oForwardAgent=yes)
-    sshargs+=(-oAddKeysToAgent=yes)
     sshargs+=(-oIdentityFile=${id})
-    sshargs+=(-oCertificateFile=${cert})
+    if [[ $SSH_VERSION -ge 70 ]]; then
+        sshargs+=(-oAddKeysToAgent=yes)
+        sshargs+=(-oCertificateFile=${cert})
+    fi
     if [ -n "$user" ]; then
         sshargs+=(-oUser=${user})
     fi
