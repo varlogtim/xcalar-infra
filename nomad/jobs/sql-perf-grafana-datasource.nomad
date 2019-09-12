@@ -1,4 +1,4 @@
-job "sql-performance-grafana-datasource" {
+job "sql-perf-grafana-datasource" {
   region      = "global"
   datacenters = ["xcalar-sjc"]
   type        = "service"
@@ -10,7 +10,7 @@ job "sql-performance-grafana-datasource" {
       driver = "docker"
 
       config {
-        image = "registry.service.consul/xcalar-qa/sql-stats-grafana-datasource:latest"
+        image = "registry.service.consul/xcalar-qa/sql-perf-grafana-datasource:latest"
 
         port_map {
           http = 80
@@ -22,9 +22,9 @@ job "sql-performance-grafana-datasource" {
       }
 
       service {
-        name = "sql-performance-grafana-datasource"
+        name = "sql-perf-grafana-datasource"
         port = "http"
-        tags = ["urlprefix-sql-performance-grafana-datasource.service.consul:9999/"]
+        tags = ["urlprefix-sql-perf-grafana-datasource.service.consul:9999/"]
 
         check {
           name     = "alive"

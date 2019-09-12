@@ -1,2 +1,2 @@
 #!/bin/bash
-docker exec -it sql-stats-grafana-datasource /bin/bash
+docker exec -it sql-perf-grafana-datasource /bin/bash
