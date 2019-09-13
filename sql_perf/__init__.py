@@ -451,7 +451,10 @@ class SqlPerfResultsData(object):
 
     def query_names(self, *, test_group, bnum):
         data = self.results(test_group=test_group, bnum=bnum)
-        return sorted(data['query_vals'].keys(), key=nat_sort)
+        query_vals = data.get('query_vals', None)
+        if not query_vals:
+            return []
+        return sorted(query_vals.keys(), key=nat_sort)
 
     def query_vals(self, *, test_group, bnum, qname, mname):
         data = self.results(test_group=test_group, bnum=bnum)

@@ -25,8 +25,9 @@ class SqlPerfPlot(object):
     fStartKey = 'fetchStart'
     fEndKey = 'fetchEnd'
 
-    def __init__(self, *, path, is_spark=False):
+    def __init__(self, *, test_group, path, is_spark=False):
         self.logger = logging.getLogger(__name__)
+        self.test_group = test_group
         self.rlist = []
         self.data = None
         self.dataByQ = {}
@@ -104,7 +105,10 @@ class SqlPerfPlot(object):
 
     def plotIntervals(self, *, padding=0, groupWidth=1.0):
         groupNum = 1
-        fig = plt.figure(figsize=(8.5, 11))
+        if self.test_group == 'tpchTest': # XXXrs HACK FOR DEMO
+            fig = plt.figure(figsize=(8.5, 11))
+        else:
+            fig = plt.figure(figsize=(8.5, 18))
         totalTime = self.data['endEpoch'] - self.data['startEpoch']
         for qname in self.qNames:
             statsList = self.dataByQ[qname]
@@ -138,10 +142,13 @@ class SqlPerfPlot(object):
 
         return fig
 
-    def plotAvg(self, *, b2_path, is_spark):
+    def plotAve(self, *, b2_path, is_spark):
         if True: # XXXrs - Really?!?
-            prevPlt = SqlPerfPlot(path=b2_path, is_spark=is_spark)
-            fig, ax = plt.subplots(figsize=(8.5, 5))
+            prevPlt = SqlPerfPlot(test_group=self.test_group, path=b2_path, is_spark=is_spark)
+            if self.test_group == 'tpchTest': # XXXrs HACK FOR DEMO
+                fig, ax = plt.subplots(figsize=(8.5, 5))
+            else:
+                fig, ax = plt.subplots(figsize=(20, 5))
             N=len(self.qAvg)
             ind = np.arange(N)    # the x locations for the groups
             width = 0.35         # the width of the bars
@@ -149,7 +156,10 @@ class SqlPerfPlot(object):
             r = [x + width for x in range(len(prevPlt.qAvg))]
             p1 = ax.bar(r, prevPlt.qAvg, width, yerr=prevPlt.qStd)
         else:
-            fig = plt.figure(figsize=(8.5, 5))
+            if self.test_group == 'tpchTest': # XXXrs HACK FOR DEMO
+                fig = plt.figure(figsize=(8.5, 5))
+            else:
+                fig = plt.figure(figsize=(20, 5))
             plt.bar(range(len(self.qAvg)), self.qAvg, yerr=self.qStd)
 
         if is_spark:
@@ -186,15 +196,18 @@ class SqlPerfComparisonPdf(object):
     def _cache_key(self, *, test_group, bnum1, bnum2):
         return "{}:{}:{}".format(test_group, bnum1, bnum2)
 
-    def _plot_compare(self, *, cur_plot, compare_path, is_spark=False):
-        prevPlt = SqlPerfPlot(path=compare_path, is_spark=is_spark)
+    def _plot_compare(self, *, test_group, cur_plot, compare_path, is_spark=False):
+        prevPlt = SqlPerfPlot(test_group=test_group, path=compare_path, is_spark=is_spark)
         assert(cur_plot.qNames == prevPlt.qNames)
         assert(cur_plot.numUsers == prevPlt.numUsers)
         assert(cur_plot.notes == prevPlt.notes)
         assert(cur_plot.ds == prevPlt.ds)
 
         delta = 100.0 * (1 - np.array(cur_plot.qAvg) / np.array(prevPlt.qAvg))
-        fig = plt.figure(figsize=(8.5, 5))
+        if test_group == 'tpchTest': # XXXrs HACK FOR DEMO
+            fig = plt.figure(figsize=(8.5, 5))
+        else:
+            fig = plt.figure(figsize=(20, 5))
         plt.bar(range(len(delta)), delta)
     
         plt.xticks(np.arange(len(cur_plot.qNames)), cur_plot.qNames, rotation=-90)
@@ -210,15 +223,15 @@ class SqlPerfComparisonPdf(object):
 
         return fig
 
-    def _create_pdf(self, *, b1_path, b2_path=None, is_spark=False, out_path):
-        b1_plot = SqlPerfPlot(path=b1_path)
+    def _create_pdf(self, *, test_group, b1_path, b2_path=None, is_spark=False, out_path):
+        b1_plot = SqlPerfPlot(test_group=test_group, path=b1_path)
         figList = []
-        figList.append(b1_plot.plotAvg(b2_path=b2_path, is_spark=is_spark))
+        figList.append(b1_plot.plotAve(b2_path=b2_path, is_spark=is_spark))
         if b2_path:
-            figList.append(self._plot_compare(cur_plot=b1_plot, compare_path=b2_path, is_spark=is_spark))
+            figList.append(self._plot_compare(test_group=test_group, cur_plot=b1_plot, compare_path=b2_path, is_spark=is_spark))
         figList.append(b1_plot.plotIntervals(padding=0.2))
         if b2_path:
-            prevPlt = SqlPerfPlot(path=b2_path, is_spark=is_spark)
+            prevPlt = SqlPerfPlot(test_group=test_group, path=b2_path, is_spark=is_spark)
             figList.append(prevPlt.plotIntervals(padding=0.2))
 
         with PdfPages(out_path) as pdf:
@@ -274,7 +287,7 @@ class SqlPerfComparisonPdf(object):
                              .format(test_group, bnum2))
 
 
-        self._create_pdf(b1_path=b1_path, b2_path=b2_path, out_path=out_path)
+        self._create_pdf(test_group=test_group, b1_path=b1_path, b2_path=b2_path, out_path=out_path)
         self.path_cache[key] = out_path
         return out_path
 
@@ -286,4 +299,5 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
     sql_pdf = SqlPerfComparisonPdf()
-    print(sql_pdf.compare(test_group='tpchTest', bnum1=496, bnum2=508))
+    #print(sql_pdf.compare(test_group='tpcdsTest', bnum1=772, bnum2=776))
+    print(sql_pdf.compare(test_group='tpcdsTest', bnum1=772, bnum2=776))
