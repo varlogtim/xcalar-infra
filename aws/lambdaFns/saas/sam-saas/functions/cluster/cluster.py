@@ -3,6 +3,7 @@ import json
 import traceback
 import socket
 import requests
+import os
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
@@ -17,8 +18,8 @@ ec2_client = boto3.client('ec2', region_name='us-west-2')
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 
 # XXX To-do Read from env variables
-user_table = 'saas_user'
-billing_table = 'saas_billing'
+user_table = os.environ.get('USER_TABLE')
+billing_table = os.environ.get('BILLING_TABLE')
 # cfn_role_arn = 'arn:aws:iam::559166403383:role/AWS-For-Users-CloudFormation'
 cfn_role_arn = 'arn:aws:iam::043829555035:role/AWSCloudFormationAdmin'
 default_credit = '500'

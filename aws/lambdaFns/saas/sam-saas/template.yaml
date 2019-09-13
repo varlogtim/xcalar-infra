@@ -10,6 +10,17 @@ Globals:
       AllowHeaders: "'Content-Type'"
       AllowOrigin: "'*'"
 
+Parameters:
+  userTable:
+    Type: String
+    Default: 'saas_user'
+  billingTable:
+    Type: String
+    Default: 'saas_billing'
+  stackPrefix:
+    Type: String
+    Default: 'saas-test'
+
 Resources:
   LibLayer:
     Type: AWS::Serverless::LayerVersion
@@ -43,6 +54,12 @@ Resources:
           Properties:
             Path: /cluster/get
             Method: post
+      Environment:
+        Variables:
+          USER_TABLE:
+              Ref: userTable
+          BILLING_TABLE:
+              Ref: billingTable
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -50,7 +67,7 @@ Resources:
               Action:
                 - cloudformation:UpdateStack
               Resource:
-                !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/saas-test-*'
+                !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${stackPrefix}-*'
             - Effect: Allow
               Action:
                 - cloudformation:DescribeStacks
@@ -61,12 +78,12 @@ Resources:
                 - dynamodb:PutItem
                 - dynamodb:UpdateItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_user'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${userTable}'
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_billing'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${billingTable}'
             - Effect: Allow
               Action:
                 - dynamodb:UpdateItem
@@ -110,6 +127,12 @@ Resources:
           Properties:
             Path: /billing/deduct
             Method: post
+      Environment:
+        Variables:
+          USER_TABLE:
+              Ref: userTable
+          BILLING_TABLE:
+              Ref: billingTable
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -121,13 +144,13 @@ Resources:
               Action:
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_user'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${userTable}'
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
                 - dynamodb:Query
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_billing'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${billingTable}'
   S3Function:
     Type: AWS::Serverless::Function
     Properties:
@@ -152,6 +175,10 @@ Resources:
           Properties:
             Path: /s3/describe
             Method: post
+      Environment:
+        Variables:
+          USER_TABLE:
+              Ref: userTable
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -163,13 +190,13 @@ Resources:
               Action:
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas_user'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${userTable}'
             - Effect: Allow
               Action:
                 - s3:PutObject
                 - s3:DeleteObject
               Resource:
-                !Sub 'arn:aws:s3:::saas-test*' # For test only
+                !Sub 'arn:aws:s3:::${StackPrefix}*' # For test only
   ConfigFunction:
     Type: AWS::Serverless::Function
     Properties:

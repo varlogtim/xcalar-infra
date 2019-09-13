@@ -1,6 +1,7 @@
 import boto3
 import json
 import traceback
+import os
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
 from util.cfn_util import get_stack_info
@@ -11,7 +12,7 @@ cfn_client = boto3.client('cloudformation', region_name='us-west-2')
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 
 # XXX To-do Read from env variables
-user_table = 'saas_user'
+user_table = os.environ.get('USER_TABLE')
 
 def get_bucket(user_name):
     response = get_user_info(dynamodb_client, user_name, user_table)

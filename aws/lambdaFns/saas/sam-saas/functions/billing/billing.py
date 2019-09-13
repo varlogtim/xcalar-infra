@@ -2,6 +2,7 @@ import boto3
 import json
 import time
 import traceback
+import os
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
@@ -11,8 +12,10 @@ from util.billing_util import get_price
 # To-do all hard-coded values need to be read from enviornemnt variables
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
-billing_table = 'saas_billing'
-user_table = 'saas_user'
+
+user_table = os.environ.get('USER_TABLE')
+billing_table = os.environ.get('BILLING_TABLE')
+
 
 def get_credit(user_name):
     response = dynamodb_client.query(
