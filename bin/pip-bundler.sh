@@ -17,6 +17,7 @@ USER_INSTALL=
 INSTALL=0
 BUNDLE=0
 TMPENV=
+DEBUG=${DEBUG:-0}
 
 say() {
     echo >&2 "$@"
@@ -68,7 +69,7 @@ sha256() {
 }
 
 main() {
-    local output=${OUTPUT:-}
+    local output=${OUTPUT:-bundle.tar}
     declare -a reqs=()
 
     if [[ $0 =~ bundle ]] || [[ $0 =~ wheel ]]; then
