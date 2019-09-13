@@ -199,6 +199,7 @@ def check_cluster_status(user_name, stack_info):
         if running_count == cluster_count:
             return {'status' : Status.OK,
                     'clusterUrl' : stack_info['cluster_url'],
+                    'clusterNum' : running_count,
                     'isPending' : False}
         else:
             return {'status' : Status.STACK_ERROR,
