@@ -177,21 +177,23 @@ def check_cluster_status(user_name, stack_info):
         # cannot check len(cluster_info) == size
         # check: running_count == size
         for i in range(len(cluster_info)):
-            cluster = cluster_info[i]['Instances'][0]
+            instances = cluster_info[i]['Instances']
             #pending case
-            if cluster['State']['Name'] == 'pending':
-                return {'status': Status.OK,
-                        'isPending' : True}
-            #all running, keep counting
-            elif cluster['State']['Name'] == 'running':
-                running_count = running_count + 1
-            elif cluster['State']['Name'] == 'terminated' or cluster['State']['Name'] == 'shutting-down':
-                continue
-            else:
-                # some clusters are "stopped"/ "stopping"
-                # shouldn't happen, something wrong
-                return {'status': Status.CLUSTER_ERROR,
-                        'error': 'Some clusters stop running'}
+            for j in range(len(instances)):
+                cluster = instances[j]
+                if cluster['State']['Name'] == 'pending':
+                    return {'status': Status.OK,
+                            'isPending' : True}
+                #all running, keep counting
+                elif cluster['State']['Name'] == 'running':
+                    running_count = running_count + 1
+                elif cluster['State']['Name'] == 'terminated' or cluster['State']['Name'] == 'shutting-down':
+                    continue
+                else:
+                    # some clusters are "stopped"/ "stopping"
+                    # shouldn't happen, something wrong
+                    return {'status': Status.CLUSTER_ERROR,
+                            'error': 'Some clusters stop running'}
         #The number of running cluster must equal to size
         # else something wrong
         if running_count == cluster_count:
