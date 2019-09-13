@@ -20,21 +20,23 @@ import time
 sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-config = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
+config = EnvConfiguration({"LOG_LEVEL": {"default": logging.INFO}})
 
 from sql_perf import SqlPerfResults, SqlPerfResultsData
+from sql_perf.comparison_pdf import SqlPerfComparisonPdf
 
 from flask import Flask, request, jsonify, json, abort
 from flask_cors import CORS, cross_origin
 
 # It's log, it's log... :)
 logging.basicConfig(
-                level=config.get('LOG_LEVEL'),
+                level=config.get("LOG_LEVEL"),
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
 sql_perf_results_data = SqlPerfResultsData()
+sql_perf_pdf = SqlPerfComparisonPdf()
 
 app = Flask(__name__)
 
@@ -98,6 +100,7 @@ def find_metrics():
         # and of same test type as build1 (suitable for comparison).
         tgroup,xce_vers,bnum1,rest = target.split(':')
         test_type = sql_perf_results_data.test_type(test_group=tgroup, bnum=bnum1)
+        logger.info("XXX build1 test_type {}".format(test_type))
         # Only display choices where test type (hash of test parameters)
         # is the same as the "base" build (since otherwise comparison is misleading).
         values = sql_perf_results_data.find_builds(test_group=tgroup,
@@ -134,6 +137,9 @@ def _table_results(*, target):
         tgroup,bnum1,bnum2,mname = tgt.split(':')
     except Exception as e:
         abort(404, Exception('incomprehensible target: {}'.format(target)))
+
+    # Spin up a comparison pdf file for the comparison of interest.
+    sql_perf_pdf.compare(test_group=tgroup, bnum1=bnum1, bnum2=bnum2)
 
     rows = []
     columns = [

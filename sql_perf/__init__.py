@@ -422,8 +422,8 @@ class SqlPerfResultsData(object):
             tg_data = data[test_group]
 
             if test_type and tg_data['test_type'] != test_type:
-                self.logger.debug("test_type mismatch want {} build {} has {}"
-                                  .format(test_type, bnum, tg_data['test_type']))
+                self.logger.info("test_type mismatch want {} build {} has {}"
+                                 .format(test_type, bnum, tg_data['test_type']))
                 continue
             if start_ts_ms and tg_data['start_ts_ms'] < start_ts_ms:
                 continue
