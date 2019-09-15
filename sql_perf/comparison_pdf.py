@@ -133,7 +133,10 @@ class SqlPerfPlot(object):
         ax.xaxis.grid(True)
         ax.grid(which='major', axis='x', linestyle='--')
 
-        plt.title('{} SQL Parallelism\n{} Users, {} Nodes of {}, {}, {}'.format(self.backend, self.numUsers, self.notes[0], self.notes[1], self.verStr, self.ds))
+        # XXXrs HACK FOR DEMO
+        # plt.title('{} SQL Parallelism\n{} Users, {} Nodes of {}, {}, {}'.format(self.backend, self.numUsers, self.notes[0], self.notes[1], self.verStr, self.ds))
+        plt.title('{} SQL Parallelism\n{}'.format(self.backend, self.verStr))
+
         plt.xlabel("Time (s)")
         plt.ylabel("Query")
         plt.xlim(0, totalTime)
@@ -142,9 +145,9 @@ class SqlPerfPlot(object):
 
         return fig
 
-    def plotAve(self, *, b2_path, is_spark):
+    def plotAve(self, *, vsPlt, is_spark):
         if True: # XXXrs - Really?!?
-            prevPlt = SqlPerfPlot(test_group=self.test_group, path=b2_path, is_spark=is_spark)
+            #vsPlt = SqlPerfPlot(test_group=self.test_group, path=b2_path, is_spark=is_spark)
             if self.test_group == 'tpchTest': # XXXrs HACK FOR DEMO
                 fig, ax = plt.subplots(figsize=(8.5, 5))
             else:
@@ -153,8 +156,8 @@ class SqlPerfPlot(object):
             ind = np.arange(N)    # the x locations for the groups
             width = 0.35         # the width of the bars
             p0 = ax.bar(range(len(self.qAvg)), self.qAvg, width, yerr=self.qStd)
-            r = [x + width for x in range(len(prevPlt.qAvg))]
-            p1 = ax.bar(r, prevPlt.qAvg, width, yerr=prevPlt.qStd)
+            r = [x + width for x in range(len(vsPlt.qAvg))]
+            p1 = ax.bar(r, vsPlt.qAvg, width, yerr=vsPlt.qStd)
         else:
             if self.test_group == 'tpchTest': # XXXrs HACK FOR DEMO
                 fig = plt.figure(figsize=(8.5, 5))
@@ -165,11 +168,16 @@ class SqlPerfPlot(object):
         if is_spark:
             ax.legend((p0[0], p1[0]), ('Xcalar', 'Spark'))
         else:
-            ax.legend((p0[0], p1[0]), ('Current', 'Previous'))
+            # XXXrs DEMO
+            #ax.legend((p0[0], p1[0]), ('Current', 'Previous'))
+            ax.legend((p0[0], p1[0]), (self.verStr, vsPlt.verStr))
 
         plt.xticks(np.arange(len(self.qNames)), self.qNames, rotation=-90)
-        plt.title('SQL Mean Execution Time w/Stddev\n{} Users, {} Nodes of {}, {}, {}'
-                .format(self.numUsers, self.notes[0], self.notes[1], self.verStr, self.ds))
+        # XXXrs DEMO
+        #plt.title('SQL Mean Execution Time w/Stddev\n{} Users, {} Nodes of {}, {}, {}'
+                #.format(self.numUsers, self.notes[0], self.notes[1], self.verStr, self.ds))
+        plt.title('SQL Mean Execution Time w/Stddev\n{} Users, {} Nodes of {}, {}'
+                .format(self.numUsers, self.notes[0], self.notes[1], self.ds))
         plt.xlabel('Query')
         plt.ylabel('Mean Execution+Fetch Time (s)')
 
@@ -196,28 +204,29 @@ class SqlPerfComparisonPdf(object):
     def _cache_key(self, *, test_group, bnum1, bnum2):
         return "{}:{}:{}".format(test_group, bnum1, bnum2)
 
-    def _plot_compare(self, *, test_group, cur_plot, compare_path, is_spark=False):
-        prevPlt = SqlPerfPlot(test_group=test_group, path=compare_path, is_spark=is_spark)
-        assert(cur_plot.qNames == prevPlt.qNames)
-        assert(cur_plot.numUsers == prevPlt.numUsers)
-        assert(cur_plot.notes == prevPlt.notes)
-        assert(cur_plot.ds == prevPlt.ds)
+    def _plot_compare(self, *, test_group, b1_plot, b2_plot, is_spark=False):
+        assert(b1_plot.qNames == b2_plot.qNames)
+        assert(b1_plot.numUsers == b2_plot.numUsers)
+        assert(b1_plot.notes == b2_plot.notes)
+        assert(b1_plot.ds == b2_plot.ds)
 
-        delta = 100.0 * (1 - np.array(cur_plot.qAvg) / np.array(prevPlt.qAvg))
+        delta = 100.0 * (1 - np.array(b1_plot.qAvg) / np.array(b2_plot.qAvg))
         if test_group == 'tpchTest': # XXXrs HACK FOR DEMO
             fig = plt.figure(figsize=(8.5, 5))
         else:
             fig = plt.figure(figsize=(20, 5))
         plt.bar(range(len(delta)), delta)
     
-        plt.xticks(np.arange(len(cur_plot.qNames)), cur_plot.qNames, rotation=-90)
+        plt.xticks(np.arange(len(b1_plot.qNames)), b1_plot.qNames, rotation=-90)
         if is_spark:
-            prevVer = 'Spark'
+            b2_ver = 'Spark'
         else:
-            prevVer = prevPlt.verStr
+            b2_ver = b2_plot.verStr
 
-        plt.title("Perf Comparison ({} vs {}) Ave: {:.1f}%\n{} Users, {} Nodes of {}, {}"
-                  .format(prevVer, cur_plot.verStr, delta.mean(), cur_plot.numUsers, cur_plot.notes[0], cur_plot.notes[1], cur_plot.ds))
+        #plt.title("Perf Comparison ({} vs {}) Ave: {:.1f}%\n{} Users, {} Nodes of {}, {}"
+                  #.format(b2_ver, b1_plot.verStr, delta.mean(), b1_plot.numUsers, b1_plot.notes[0], b1_plot.notes[1], b1_plot.ds))
+        plt.title("Perf Comparison Ave: {:.1f}%\n{} Users, {} Nodes of {}, {}"
+                  .format(delta.mean(), b1_plot.numUsers, b1_plot.notes[0], b1_plot.notes[1], b1_plot.ds))
         plt.xlabel('Query')
         plt.ylabel('% Execution Time Decrease')
 
@@ -225,14 +234,16 @@ class SqlPerfComparisonPdf(object):
 
     def _create_pdf(self, *, test_group, b1_path, b2_path=None, is_spark=False, out_path):
         b1_plot = SqlPerfPlot(test_group=test_group, path=b1_path)
+        b2_plot = None
+        if b2_path:
+            b2_plot = SqlPerfPlot(test_group=test_group, path=b2_path, is_spark=is_spark)
         figList = []
-        figList.append(b1_plot.plotAve(b2_path=b2_path, is_spark=is_spark))
+        figList.append(b1_plot.plotAve(vsPlt=b2_plot, is_spark=is_spark))
         if b2_path:
-            figList.append(self._plot_compare(test_group=test_group, cur_plot=b1_plot, compare_path=b2_path, is_spark=is_spark))
+            figList.append(self._plot_compare(test_group=test_group, b1_plot=b2_plot, b2_plot=b1_plot, is_spark=is_spark))
         figList.append(b1_plot.plotIntervals(padding=0.2))
-        if b2_path:
-            prevPlt = SqlPerfPlot(test_group=test_group, path=b2_path, is_spark=is_spark)
-            figList.append(prevPlt.plotIntervals(padding=0.2))
+        if b2_plot:
+            figList.append(b2_plot.plotIntervals(padding=0.2))
 
         with PdfPages(out_path) as pdf:
             for fig in figList:

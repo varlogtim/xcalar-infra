@@ -224,7 +224,8 @@ class SqlPerfResults(object):
             raise SqlPerfNoResultsError("no results found: {}".format(dir_path))
 
     def test_groups(self):
-        return self.iters_by_group.keys()
+        #return self.iters_by_group.keys()
+        return ['tpchTest', 'tpcdsTest']
 
     def to_csv(self):
         """
