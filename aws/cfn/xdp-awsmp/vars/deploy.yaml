@@ -1,5 +1,5 @@
-VERSION: 2.0.0
+VERSION: 2.0.2
 PROJECT: xdp-awsmp
-RELEASE: GTM
-baseUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/prod/xdp-awsmp/2.0.0-GTM'
-bootstrapUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/prod/xdp-awsmp/2.0.0-GTM/scripts/user-data.sh'
+RELEASE: RC7
+baseUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/dev/xdp-awsmp/2.0.2-RC7'
+bootstrapUrl: 'https://s3.us-west-2.amazonaws.com/xcrepo/cfn/dev/xdp-awsmp/2.0.2-RC7/scripts/user-data.sh'

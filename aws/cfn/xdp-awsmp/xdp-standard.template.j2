@@ -5,16 +5,16 @@ Parameters:
     Type: String
     Description: Xcalar node instance type
     ConstraintDescription: Choose an instance type.
-    Default: '{{ instance_default | default("m5d.2xlarge") }}'
+    Default: '{{ instance_default | default("m5d.xlarge") }}'
     AllowedValues: {{ instance_types }}
     {#  {% for instance_type in instance_types -%}
     #  - {{ instance_type }}
     #  {%- endfor %} #}
-{%- if createVpc %}
   KeyName:
     Description: (Optional) Name of an existing EC2 KeyPair to enable SSH access to the instances
-    Type: String
-    Default: ''
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: '{{ key_name | default("xcalar-us-west-2") }}'
+{%- if createVpc %}
   VpcCidr:
     Type: String
     MinLength: 9
@@ -30,9 +30,6 @@ Parameters:
     ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/22
     Default: 10.20.0.0/22
 {%- else %}
-  KeyName:
-    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
-    Type: AWS::EC2::KeyPair::KeyName
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC to use for cluster placement (vpc-xxxxxx)
@@ -108,9 +105,7 @@ Metadata:
           default: Security Configuration
         Parameters:
           - AllowedCIDR
-{%- if not createVpc %}
           - KeyName
-{%- endif %}
       - Label:
           default: Cluster Configuration
         Parameters:
@@ -133,9 +128,7 @@ Metadata:
           - AssociatePublicIpAddress
           - ExistingShare
           - ExistingS3
-{%- if createVpc %}
           - KeyName
-{%- endif %}
     ParameterLabels:
 {%- if enableLicense %}
       LicenseKey:
@@ -162,7 +155,7 @@ Metadata:
 Conditions:
   CreateNewShare: !Equals [!Ref ExistingShare, '']
   CreateNewS3: !Equals [!Ref ExistingS3, '']
-  NoKeyName: !Equals [!Ref KeyName, '']
+  NoInstances: !Equals [!Ref ClusterSize, '0']
 Mappings:
   AWSAMIRegionMap:
     AMI:
@@ -399,9 +392,8 @@ Resources:
         IgnoreUnmodifiedGroupSizeProperties: 'true'
       AutoScalingRollingUpdate:
         MinInstancesInService: '0'
-        MaxBatchSize: !Ref 'ClusterSize'
+        MaxBatchSize: !If [NoInstances ,!Ref 'AWS::NoValue', !Ref 'ClusterSize']
         WaitOnResourceSignals: 'false'
-        PauseTime: PT10M
   ClusterEIP:
     Type: AWS::EC2::EIP
 {%- if createVpc %}
@@ -565,7 +557,7 @@ Resources:
             SubnetId: !Ref 'Subnet'
             Groups:
               - !Ref 'ClusterSG'
-        KeyName: !If [NoKeyName, !Ref 'AWS::NoValue', !Ref KeyName ]
+        KeyName: !Ref 'KeyName'
         ImageId: !FindInMap
           - AWSAMIRegionMap
           - !Ref 'AWS::Region'

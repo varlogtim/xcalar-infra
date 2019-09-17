@@ -1,6 +1,6 @@
 ami:
-  Version: 2.0.0
-  BaseOS: AMZN-AMI-HVM-2018.03
-  Name: xdp-standard v2.0.0 2926 AMZN-AMI-HVM-2018.03
-  Build: '2926'
+  BaseOS: XDP-AMZN1-BASE
+  Build: '3348'
+  Name: xdp-standard v2.0.2 3348 XDP-AMZN1-BASE
   Product: xdp-standard
+  Version: 2.0.2
