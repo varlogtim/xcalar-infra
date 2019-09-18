@@ -16,7 +16,7 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
         echo "Creating stack ${i}"
         SUFFIX=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)
         RET=$(aws cloudformation create-stack \
-        --role-arn arn:aws:iam::559166403383:role/AWS-For-Users-CloudFormation \
+        --role-arn ${ROLE} \
         --stack-name ${STACK_PREFIX}${SUFFIX} \
         --template-url ${CFN_TEMPLATE_URL} \
         --parameters ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE} \
