@@ -10,3 +10,4 @@ class Status(IntEnum):
     STACK_ERROR = 7
     CLUSTER_ERROR = 8
     USER_NOT_FOUND = 9
+    AUTH_ERROR = 10

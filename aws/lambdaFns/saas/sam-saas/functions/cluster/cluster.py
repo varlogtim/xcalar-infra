@@ -7,7 +7,7 @@ import requests
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
 from util.cfn_util import get_stack_info
-from util.user_util import init_user, get_user_info, update_user_info
+from util.user_util import init_user, get_user_info, update_user_info, check_user_credential
 from constants.cluster_type import cluster_type_table
 from constants.price import price_table
 
@@ -310,7 +310,14 @@ def get_cluster(user_name):
 def lambda_handler(event, context):
     try:
         path = event['path']
+        headers = event['headers']
         data = json.loads(event['body'])
+        credential, username = check_user_credential(dynamodb_client, headers)
+        if credential == None or username != data['username']:
+            return _make_reply(200, {
+                'status': Status.AUTH_ERROR,
+                'error': "Unvalid Authentication"
+            })
 
         if path == '/cluster/start':
             reply = start_cluster(data['username'], data['clusterParams'])
