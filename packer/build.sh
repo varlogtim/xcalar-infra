@@ -123,7 +123,7 @@ main() {
         fi
         COMBINED_VARS_FILE="${JSON_TEMPLATE%.json}"-vars.json
         cat $VAR_FILE vars/${OSID}.yaml vars/shared.yaml | cfn-flip > "$COMBINED_VARS_FILE"
-        set -- "$@" -var-file "$COMBINED_VARS_FILE" "$JSON_TEMPLATE"
+        set -- -var-file "$COMBINED_VARS_FILE" "$@" "$JSON_TEMPLATE"
     fi
 
     if [ -z "$INSTALLER_URL" ]; then
