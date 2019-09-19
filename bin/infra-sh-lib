@@ -361,7 +361,7 @@ download_hashitool() {
 }
 
 download_packer() {
-    export PACKER_VERSION=${PACKER_VERSION:-1.3.5}
+    export PACKER_VERSION=${PACKER_VERSION:-1.4.3}
     export PACKER=${PACKER:-$HOME/bin/packer-${PACKER_VERSION}}
     if test -x $PACKER; then
         return 0

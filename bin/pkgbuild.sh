@@ -254,7 +254,10 @@ pkgmain() {
         local cmd="$1"
         shift
         case "$cmd" in
-            -d | --debug) DEBUG=1 ;;
+            -d | --debug)
+                export DEBUG=1
+                export PS4='# ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
+                ;;
             --no-debug) DEBUG=0 ;;
             --gen-fpm) GENFPM=1 ;;
             --fpm) FPM="$1"; shift;;
@@ -311,7 +314,9 @@ pkgmain() {
         rm -rf "$pkgdir" "$srcdir"
     fi
     mkdir -p "$pkgdir" "$srcdir"
-    sources+=("$source")
+    if [ -n "$source" ]; then
+        sources+=("$source")
+    fi
     local nsources=${#sources[@]}
     for ii in $(seq 0 $((nsources - 1))); do
         cd $srcdir
@@ -333,15 +338,15 @@ pkgmain() {
         elif [ "${sha256sums[$ii]}" = "" ]; then
             echo >&2 "WARNING: Missing checksum for ${sources[$ii]}. It should be $sha256"
         elif [ "${sha256sums[$ii]}" = "0" ]; then
-            info "Skipping checksum verification for ${sources[$ii]}"
+            info "Skipping checksum verification for ${sources[$ii]}. It should be $sha256"
         elif [ "$sha256" != "${sha256sums[$ii]}" ]; then
             echo >&2 "SHA256($filen) = $sha256"
             info "Removing $cache"
-            rm -f "$cache" "$filen"
+            rm -vf "$cache" "$filen" "${PKGBUILDdir}/${filen}"
             die "SHA256 checksum failed for $filen"
         fi
         case "$filen" in
-            *.tar.gz) tar zxf "$filen" ;;
+            *.tar.gz|*.tgz) tar zxf "$filen" ;;
             *.tar.bz2) tar xf "$filen" ;;
             *.tar) tar xf "$filen" ;;
             *.zip) unzip -q -o "$filen" ;;
@@ -373,15 +378,20 @@ pkgmain() {
         info "Calling prepare ..."
         (
             set -e
+            debug "calling prepare in $PWD ($srcpkgdir)"
+            ((DEBUG)) && ls -la >&2 || true
             cd $srcpkgdir
             prepare
+            ((DEBUG)) && ls -la >&2 || true
         ) || die "Failed to prepare"
     fi
     if type -t build > /dev/null; then
         info "Calling build ..."
         (
             set -e
+            ((DEBUG)) && ls -la >&2 || true
             cd $srcpkgdir
+            debug "calling build in $PWD ($srcpkgdir)"
             build
         ) || die "Failed to build"
     fi
@@ -390,6 +400,7 @@ pkgmain() {
         (
             set -e
             cd $srcpkgdir
+            debug "calling check in $PWD"
             check
         ) || die "Failed to check"
     fi
@@ -397,6 +408,7 @@ pkgmain() {
         info "Calling package ..."
         (
             cd $srcpkgdir
+            debug "calling package in $PWD"
             package
         ) || die "Failed to package"
     fi
@@ -409,40 +421,47 @@ pkgmain() {
         ${arch+--architecture $arch}
         --description "${pkgdesc}"
         --url "${url}")
-    for script in after-install after-remove after-upgrade before-install before-remove before-upgrade; do
-        if test -x ${srcdir}/${script}.sh; then
-            info "adding --${script} ${srcdir}/${script}.sh"
-            FPM_COMMON+=(--${script} ${srcdir}/${script}.sh)
-        fi
+    for scriptbase in after-install after-remove after-upgrade before-install before-remove before-upgrade; do
+        for script in ${srcdir}/${scriptbase}.sh ${PKGBUILDdir}/${scriptbase}.sh; do
+            if test -f $script; then
+                info "adding --${scriptbase} ${script}"
+                FPM_COMMON+=("--${scriptbase}" "${script}")
+            fi
+        done
     done
     if $FORCE; then
         FPM_COMMON+=(-f)
     fi
-    if ! ((GENFPM)); then
-        FPM_COMMON+=(-C "$pkgdir${prefix}")
-    fi
+    #if ! ((GENFPM)); then
+    #    FPM_COMMON+=(-C "$pkgdir${prefix}")
+    #fi
     if ! ((GENFPM)); then
         info "building $pkgname rpm ..."
-        run $FPM -s dir -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}"
+        run $FPM -s dir -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" -C "$pkgdir${prefix}"
     else
         info "bundling ${pkgname}-rpm.tar.gz"
         run tar czf ${pkgname}-rpm.tar.gz -C $pkgdir ${prefix:-.}
-        printf '%q ' $FPM -s tar -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" ${pkgname}-rpm.tar.gz; echo
+        printf '%q ' $FPM -s tar -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" -C "$pkgdir${prefix}" ${pkgname}-rpm.tar.gz; echo
+    fi
+    if test -e "${pkgdir}_deb"; then
+        rootfs="${pkgdir}_deb"
+    else
+        rootfs="${pkgdir}"
     fi
 
-    if test -e "${pkgdir}"/etc/sysconfig; then
-        mv "${pkgdir}"/etc/sysconfig "${pkgdir}"/etc/default
-        for ii in "${pkgdir}"/{usr/,}lib/systemd/system/* "${pkgdir}"/etc/init.d/* "${pkgdir}"/etc/init/*; do
+    if test -e "${rootfs}"/etc/sysconfig; then
+        mv "${rootfs}"/etc/sysconfig "${rootfs}"/etc/default
+        for ii in "${rootfs}"/{usr/,}lib/systemd/system/* "${rootfs}"/etc/init.d/* "${rootfs}"/etc/init/*; do
             sed -i 's@/etc/sysconfig@/etc/default@g' $ii
         done
     fi
     if ! ((GENFPM)); then
         info "building $pkgname deb ..."
-        run $FPM -s dir -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}"
+        run $FPM -s dir -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}" -C "$rootfs${prefix}"
     else
         info "bundling ${pkgname}-deb.tar.gz"
-        run tar czf ${pkgname}-deb.tar.gz -C $pkgdir ${prefix:-.}
-        printf '%q ' $FPM -s tar -t deb "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" ${pkgname}-deb.tar.gz; echo
+        run tar czf ${pkgname}-deb.tar.gz -C $rootfs ${prefix:-.}
+        printf '%q ' $FPM -s tar -t deb "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" -C "$rootfs${prefix}" ${pkgname}-deb.tar.gz; echo
     fi
 
     if ((DEBUG)); then

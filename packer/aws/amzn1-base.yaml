@@ -1,7 +1,7 @@
 ---
 variables:
   uid: '1000'
-  disk_size: '8'
+  disk_size: '16'
   device_name: /dev/xvda
   baseos: amzn-ami-hvm-2018.03
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'

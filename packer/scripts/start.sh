@@ -67,11 +67,18 @@ if test -e /etc/system-release; then
     yum remove -y java java-1.7.0-openjdk || true
     keep_trying yum update -y
     keep_trying yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
-    yum install -y -q --enablerepo='xcalar-*' nfs-utils xfsprogs sudo lvm2 mdadm btrfs-progs yum-utils fuse || true
+    yum install -y -q --enablerepo='xcalar-*' nfs-utils xfsprogs sudo lvm2 mdadm btrfs-progs yum-utils fuse tmux || true
 else
     export DEBIAN_FRONTEND=noninteractive
+    #VERSION_CODENAME=bionic
+    (
+    . /etc/os-release
+    curl -L -O https://google.storageapis.com/repo.xcalar.net/xcalar-release-${VERSION_CODENAME}.deb
+    dpkg -i xcalar-release-${VERSION_CODENAME}.deb
+    rm xcalar-release-${VERSION_CODENAME}.deb
+    )
     keep_trying apt-get update -q
-    apt-get -yqq install linux-generic-lts-xenial curl lvm2 xfsprogs bonnie++ bwm-ng mdadm btrfs-tools
+    apt-get -yqq install curl lvm2 xfsprogs bonnie++ bwm-ng mdadm btrfs-tools
     apt-get -yqq dist-upgrade
     apt-get -yqq autoremove
 fi

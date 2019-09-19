@@ -30,9 +30,9 @@ packer_do() {
 check_or_upload_installer() {
     if [ -z "$INSTALLER_URL" ]; then
         if [ -z "$INSTALLER" ]; then
-            INSTALLER="$(latest-installer.sh)"
+            INSTALLER="$(latest-installer.sh)" || die "Failed to find latest installer"
         fi
-        INSTALLER_URL="$(installer-url.sh -d s3 $INSTALLER)"
+        INSTALLER_URL="$(installer-url.sh -d s3 $INSTALLER)" || die "Failed to upload installer"
     fi
 
     if [[ $INSTALLER_URL =~ ^http ]]; then
@@ -130,7 +130,7 @@ main() {
         INSTALLER_URL="$(installer-url.sh -d s3 "$INSTALLER")"
     fi
 
-    IMAGE_BUILD_NUMBER=${IMAGE_BUILD_NUMBER:-1}
+    IMAGE_BUILD_NUMBER=${BUILD_NUMBER:-1}
     PRODUCT="${PRODUCT:-xdp-standard}"
 
     INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))

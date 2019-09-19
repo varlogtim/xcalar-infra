@@ -6,6 +6,7 @@ install_aws_deps() {
     curl -L "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o awscli-bundle.zip
     unzip awscli-bundle.zip
     ./awscli-bundle/install -i /opt/aws -b /usr/local/bin/aws
+    ln -sfn /opt/aws/bin/aws_completer /usr/local/bin/
     cd - >/dev/null
     rm -rf "$tmpdir"
 }
@@ -21,7 +22,7 @@ yum erase -y 'ntp*'
 yum install -y --enablerepo='xcalar*' --enablerepo=epel \
         ephemeral-disk ec2tools chrony aws-cfn-bootstrap amazon-efs-utils ec2-net-utils ec2-utils \
         deltarpm curl wget tar gzip htop gdb fuse jq nfs-utils iftop iperf3 tmux sysstat python27-pip \
-        lvm2 util-linux
+        lvm2 util-linux restic neovim tmux xcalar-ssh-ca
 
 service chronyd start
 chkconfig chronyd on

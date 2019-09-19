@@ -38,24 +38,32 @@ do_parse_yaml() {
 
 
 do_packer() {
-    if [ -d "$INSTALLER" ]; then
-        echo "INSTALLER=$INSTALLER is a directory. Looking for an installer."
-        INSTALLER=$(find $INSTALLER/ -type f -name 'xcalar-*-installer' | grep prod | head -1)
-    fi
+    if [ -z "$INSTALLER_URL" ]; then
+        if [ -d "$INSTALLER" ]; then
+            echo "INSTALLER=$INSTALLER is a directory. Looking for an installer."
+            INSTALLER=$(find $INSTALLER/ -type f -name 'xcalar-*-installer' | grep prod | head -1)
+        fi
 
-    if ! [ -r "$INSTALLER" ]; then
-        echo >&2 "ERROR: Unable to find installer INSTALLER=$INSTALLER"
-        exit 1
+        if ! [ -r "$INSTALLER" ]; then
+            die "Unable to find installer INSTALLER=$INSTALLER"
+        fi
+        CLOUD_STORE=s3
+        if [[ "$BUILDER" =~ (azure|arm) ]]; then
+            CLOUD_STORE=az
+        fi
+        if ! INSTALLER_URL="$(installer-url.sh -d $CLOUD_STORE $INSTALLER)"; then
+            die "Failed to upload $INSTALLER to $CLOUD_STORE"
+        fi
     fi
 
     cd $XLRINFRADIR/packer/aws
     #export INSTALLER_URL=$(installer-url.sh -d s3 $INSTALLER)
     #cfn-flip < $PACKERCONFIG > packer.json
 
-    INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER")"))
+    INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
     VERSION=${INSTALLER_VERSION_BUILD[0]}
 
-    bash -x ../build.sh --osid amzn1 --template $PACKERCONFIG --installer "$INSTALLER" -- ${BUILDER:+-only=${BUILDER}} -var license="${LICENSE}" -color=false 2>&1 | tee $OUTDIR/output.txt
+    bash -x ../build.sh --osid amzn1 --template $PACKERCONFIG --installer-url "$INSTALLER_URL" -- ${BUILDER:+-only=${BUILDER}} -var license="${LICENSE}" -var disk_size=$DISK_SIZE -color=false 2>&1 | tee $OUTDIR/output.txt
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         exit 1
     fi

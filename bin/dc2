@@ -37,12 +37,12 @@ dc2_upload_help() {
               [--flavors FLAVORS]
               [--dry-run]  [--force] [--debug] [--render]
               [--find-ami Look for newest AMI in each supported region]
+              [--flavors   FLAVORS     What flavors to build (eg, default,withvpc)]
 
     $0 takes CloudFormation stack templates, applies some preprocessing on it then
     publish the templates/scripts to the appropriate directories in S3. The S3 URLs
     can then be used by customers for their own deployment.
 
-    --flavors   FLAVORS     What flavors to build (eg, default,withvpc)
 EOF
     exit 2
 }
@@ -291,13 +291,16 @@ dc2_upload() {
         esac
     done
 
-    test -n "$PROJECT" || die "Need to set --project"
-    test -n "$VERSION" || VERSION=$(cat $PORJECT/VERSION) || die "Need to set --version"
+    test -n "${PROJECT:-}" || die "Need to set --project"
+    test -n "${VERSION:-}" || VERSION=$(cat $PORJECT/VERSION) || die "Need to set --version"
     PROJDIR="${TEMPLATEDIR}/${PROJECT}"
     CONTEXT="${ENVIRONMENT}/${PROJECT}/${VERSION}"
     if test -z "${RELEASE:-}"; then
-        RELEASE=$(consul kv get "$CONTEXT/next") || RELEASE=1
-        consul kv put $CONTEXT/next $((RELEASE + 1))
+        if [ -n "${BUILD_NUMBER:-}" ]; then
+            RELEASE="${BUILD_NUMBER}"
+        fi
+        #RELEASE=$(consul kv get "$CONTEXT/next") || RELEASE=1
+        #consul kv put $CONTEXT/next $((RELEASE + 1))
     fi
     test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
 
