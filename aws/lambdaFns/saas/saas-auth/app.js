@@ -3,6 +3,7 @@ const path = require('path')
 const express = require('express')
 const expressSession = require('express-session');
 const cookieParser = require('cookie-parser');
+const signature = require('cookie-signature');
 const bodyParser = require('body-parser')
 const methodOverride = require('method-override');
 const passport = require('passport');
@@ -227,6 +228,32 @@ router.use(awsServerlessExpressMiddleware.eventContext())
 // NOTE: tests can't find the views directory without this
 app.set('views', path.join(__dirname, 'views'))
 
+function ensureAuthenticated(req, res, next) {
+    if (req.isAuthenticated()) { return next(); }
+    res.status(401).send({ 'message': 'Unauthorized' });
+    return next('router');
+}
+
+function setSessionCookie(res, name, val, secret, options) {
+    var signed = 's:' + signature.sign(val, secret);
+    var data = cookie.serialize(name, signed, options);
+
+    var prev = res.getHeader('Set-Cookie') || []
+    var header = Array.isArray(prev) ? prev.concat(data) : [prev, data];
+
+    res.setHeader('Set-Cookie', header)
+}
+
+function setServerCookie(res, name, val, secret, options) {
+    var signed = jwt.sign(val, secret);
+    var data = cookie.serialize(name, signed, options);
+
+    var prev = res.getHeader('Set-Cookie') || []
+    var header = Array.isArray(prev) ? prev.concat(data) : [prev, data];
+
+    res.setHeader('Set-Cookie', header)
+}
+
 router.get('/', (req, res) => {
   res.render('index', {
     apiUrl: req.apiGateway ? `https://${req.apiGateway.event.headers.Host}/${req.apiGateway.event.requestContext.stage}` : 'http://localhost:3000'
@@ -234,7 +261,7 @@ router.get('/', (req, res) => {
 })
 
 router.get('/sam', (req, res) => {
-  res.sendFile(`${__dirname}/sam-logo.png`)
+    res.sendFile(`${__dirname}/sam-logo.png`)
 })
 
 router.post('/login', 
@@ -280,7 +307,70 @@ router.post('/login',
         });
     });
 
-router.get("/logout", function(req, res, next) {
+router.post('/creds',
+    ensureAuthenticated,
+    function(req, res, next) {
+        var domains = process.env.XCE_COOKIE_DOMAINS ?
+            process.env.XCE_COOKIE_DOMAINS.split(':') : [];
+
+        if (req.body && req.body.domains) {
+            domains = domains.concat(req.body.domains);
+        }
+
+        var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
+        var serverOptions = { maxAge: 1000*req.session.timeout, httpOnly: true, signed: false };
+        var sessionOptions = req.session.cookie.data;
+
+        for (var idx in domains) {
+            sessionOptions['domain'] = domains[idx];
+            serverOptions['domain'] = domains[idx];
+
+            setSessionCookie(res, 'connect.sid', req.sessionID, config.sessionSecret, sessionOptions);
+            setServerCookie(res, 'jwt_token', payload, defaultJwtHmac, serverOptions);
+        }
+
+        res.status(200).send({ 'message': 'cookies created' });
+    });
+
+router.get('/status',
+           function(req, res, next) {
+               var message = { user: false,
+                               admin: false,
+                               loggedIn: false,
+                               emailAddress: null,
+                               firstName: null,
+                               username: null,
+                               timeout: 0 };
+               var expirationDate = (new Date(req.session.cookie.expires)).getTime();
+               var now = (new Date).getTime()
+
+               if (req.session.hasOwnProperty('loggedIn') &&
+                   req.session.hasOwnProperty('loggedInAdmin') &&
+                   req.session.hasOwnProperty('loggedInUser') &&
+                   req.session.hasOwnProperty('firstName') &&
+                   req.session.hasOwnProperty('emailAddress') &&
+                   req.session.hasOwnProperty('username')) {
+
+                   message = {
+                       user: req.session.loggedInUser,
+                       admin: req.session.loggedInAdmin,
+                       loggedIn: req.session.loggedIn &&
+                           (now <= expirationDate),
+                       emailAddress: req.session.emailAddress,
+                       firstName: req.session.firstName,
+                       username: req.session.username,
+                       timeout: config.sessionAges['interactive']/1000
+                   }
+
+                   if (req.session.hasOwnProperty('timeout')) {
+                       message.timeout = req.session.timeout;
+                   }
+               }
+
+               res.status(200).send(message);
+           });
+
+router.get("/logout", ensureAuthenticated, function(req, res, next) {
     var id = req.user.id;
     req.session.destroy(function(err) {
         req.logOut();

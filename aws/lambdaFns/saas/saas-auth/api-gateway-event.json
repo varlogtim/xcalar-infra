@@ -1,10 +1,13 @@
 {
-    "//httpMethod": "POST",
-    "httpMethod": "GET",
+    "httpMethod": "POST",
+    "//httpMethod": "GET",
     "//body": "{\"name\": \"Sam\"}",
-    "//body": "{\"username\": \"<username>\", \"password\": \"<password>\"}",
-    "//path": "/login",
-    "path": "/logout",
+    "body": "{\"username\": \"<username>\", \"password\": \"<password>\"}",
+    "//body": "{\"domains\": [\"baz.com\", \"baz.boo.com\"]}",
+    "path": "/login",
+    "//path": "/logout",
+    "//path": "/creds",
+    "//path": "/status",
     "resource": "/{proxy+}",
     "queryStringParameters": {},
     "pathParameters": {
@@ -28,8 +31,7 @@
         "X-Amz-Cf-Id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_xxxxxxxxxxx_xxxx==",
         "X-Forwarded-For": "11.111.111.111, 11.111.111.111",
         "X-Forwarded-Port": "111",
-        "X-Forwarded-Proto": "http",
-        "Cookie": "connect.sid=s%3ANgSjIWXQkqPz_lCFOyf56lcN8rvTz2UI.Ga5Bdk9e52q0vCz68vEzeS%2FgqlX9a3E%2F2v%2FtegEXiE4"
+        "X-Forwarded-Proto": "http"
     },
     "requestContext": {
         "accountId": "111111111111",
