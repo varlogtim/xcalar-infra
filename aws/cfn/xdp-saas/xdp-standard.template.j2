@@ -499,6 +499,11 @@ Resources:
                   - /etc/cfn/hooks.d/cfn-asg-reloader.conf
         configure_app:
           files:
+            /opt/xcalar/xcalar-gui/assets/js/env/cloudEnv.js:
+              content: const gCloud = true;
+              mode: '000777'
+              owner: root
+              group: root
             /var/lib/cloud/instance/ec2.env:
               content: !Sub
                 - |-
