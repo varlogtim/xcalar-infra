@@ -1,54 +1,71 @@
-var http = require('http'),
-    https = require('https'),
-    httpProxy = require('http-proxy')
+var express = require('express');
+var app = express();
+var cors = require('cors');
+var httpProxy = require('http-proxy');
 var AWS = require('aws-sdk');
+var tcpp = require('tcp-ping');
 
 var ec2 = new AWS.EC2({region: "us-west-2"});
+var dynamodb = new AWS.DynamoDB({region: "us-west-2"});
 var proxy = httpProxy.createServer();
+var ipCache = {};
 
-var server = http.createServer(async function (req, res) {
-    // XXX Not working because of SSL
-    // if (req.url.startsWith("/auth")) {
-    //     // auth forwarding
-    //     console.log("auth forwarding");
-    //     res.writeHead(500, { 'Content-Type': 'application/json' });
-    //     res.end({error: "not supported"});
-    // } else if (req.url.startsWith("/cluster") ||
-    //            req.url.startsWith("/billing") ||
-    //            req.url.startsWith("/s3")) {
-    //     // other lambda forwrading
-    //     console.log("saas api forwarding");
-    //     proxy.web(req, res, {
-    //         target: {
-    //             protocol: "https",
-    //             host: "g6sgwgkm1j.execute-api.us-west-2.amazonaws.com",
-    //             port: 443
-    //         },
-    //         changeOrigin: true,
-    //         autoRewrite: true,
-    //         xfwd: true,
-    //         hostRewrite: true,
-    //         protocolRewrite: true
-    //     });
-    // } else {
+app.use(cors());
+app.all("*", async function (req, res) {
     // xcalar cluster forwarding
+    var username;
+    for (var key in req.headers) {
+        if (key.toLowerCase() === "username") {
+            username = req.headers[key];
+        }
+    }
+    if (ipCache[username]) {
+        // cached
+        var ip = ipCache[username];
+        ip = ip.substring(0, ip.length - 3) + "100"
+        var target = 'https://' + ip;
+        tcpp.ping({address: ip, port: 443, attempts: 1, timeout: 500}, function(err, data) {
+            if (data.min !== undefined) {
+                console.log("hitting cache");
+                proxy.web(req, res, {target: target, secure: false});
+            } else {
+                // if cache is stale
+                console.log("updating cache");
+                proxyRequest(username, req, res);
+            }
+        });
+    } else {
+        proxyRequest(username, req, res);
+    }
+}).listen(9000);
+
+async function proxyRequest(username, req, res) {
+    // not hitting cache
+    var ip;
+    var target;
+    try {
+        ip = await getIpFromUsername(username);
+        target = 'https://' + ip;
+    } catch(e) {
+        console.log(e, e.stack);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({error: "Failed to get address of cluster"}));
+        return;
+    }
+    proxy.web(req, res, {target: target, secure: false});
+    ipCache[username] = ip;
+}
+
+async function getIpFromUsername(username) {
     var params = {
         Filters: [
             {
                 "Name": "tag:Owner",
-                "Values": [req.headers.username]
+                "Values": [username]
             }
         ]
     };
-    var data;
-    try {
-        data = await ec2.describeInstances(params).promise();
-    } catch(e) {
-        console.log(e, e.stack);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end({error: err});
-        return;
-    }
+    var data = await ec2.describeInstances(params).promise();
     var reservations = data.Reservations;
     var allInstances = [];
     for (var reservation of data.Reservations) {
@@ -64,9 +81,7 @@ var server = http.createServer(async function (req, res) {
     }
     if (allInstances.length < 1) {
         // no instance
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end({error: "No running cluster"});
-        return;
+        throw "No running cluster";
     }
     allInstances.sort(function(i1, i2) {
         if (i1.timestamp === i2.timestamp) {
@@ -76,9 +91,8 @@ var server = http.createServer(async function (req, res) {
         }
     });
     var ip = allInstances[0].ip;
-    var target = 'https://' + ip;
-    proxy.web(req, res, {target: target, secure: false});
-}).listen(9000);
+    return ip;
+}
 
 // server.on('connect', function (req, socket) {
 //     var ip;
