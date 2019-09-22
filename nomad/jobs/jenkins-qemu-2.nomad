@@ -48,7 +48,7 @@ EOT
       }
 
       config {
-        image_path        = "local/tdhtest"
+        image_path        = "local/el7-jenkins_swarm-qemu-4.qcow2"
         accelerator       = "kvm"
         graceful_shutdown = true
 
@@ -84,7 +84,7 @@ EOT
       }
 
       artifact {
-        source = "http://netstore/images/el7-jenkins_slave-qemu-4.tar.gz"
+        source = "http://10.10.2.136/images/el7-jenkins_swarm-qemu-4.qcow2"
       }
     }
   }

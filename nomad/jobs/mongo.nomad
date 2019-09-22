@@ -42,8 +42,8 @@ job "mongo" {
       }
 
       resources {
-        cpu    = 500 # 500 MHz
-        memory = 256 # 256MB
+        cpu    = 500 # Mhz
+        memory = 512 # MB
 
         network {
           port "db" {

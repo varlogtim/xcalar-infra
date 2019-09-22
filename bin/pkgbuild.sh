@@ -303,10 +303,10 @@ pkgmain() {
     PKGBUILDdir=$(cd $(dirname $PKGBUILD) && pwd)
     TMPDIR="/var/tmp/pkgbuild-$(id -u)/$pkgname"
     if [ -z "$pkgdir" ]; then
-        if [ "$(pwd)" != "$PKGBUILDdir" ]; then
-            pkgdir="${PKGBUILDdir}/rootfs"
+        if test -x /is_container || [ -n "$container" ]; then
+            pkgdir="${PKGBUILDdir}/pkgdir"
         else
-            pkgdir="${TMPDIR}/rootfs"
+            pkgdir="${TMPDIR}/pkgdir"
         fi
     fi
     srcdir="${TMPDIR}/srcdir"
@@ -413,7 +413,7 @@ pkgmain() {
         ) || die "Failed to package"
     fi
     cd $CURDIR
-    FPM_COMMON=(--name ${pkgname}
+    FPM_COMMON=(--name ${altpkgname:-$pkgname}
         --version ${pkgver#v}
         ${prefix+--prefix $prefix}
         ${pkgrel+--iteration $pkgrel}

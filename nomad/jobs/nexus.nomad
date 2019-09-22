@@ -83,7 +83,7 @@ EOD
       }
 
       service {
-        name = "nexus-ui"
+        name = "nexus"
         port = "ui_port"
 
         tags = [

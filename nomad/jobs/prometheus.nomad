@@ -34,8 +34,7 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image = "grafana/loki:master"
-
+        image      = "grafana/loki:master"
         force_pull = true
 
         args = ["-config.file=/etc/loki/local-config.yaml"]
@@ -433,8 +432,7 @@ EOT
       driver = "docker"
 
       config {
-        image = "prom/prometheus:latest"
-
+        image      = "prom/prometheus:latest"
         force_pull = true
 
         volumes = [
@@ -539,6 +537,14 @@ scrape_configs:
       - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
         datacenter: xcalar-sjc
         services: ["squid-exporter"]
+  - job_name: registry-exporter
+    params:
+      format:
+        - prometheus
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services: ["registry-exporter"]
   - job_name: node-exporter
     params:
       format:
