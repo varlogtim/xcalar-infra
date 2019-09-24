@@ -17,12 +17,16 @@ fix_cloud_init() {
 
 OSID=$(osid)
 
-yum install -y "http://repo.xcalar.net/xcalar-release-${OSID}.rpm"
+yum install -y "https://storage.googleapis.com/repo.xcalar.net/xcalar-release-${OSID}.rpm"
 yum erase -y 'ntp*'
 yum install -y --enablerepo='xcalar*' --enablerepo=epel \
         ephemeral-disk ec2tools chrony aws-cfn-bootstrap amazon-efs-utils ec2-net-utils ec2-utils \
         deltarpm curl wget tar gzip htop gdb fuse jq nfs-utils iftop iperf3 tmux sysstat python27-pip \
-        lvm2 util-linux restic neovim tmux xcalar-ssh-ca
+        lvm2 util-linux restic neovim tmux xcalar-ssh-ca optgdb8
+for prog in gdb gcore gdbserver; do
+    ln -sfn /opt/gdb8/bin/${prog} /usr/local/bin/${prog}
+    ln -sfn /opt/gdb8/bin/${prog} /usr/local/bin/${prog}8
+done
 
 service chronyd start
 chkconfig chronyd on

@@ -36,8 +36,14 @@ do_parse_yaml() {
     AMI_US_WEST_2=$(awk '/us-west-2: /{print $2}' $yaml)
 }
 
-
 do_packer() {
+    case "$BUILDER" in
+        amazon-*) CLOUD=aws; CLOUD_STORE=s3;;
+        arm-*|azure-*) CLOUD=azure; CLOUD_STORE=az;;
+        google*) CLOUD=google; CLOUD_STORE=gs;;
+        qemu*) CLOUD=qemu; CLOUD_STORE=;;
+    esac
+
     if [ -z "$INSTALLER_URL" ]; then
         if [ -d "$INSTALLER" ]; then
             echo "INSTALLER=$INSTALLER is a directory. Looking for an installer."
@@ -47,10 +53,8 @@ do_packer() {
         if ! [ -r "$INSTALLER" ]; then
             die "Unable to find installer INSTALLER=$INSTALLER"
         fi
-        CLOUD_STORE=s3
-        if [[ "$BUILDER" =~ (azure|arm) ]]; then
-            CLOUD_STORE=az
-        fi
+
+        CLOUD_STORE=${CLOUD_STORE:-s3}
         if ! INSTALLER_URL="$(installer-url.sh -d $CLOUD_STORE $INSTALLER)"; then
             die "Failed to upload $INSTALLER to $CLOUD_STORE"
         fi

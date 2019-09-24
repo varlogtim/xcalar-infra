@@ -164,10 +164,10 @@ aws_delete_image() {
         return 0
     fi
     if test $((${#image_id_and_snapshot[@]} % 2)) -ne 0; then
-        echo >&2 "ERROR($rc): Unknown format for image id and snapshot: ${image_id_and_snapshot[@]}"
+        echo >&2 "ERROR($rc): Unknown format for image id and snapshot: ${image_id_and_snapshot[*]}"
         return 1
     fi
-    echo >&2 "Deleting ${image_id_and_snapshot[@]}."
+    echo >&2 "Deleting ${image_id_and_snapshot[*]}."
     if [ -t 1 ] && [ $no_wait = false ]; then
         echo >&2 "Sleeping for 5 seconds"
         sleep 5
@@ -354,6 +354,15 @@ aws_quickcreate() {
     templ="$1"
     url="https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?stackName=${2:-mystack}&templateUrl=${templ}"
     echo "$url"
+}
+
+aws_quickurl() {
+    local s3Url="$1" stackName="${2:-$(id -un)-stack-$(date +%Y%m%d)}"
+ # replace("/", "%2A")
+    local region="${AWS_DEFAULT_REGION:-us-west-2}"
+    cat <<EOF
+https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateUrl=${safeUrl}&stackName=${stackName}
+EOF
 }
 
 cfn_template_default() {
@@ -675,10 +684,21 @@ aws_seconds_until_spot_termination() {
 # AWS Marketplace = 679593333241
 aws_ami_add_account() {
     local ami_id="$1" account_id='' snapshot_id=''
+    shift
+    local -a snapshots=()
+    if ! snapshots=($(aws ec2 describe-images --image-ids $ami_id --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)); then
+        say "AMI: $ami_id has no snapshots"
+        return 1
+    fi
     for account_id in "$@"; do
-        aws ec2 modify-image-attribute --image-id $ami_id --launch-permission "Add=[{UserId=$account_id}]"
-        for snapshot_id in $(aws ec2 describe-images --image-ids $ami_id --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text); do
-            aws ec2 modify-snapshot-attribute --snapshot-id $snapshot_id --attribute createVolumePermission --operation-type add --user-ids $account_id
+        if ! aws ec2 modify-image-attribute --image-id $ami_id --launch-permission "Add=[{UserId=$account_id}]"; then
+            say "Failed to add permissions for account $account_id to AMI $ami_id"
+            continue
+        fi
+        for snapshot_id in "${snapshots[@]}"; do
+            if ! aws ec2 modify-snapshot-attribute --snapshot-id $snapshot_id --attribute createVolumePermission --operation-type add --user-ids $account_id; then
+                say "Failed to add permissions for account $account_id to snapshot $snapshot_id"
+            fi
         done
     done
 }

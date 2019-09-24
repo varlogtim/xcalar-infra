@@ -94,11 +94,16 @@ Parameters:
     Description: AMI for us-west-2 region
     Type: AWS::EC2::Image::Id
     Default: '{{ ami_us_west_2 }}'
+  CNAME:
+    Description: Desired CNAME of the instance (ex, fun.xcalar.cloud.)
+    Type: String
+    Default: 'yourstack-replace-me.xcalar.cloud.'
 {%- if enableLicense %}
-  LicenseKey:
+  License:
     Description: XDP License Key
     Type: String
     Default: ''
+    NoEcho: True
 {%- endif %}
 Metadata:
   AWS::CloudFormation::Interface:
@@ -145,7 +150,7 @@ Metadata:
 {%- endif %}
     ParameterLabels:
 {%- if enableLicense %}
-      LicenseKey:
+      License:
         default: 'XCE License Key:'
 {%- endif %}
       AdminUsername:
@@ -171,6 +176,19 @@ Conditions:
   CreateNewS3: !Equals [!Ref ExistingS3, '']
   NoKeyName: !Equals [!Ref KeyName, '']
   NoInstances: !Equals [!Ref ClusterSize, '0']
+  CreateDNS: !Not
+    - !Equals [!Ref CNAME, '' ]
+Mappings:
+  ZoneMappings:
+    '043829555035':
+      HostedZoneId: 'ZOHHT2AHYTDDN'
+      HostedZoneName: 'test.xcalar.cloud'
+    '559166403383':
+      HostedZoneId: 'ZZ2J6FQ00JXZX'
+      HostedZoneName: 'xcalar.cloud'
+    '876030232190':
+      HostedZoneId: 'Z3OAJRCVE57A0G'
+      HostedZoneName: 'xcalar.cloud'
 Resources:
 {%- if createVpc %}
   VpcId:
@@ -263,6 +281,10 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: !Ref 'AllowedCIDR'
+        - IpProtocol: tcp
+          FromPort: 10000
+          ToPort: 10000
+          CidrIp: !Ref 'AllowedCIDR'
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-ClusterSG'
@@ -324,6 +346,14 @@ Resources:
           FromPort: 2049
           ToPort: 2049
           SourceSecurityGroupId: !Ref 'ClusterSG'
+  ClusterIngressSQL:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: tcp
+      FromPort: 10000
+      ToPort: 10000
+      SourceSecurityGroupId: !Ref 'ClusterSG'
   EfsSharedRoot:
     Type: AWS::EFS::FileSystem
     Condition: CreateNewShare
@@ -408,6 +438,20 @@ Resources:
 {%- endif %}
     Properties:
       Domain: vpc
+  ClusterDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateDNS
+    DependsOn: [ClusterEIP]
+    Properties:
+      HostedZoneId: !FindInMap
+        - ZoneMappings
+        - !Ref 'AWS::AccountId'
+        - HostedZoneId
+      Name: !Ref 'CNAME'
+      Type: A
+      TTL: '60'
+      ResourceRecords:
+        - !Ref ClusterEIP
   AssociateEIP:
     Type: AWS::EC2::EIPAssociation
     Properties:
@@ -430,6 +474,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
+          CidrIp: !Ref 'AllowedCIDR'
+        - IpProtocol: tcp
+          FromPort: 10000
+          ToPort: 10000
           CidrIp: !Ref 'AllowedCIDR'
       Tags:
         - Key: Name
@@ -513,6 +561,7 @@ Resources:
                   NFSHOST=${SharedRoot}
                   SUBNET=${Subnet}
                   NIC=${ClusterNIC}
+                  CNAME=${CNAME}
                 - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
                   Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
               mode: '000400'
@@ -537,7 +586,7 @@ Resources:
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
                   bash /var/lib/cloud/instance/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" \
                             --cluster-size "$DESIREDCAP" --tag-key "aws:autoscaling:groupName" --tag-value "$AWS_AUTOSCALING_GROUPNAME" --cluster-name "${AWS::StackName}" \
-                            --bucket "${Bucket}" --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic ${ClusterNIC}
+                            --bucket "${Bucket}" --certstore /xcalar/cloud/xcalar.cloud --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic ${ClusterNIC}
                   rc=$?
                   log local0.info "bootstrap.sh returned $rc"
                   exit $rc
@@ -659,6 +708,35 @@ Resources:
                 Resource: !Sub
                   - 'arn:aws:s3:::${Bucket}/*'
                   - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+              - Effect: Allow
+                Action:
+                  - route53:GetChange
+                  - route53:ListHostedZonesByName
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                Resource: !Sub
+                  - 'arn:aws:route53:::hostedzone/${HostedZoneId}'
+                  - HostedZoneId: !FindInMap
+                    - ZoneMappings
+                    - !Ref 'AWS::AccountId'
+                    - HostedZoneId
+              - Effect: Allow
+                Action:
+                  - ssm:GetParametersByPath
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                Resource:
+                  - 'arn:aws:ssm:*:*:parameter/xcalar/*'
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:DescribeKey
+                Resource:
+                  - 'arn:aws:kms:*:*:alias/aws/ssm'
+
   IamInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -669,6 +747,10 @@ Outputs:
   URL:
     Description: URL of your new Xcalar Cluster
     Value: !Join ["", ["https://",!Ref 'ClusterEIP']]
+  VanityURL:
+    Description: Vanity URL for your Xcalar Cluster
+    Condition: CreateDNS
+    Value: !Join ["", ["https://",!Ref 'ClusterDNSRecord']]
   EIP:
     Description: Cluster ElasticIP
     Value: !Ref 'ClusterEIP'

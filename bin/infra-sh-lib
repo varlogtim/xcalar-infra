@@ -43,6 +43,18 @@ warn() {
     fi
 }
 
+gpgcrypt() {
+    local password="$1" input="$2" output="$3" tmpdir='' rc=''
+    if [ -z "$output" ]; then
+        say "Must specify password, input, output"
+    fi
+    tmpdir=$(mktemp -d /tmp/encrypt.XXXXXX)
+    echo "$password" | gpg --no-use-agent --homedir=$tmpdir --passphrase-fd=0 --armor --output="$output" --cipher-algo=AES256 --symmetric "$input"
+    rc=${PIPESTATUS[1]}
+    rm -rf $tmpdir
+    return $rc
+}
+
 error() {
     if test -t 2; then
         RED='\e[31m'

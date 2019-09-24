@@ -1,6 +1,0 @@
-ami:
-  BaseOS: XDP-AMZN1-BASE
-  Build: '3348'
-  Name: xdp-standard v2.0.2 3348 XDP-AMZN1-BASE
-  Product: xdp-standard
-  Version: 2.0.2
