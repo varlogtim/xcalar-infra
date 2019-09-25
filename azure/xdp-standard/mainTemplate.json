@@ -382,6 +382,7 @@
       "sku": "7.6",
       "version": "latest"
     },
+    "placementGroup": "[concat(parameters('appName'),'-ppg')]",
     "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
     "linuxConfiguration": {
       "disablePasswordAuthentication": "true",
@@ -773,6 +774,12 @@
       }
     },
     {
+      "apiVersion": "2018-04-01",
+      "type": "Microsoft.Compute/proximityPlacementGroups",
+      "name": "[variables('placementGroup')]",
+      "location": "[parameters('location')]"
+    },
+    {
       "apiVersion": "2018-10-01",
       "type": "Microsoft.Compute/virtualMachines",
       "name": "[concat(variables('vmName'), copyIndex())]",
@@ -788,9 +795,13 @@
       },
       "dependsOn": [
         "[concat('Microsoft.Storage/storageAccounts/', parameters('storageAccountName'))]",
-        "[concat('Microsoft.Network/networkInterfaces/',variables('nicName'), copyIndex())]"
+        "[concat('Microsoft.Network/networkInterfaces/',variables('nicName'), copyIndex())]",
+        "[concat('Microsoft.Compute/proximityPlacementGroups/', variables('placementGroup'))]"
       ],
       "properties": {
+        "proximityPlacementGroup": {
+          "id": "[resourceId('Microsoft.Compute/proximityPlacementGroups',variables('placementGroup'))]"
+        },
         "hardwareProfile": {
           "vmSize": "[parameters('vmSize')]"
         },

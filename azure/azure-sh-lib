@@ -498,7 +498,7 @@ az_deploy_usage() {
     cat << EOF
     az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer installer] [--dnslabel dns]
               [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
-              [-n|--name name] [--dnslabel dns] ${str[*]}
+              [--parameters-file params.json] [-n|--name name] [--dnslabel dns] ${str[*]}
 EOF
     return 0
 }
@@ -508,7 +508,7 @@ az_deploy() {
     local -a extra_params=()
     local email=$(git config user.email) retry ip_address
     local location=${LOCATION}
-    local name group count=1 size=Standard_E8s_v3 template_arg storageAccount_arg
+    local name group count=1 size=Standard_D8s_v3 template_arg storageAccount_arg
     local template=$AZ_DEFAULT_TEMPLATE
     local parameters_file=${DEFAULTS}
     local installer_url installer dnslabel

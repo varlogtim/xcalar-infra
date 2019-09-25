@@ -449,12 +449,6 @@ pkgmain() {
         rootfs="${pkgdir}"
     fi
 
-    if test -e "${rootfs}"/etc/sysconfig; then
-        mv "${rootfs}"/etc/sysconfig "${rootfs}"/etc/default
-        for ii in "${rootfs}"/{usr/,}lib/systemd/system/* "${rootfs}"/etc/init.d/* "${rootfs}"/etc/init/*; do
-            sed -i 's@/etc/sysconfig@/etc/default@g' $ii
-        done
-    fi
     if ! ((GENFPM)); then
         info "building $pkgname deb ..."
         run $FPM -s dir -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}" -C "$rootfs${prefix}"
