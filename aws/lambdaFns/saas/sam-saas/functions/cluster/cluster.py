@@ -1,6 +1,7 @@
 import boto3
 import json
 import traceback
+import socket
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
@@ -197,6 +198,17 @@ def check_cluster_status(user_name, stack_info):
         #The number of running cluster must equal to size
         # else something wrong
         if running_count == cluster_count:
+            # One last check to make sure the url is available
+            s = socket.socket()
+            try:
+                s.settimeout(0.5)
+                s.connect((stack_info['cluster_url'].split("https://", 1)[-1], 443))
+            except Exception as e:
+                return {'status' : Status.CLUSTER_ERROR,
+                        'error': 'Cluster is not reachable yet'}
+            finally:
+                s.settimeout(None)
+                s.close()
             return {'status' : Status.OK,
                     'clusterUrl' : stack_info['cluster_url'],
                     'clusterNum' : running_count,
