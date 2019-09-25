@@ -16,7 +16,6 @@ if [ "${INSTALLER_URL:0:1}" == / ]; then
     echo "Uploading $INSTALLER_URL to Azure Blobstore..."
     INSTALLER_URL="$(installer-url.sh -d az $INSTALLER_URL)" || exit 1
 fi
-INSTALLER_URL="${INSTALLER_URL%\?*}"
 echo "Installer: $INSTALLER_URL"
 
 if [ -z "$APP" ]; then
@@ -49,7 +48,7 @@ cd $XLRINFRADIR/azure
 if ! az_deploy -g $GROUP -l $LOCATION -i "$INSTALLER_URL" --count $NUM_NODES \
     --size $INSTANCE_TYPE --name "$APP" \
     --parameters \
-    adminEmail="$BUILD_USER_EMAIL" \
+    adminEmail="${BUILD_USER_EMAIL:-nobody@xcalar.com}" \
     appUsername="$ADMIN_USERNAME" \
     appPassword="$ADMIN_PASSWORD" \
     licenseKey="$LICENSE_KEY" > output.json; then
