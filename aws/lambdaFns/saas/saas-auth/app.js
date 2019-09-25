@@ -220,7 +220,7 @@ if (process.env.NODE_ENV === 'test') {
   router.use(compression())
 }
 
-router.use(cors())
+router.use(cors({ "origin": true, credentials: true }))
 router.use(bodyParser.json())
 router.use(bodyParser.urlencoded({ extended: true }))
 router.use(awsServerlessExpressMiddleware.eventContext())
@@ -274,8 +274,8 @@ router.post('/login',
 
         req.session.loggedIn = true;
 
-        req.session.loggedInAdmin = true;
-        req.session.loggedInUser = false;
+        req.session.loggedInAdmin = false;
+        req.session.loggedInUser = true;
 
         req.session.username = req.user.email;
         req.session.firstName = req.user.givenName;
@@ -301,35 +301,11 @@ router.post('/login',
             res.cookie("jwt_token", token, { maxAge: 1000*req.session.timeout, httpOnly: true, signed: false });
 
             req.session.save(function(err) {
-                res.status(200).send({"message": "Authentication successful"});
+                res.status(200).send({"message": "Authentication successful",
+                                      "sessionId": Buffer.from(req.sessionID).toString('base64')});
                 return next();
             });
         });
-    });
-
-router.post('/creds',
-    ensureAuthenticated,
-    function(req, res, next) {
-        var domains = process.env.XCE_COOKIE_DOMAINS ?
-            process.env.XCE_COOKIE_DOMAINS.split(':') : [];
-
-        if (req.body && req.body.domains) {
-            domains = domains.concat(req.body.domains);
-        }
-
-        var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
-        var serverOptions = { maxAge: 1000*req.session.timeout, httpOnly: true, signed: false };
-        var sessionOptions = req.session.cookie.data;
-
-        for (var idx in domains) {
-            sessionOptions['domain'] = domains[idx];
-            serverOptions['domain'] = domains[idx];
-
-            setSessionCookie(res, 'connect.sid', req.sessionID, config.sessionSecret, sessionOptions);
-            setServerCookie(res, 'jwt_token', payload, defaultJwtHmac, serverOptions);
-        }
-
-        res.status(200).send({ 'message': 'cookies created' });
     });
 
 router.get('/status',
@@ -359,7 +335,8 @@ router.get('/status',
                        emailAddress: req.session.emailAddress,
                        firstName: req.session.firstName,
                        username: req.session.username,
-                       timeout: config.sessionAges['interactive']/1000
+                       timeout: config.sessionAges['interactive']/1000,
+                       sessionId: Buffer.from(req.sessionID).toString('base64')
                    }
 
                    if (req.session.hasOwnProperty('timeout')) {

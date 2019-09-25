@@ -13,7 +13,8 @@
     "userTableName": "YOUR_DYNAMODB_USER_TABLE_NAME",
     "userPoolId": "YOUR_USER_POOL_ID",
     "identityPoolId": "YOUR_IDENTITY_POOL_ID",
-    "clientId": "YOUR_CLIENT_ID"
+    "clientId": "YOUR_CLIENT_ID",
+    "corsOrigin": "YOUR_CORS_ORIGIN"
   },
   "scripts": {
     "start": "node app.local.js",

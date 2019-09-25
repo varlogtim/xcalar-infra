@@ -23,7 +23,8 @@ const args = require('minimist')(process.argv.slice(2), {
     'identity-pool-id',
     'user-pool-id',
     'client-id',
-    'cloudformation-stack'
+    'cloudformation-stack',
+    'cors-origin'
   ],
   default: {
     region: 'us-east-1',
@@ -43,6 +44,7 @@ const sessionTableName = args['session-table-name']
 const userPoolId = args['user-pool-id']
 const identityPoolId = args['identity-pool-id']
 const clientId = args['client-id']
+const corsOrigin = args['cors-origin']
 const cloudFormationStackName = args['cloudformation-stack'] ?
       args['cloudformation-stack'] : 'AwsServerlessExpressStack'
 
@@ -83,6 +85,10 @@ if (!clientId) {
   process.exit(1)
 }
 
+if (!corsOrigin) {
+    console.error('You must supply a CORS origin as --cors-origin="<origin URL>"')
+}
+
 modifyFiles(['./simple-proxy-api.yaml', './package.json', './cloudformation.yaml', './config.js'], [{
   regexp: /YOUR_ACCOUNT_ID/g,
   replacement: accountId
@@ -110,6 +116,9 @@ modifyFiles(['./simple-proxy-api.yaml', './package.json', './cloudformation.yaml
 }, {
   regexp: /YOUR_CLIENT_ID/g,
   replacement: clientId
+}, {
+  regexp: /YOUR_CORS_ORIGIN/g,
+  replacement: corsOrigin
 }, {
   regexp: /AwsServerlessExpressStack/g,
   replacement: cloudFormationStackName

@@ -33,6 +33,9 @@ modifyFiles(['./simple-proxy-api.yaml', './package.json', './cloudformation.yaml
   regexp: new RegExp(config.region, 'g'),
   replacement: 'YOUR_AWS_REGION'
 }, {
+  regexp: new RegExp(config.corsOrigin, 'g'),
+  replacement: 'YOUR_CORS_ORIGIN'
+}, {
   regexp: new RegExp(config.cloudFormationStackName, 'g'),
   replacement: 'AwsServerlessExpressStack'
 }])
