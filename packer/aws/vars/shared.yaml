@@ -1,7 +1,8 @@
 disk_size: '20'
 destination_regions: 'us-east-1,us-west-2'
-shared_with: '045297022527,043829555035,364047378361'
+shared_with: '045297022527,043829555035,364047378361,876030232190'
 
+# account xcalar-saas: 876030232190
 # account xcalar-prod: 045297022527
 # account xcalar-test: 043829555035
 # account xcalar-poc: 364047378361
