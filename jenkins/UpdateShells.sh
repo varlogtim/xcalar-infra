@@ -9,7 +9,7 @@ export XLRINFRADIR=${XLRINFRADIR:-$PWD}
 if [ "${USERNAME_LIST}" == "ALL" ]; then
     RET=$(aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName, '${STACK_PREFIX}')]")
     STACK_LIST=$(echo $RET | jq .[].StackId | cut -d '"' -f 2)
-elif [ "${USERNAME_LIST}" != "ALL" ] && ! [ -z "${USERNAME_LIST}"]; then
+elif [ "${USERNAME_LIST}" != "ALL" ] && ! [ -z "${USERNAME_LIST}" ]; then
     for USERNAME in ${USERNAME_LIST[@]}; do
         RET=$(aws cloudformation describe-stacks --query "Stacks[?Tags[?Value=='${USERNAME}']]")
         STACK_LIST+=( $(echo $RET | jq .[].StackId | cut -d '"' -f 2) )
@@ -19,17 +19,26 @@ else
     exit 1
 fi
 
-
-
 for STACK in ${STACK_LIST[@]}; do
-    #TODO
-    #generate license key
-    echo ${STACK}
+    STACK_NAME=$(echo ${STACK} | cut -d "/" -f 2)
+    if [ "${LICENSE_TYPE}" == "dev" ]; then
+        KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK_NAME}"'","licenseType":"Developer","compress":true,
+              "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
+              "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+    elif [ "${LICENSE_TYPE}" == "prod" ]; then
+        KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK_NAME}"'","licenseType":"Production","compress":true,
+              "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
+              "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+    else
+        echo "Need to provide the licenseType"
+        exit 1
+    fi
     aws cloudformation update-stack --stack-name ${STACK} \
                                     --no-use-previous-template \
                                     --template-url ${CFN_TEMPLATE_URL} \
                                     --parameters  ParameterKey=ImageId,ParameterValue="${AMI}",UsePreviousValue=false \
                                                 ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE},UsePreviousValue=false \
+                                                ParameterKey=LicenseKey,ParameterValue=${KEY},UsePreviousValue=false \
                                     --role-arn ${ROLE} \
                                     --capabilities CAPABILITY_IAM
 done
@@ -49,7 +58,7 @@ while true; do
                     unset NEW_STACK_LIST[$i]
                 fi
             done
-        elif [ $STATUS == "ROLLBACK_IN_PROGRESS" ] | [ $STATUS == "ROLLBACK_COMPLETE" ]; then
+        elif [ $STATUS == "UPDATE_ROLLBACK_IN_PROGRESS" ] | [ $STATUS == "UPDATE_ROLLBACK_COMPLETE" ]; then
             echo "$STACK is faulty"
             EXIT_CODE=1
             DELETE=($STACK)
