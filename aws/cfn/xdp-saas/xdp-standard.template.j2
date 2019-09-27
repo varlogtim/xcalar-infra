@@ -339,6 +339,14 @@ Resources:
       FromPort: 18552
       ToPort: 18552
       SourceSecurityGroupId: !Ref 'ClusterSG'
+  ClusterIngressTableau:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'ClusterSG'
+      IpProtocol: tcp
+      FromPort: 10000
+      ToPort: 10000
+      SourceSecurityGroupId: !Ref 'ClusterSG'
   ClusterIngressProto:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
