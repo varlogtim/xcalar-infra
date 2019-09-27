@@ -2,6 +2,7 @@ import boto3
 import json
 import traceback
 import socket
+import requests
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
@@ -158,8 +159,8 @@ def check_cluster_status(user_name, stack_info):
     #size = 0, no running cluster
     #directly return
     if stack_info['size'] == 0:
-        return {'status' : Status.OK,
-            'isPending' : False}
+        return {'status': Status.OK,
+                'isPending': False}
     else:
         cluster_count = stack_info['size']
         response = ec2_client.describe_instances(
@@ -184,7 +185,7 @@ def check_cluster_status(user_name, stack_info):
                 cluster = instances[j]
                 if cluster['State']['Name'] == 'pending':
                     return {'status': Status.OK,
-                            'isPending' : True}
+                            'isPending': True}
                 #all running, keep counting
                 elif cluster['State']['Name'] == 'running':
                     running_count = running_count + 1
@@ -202,20 +203,24 @@ def check_cluster_status(user_name, stack_info):
             s = socket.socket()
             try:
                 s.settimeout(0.5)
-                s.connect((stack_info['cluster_url'].split("https://", 1)[-1], 443))
+                s.connect((stack_info['cluster_url'].split('https://', 1)[-1], 443))
+                r = requests.get(stack_info['cluster_url'] + '/assets/htmlFiles/login.html', verify=False)
+                if r.status_code != 200:
+                    return {'status': Status.OK,
+                            'isPending': True}
             except Exception as e:
-                return {'status' : Status.CLUSTER_ERROR,
-                        'error': 'Cluster is not reachable yet'}
+                return {'status': Status.OK,
+                        'isPending': True}
             finally:
                 s.settimeout(None)
                 s.close()
-            return {'status' : Status.OK,
-                    'clusterUrl' : stack_info['cluster_url'],
-                    'clusterNum' : running_count,
-                    'isPending' : False}
+            return {'status': Status.OK,
+                    'clusterUrl': stack_info['cluster_url'],
+                    'clusterNum': running_count,
+                    'isPending': False}
         else:
-            return {'status' : Status.STACK_ERROR,
-                    'error' : 'The number of clusters is wrong'}
+            return {'status': Status.STACK_ERROR,
+                    'error': 'The number of clusters is wrong'}
 
 
 def get_cluster(user_name):
@@ -243,18 +248,18 @@ def get_cluster(user_name):
         # in progresss
         if stack_info['stack_status'].endswith('IN_PROGRESS'):
             return _make_reply(200, {
-                'status' : Status.OK,
-                'isPending' : True
+                'status': Status.OK,
+                'isPending': True
             })
         #updated completed, then check cluster status
         elif stack_info['stack_status'] == 'UPDATE_COMPLETE':
             cluster_status = check_cluster_status(user_name, stack_info)
             return _make_reply(200, cluster_status)
         #error(more detailed failure check)
-        else :
+        else:
             return _make_reply(200, {
-                'status' : Status.STACK_ERROR,
-                'error' : 'Stack has error: %s' % stack_info['stack_status'],
+                'status': Status.STACK_ERROR,
+                'error': 'Stack has error: %s' % stack_info['stack_status'],
             })
 
 def lambda_handler(event, context):
