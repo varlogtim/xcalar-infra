@@ -15,12 +15,25 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
     for i in `seq 1 $NUM_TO_CREATE`; do
         echo "Creating stack ${i}"
         SUFFIX=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)
+        if [ "${LICENSE_TYPE}" == "dev" ]; then
+            KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK}${SUFFIX}"'","licenseType":"Developer","compress":true,
+                "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
+                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_DEV_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+        elif [ "${LICENSE_TYPE}" == "prod" ]; then
+            KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK}"'","licenseType":"Production","compress":true,
+                "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
+                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_PROD_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+        else
+            echo "Need to provide the licenseType"
+            exit 1
+        fi
         RET=$(aws cloudformation create-stack \
         --role-arn ${ROLE} \
         --stack-name ${STACK_PREFIX}${SUFFIX} \
         --template-url ${CFN_TEMPLATE_URL} \
         --parameters ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE} \
                     ParameterKey=ImageId,ParameterValue=${AMI} \
+                    ParameterKey=LicenseKey,ParameterValue=${KEY} \
         --tags Key=available,Value=true \
                 Key=deployment,Value=saas \
         --capabilities CAPABILITY_IAM)
