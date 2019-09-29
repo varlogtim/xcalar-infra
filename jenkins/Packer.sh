@@ -67,7 +67,9 @@ do_packer() {
     INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
     VERSION=${INSTALLER_VERSION_BUILD[0]}
 
-    bash -x ../build.sh --osid amzn1 --template $PACKERCONFIG --installer-url "$INSTALLER_URL" -- ${BUILDER:+-only=${BUILDER}} -var license="${LICENSE}" -var disk_size=$DISK_SIZE -color=false 2>&1 | tee $OUTDIR/output.txt
+    unset INSTALLER
+    export INSTALLER_URL
+    bash -x ../build.sh --template $PACKERCONFIG --installer-url "$INSTALLER_URL" -- ${BUILDER:+-only=${BUILDER}} -var license="${LICENSE}" -var disk_size=$DISK_SIZE -color=false 2>&1 | tee $OUTDIR/output.txt
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         exit 1
     fi

@@ -1,10 +1,17 @@
 #!/bin/bash
 
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin:/opt/aws/bin:$HOME/bin
+export PS4='# ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
+set -x
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin
 
 XCE_CONFDIR="${XCE_CONFDIR:-/etc/xcalar}"
+OSID=${OSID:-$(osid)}
 
 EPHEMERAL=/ephemeral/data
+
+yum localinstall -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-12.noarch.rpm
+
+/usr/bin/ephemeral-disk || true
 
 NOW=$(date +%s)
 if test -x /usr/bin/ephemeral-disk; then
@@ -23,10 +30,10 @@ if [ -z "$TMPDIR" ]; then
         export TMPDIR=$EPHEMERAL/tmp
     elif [ -e /mnt/resource ]; then
         export TMPDIR=/mnt/resource/tmp
-    elif [ -e /mnt ]; then
-        export TMPDIR=/mnt/tmp
+    elif mountpoint -q /mnt; then
+        export TMPDIR=/mnt/tmp-installer-$(id -u)
     else
-        export TMPDIR=/tmp/installer
+        export TMPDIR=/tmp/installer-$(id -u)
     fi
     mkdir -m 1777 -p $TMPDIR
 fi
@@ -47,12 +54,20 @@ download_file() {
 }
 
 aws_s3_from_url() {
-    local clean_url="$(echo "$1" | sed -e 's/\?.*$//g')"
+    local clean_url="${1%%\?*}"
     clean_url="${clean_url#https://}"
-    if ! [[ $clean_url =~ ^s3 ]]; then
+    if [[ $clean_url =~ ^s3 ]]; then
+        echo "s3://${clean_url#*/}"
+        return 0
+    fi
+    local host="${clean_url%%/*}"
+    local bucket="${host%%.*}"
+    local s3host="${host#$bucket.}"
+    if ! [[ $s3host =~ ^s3 ]]; then
         return 1
     fi
-    echo "s3://${clean_url#*/}"
+    local key="${clean_url#$host/}"
+    echo "s3://${bucket}/${key}"
 }
 
 set +e

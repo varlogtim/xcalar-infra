@@ -35,8 +35,8 @@ check_or_upload_installer() {
         INSTALLER_URL="$(installer-url.sh -d s3 $INSTALLER)" || die "Failed to upload installer"
     fi
 
-    if [[ $INSTALLER_URL =~ ^http ]]; then
-        if URL_CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Range: bytes=0-500" -L "$INSTALLER_URL"); then
+    if [[ "$INSTALLER_URL" =~ ^http ]]; then
+        if URL_CODE=$(curl -f -s -o /dev/null -w '%{http_code}' -H "Range: bytes=0-500" -L "$INSTALLER_URL"); then
             if ! [[ $URL_CODE =~ ^2 ]]; then
                 echo >&2 "InstallerURL failed! $INSTALLER_URL not found!"
                 exit 1
@@ -45,8 +45,8 @@ check_or_upload_installer() {
             echo >&2 "InstallerURL failed! $INSTALLER_URL not found!"
             exit 1
         fi
-    elif [[ $INSTALLER_URL =~ ^s3:// ]]; then
-        if ! aws_s3_head_object $INSTALLER_URL > /dev/null; then
+    elif [[ "$INSTALLER_URL" =~ ^s3:// ]]; then
+        if ! aws_s3_head_object "$INSTALLER_URL" > /dev/null; then
             echo >&2 "InstallerURL failed! $INSTALLER_URL not found!"
             exit 1
         fi
@@ -121,9 +121,6 @@ main() {
             JSON_TEMPLATE="${TEMPLATE%.yaml}".json
             cfn-flip < "$TEMPLATE" > "$JSON_TEMPLATE"
         fi
-        COMBINED_VARS_FILE="${JSON_TEMPLATE%.json}"-vars.json
-        cat $VAR_FILE vars/${OSID}.yaml vars/shared.yaml | cfn-flip > "$COMBINED_VARS_FILE"
-        set -- -var-file "$COMBINED_VARS_FILE" "$@" "$JSON_TEMPLATE"
     fi
 
     if [ -z "$INSTALLER_URL" ]; then
@@ -138,7 +135,7 @@ main() {
     INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
 
     set +e
-    if ! packer_do validate ${*/-color=*/} || ! packer_do build "$@"; then
+    if ! packer_do validate ${*/-color=*/} "$JSON_TEMPLATE" || ! packer_do build $* "$JSON_TEMPLATE"; then
         trap - EXIT
         echo "Failed! See $TMPDIR"
         exit 1

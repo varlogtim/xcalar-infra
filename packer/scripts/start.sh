@@ -55,7 +55,7 @@ keep_trying() {
 
 curl -fsSL http:/repo.xcalar.net/scripts/osid-201904 -o /usr/bin/osid
 chmod +x /usr/bin/osid
-OSID=$(osid)
+OSID=${OSID:-$(osid)}
 
 if test -e /etc/system-release; then
     if test -f /etc/selinux/config; then
@@ -66,8 +66,8 @@ if test -e /etc/system-release; then
     rm -rf /var/cache/yum/*
     yum remove -y java java-1.7.0-openjdk || true
     keep_trying yum update -y
-    keep_trying yum install -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
-    yum install -y -q --enablerepo='xcalar-*' nfs-utils xfsprogs sudo lvm2 mdadm btrfs-progs yum-utils fuse tmux || true
+    keep_trying yum localinstall -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
+    yum install -y -q --enablerepo='xcalar-*' nfs-utils xfsprogs sudo lvm2 mdadm btrfs-progs yum-utils fuse tmux bcache-tools || true
 else
     export DEBIAN_FRONTEND=noninteractive
     #VERSION_CODENAME=bionic

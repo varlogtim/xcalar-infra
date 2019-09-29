@@ -76,7 +76,7 @@ provisioners:
       - '{{ template_dir }}/../scripts/start.sh'
       - '{{ template_dir }}/../scripts/install-epel.sh'
       - '{{ template_dir }}/../scripts/install-java8.sh'
-      - '{{ template_dir }}/../scripts/packages-{{user `osid`}}.sh'
+      - '{{ template_dir }}/../scripts/packages-amzn.sh'
   - type: file
     source: '{{ template_dir }}/../scripts/aws-verify.sh'
     destination: /tmp/aws-verify.sh

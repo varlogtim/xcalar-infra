@@ -95,9 +95,16 @@ Parameters:
     Type: AWS::EC2::Image::Id
     Default: '{{ ami_us_west_2 }}'
   CNAME:
-    Description: Desired CNAME of the instance (ex, fun.xcalar.cloud.)
+    Description: Desired CNAME of the instance without domain portion. NONE to skip, GEN to generate.
     Type: String
-    Default: 'yourstack-replace-me.xcalar.cloud.'
+    Default: 'NONE'
+  Cgroups:
+    Description: Enable cgroups.
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+    Type: String
   SessionTable:
     Description: Authenticaton Sessopn Table Name
     Type: String
@@ -181,7 +188,7 @@ Conditions:
   NoKeyName: !Equals [!Ref KeyName, '']
   NoInstances: !Equals [!Ref ClusterSize, '0']
   CreateDNS: !Not
-    - !Equals [!Ref CNAME, '' ]
+    - !Equals [!Ref CNAME, 'NONE' ]
 Mappings:
   ZoneMappings:
     '043829555035':
@@ -384,6 +391,7 @@ Resources:
       Strategy: cluster
   ClusterASG:
     Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: [EfsMountTarget]
     Properties:
       PlacementGroup: !Ref 'PlacementGroup'
       TerminationPolicies:
@@ -432,9 +440,8 @@ Resources:
       AutoScalingScheduledAction:
         IgnoreUnmodifiedGroupSizeProperties: 'true'
       AutoScalingRollingUpdate:
-        MinInstancesInService: '0'
         MaxBatchSize: !If [NoInstances ,!Ref 'AWS::NoValue', !Ref 'ClusterSize']
-        WaitOnResourceSignals: 'false'
+        WaitOnResourceSignals: false
   ClusterEIP:
     Type: AWS::EC2::EIP
 {%- if createVpc %}
@@ -451,7 +458,13 @@ Resources:
         - ZoneMappings
         - !Ref 'AWS::AccountId'
         - HostedZoneId
-      Name: !Ref 'CNAME'
+      Name: !Sub
+        - '${CNAME}.${HostedZoneName}.'
+        - CNAME: !Ref 'CNAME'
+          HostedZoneName: !FindInMap
+            - ZoneMappings
+            - !Ref 'AWS::AccountId'
+            - HostedZoneName
       Type: A
       TTL: '60'
       ResourceRecords:
@@ -495,11 +508,12 @@ Resources:
         - !Ref ClusterNICSG
       SourceDestCheck: true
       Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-ClusterNIC'
         - Key: StackName
           Value: !Ref 'AWS::StackName'
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
-    DependsOn: [EfsMountTarget]
     Metadata:
       AWS::CloudFormation::Init:
         configSets:
@@ -510,6 +524,40 @@ Resources:
             - reconfigure_app
         configure_cfn:
           files:
+{%- if enableLifecycle %}
+            /etc/sysconfig/lifecycled:
+              content: !Sub
+                - |
+                  AWS_DEFAULT_REGION=${AWS::Region}
+                  AWS_REGION=${AWS::Region}
+                  LIFECYCLED_HANDLER=/usr/bin/copylogs.sh
+                  LIFECYCLED_SNS_TOPIC=${LifecycleHookTopic}
+                  LIFECYCLE_HOOK_NAME=LifecycleTerminating
+                  LOGBUCKET=${LogBucket}
+                  LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
+                - { LogBucket: !ImportValue sharedinf-logbucket }
+              mode: '000400'
+              owner: root
+              group: root
+            /usr/bin/copylogs.sh:
+              content: !Sub |
+                #!/bin/bash
+                set -x
+                echo "$(date +%TF%T%z) Running copylogs.sh" | logger --id -p "local0.info" -t copy-logs -s
+                eval $(ec2-tags -s -i)
+                source /etc/sysconfig/lifecycled
+                export AWS_DEFAULT_REGION="${AWS::Region}"
+                InstanceId=$(curl -s http://169.254.169.254/2018-09-24/meta-data/instance-id)
+                S3Uri=${!LOGBUCKET}${!LOGPREFIX}${!InstanceId}
+                for dir in /var/log /var/opt/xcalar /home/xcalar; do
+                  aws s3 cp --recursive ${!dir}/ s3://${!S3Uri}${!dir}/ 2>&1 | logger --id -p "local0.info" -t copy-logs -s
+                done
+                aws autoscaling complete-lifecycle-action --lifecycle-action-result CONTINUE --instance-id ${!InstanceId} --lifecycle-hook-name $LIFECYCLE_HOOK_NAME --auto-scaling-group-name "$AWS_AUTOSCALING_GROUPNAME"
+                exit 0
+              mode: '000750'
+              owner: root
+              group: root
+{%- endif %}
             /etc/cfn/hooks.d/cfn-asg-reloader.conf:
               content: !Sub |
                 [cfn-asg-reloader-hook]
@@ -558,16 +606,31 @@ Resources:
               group: root
             /var/lib/cloud/instance/ec2.env:
               content: !Sub
-                - |-
+                - |
                   AWS_DEFAULT_REGION=${AWS::Region}
+                  AWS_REGION=${AWS::Region}
                   CLUSTER_NAME=${AWS::StackName}
                   BUCKET=${Bucket}
                   NFSHOST=${SharedRoot}
                   SUBNET=${Subnet}
                   NIC=${ClusterNIC}
                   CNAME=${CNAME}
+                  LOGBUCKET=${LogBucket}
+                  LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
+                  HOSTEDZONEID=${HostedZoneId}
+                  HOSTEDZONENAME=${HostedZoneName}
+                  CERTSTORE=/xcalar/cloud/${HostedZoneName}
                 - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
                   Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                  LogBucket: !ImportValue sharedinf-logbucket
+                  HostedZoneId: !FindInMap
+                    - ZoneMappings
+                    - !Ref 'AWS::AccountId'
+                    - HostedZoneId
+                  HostedZoneName: !FindInMap
+                    - ZoneMappings
+                    - !Ref 'AWS::AccountId'
+                    - HostedZoneName
               mode: '000400'
               owner: root
               group: root
@@ -578,7 +641,7 @@ Resources:
               group: root
             /var/lib/cloud/instance/bootstrap-wrapper.sh:
               content: !Sub
-                - |-
+                - |
                   #!/bin/bash
                   log()  {
                     logger --id -p "$1" -t user-data -s <<< "$2"
@@ -590,12 +653,16 @@ Resources:
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
                   bash /var/lib/cloud/instance/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" \
                             --cluster-size "$DESIREDCAP" --tag-key "aws:autoscaling:groupName" --tag-value "$AWS_AUTOSCALING_GROUPNAME" --cluster-name "${AWS::StackName}" \
-                            --bucket "${Bucket}" --certstore /xcalar/cloud/xcalar.cloud --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic ${ClusterNIC}
+                            --bucket "${Bucket}" --cgroups "${Cgroups}" --certstore /xcalar/cloud/${HostedZoneName} --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic "${ClusterNIC}"
                   rc=$?
                   log local0.info "bootstrap.sh returned $rc"
                   exit $rc
                 - SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
                   Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                  HostedZoneName: !FindInMap
+                    - ZoneMappings
+                    - !Ref 'AWS::AccountId'
+                    - HostedZoneName
               mode: '000700'
               owner: root
               group: root
@@ -641,10 +708,22 @@ Resources:
             log local0.info "Bootstrap returned $rc"
             /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
             exit $rc
-  IamInstanceRole:
+{%- if enableLifecycle %}
+  LifecycleHookTopic:
+    Type: AWS::SNS::Topic
+  LifecycleHook:
+    Type: AWS::AutoScaling::LifecycleHook
+    Properties:
+      AutoScalingGroupName: !Ref ClusterASG
+      HeartbeatTimeout: 60
+      DefaultResult: 'CONTINUE'
+      LifecycleHookName: 'LifecycleTerminating'
+      LifecycleTransition: "autoscaling:EC2_INSTANCE_TERMINATING"
+      NotificationTargetARN: !Ref LifecycleHookTopic
+      RoleARN: !GetAtt LifecycleHookRole.Arn
+  LifecycleHookRole:
     Type: AWS::IAM::Role
     Properties:
-      Path: /
       AssumeRolePolicyDocument:
         Statement:
           - Action:
@@ -653,6 +732,23 @@ Resources:
             Principal:
               Service:
                 - ec2.amazonaws.com
+                - autoscaling.amazonaws.com
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AutoScalingNotificationAccessRole'
+{%- endif %}
+  IamInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+      Path: /
       Policies:
         - PolicyName: ClusterPolicy
           PolicyDocument:
@@ -684,8 +780,15 @@ Resources:
                   - '*'
               - Effect: Allow
                 Action:
-                  - autoscaling:UpdateAutoScalingGroup
-                  - autoscaling:DescribeAutoScalingGroups
+                  - "autoscaling:*Scaling*"
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    autoscaling:ResourceTag/aws:cloudformation:stack-name: !Ref 'AWS::StackName'
+              - Effect: Allow
+                Action:
+                  - "autoscaling:Describe*Scaling*"
+                  - autoscaling:CompleteLifecycleAction
                 Resource:
                   - '*'
               - Effect: Allow
@@ -708,10 +811,17 @@ Resources:
                   - s3:DeleteObject
                   - s3:GetObject
                   - s3:ListMultipartUploadParts
+                  - s3:ListBucket
                   - s3:PutObject
-                Resource: !Sub
-                  - 'arn:aws:s3:::${Bucket}/*'
-                  - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                Resource:
+                  - !Sub
+                    - 'arn:aws:s3:::${Bucket}/*'
+                    - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                  - !Sub
+                    - 'arn:aws:s3:::${LogBucket}/logs/${AccountId}/${StackName}/*'
+                    - LogBucket: !ImportValue sharedinf-logbucket
+                      AccountId: !Ref AWS::AccountId
+                      StackName: !Ref AWS::StackName
               - Effect: Allow
                 Action:
                   - route53:GetChange
@@ -733,7 +843,7 @@ Resources:
                   - ssm:GetParameters
                   - ssm:GetParameter
                 Resource:
-                  - 'arn:aws:ssm:*:*:parameter/xcalar/*'
+                  - 'arn:aws:ssm:*:*:parameter/xcalar/cloud/*'
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -748,12 +858,26 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
 
+{%- if enableLifecycle %}
+              - Effect: Allow
+                Action:
+                  - 'sns:Subscribe'
+                  - 'sns:Unsubscribe'
+                Resource:
+                  - !Ref LifecycleHookTopic
+              - Effect: Allow
+                Action:
+                  - 'sqs:*'
+                Resource:
+                  - !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:lifecycled-*'
+{%- endif %}
   IamInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Path: /
       Roles:
         - !Ref 'IamInstanceRole'
+
 Outputs:
   URL:
     Description: URL of your new Xcalar Cluster

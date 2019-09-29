@@ -95,8 +95,8 @@ ec2_image_tags() {
 }
 
 xcalar_latest() {
-    AMZN1HVM_US_EAST_1=$(ec2_find_ami --filters 'Name=name,Values=xdp-*' --owner self --region us-east-1)
-    AMZN1HVM_US_WEST_2=$(ec2_find_ami --filters 'Name=name,Values=xdp-*' --owner self --region us-west-2)
+    AMZN1HVM_US_EAST_1=$(ec2_find_ami --filters "Name=tag:Version,Values=${VERSION}" 'Name=name,Values=xdp-*' --owner self --region us-east-1)
+    AMZN1HVM_US_WEST_2=$(ec2_find_ami --filters "Name=tag:Version,Values=${VERSION}" 'Name=name,Values=xdp-*' --owner self --region us-west-2)
     echo "ami_us_east_1: $AMZN1HVM_US_EAST_1" > $TEMPLATEDIR/vars/amis.yaml
     echo "ami_us_west_2: $AMZN1HVM_US_WEST_2" >> $TEMPLATEDIR/vars/amis.yaml
 }
@@ -334,7 +334,7 @@ dc2_upload() {
             ;;
     esac
 
-    BUCKET_ENDPOINT="https://$(aws_s3_endpoint $BUCKET)"
+    BUCKET_ENDPOINT="$(aws_s3_url s3://$BUCKET)"
     TARGET=cfn/${CONTEXT}-${RELEASE}
     BASE_URL="${BUCKET_ENDPOINT}/${TARGET}"
     bootstrapUrl="${BASE_URL}/scripts/user-data.sh"
@@ -357,6 +357,18 @@ dc2_upload() {
     local -a urls=() quick_urls=()
     test -n "${URL_FILE:-}" && rm -f "${URL_FILE}" || true
     local ami_id=$(cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | cfn-flip | jq -r '.ami_us_west_2')
+    debug "Found AMI: $ami_id"
+    if [ "$ami_id" = null ] || test -z "$ami_id" ; then
+        xcalar_latest
+        ami_id=$(aws --region us-west-2 ec2 describe-images --owners self --filters \
+            Name=tag:Version,Values=${VERSION} \
+            Name=tag:BaseOS,Values='XDP-AMZN1-BASE' \
+            Name=name,Values='xdp-*' | aws_format_images | head -1 | awk '{print $2}')
+        if [ $? -ne 0 ]; then
+            die "Failed to find valid AMI"
+        fi
+        debug "Found New AMI: $ami_id"
+    fi
     aws ec2 describe-images --region us-west-2 --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TEMPLATEDIR"/vars/image.yaml
     for J2TEMPLATE in "$PROJDIR"/*.j2; do
         if [[ $J2TEMPLATE =~ quickcreate ]]; then
@@ -408,7 +420,7 @@ dc2_upload() {
         s3_sync --dryrun "${GENDIR}/" "s3://${BUCKET}/${TARGET}/" >&2
     else
         local -i would_delete
-        if would_delete=$(s3_sync --dryrun ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" | grep delete: | wc -l) \
+        if would_delete=$(s3_sync --dryrun ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" | grep upload: | wc -l) \
             && [ $would_delete -gt 10 ]; then
             warn "You would delete $would_delete objects from s3://${BUCKET}/${TARGET}/!!"
             die "Manually remove the destination first, aws s3 rm --recursive s3://${BUCKET}/${TARGET}/ if you're sure"
@@ -442,7 +454,7 @@ dc2_cleanup() {
 }
 
 dc2_defaults() {
-    declare -g FIND_AMI='' DRY=0 KEEP=0 DEBUG='' CLOUD=aws MODE=''
+    declare -g FIND_AMI=0 DRY=0 KEEP=0 DEBUG='' CLOUD=aws MODE=''
     declare -g ENVIRONMENT=${ENVIRONMENT:-dev}
     declare -g TMPBASE="${TMPDIR:-/tmp}/$(basename $0 .sh)-$(id -u)" # EG /tmp/dc2-1000/
 

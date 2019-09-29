@@ -46,14 +46,46 @@ efsip() {
 # Parse out all IP addresses from default.cfg and append the hosts to /etc/hosts
 # named as vm0, vm1, ...
 cluster_ips () {
-    local c=0 ii
-    mkdir -m 0700 -p ~/.ssh
-    sudo sed -r -i '/vm([0-9]+)$/d' /etc/hosts
+    local c=0 ii='' name='' domain=''
+    if [ "$AWS_DEFAULT_REGION" = us-east-1 ]; then
+        domain=$(hostname -d || echo ec2.internal)
+    else
+        domain=$(hostname -d || echo ${AWS_DEFAULT_REGION}.compute.amazonaws.com)
+    fi
+
+    sed -r -i '/#cloud-init$/d' /etc/hosts
+    rm -f /etc/ssh/ssh_known_hosts
+    mkdir -p /etc/ansible
+    echo "[cluster]" > /etc/ansible/hosts
     for ii in $(awk -F'=' '/IpAddr/{print $2}' $XCE_CONFIG); do
-        echo "$ii      vm${c}.local   vm$c" | sudo tee -a /etc/hosts
-        ssh-keyscan $ii vm${c}.local  vm$c | tee -a ~/.ssh/known_hosts
+        name="${ii//\./-}"
+        echo "$ii    ip-${name}.${domain} ip-${name} vm${c} #cloud-init" | tee -a /etc/hosts
+        echo "vm${c}   ansible_host=$ii" | tee -a /etc/ansible/hosts
+        ssh-keyscan $ii    ip-${name}.${domain} ip-${name} vm${c} | tee -a /etc/ssh/ssh_known_hosts
         c=$((c+1));
     done
+}
+
+stop_cluster() {
+    if ((SYSTEMD)); then
+        systemctl daemon-reload
+        systemctl stop xcalar || true
+    else
+        /etc/init.d/xcalar stop-supervisor || true
+    fi
+}
+
+start_cluster() {
+    if ((SYSTEMD)); then
+        systemctl start xcalar
+    else
+        service xcalar start
+    fi
+}
+
+restart_cluster() {
+    stop_cluster
+    start_cluster
 }
 
 ssm_get_string() {
@@ -132,6 +164,9 @@ node_0() {
             echo >&2 "Waiting for ENI $NIC that is $eni_status by $eni_instance .."
             sleep 10
         done
+    fi
+    if ! test -d ${XLRROOT}/jupyterNotebooks; then
+        rsync -avzr /var/opt/xcalar/ ${XLRROOT}/
     fi
 
     test -d $XLRROOT/config || mkdir -p $XLRROOT/config
@@ -216,6 +251,14 @@ main() {
                 PREFIX="$1"
                 shift
                 ;;
+            --logbucket)
+                LOGBUCKET="$1"
+                shift
+                ;;
+            --logprefix)
+                LOGPREFIX="$1"
+                shift
+                ;;
             --cluster-size)
                 CLUSTER_SIZE="$1"
                 shift
@@ -256,6 +299,10 @@ main() {
                 ADMIN_EMAIL="$1"
                 shift
                 ;;
+            --cgroups)
+                CGROUPS_ENABLED="$1"
+                shift
+                ;;
             *)
                 echo >&2 "WARNING: Unknown command $cmd"
                 ;;
@@ -264,9 +311,12 @@ main() {
     set -x
 
     CLUSTER_SIZE=${CLUSTER_SIZE:-1}
-    if [ -z "$XCE_CONFIG" ]; then
+
+    if [ -z "$XCE_CONFIG" ] || ! test -f "$XCE_CONFIG"; then
         XCE_CONFIG=/etc/xcalar/default.cfg
         XCE_DEFAULT_CONFIG=1
+    else
+        XCE_DEFAULT_CONFIG=0
     fi
 
     XCE_TEMPLATE=${XCE_TEMPLATE:-/etc/xcalar/template.cfg}
@@ -290,10 +340,9 @@ main() {
     INSTANCE_TYPE=$(curl -sSf http://169.254.169.254/latest/meta-data/instance-type)
     LOCAL_IPV4=$(curl -sSf http://169.254.169.254/latest/meta-data/local-ipv4)
     LOCAL_HOSTNAME=$(curl -sSf http://169.254.169.254/latest/meta-data/local-hostname)
-    sed -i "/^${LOCAL_IPV4}/d; /${LOCAL_HOSTNAME}/d;" /etc/hosts
-    echo "$LOCAL_IPV4	$LOCAL_HOSTNAME     $(hostname -s)" | tee -a /etc/hosts
-
     export AWS_DEFAULT_REGION="${AVZONE%[a-f]}"
+    sed -i "/^${LOCAL_IPV4}/d; /${LOCAL_HOSTNAME}/d;" /etc/hosts
+    echo "$LOCAL_IPV4	$LOCAL_HOSTNAME     $(hostname -s) #cloud-init" | tee -a /etc/hosts
 
     JAVA_HOME="$(readlink -f $(command -v java))"
     export JAVA_HOME="${JAVA_HOME%/bin/java}"
@@ -307,6 +356,17 @@ main() {
     NFSDIR="${NFSDIR#:}"
     NFSDIR="${NFSDIR#/}"
 
+    # This was set explicitly
+    if [ "${CLUSTER_SIZE}" = 0 ]; then
+        stop_cluster
+        exit 0
+    fi
+
+    if ((SYSTEMD)); then
+        systemctl start lifecycled || true
+    else
+        start lifecycled || true
+    fi
     if [ -z "$NFS_TYPE" ]; then
         if [[ $NFSHOST =~ ^fs-[0-9a-f]{8}$ ]]; then
             if [ -n "$SUBNET" ]; then
@@ -391,7 +451,9 @@ main() {
                     if [ -z "$CLUSTER_SIZE" ]; then
                         break
                     fi
-                    if [ $NUM_INSTANCES -eq $CLUSTER_SIZE ]; then
+                    # Greater-than occurs when the cluster wants to shut down
+                    # (Desired=0) but we have instances running
+                    if [ $NUM_INSTANCES -ge $CLUSTER_SIZE ]; then
                         break
                     fi
                 fi
@@ -420,6 +482,8 @@ main() {
             XLRROOT=/mnt/xcalar
         fi
     fi
+    test -d $XLRROOT || mkdir -p $XLRROOT
+    chown xcalar:xcalar $XLRROOT
 
     sed -i '/^Constants.Cgroups/d' ${XCE_TEMPLATE}
     if [ "$CGROUPS_ENABLED" = false ]; then
@@ -427,21 +491,16 @@ main() {
             && mv ${XCE_TEMPLATE}.tmp ${XCE_TEMPLATE}
     fi
 
-    if [ "$MOUNT_OK" = true ]; then
-        if ! test -d ${XLRROOT}/jupyterNotebooks; then
-            rsync -avzr /var/opt/xcalar/ ${XLRROOT}/
-        fi
-        /opt/xcalar/scripts/genConfig.sh ${XCE_TEMPLATE} - "${IPS[@]}" | sed 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='${XLRROOT}'@g' | tee $XCE_CONFIG
-    else
-        XLRROOT=/var/opt/xcalar
-        mkdir -p $XLRROOT
-        chown xcalar:xcalar $XLRROOT
-        /opt/xcalar/scripts/genConfig.sh ${XCE_TEMPLATE} - localhost | tee $XCE_CONFIG
+    if test -L $XCE_CONFIG; then
+        rm $XCE_CONFIG
     fi
 
+    /opt/xcalar/scripts/genConfig.sh ${XCE_TEMPLATE} - "${IPS[@]}" | sed 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='${XLRROOT}'@g' | tee $XCE_CONFIG
+
+    cluster_ips
+
     aws ec2 create-tags --resources $INSTANCE_ID \
-        --tags Key=Name,Value="${AWS_CLOUDFORMATION_STACK_NAME}-${NODE_ID}" \
-            Key=Node_ID,Value="${NODE_ID}"
+        --tags Key=Name,Value="${AWS_CLOUDFORMATION_STACK_NAME}-${NODE_ID}"
 
     # Special node0 processing
     if [ $NODE_ID -eq 0 ]; then
