@@ -1,0 +1,2 @@
+#!/bin/bash
+exec docker run --detach --init --restart always --name jenkins-meta-back --hostname jenkins-meta-back -p 4000:80 jenkins-meta-back

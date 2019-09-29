@@ -55,7 +55,7 @@ class MongoDB(object):
                            self.cfg.get('MONGO_DB_PASS'),
                            self.cfg.get('MONGO_DB_HOST'),
                            self.cfg.get('MONGO_DB_PORT'))
-        self.client = MongoClient(self.url)
+        self.client = MongoClient(self.url, connect=False)
         # Quick connectivity check...
         # The ismaster command is cheap and does not require auth.
         self.client.admin.command('ismaster')
@@ -64,6 +64,14 @@ class MongoDB(object):
 
     def collection(self, name):
         return self.db[name]
+
+    def job_collections(self):
+        jobs = []
+        for name in self.db.collection_names():
+            if '_meta' in name:
+                continue
+            jobs.append(name)
+        return jobs
 
     @staticmethod
     def encode_key(key):

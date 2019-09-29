@@ -1,0 +1,2 @@
+#!/bin/bash
+docker exec -it jenkins-meta-back /bin/bash

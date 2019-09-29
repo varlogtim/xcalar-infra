@@ -1,0 +1,2 @@
+#!/bin/bash
+docker build --no-cache -f $XLRINFRADIR/py_common/jenkins_meta_query/back/Dockerfile --rm -t jenkins-meta-back $XLRINFRADIR
