@@ -43,14 +43,16 @@
 FILE=""
 VAULTCACHE_BASE="$HOME/.aws/cache"
 TTL=4h
+ACCOUNT="${ACCOUNT:-$(cat ${VAULTCACHE_BASE}/account 2>/dev/null || echo xcalar)}"
 TYPE="sts"
+ROLE="${ROLE:-$(cat ${VAULTCACHE_BASE}/role 2>/dev/null || echo poweruser)}"
+PROFILE="${PROFILE:-$(cat ${VAULTCACHE_BASE}/profile 2>/dev/null || echo vault)}"
 CLEAR=false
 EXPORT_ENV=false
 EXPORT_PROFILE=false
 INSTALL=false
 UNMET_DEPS=()
-DEBUG=0
-export AWS_SHARED_CREDENTIALS_FILE="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+AWS_SHARED_CREDENTIALS_FILE="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
 
 usage() {
     cat <<EOF >&2
@@ -174,10 +176,6 @@ vault_status() {
     return 1
 }
 
-remove_profile() {
-    sed -i.bak '/^\['$1'\]/,/^$/d' "$2"
-}
-
 aws_configure() {
     local value
     value="$(aws configure get $1)"
@@ -197,25 +195,21 @@ vault_install_credential_helper() {
     local dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
     local filen="$(basename "${BASH_SOURCE[0]}")"
 
-    cat >${AWS_SHARED_CREDENTIALS_FILE}.$$ <<EOF
-
+    touch ${AWS_SHARED_CREDENTIALS_FILE}
+    sed -i.bak '/^\['$PROFILE'\]/,/^$/d' ${AWS_SHARED_CREDENTIALS_FILE}
+    cat >>${AWS_SHARED_CREDENTIALS_FILE} <<EOF
 [$PROFILE]
 credential_process = "${dir}/${filen}" --path $AWSPATH
 
 EOF
-
     unset AWS_SECRET_ACCESS_KEY
     unset AWS_SESSION_TOKEN
     unset AWS_ACCESS_KEY_ID
-    if ! AWS_SHARED_CREDENTIALS_FILE=${AWS_SHARED_CREDENTIALS_FILE}.$$ aws --profile "$PROFILE" sts get-caller-identity --output json; then
+    if ! aws --profile "$PROFILE" sts get-caller-identity --output json; then
         die "Failed to get your identity from AWS :("
     fi
 
-    remove_profile "$PROFILE" "$AWS_SHARED_CREDENTIALS_FILE"
-    cat ${AWS_SHARED_CREDENTIALS_FILE}.$$ >> ${AWS_SHARED_CREDENTIALS_FILE}
-    rm ${AWS_SHARED_CREDENTIALS_FILE}.$$
     say "SUCCESS"
-
     say
     if [ "$PROFILE" = default ]; then
         say "   aws <cmd>"
@@ -226,35 +220,14 @@ EOF
         say "To avoid having to add '--profile $PROFILE' to every awscli command, add the following to your ~/.bashrc"
         say "   export AWS_PROFILE=$PROFILE"
     fi
-}
-
-install_aws() {
-    VENV_AWS=$HOME/.local/share/aws
-    if ! test -e "${VENV_AWS}/bin/activate"; then
-        venv_version=16.7.5
-        venv_url="https://github.com/pypa/virtualenv/tarball/${venv_version}"
-        venv_dir=$HOME/.local/share/venv
-        mkdir -p $venv_dir
-        curl -fsSL "$venv_url" | tar zxf - -C "$venv_dir" --strip-component=1
-        if type deactivate >/dev/null 2>&1; then
-            deactivate || true
-            hash -r
-        fi
-        mkdir -p $VENV_AWS
-        if command -v python3 >/dev/null; then
-            python3 $venv_dir/virtualenv.py $VENV_AWS
-        else
-            python $venv_dir/virtualenv.py $VENV_AWS
-        fi
-        say "Installing awscli locally ..."
-        $VENV_AWS/bin/pip install -q -U awscli || die "Failed to install awscli"
-    fi
-    . $VENV_AWS/bin/activate
+    echo "$ACCOUNT" >"${VAULTCACHE_BASE}/account"
+    echo "$ROLE" >"${VAULTCACHE_BASE}/role"
+    echo "$PROFILE" >"${VAULTCACHE_BASE}/profile"
 }
 
 vault_sanity() {
     say "Sanity checking your vault installation ..."
-    local progs="jq vault curl" prog=''
+    local progs="jq vault curl" prog
     for prog in $progs; do
         please_have $prog
     done
@@ -332,9 +305,7 @@ expiration_ts() {
 }
 
 expiration_json() {
-    if ! jq -r .expiration "$@" 2>/dev/null; then
-        return 1
-    fi
+    jq -r .expiration "$@"
 }
 
 vault_update_expiration() {
@@ -379,7 +350,7 @@ vault2aws() {
 }
 
 vault_render_file() {
-    local file="$1" tmp=''
+    local file="$1" tmp
     if [ -z "$file" ] || [ "$file" = - ]; then
         tmp=$(mktemp ${TMPDIR}/vaultXXXXXX.json)
         cat - >"$tmp"
@@ -396,10 +367,7 @@ vault_render_file() {
         echo "aws_session_token = $(jq -r .data.security_token $file)"
         echo
     else
-        if ! vault2aws "$file"; then
-            test -z "$tmp" || rm -f "$tmp"
-            die "Failed to render $file"
-        fi
+        vault2aws "$file"
     fi
 
     test -z "$tmp" || rm -f "$tmp"
@@ -417,7 +385,8 @@ main() {
                 exit $?
                 ;;
             --account)
-                ACCOUNT="$1"
+                ACCOUNT="${1#aws-}"
+                ACCOUNT="aws-${ACCOUNT}"
                 shift
                 ;;
             --role)
@@ -451,34 +420,24 @@ main() {
             *) usage "Unknown argument $cmd" ;;
         esac
     done
-    if [ -n "$ACCOUNT" ]; then
-        case "$ACCOUNT" in
-            test|xcalar-test) ACCOUNT="aws-test";;
-            sophia) ACCOUNT="aws-sophia";;
-            prod|xcalar-prod) ACCOUNT="aws-prod";;
-            pegasus|xcalar-pegasus) ACCOUNT="aws-pegasus";;
-            poc|xcalar-poc) ACCOUNT="aws-xcalar-poc";;
-            aws|default|xcalar) ACCOUNT="aws-xcalar";;
-            *) die "Unknown account: $ACCOUNT";;
-        esac
+    ACCOUNT="${ACCOUNT#aws-}"
+    ACCOUNT="aws-${ACCOUNT}"
+    if [ -n "$FILE" ]; then
+        vault_render_file "$FILE"
+        exit $?
     fi
-
     test -e "$(dirname ${AWS_SHARED_CREDENTIALS_FILE})" || mkdir -m 0700 "$(dirname ${AWS_SHARED_CREDENTIALS_FILE})"
     if [ -z "$AWSPATH" ]; then
         AWSPATH="$ACCOUNT/$TYPE/$ROLE"
+    fi
+    if $INSTALL; then
+        vault_install_credential_helper
+        exit $?
     fi
     VAULTCACHE="${VAULTCACHE_BASE}/${AWSPATH}.json"
     if $CLEAR; then
         say "Clearing cached credentials for $AWSPATH .."
         rm -f -- "$VAULTCACHE"
-        exit $?
-    fi
-    if [ -n "$FILE" ]; then
-        vault_render_file "$FILE"
-        exit $?
-    fi
-    if $INSTALL; then
-        vault_install_credential_helper
         exit $?
     fi
     mkdir -m 0700 -p "$(dirname $VAULTCACHE)"
@@ -498,15 +457,14 @@ main() {
 
     case "$TYPE" in
         sts) cvault "$AWSPATH" -d '{"ttl": "'$TTL'"}' -X POST >"$TMP" ;;
-        creds) cvault  "$AWSPATH" -d '{"ttl": "'$TTL'"}' -X GET >"$TMP" ;;
+        creds) cvault "$AWSPATH" -d '{"ttl": "'$TTL'"}' -X GET >"$TMP" ;;
         *) die "Unknown type of path $AWSPATH" ;;
     esac
     if [ $? -ne 0 ]; then
         echo >&2 "ERROR: Failed to get valid vault creds for $AWSPATH"
         echo >&2 "Check ~/.vault-token, VAULT_TOKEN and $TMP"
         echo >&2 "VAULT_ADDR=$VAULT_ADDR"
-        say
-        die "Also make sure that $AWSPATH is valid path in vault"
+        exit 1
     fi
 
     if vault_update_expiration "$TMP" > "${TMP}.2"; then

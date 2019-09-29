@@ -78,18 +78,15 @@ vssh() {
     rm -fv ${id}-cert.pub # clean up old certs
     local cert="${tmpdir}/$(basename ${id} .pem)-cert.pub" now=$(date +%s) expires='0'
     expires=$(test -e $cert && date -d $(ssh-keygen -Lf $cert | awk '/Valid: from/{print $(NF)}') +%s || echo 0)
-    if true; then #[[ $expires -eq 0 ]] || [[ $(( expires-now )) -lt 100 ]]; then
+    if [[ $expires -eq 0 ]] || [[ $(( expires-now )) -lt 100 ]]; then
         if ! vault write -field=signed_key ssh/sign/$role public_key=@${id%.pem}.pub > ${cert}.tmp; then
             return 1
         fi
         mv -f ${cert}.tmp ${cert}
     fi
-    sshargs+=(-F /dev/null)
     sshargs+=(-oIdentitiesOnly=yes)
     sshargs+=(-oForwardAgent=yes)
     sshargs+=(-oIdentityFile=${id})
-    sshargs+=(-oStrictHostKeyChecking=no)
-    sshargs+=(-oUserKnownHostsFile=$tmpdir/known_hosts)
     if [[ $SSH_VERSION -ge 70 ]]; then
         sshargs+=(-oAddKeysToAgent=yes)
         sshargs+=(-oCertificateFile=${cert})
