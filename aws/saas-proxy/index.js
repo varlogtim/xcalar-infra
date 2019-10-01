@@ -22,7 +22,6 @@ app.all("*", async function (req, res) {
     if (ipCache[username]) {
         // cached
         var ip = ipCache[username];
-        ip = ip.substring(0, ip.length - 3) + "100"
         var target = 'https://' + ip;
         tcpp.ping({address: ip, port: 443, attempts: 1, timeout: 500}, function(err, data) {
             if (data.min !== undefined) {
