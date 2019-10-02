@@ -184,6 +184,16 @@ generateThriftVersionSig() {
     local DEF_FILE="$1"
     md5sum $DEF_FILE | cut -d " "  -f 1
 }
+generateThriftVersionSigNew() {
+    local DEF_FILES="$@"
+
+    local newline=$'\n'
+    local content=""
+    for defFile in "${DEF_FILES[@]}"; do
+        content="${content}$(cat ${defFile})${newline}"
+    done
+    echo -n "$content" | md5sum | cut -d " " -f 1
+}
 
 # Make symbolic link
 sudo mkdir /var/www || true
@@ -238,21 +248,48 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     xcrpcVersionFile="$XLRGUIDIR/assets/js/xcrpc/enumMap/XcRpcApiVersion/XcRpcApiVersionToStr.json"
     thriftDefFileH="$XLRDIR/src/include/libapis/LibApisCommon.h"
     thriftDefFile="$XLRDIR/src/include/libapis/LibApisCommon.thrift"
+    PKG_LANG="en"
+    thriftDefFileList=(
+        "$XLRDIR/src/include/libapis/LibApisCommon.thrift"
+        "$XLRDIR/src/include/libapis/LibApisCommon.h"
+        "$XLRDIR/src/include/UdfTypeEnums.enum"
+        "$XLRDIR/src/include/SourceTypeEnum.enum"
+        "$XLRDIR/src/include/OrderingEnums.enum"
+        "$XLRDIR/src/include/DataFormatEnums.enum"
+        "$XLRDIR/src/include/JsonGenEnums.enum"
+        "$XLRDIR/src/include/JoinOpEnums.enum"
+        "$XLRDIR/src/include/UnionOpEnums.enum"
+        "$XLRDIR/src/include/XcalarEvalEnums.enum"
+        "$XLRDIR/src/include/DagStateEnums.enum"
+        "$XLRDIR/src/include/DagRefTypeEnums.enum"
+        "$XLRDIR/src/include/QueryParserEnums.enum"
+        "$XLRDIR/src/include/libapis/LibApisEnums.enum"
+        "$XLRDIR/src/include/libapis/LibApisConstants.enum"
+        "$XLRDIR/src/include/QueryStateEnums.enum"
+        "$XLRDIR/src/include/DataTargetEnums.enum"
+        "$XLRDIR/src/include/CsvLoadArgsEnums.enum"
+        "$XLRDIR/src/include/license/LicenseTypes.enum"
+        "$XLRDIR/src/data/lang/${PKG_LANG}/Subsys.enum"
+        "$XLRDIR/src/data/lang/${PKG_LANG}/StatusCode.enum"
+        "$XLRDIR/src/data/lang/${PKG_LANG}/FunctionCategory.enum"
+        "$XLRDIR/src/include/runtime/RuntimeEnums.enum"
+    )
     thriftVersionFile="$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"
 
     echo "Detecting version of XCE to use"
     cd $XLRDIR
     foundVersion="false"
     isCheckXcrpc="true"
-    checkOutFiles="$thriftDefFile $thriftDefFileH $xcrpcDefDir"
+    checkOutFiles="${thriftDefFileList[@]} $thriftDefFile $thriftDefFileH $xcrpcDefDir"
     if [ ! -f "$xcrpcVersionFile" ]; then
         isCheckXcrpc="false"
         checkOutFiles="$thriftDefFile $thriftDefFileH"
         echo "Skip xcrpc check"
     fi
+    versionSigThriftNew=$(generateThriftVersionSigNew "${thriftDefFileList[@]}")
     versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
     versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
-    checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
+    checkApiVersionSig $versionSigThriftNew $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
     foundVerThrift=$?
     if [ $isCheckXcrpc == "true" ]; then
         versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
@@ -273,9 +310,10 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
             if ! git checkout "$gitsha" $checkOutFiles; then
                 break
             fi
+            versionSigThriftNew=$(generateThriftVersionSigNew "${thriftDefFileList[@]}")
             versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
             versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
-            checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
+            checkApiVersionSig $versionSigThriftNew $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
             foundVerThrift=$?
             if [ $isCheckXcrpc == "true" ]; then
                 versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
@@ -285,7 +323,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
                 versionSigXcrpc="N/A"
                 foundVerXcrpc=0
             fi
-            echo "$gitsha: ThriftVersionSig = $versionSigThrift; XcrpcVersionSig = $versionSigXcrpc"
+            echo "$gitsha: ThriftVersionSigNew = $versionSigThriftNew; ThriftVersionSig = $versionSigThrift; XcrpcVersionSig = $versionSigXcrpc"
             if [ $foundVerThrift -eq 0 ] && [ $foundVerXcrpc -eq 0 ]; then
                 echo "$gitsha is a match"
                 echo "Checking out $prevSha as the last commit with the matching signature"
