@@ -34,7 +34,7 @@ ELVERSION=$(rpm -qf /etc/system-release --qf '%{VERSION}')
 ELVERSION=${ELVERSION:0:1}
 
 if ! rpm -q puppet-agent; then
-    yum install -y http://yum.puppetlabs.com/puppetlabs-release-pc1-el-${ELVERSION}.noarch.rpm
+    yum install -y http://yum.puppetlabs.com/puppet6-release-el-${ELVERSION}.noarch.rpm
     yum install -y puppet-agent
 fi
 
@@ -57,8 +57,8 @@ PUPPETROOT=/etc/puppetlabs/code/environments/${ENVIRONMENT}
 
 rm -rfv $PUPPETROOT
 mkdir -p $PUPPETROOT
+tar xzf ${PUPPET_TAR} -C $PUPPETROOT
 cd $PUPPETROOT
-tar xzf ${PUPPET_TAR}
 set +e
 (
 mkdir -p /etc/facter/facts.d
