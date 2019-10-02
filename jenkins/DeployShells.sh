@@ -18,22 +18,24 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
         if [ "${LICENSE_TYPE}" == "dev" ]; then
             KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK}${SUFFIX}"'","licenseType":"Developer","compress":true,
                 "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
-                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_DEV_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
         elif [ "${LICENSE_TYPE}" == "prod" ]; then
             KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK}"'","licenseType":"Production","compress":true,
                 "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
-                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_PROD_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
         else
             echo "Need to provide the licenseType"
             exit 1
         fi
+        CNAME=$(cat /dev/urandom | tr -dc 'a-z1-9' | fold -w 4 | head -n 1)
         RET=$(aws cloudformation create-stack \
         --role-arn ${ROLE} \
         --stack-name ${STACK_PREFIX}${SUFFIX} \
         --template-url ${CFN_TEMPLATE_URL} \
         --parameters ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE} \
                     ParameterKey=ImageId,ParameterValue=${AMI} \
-                    ParameterKey=LicenseKey,ParameterValue=${KEY} \
+                    ParameterKey=License,ParameterValue=${KEY} \
+                    ParameterKey=CNAME,ParameterValue=${CNAME} \
                     ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
         --tags Key=available,Value=true \
                 Key=deployment,Value=saas \
