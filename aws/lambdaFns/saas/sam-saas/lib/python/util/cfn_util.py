@@ -17,7 +17,9 @@ def get_stack_info(client, cfn_id):
     for output in stack_info['Outputs']:
         if output['OutputKey'] == 'S3Bucket':
             ret_struct['s3_url'] = output['OutputValue']
-        elif output['OutputKey'] == 'URL':
+        elif output['OutputKey'] == 'VanityURL':
+            ret_struct['cluster_url'] = output['OutputValue']
+        elif 'cluster_url' not in ret_struct and output['OutputKey'] == 'URL':
             ret_struct['cluster_url'] = output['OutputValue']
     ret_struct['stack_status'] = stack_info['StackStatus']
     return ret_struct

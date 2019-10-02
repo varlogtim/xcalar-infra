@@ -74,23 +74,33 @@ def start_cluster(user_name, cluster_params):
     parameters.append(
         {
             'ParameterKey': 'ClusterSize',
-            'ParameterValue': cluster_type['clusterSize'],
-            'UsePreviousValue': False
+            'ParameterValue': cluster_type['clusterSize']
         }
     )
     parameters.append(
         {
             'ParameterKey': 'InstanceType',
-            'ParameterValue': cluster_type['instanceType'],
-            'UsePreviousValue': False
+            'ParameterValue': cluster_type['instanceType']
+        }
+    )
+    parameters.append(
+        {
+            'ParameterKey': 'CNAME',
+            'UsePreviousValue': True
         }
     )
     if 'AMI' in cluster_params:
         parameters.append(
             {
-                'ParameterKey': 'AMIUsWest2',
-                'ParameterValue': cluster_params['AMI'],
-                'UsePreviousValue': False
+                'ParameterKey': 'ImageId',
+                'ParameterValue': cluster_params['AMI']
+            }
+        )
+    else:
+        parameters.append(
+            {
+                'ParameterKey': 'ImageId',
+                'UsePreviousValue': True
             }
         )
     if is_new == False:
@@ -144,8 +154,7 @@ def stop_cluster(user_name):
         Parameters = [
             {
                 'ParameterKey': 'ClusterSize',
-                'ParameterValue': "0",
-                'UsePreviousValue': False
+                'ParameterValue': "0"
             }
         ],
         Capabilities=[
