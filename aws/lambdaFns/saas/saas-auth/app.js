@@ -342,6 +342,9 @@ router.get('/status',
                    if (req.session.hasOwnProperty('timeout')) {
                        message.timeout = req.session.timeout;
                    }
+               } else {
+                   res.clearCookie('connect.sid');
+                   res.clearCookie('jwt_token', { httpOnly: true, signed: false });
                }
 
                res.status(200).send(message);
@@ -349,24 +352,32 @@ router.get('/status',
 
 router.get("/logout", ensureAuthenticated, function(req, res, next) {
     var id = req.user.id;
-    req.session.destroy(function(err) {
+    req.session.destroy(function(sessionErr) {
+        if (sessionErr) {
+            res.status(500).send({"errMsg": `destroy: ${JSON.stringify(sessionErr)}`});
+            return next();
+        }
+
         req.logOut();
-        findByIdFull(id, (err, user) => {
-            if (err) {
-                res.status(500).send({"errMsg": JSON.stringify(err)});
+        res.clearCookie('connect.sid');
+        res.clearCookie('jwt_token', { httpOnly: true, signed: false });
+
+        findByIdFull(id, (findErr, user) => {
+            if (findErr) {
+                res.status(500).send({"errMsg": `find: ${JSON.stringify(findErr)}`});
                 return next();
             }
 
             if (user) {
-                deleteUser(id, (err, user) => {
-
-                    if (err) {
-                        res.status(500).send({"errMsg": JSON.stringify(err)});
+                deleteUser(id, (deleteErr, user) => {
+                    if (deleteErr) {
+                        res.status(500).send({"errMsg": `delete: ${JSON.stringify(deleteErr)}`});
                         return next();
                     } else {
                         res.status(200).send({"message": "Logout successful"});
                         return next();
                     }
+
                 });
             } else {
                 res.status(500).send({"errMsg": "user not found"});
