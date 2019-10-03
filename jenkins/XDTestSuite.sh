@@ -249,9 +249,37 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     thriftDefFileH="$XLRDIR/src/include/libapis/LibApisCommon.h"
     thriftDefFile="$XLRDIR/src/include/libapis/LibApisCommon.thrift"
     PKG_LANG="en"
+    # This is for thrift version on trunk
     thriftDefFileList=(
         "$XLRDIR/src/include/libapis/LibApisCommon.thrift"
         "$XLRDIR/src/include/libapis/LibApisCommon.h"
+        "$XLRDIR/src/include/UdfTypeEnums.enum"
+        "$XLRDIR/src/include/SourceTypeEnum.enum"
+        "$XLRDIR/src/include/OrderingEnums.enum"
+        "$XLRDIR/src/include/DataFormatEnums.enum"
+        "$XLRDIR/src/include/JsonGenEnums.enum"
+        "$XLRDIR/src/include/JoinOpEnums.enum"
+        "$XLRDIR/src/include/UnionOpEnums.enum"
+        "$XLRDIR/src/include/XcalarEvalEnums.enum"
+        "$XLRDIR/src/include/DagStateEnums.enum"
+        "$XLRDIR/src/include/DagRefTypeEnums.enum"
+        "$XLRDIR/src/include/QueryParserEnums.enum"
+        "$XLRDIR/src/include/libapis/LibApisEnums.enum"
+        "$XLRDIR/src/include/libapis/LibApisConstants.enum"
+        "$XLRDIR/src/include/QueryStateEnums.enum"
+        "$XLRDIR/src/include/DataTargetEnums.enum"
+        "$XLRDIR/src/include/CsvLoadArgsEnums.enum"
+        "$XLRDIR/src/include/license/LicenseTypes.enum"
+        "$XLRDIR/src/data/lang/${PKG_LANG}/Subsys.enum"
+        "$XLRDIR/src/data/lang/${PKG_LANG}/StatusCode.enum"
+        "$XLRDIR/src/data/lang/${PKG_LANG}/FunctionCategory.enum"
+        "$XLRDIR/src/include/runtime/RuntimeEnums.enum"
+    )
+    # This is for thrift version on 2.0 branch
+    # It involves the same files as trunk but with slightly different order
+    thriftDefFileList2=(
+        "$XLRDIR/src/include/libapis/LibApisCommon.h"
+        "$XLRDIR/src/include/libapis/LibApisCommon.thrift"
         "$XLRDIR/src/include/UdfTypeEnums.enum"
         "$XLRDIR/src/include/SourceTypeEnum.enum"
         "$XLRDIR/src/include/OrderingEnums.enum"
@@ -283,13 +311,14 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     checkOutFiles="${thriftDefFileList[@]} $thriftDefFile $thriftDefFileH $xcrpcDefDir"
     if [ ! -f "$xcrpcVersionFile" ]; then
         isCheckXcrpc="false"
-        checkOutFiles="$thriftDefFile $thriftDefFileH"
+        checkOutFiles="${thriftDefFileList[@]} $thriftDefFile $thriftDefFileH"
         echo "Skip xcrpc check"
     fi
     versionSigThriftNew=$(generateThriftVersionSigNew "${thriftDefFileList[@]}")
+    versionSigThriftNew2=$(generateThriftVersionSigNew "${thriftDefFileList2[@]}")
     versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
     versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
-    checkApiVersionSig $versionSigThriftNew $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
+    checkApiVersionSig $versionSigThriftNew $thriftVersionFile || checkApiVersionSig $versionSigThriftNew2 $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
     foundVerThrift=$?
     if [ $isCheckXcrpc == "true" ]; then
         versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
@@ -311,9 +340,10 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
                 break
             fi
             versionSigThriftNew=$(generateThriftVersionSigNew "${thriftDefFileList[@]}")
+            versionSigThriftNew2=$(generateThriftVersionSigNew "${thriftDefFileList2[@]}")
             versionSigThrift=$(generateThriftVersionSig $thriftDefFile)
             versionSigThriftH=$(generateThriftVersionSig $thriftDefFileH)
-            checkApiVersionSig $versionSigThriftNew $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
+            checkApiVersionSig $versionSigThriftNew $thriftVersionFile || checkApiVersionSig $versionSigThriftNew2 $thriftVersionFile || checkApiVersionSig $versionSigThrift $thriftVersionFile || checkApiVersionSig $versionSigThriftH $thriftVersionFile
             foundVerThrift=$?
             if [ $isCheckXcrpc == "true" ]; then
                 versionSigXcrpc=$(generateXcrpcVersionSig $xcrpcDefDir)
