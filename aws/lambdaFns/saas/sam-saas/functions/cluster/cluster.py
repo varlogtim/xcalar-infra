@@ -156,6 +156,18 @@ def stop_cluster(user_name):
             {
                 'ParameterKey': 'ClusterSize',
                 'ParameterValue': "0"
+            },
+            {
+                'ParameterKey': 'InstanceType',
+                'UsePreviousValue': True
+            },
+            {
+                'ParameterKey': 'ImageId',
+                'UsePreviousValue': True
+            },
+            {
+                'ParameterKey': 'CNAME',
+                'UsePreviousValue': True
             }
         ],
         Capabilities=[
