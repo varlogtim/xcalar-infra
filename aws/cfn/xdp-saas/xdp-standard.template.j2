@@ -98,6 +98,10 @@ Parameters:
     Description: Desired CNAME of the instance (ex, fun.xcalar.cloud.)
     Type: String
     Default: 'yourstack-replace-me.xcalar.cloud.'
+  SessionTable:
+    Description: Authenticaton Sessopn Table Name
+    Type: String
+    Default: 'saas-auth-session-table'
 {%- if enableLicense %}
   License:
     Description: XDP License Key
@@ -736,6 +740,13 @@ Resources:
                   - kms:DescribeKey
                 Resource:
                   - 'arn:aws:kms:*:*:alias/aws/ssm'
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DescribeTable
+                Resource:
+                  - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
 
   IamInstanceProfile:
     Type: AWS::IAM::InstanceProfile
