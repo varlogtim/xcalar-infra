@@ -7,13 +7,12 @@ from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
 from util.user_util import get_user_info
 from util.cfn_util import get_stack_info
-from constants.price import price_table
+from constants.price import price_table, price_factor
 # To-do all hard-coded values need to be read from enviornemnt variables
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
 billing_table = 'saas_billing'
 user_table = 'saas_user'
-price_factor = 1.7
 
 def get_credit(user_name):
     response = dynamodb_client.query(

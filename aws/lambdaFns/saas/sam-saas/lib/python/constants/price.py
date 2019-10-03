@@ -12,6 +12,7 @@
 #     }
 # }
 # JSON.stringify(pricing, undefined, 2)
+price_factor = 1.7
 price_table = {
     "a1.medium": 0.0255,
     "a1.large": 0.051,
