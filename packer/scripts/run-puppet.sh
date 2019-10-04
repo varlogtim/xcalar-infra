@@ -63,9 +63,10 @@ set +e
 (
 mkdir -p /etc/facter/facts.d
 cd /etc/facter/facts.d
-echo "role=${FACTER_role}" > role.txt
-echo "cluster=${FACTER_cluster}" > cluster.txt
-echo "datacenter=${FACTER_datacenter}" > datacenter.txt
+[ "${FACTER_role}x" != "x" ] && echo "role=${FACTER_role}" > role.txt
+[ "${FACTER_cluster}x" != "x" ] && echo "cluster=${FACTER_cluster}" > cluster.txt
+[ "${FACTER_datacenter}x" != "x" ] && echo "datacenter=${FACTER_datacenter}" > datacenter.txt
+[ "${FACTER_cloud}x" != "x" ] && echo "cloud=${FACTER_cloud}" > cloud.txt
 )
 env
 cat /etc/facter/facts.d/*

@@ -77,7 +77,7 @@ provisioners:
     destination: /tmp/scripts/
 
   - type: file
-    source: "{{ template_dir }}/run-puppet.sh"
+    source: "{{ template_dir }}/../scripts/run-puppet.sh"
     destination: /tmp/scripts/
 
   - type: file

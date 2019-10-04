@@ -1,0 +1,108 @@
+{
+  "variables": {
+    "today": "{{ isotime \"20060102\" }}",
+    "name": "{{ user `instance_name` }}",
+    "role": "{{ user `role` }}",
+    "cluster": "{{ user `cluster` }}",
+    "datacenter": "{{ user `datacenter` }}",
+    "osid": "el7",
+    "domain": "azure.xcalar.io",
+    "puppet_src": "{{ env `HOME` }}/puppet",
+    "puppet_host": "puppet",
+    "image_name": "{{ user `instance_name` }}-{{ user `osid` }}-{{ user `today` }}"
+  },
+  "builders": [
+    {
+      "type": "azure-arm",
+      "client_id": "{{ user `client_id` }}",
+      "client_secret": "{{ user `client_secret` }}",
+      "subscription_id": "{{ user `subscription_id` }}",
+      "tenant_id": "{{ user `tenant_id` }}",
+      "managed_image_name": "{{ user `image_name`}}",
+      "managed_image_resource_group_name": "xcimages",
+      "os_type": "Linux",
+      "image_publisher": "OpenLogic",
+      "image_offer": "CentOS",
+      "image_sku": 7.7,
+      "ssh_username": "centos",
+      "azure_tags": {
+          "Name": "{{ user `image_name`}}",
+          "OS": "{{ user `osid`}}",
+          "Author": "Packer SP"
+      },
+      "os_disk_size_gb": 64,
+      "location": "westus2",
+      "vm_size": "Standard_D8s_v3"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell-local",
+      "inline": [
+        "ulimit -Ss 8192; cd {{ user `puppet_src` }} && make puppet.tar.gz"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "mkdir /tmp/scripts"
+      ]
+    },
+    {
+      "type": "file",
+      "source": "{{ user `puppet_src` }}/t/{{user `osid`}}-packages.txt",
+      "destination": "/tmp/scripts/packages.txt"
+    },
+    {
+      "type": "file",
+      "source": "{{ user `puppet_src` }}/puppet.tar.gz",
+      "destination": "/tmp/scripts/"
+    },
+    {
+      "type": "file",
+      "source": "{{ template_dir }}/../scripts/run-puppet.sh",
+      "destination": "/tmp/scripts/"
+    },
+    {
+      "type": "file",
+      "source": "{{ template_dir }}/../scripts/cloud-init-nocloud.sh",
+      "destination": "/tmp/scripts/"
+    },
+    {
+      "type": "file",
+      "source": "{{ template_dir }}/../scripts/generalize.sh",
+      "destination": "/tmp/scripts/"
+    },
+    {
+      "type": "shell",
+      "environment_vars": [
+        "OSID={{user `osid`}}",
+        "FACTER_role={{user `role`}}",
+        "FACTER_cluster={{user `cluster`}}",
+        "FACTER_datacenter={{user `datacenter`}}",
+        "FACTER_cloud=azure",
+        "FACTER_packer=1",
+        "MYHOSTNAME={{user `image_name`}}.{{user `domain`}}",
+        "PUPPET_TAR=/tmp/scripts/puppet.tar.gz",
+        "FACTER_override=offline",
+        "NODISABLE=puppet"
+      ],
+      "execute_command": "chmod +x {{ .Path }}; {{ .Vars }} sudo -E {{.Path}}",
+      "inline": [
+        "set -x",
+        "cd /tmp/scripts",
+        "yum remove -y git perl-Git",
+        "yum install -y https://repo.ius.io/ius-release-el7.rpm",
+        "yum install -y git2u git2u-core git2u-perl-Git --enablerepo='ius'",
+        "bash -x run-puppet.sh",
+        "yum install -y --enablerepo='updates' --enablerepo='ius' --enablerepo='xcalar-*' $(cat packages.txt  | grep -v '^#' | grep -v git)",
+        "echo \"[main]\" > /etc/puppetlabs/puppet/puppet.conf",
+        "echo \"server = {{user `puppet_host`}}.{{user `domain`}}\" >> /etc/puppetlabs/puppet/puppet.conf",
+        "if [ -n \"{{user `environment`}}\" ]; then echo \"environment = {{user `environment`}}\" >> /etc/puppetlabs/puppet/puppet.conf; fi",
+        "bash -x generalize.sh",
+        "rm -rf /tmp/scripts",
+        "rm -rf /etc/puppetlabs/code"
+      ]
+    }
+  ]
+}

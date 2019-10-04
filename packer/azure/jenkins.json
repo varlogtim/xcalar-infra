@@ -1,0 +1,6 @@
+{
+  "instance_name": "jenkins-agent",
+  "role": "jenkins_slave",
+  "cluster": "jenkins-swarm",
+  "datacenter": "azure-westus2"
+}

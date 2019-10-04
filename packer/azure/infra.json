@@ -1,0 +1,6 @@
+{
+  "instance_name": "infra",
+  "role": "infra",
+  "cluster": "infra",
+  "datacenter": "azure-westus2"
+}
