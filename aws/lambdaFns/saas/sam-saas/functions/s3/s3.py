@@ -25,11 +25,13 @@ def get_bucket(user_name):
         stack_info = get_stack_info(cfn_client, cfn_id)
     except Exception as e:
         return _make_reply(200, {
-            'status': Status.STACK_NOT_FOUND
+            'status': Status.STACK_NOT_FOUND,
+            'error': 'Could not find stack %s' % cfn_id
         })
     if 's3_url' not in stack_info:
         return _make_reply(200, {
-            'status': Status.S3_BUCKET_NOT_EXIST
+            'status': Status.S3_BUCKET_NOT_EXIST,
+            'error': 'Cloud not find s3 given stack %s' % cfn_id
         })
     return stack_info['s3_url']
 
