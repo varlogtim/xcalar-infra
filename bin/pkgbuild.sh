@@ -421,6 +421,10 @@ pkgmain() {
         ${arch+--architecture $arch}
         --description "${pkgdesc}"
         --url "${url}")
+    if [ -n "$conffiles" ]; then
+        info "Marking config files ${conffiles[*]}"
+        FPM_COMMON+=(--config-files "${conffiles[@]}")
+    fi
     for scriptbase in after-install after-remove after-upgrade before-install before-remove before-upgrade; do
         for script in ${srcdir}/${scriptbase}.sh ${PKGBUILDdir}/${scriptbase}.sh; do
             if test -f $script; then
@@ -437,11 +441,11 @@ pkgmain() {
     #fi
     if ! ((GENFPM)); then
         info "building $pkgname rpm ..."
-        run $FPM -s dir -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" -C "$pkgdir${prefix}"
+        run $FPM -s dir -t rpm "${fpmextra[@]}" "${rpmextra[@]}" $fpmopts $rpmopts "${FPM_COMMON[@]}" -C "$pkgdir${prefix}"
     else
         info "bundling ${pkgname}-rpm.tar.gz"
         run tar czf ${pkgname}-rpm.tar.gz -C $pkgdir ${prefix:-.}
-        printf '%q ' $FPM -s tar -t rpm "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" -C "$pkgdir${prefix}" ${pkgname}-rpm.tar.gz; echo
+        printf '%q ' $FPM -s tar -t rpm "${fpmextra[@]}" "${rpmextra[@]}" $fpmopts $rpmopts "${FPM_COMMON[@]}" -C "$pkgdir${prefix}" ${pkgname}-rpm.tar.gz; echo
     fi
     if test -e "${pkgdir}_deb"; then
         rootfs="${pkgdir}_deb"
@@ -451,11 +455,11 @@ pkgmain() {
 
     if ! ((GENFPM)); then
         info "building $pkgname deb ..."
-        run $FPM -s dir -t deb "${fpmextra[@]}" "${debextra[@]}" "${FPM_COMMON[@]}" -C "$rootfs${prefix}"
+        run $FPM -s dir -t deb "${fpmextra[@]}" "${debextra[@]}" $fpmopts $debopts "${FPM_COMMON[@]}" -C "$rootfs${prefix}"
     else
         info "bundling ${pkgname}-deb.tar.gz"
         run tar czf ${pkgname}-deb.tar.gz -C $rootfs ${prefix:-.}
-        printf '%q ' $FPM -s tar -t deb "${fpmextra[@]}" "${rpmextra[@]}" "${FPM_COMMON[@]}" -C "$rootfs${prefix}" ${pkgname}-deb.tar.gz; echo
+        printf '%q ' $FPM -s tar -t deb "${fpmextra[@]}" "${rpmextra[@]}" $fpmopts $debopts "${FPM_COMMON[@]}" -C "$rootfs${prefix}" ${pkgname}-deb.tar.gz; echo
     fi
 
     if ((DEBUG)); then

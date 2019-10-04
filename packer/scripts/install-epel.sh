@@ -1,4 +1,4 @@
-!/bin/bash
+#!/bin/bash
 #
 # Script to setup the IUS public repository on your EL server.
 # Tested on CentOS/RHEL 6/7.
@@ -36,7 +36,7 @@ rhel_install_epel(){
     # NOTE: Use our repo as a backup because we've seen fedoraproject.org be down
     case ${RELEASE} in
         201*) yum -y -q install epel-release || yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-6-8.noarch.rpm;;
-        2*) amazon-linux-extras install -y epel;;
+        2) amazon-linux-extras install -y epel;;
         6*) yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-6-8.noarch.rpm;;
         7*) yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-7-9.noarch.rpm;;
     esac

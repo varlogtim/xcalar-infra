@@ -550,22 +550,39 @@ aws_s3_sync_public() {
 }
 
 aws_s3_from_url() {
-    local clean_url="$(echo "$1" | sed -e 's/\?.*$//g')"
+    local clean_url="${1%%\?*}"
     clean_url="${clean_url#https://}"
-    if ! [[ $clean_url =~ ^s3 ]]; then
+    if [[ $clean_url =~ ^s3 ]]; then
+        echo "s3://${clean_url#*/}"
+        return 0
+    fi
+    local host="${clean_url%%/*}"
+    local bucket="${host%%.*}"
+    local s3host="${host#$bucket.}"
+    if ! [[ $s3host =~ ^s3 ]]; then
         return 1
     fi
-    echo "s3://${clean_url#*/}"
+    local key="${clean_url#$host/}"
+    echo "s3://${bucket}/${key}"
+}
+
+aws_s3_regional_url() {
+    local bucket="${1#s3://}"
+    bucket="${bucket%%/*}"
+    local key="${1#s3://$bucket}"
+    local region=$(aws_s3_region $bucket)
+    if [ "$region" == us-east-1 ] || [ -z "$region" ]; then
+        echo "https://s3.amazonaws.com/${bucket}${key}"
+    else
+        echo "https://${bucket}.s3${region:+.$region}.amazonaws.com${key}"
+    fi
 }
 
 aws_s3_url() {
-    local bucket_and_key=($(echo "${1#s3://}" | sed 's,/, ,'))
-    local region=$(aws_s3_region ${bucket_and_key[0]})
-    if [ "$region" == us-east-1 ] || [ -z "$region" ]; then
-        echo "https://s3.amazonaws.com/${bucket_and_key[0]}/${bucket_and_key[1]}"
-    else
-        echo "https://s3${region:+.$region}.amazonaws.com/${bucket_and_key[0]}/${bucket_and_key[1]}"
-    fi
+    local bucket="${1#s3://}"
+    bucket="${bucket%%/*}"
+    local key="${1#s3://$bucket}"
+    echo "https://${bucket}.s3.amazonaws.com${key}"
 }
 
 aws_s3_configure() {
