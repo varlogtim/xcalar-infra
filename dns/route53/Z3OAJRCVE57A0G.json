@@ -1,0 +1,478 @@
+{
+  "Changes": [
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "capzone-dev.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "52.11.12.248"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "capzone-stage.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "52.43.56.249"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "capzone-ui-2.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "18.237.84.196"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "capzone-ui.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "52.11.12.248"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "capzone.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "34.223.205.129"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "demo-1.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "35.162.239.220"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "demo.xcalar.cloud.",
+        "Type": "NS",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "ns-1568.awsdns-04.co.uk."
+          },
+          {
+            "Value": "ns-625.awsdns-14.net."
+          },
+          {
+            "Value": "ns-1042.awsdns-02.org."
+          },
+          {
+            "Value": "ns-456.awsdns-57.com."
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "eu-training-01.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "18.203.135.168"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "helloworld.xcalar.cloud.",
+        "Type": "A",
+        "SetIdentifier": "helloworld-Primary",
+        "Failover": "PRIMARY",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "34.223.163.198"
+          }
+        ],
+        "HealthCheckId": "bde8422f-cd59-4f9e-a899-8c03d26c6ca6"
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "horizon.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "52.27.255.27"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "iheartradio.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "52.13.221.93"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "jump-aws.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "ec2-54-188-91-140.us-west-2.compute.amazonaws.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "jump-az.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "xcjump.westus2.cloudapp.azure.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "jump1.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "34.208.218.124"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "mondaycall-old.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "52.24.148.197"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "mondaycall.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "52.35.26.193"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "musixmatch.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "35.164.114.196"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "my.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "35.165.208.148"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "myfuncloud.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "100.20.103.219"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "mylb-2.xcalar.cloud.",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "Z1H1FL5HABSF5",
+          "DNSName": "dualstack.mylb-2-1353228448.us-west-2.elb.amazonaws.com.",
+          "EvaluateTargetHealth": false
+        }
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "oslaurent.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "54.68.8.215"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "proxy-test.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "35.165.143.184"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "safra.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "34.208.238.127"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "sol1-vm0.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "sol1-rg-0.westus2.cloudapp.azure.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "sol1-vm1.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "sol1-rg-vm1.westus2.cloudapp.azure.com."
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "sol1-vm2.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "sol1-rg-vm2.westus2.cloudapp.azure.com."
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "static.xcalar.cloud.",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "Z2FDTNDATAQYW2",
+          "DNSName": "d2e2aj3lkpjq2r.cloudfront.net.",
+          "EvaluateTargetHealth": false
+        }
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "_4fd100b5a0c3c17e2069f59c3af2e46c.static.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "_3cc9087755c3b7c7b52d069031eb4cd8.duyqrilejt.acm-validations.aws."
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "synechron.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "34.216.32.237"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "tapclicks.xcalar.cloud.",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "34.210.169.75"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "test.xcalar.cloud.",
+        "Type": "NS",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "ns-1203.awsdns-22.org."
+          },
+          {
+            "Value": "ns-534.awsdns-02.net."
+          },
+          {
+            "Value": "ns-1880.awsdns-43.co.uk."
+          },
+          {
+            "Value": "ns-188.awsdns-23.com."
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "xcalar-2313.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "ec2-52-91-245-100.compute-1.amazonaws.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "xcalar-sfl-datagen.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "ec2-18-237-104-212.us-west-2.compute.amazonaws.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "xcpersistent.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 60,
+        "ResourceRecords": [
+          {
+            "Value": "xcpersistent.westus2.cloudapp.azure.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "xdp-adventure.xcalar.cloud.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "xdp-abakshi-297.westus2.cloudapp.azure.com"
+          }
+        ]
+      }
+    }
+  ]
+}

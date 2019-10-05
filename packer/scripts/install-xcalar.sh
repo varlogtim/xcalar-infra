@@ -9,12 +9,13 @@ OSID=${OSID:-$(osid)}
 
 EPHEMERAL=/ephemeral/data
 
-yum localinstall -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-12.noarch.rpm
-
-/usr/bin/ephemeral-disk || true
+if ! rpm -q ephemeral-disk; then
+    yum install -y ephemeral-disk --enablerepo='xcalar-*'
+fi
 
 NOW=$(date +%s)
 if test -x /usr/bin/ephemeral-disk; then
+    /usr/bin/ephemeral-disk || true
     until mountpoint -q $EPHEMERAL; do
         echo >&2 "Waiting for $EPHEMERAL mount point to show up ..."
         sleep 5
