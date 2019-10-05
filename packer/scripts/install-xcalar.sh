@@ -102,6 +102,22 @@ if [ -n "$INSTALLER_URL" ]; then
     rm -v -f "${INSTALLER_FILE}"
 fi
 
+if [ -n "${SAAS_CONFIG_LAMBDA}" ]; then
+    XCE_EXPSERVER_CLOUD_CONFIG="$(aws lambda invoke --invocation-type RequestResponse --function-name ${SAAS_CONFIG_LAMBDA} --payload '{ "path": "/config" }' /dev/stdout | jq -r '.body' | head -1)"
+    rc=$?
+
+    if [ $rc -ne 0 ]; then
+        echo >&2 "!!! FAILED TO CONFIGURE EXPSERVER FOR CLOUD !!!"
+        echo >&2 "!!! ${SAAS_CONFIG_LAMBDA} -> ${XCE_EXPSERVER_CLOUD_CONFIG}"
+        echo >&2 "!!! rc=${rc} !!!"
+        env >&2
+        exit $rc
+    fi
+
+    # if XCE_CLOUD_REGION is not set, set it to AWS_DEFAULT_REGION
+    echo "$XCE_EXPSERVER_CLOUD_CONFIG" | jq -r '.config' >> /etc/default/xcalar
+fi
+
 LICENSE_FILE="${XCE_CONFDIR}/XcalarLic.key"
 if [ -z "$LICENSE" ] && [ -n "$LICENSE_URL" ]; then
     set +e

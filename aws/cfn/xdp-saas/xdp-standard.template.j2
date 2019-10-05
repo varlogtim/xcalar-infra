@@ -109,6 +109,10 @@ Parameters:
     Description: Authenticaton Sessopn Table Name
     Type: String
     Default: 'saas-auth-session-table'
+  ConfigLambda:
+    Description: Configuration Lambda Name
+    Type: String
+    Default: 'ConfigFunction'
 {%- if enableLicense %}
   License:
     Description: XDP License Key
@@ -868,6 +872,12 @@ Resources:
                   - dynamodb:DescribeTable
                 Resource:
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - lambda:ListFunction
+                Resource:
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:${ConfigLambda}'
 
 {%- if enableLifecycle %}
               - Effect: Allow

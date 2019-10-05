@@ -160,7 +160,20 @@ Resources:
                 - s3:DeleteObject
               Resource:
                 !Sub 'arn:aws:s3:::saas-test*' # For test only
-
+  ConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/config/
+      Handler: config.lambda_handler
+      Runtime: python3.6
+      Layers:
+        - !Ref LibLayer
+      Events:
+        GetConfig:
+          Type: Api
+          Properties:
+            Path: /config
+            Method: get
 
 Outputs:
   SaaSApi:
@@ -184,4 +197,10 @@ Outputs:
   S3FunctionIamRole:
     Description: Implicit IAM Role created for S3 function
     Value: !GetAtt 'S3FunctionRole.Arn'
+  ConfigFunction:
+    Description: Config Lambda Function ARN
+    Value: !GetAtt 'ConfigFunction.Arn'
+  ConfigFunctionIamRole:
+    Description: Implicit IAM Role created for S3 function
+    Value: !GetAtt 'ConfigFunctionRole.Arn'
 

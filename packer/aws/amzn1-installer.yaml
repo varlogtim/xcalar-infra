@@ -19,6 +19,7 @@ variables:
   shared_with: '{{env `SHARED_WITH` }}'
   version: '1.0'
   license: '{{env `LICENSE`}}'
+  config_lambda: '{{env `SAAS_CONFIG_LAMBDA`}}'
   build_number: '1'
   ssh_username: ec2-user
 builders:
@@ -130,6 +131,8 @@ provisioners:
       - OSID={{split build_name "-" 2}}
       - INSTALLER_URL={{user `installer_url`}}
       - LICENSE={{user `license`}}
+      - SAAS_CONFIG_LAMBDA={{user `config_lambda`}}
+      - AWS_DEFAULT_REGION={{user `region`}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
