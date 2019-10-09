@@ -416,7 +416,7 @@
     "Reader": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
-    "imageSKU": "7.6",
+    "imageSKU": "7.7",
     "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
     "linuxConfiguration": {
       "sshPublicKey": {
