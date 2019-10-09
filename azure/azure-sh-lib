@@ -7,7 +7,6 @@
 
 source $XLRINFRADIR/bin/infra-sh-lib
 
-
 az_setup() {
     AZ_CACHEDIR="$HOME/.cache/azure"
     HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
@@ -18,6 +17,8 @@ az_setup() {
     TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
     TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v9/mainTemplate.json
     DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
+    LICENSEDEV=$XLRINFRADIR/azure/xdp-standard/licenseDev.json
+    LICENSERC=$XLRINFRADIR/azure/xdp-standard/licenseRC.json
 
     AZ_PUBLIC_ACCOUNT=${AZ_PUBLIC_ACCOUNT:-xcrepo}
     AZ_PUBLIC_CONTAINER=${AZ_PUBLIC_CONTAINER:-public}
@@ -508,10 +509,11 @@ az_deploy() {
     local -a extra_params=()
     local email=$(git config user.email) retry ip_address
     local location=${LOCATION}
-    local name group count=1 size=Standard_D8s_v3 template_arg storageAccount_arg
+    local name group count=1 size=Standard_D8_v3 template_arg storageAccount_arg
     local template=$AZ_DEFAULT_TEMPLATE
     local parameters_file=${DEFAULTS}
     local installer_url installer dnslabel
+    local licenseParamFile=$LICENSEDEV
     while [ $# -gt 0 ]; do
         cmd="$1"
         case "$cmd" in
@@ -642,6 +644,9 @@ az_deploy() {
         return 1
     fi
 
+    if [[ "$installer" =~ RC ]]; then
+        licenseParamFile=$LICENSERC
+    fi
     if [ -n "$installer" ]; then
         if test -f "$installer"; then
             installer_url="$(installer-url.sh -d az "$installer")"
@@ -673,7 +678,7 @@ az_deploy() {
     local TMP="$(az_mktemp)"
 
     az group deployment validate -g $group $template_arg \
-        --parameters ${parameters_file+@$parameters_file} "appName=${name}" \
+        --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP" > /dev/null
     rc=${PIPESTATUS[0]}
@@ -689,8 +694,8 @@ az_deploy() {
     say
 
     az group deployment create --name deploy-${NOW} -g $group $template_arg \
-        --parameters ${parameters_file+@$parameters_file} "appName=${name}" \
-        "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
+        --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
+        "appName=${name}" "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
@@ -707,6 +712,20 @@ az_deploy() {
     say
     say "Finally, you can delete your cluster: az group delete -g $group"
     say
+}
+
+az_quickdeploy() {
+    local dir="${XLRINFRADIR}/azure" cmd
+    local name="$(curl http://petname.service.consul:9999/)"
+    local group="xdp-${name}-rg"
+    local location=westus2
+    local installer="/netstore/builds/ReleaseCandidates/xcalar-2.0.3-RC7/prod/xcalar-2.0.3-3458-installer-el7"
+    local cgroup=
+
+    az group create -g ${group} -l ${location}
+    az_deploy -g ${group} -i "${installer}" --count 1 --name xdp-${name} \
+          --template-file ${dir}/xdp-standard/mainTemplate.json \
+        --parameters-file ${dir}/xdp-standard/mainTemplate.defaults.json "$@"
 }
 
 # Call this function with the resourceGroup name and optionally

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "licenseKey": {
+      "value": "H4sIAAM5CV0AA22Oy3aCMABE9/kK91YFBLGLLARf+MBHRbGbnpAEjY3BhkTAr6966q7LmblzZmYMU5FTsslgjBFH8q0WCAwCRSVSLBPQahpgyZFKM3mGsyCM4q+4Y4MtlfkjNpv2HZijMhCPClbsSvtIoQ92o9DceGBCEjwQKOGUQCU1BUuZEY3V31ztAddeA2AhBuWFyQrukBQvdIjOjFf/F5748+ndp9AyLKMx0aJhWSDMCPUzLRQ0DcsBUU7lSxogZweBlJYUjgN5HG7tKy9Kotb7G6laP1Ug/dbeDkef7powhrt8SniAnYn/PXZzuTCnu+toGqU8DDZGD214cdPYdcO65/HuynN6J+UkHR6TViu2+4s2di2hY3NnpBqLIjG7fDvw8tl7hFbt/eE4t8nOrBc0Zim/xMskzzvDkaN9u3/M8ODkV1ggT5Vd8AvWVMeorgEAAA=="
+    }
+  }
+}
+
+

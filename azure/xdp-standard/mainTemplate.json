@@ -281,6 +281,10 @@
       "metadata": {
         "description": "Size of root disk"
       }
+    },
+    "cgroupsEnabled": {
+      "type": "string",
+      "defaultValue": "false"
     }
   },
   "variables": {
@@ -866,7 +870,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', if( equals(parameters('shareServerNewOrExisting'),'new'), reference(resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))).ipConfigurations[0].properties.privateIPAddress, parameters('shareName')),':', parameters('shareFolder'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -e \"', variables('vmName'), '\" -c \"', parameters('appName'),'\" -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'), parameters('installerUrlSasToken'), '\"')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', if( equals(parameters('shareServerNewOrExisting'),'new'), reference(resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))).ipConfigurations[0].properties.privateIPAddress, parameters('shareName')),':', parameters('shareFolder'),' -d ', parameters('domainNameLabel'),' -b ',parameters('cgroupsEnabled'),' -i ', copyIndex(), ' -e \"', variables('vmName'), '\" -c \"', parameters('appName'),'\" -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'), parameters('installerUrlSasToken'), '\"')]"
         }
       }
     }
