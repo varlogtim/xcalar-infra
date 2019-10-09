@@ -49,8 +49,8 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}'
-    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `version`}} {{user `build_number`}} {{user `image_build_number`}} ({{user `today`}}))'
+    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `image_build_number`}}'
+    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `version`}}-{{user `build_number`}} ({{user `today`}}-{{user `image_build_number`}}))'
     snapshot_tags:
       Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}'
       BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
@@ -100,8 +100,8 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}'
-    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `version`}} {{user `build_number`}} {{user `image_build_number`}} ({{user `today`}}))'
+    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `image_build_number`}}'
+    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `version`}}-{{user `build_number`}} ({{user `today`}}-{{user `image_build_number`}}))'
     snapshot_tags:
       Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}'
       BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
