@@ -19,6 +19,11 @@ export AWS_DEFAULT_FNAME="AwsServerlessExpressFunction"
 export AWS_REGION="${REGION:-$AWS_DEFAULT_REGION}"
 export XLRINFRADIR=${XLRINFRADIR-$HOME/xcalar-infra}
 SAAS_AUTH_DIR="$XLRINFRADIR/aws/lambdaFns/saas/saas-auth"
+export TMPDIR=/tmp/`id -un`/DeployAuthLambda
+
+mkdir -p $TMPDIR
+
+export STATUS_FILE=${TMPDIR}/DeployAuthLambda.$$
 
 PATH=/opt/xcalar/bin:$PATH
 export PATH
@@ -50,8 +55,26 @@ fi
      aws cloudformation deploy --template-file packaged-sam.yaml \
          --stack-name ${CLOUDFORMATION_STACK_NAME} \
          --capabilities CAPABILITY_IAM --region ${AWS_REGION} \
-         --role-arn ${ROLE} ||
-         aws cloudformation describe-stack-events --stack-name saas-sam-auth-test)
+         --role-arn ${ROLE} && echo '0' > "$STATUS_FILE" ||
+         echo '1' > "$STATUS_FILE")
+
+DEPLOY_STATUS="$(cat "$STATUS_FILE")"
+
+if [ "0" == "$DEPLOY_STATUS" ]; then
+    API_URL="$(aws cloudformation describe-stacks \
+                  --region ${AWS_REGION} \
+                  --stack-name ${CLOUDFORMATION_STACK_NAME} \
+                  --query "Stacks[*].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+                  --output text)"
+    PARAM_STR="XCE_CLOUD_MODE=1\nXCE_CLOUD_SESSION_TABLE=${SESSION_TABLE_NAME}\nXCE_SAAS_LAMBDA_URL=${API_URL}\nXCE_CLOUD_REGION=${AWS_REGION}\nXCE_CLOUD_PREFIX=xc\nXCE_CLOUD_HASH_KEY=id\n"
+else
+    aws cloudformation describe-stack-events --stack-name ${CLOUDFORMATION_STACK_NAME}
+fi
+
+rm -f "$STATUS_FILE"
+
 # we want to deconfigure no matter what
 (cd "$SAAS_AUTH_DIR" &&
      /opt/xcalar/bin/node ./scripts/deconfigure.js)
+
+exit $DEPLOY_STATUS

@@ -150,6 +150,25 @@ Resources:
             Path: /{proxy+}
             Method: ANY
 
+  LambdaConfigurationInformation:
+     Type: AWS::SSM::Parameter
+     Properties:
+       Name: '/xcalar/cloud/auth/AwsServerlessExpressStack'
+       Type: String
+       Value: !Join
+         - ''
+         - - "XCE_CLOUD_MODE=1\n"
+           - "XCE_CLOUD_SESSION_TABLE=YOUR_DYNAMODB_SESSION_TABLE_NAME\n"
+           - "XCE_SAAS_LAMBDA_URL="
+           - https://
+           - !Ref ApiGatewayApi
+           - ".execute-api."
+           - !Ref AWS::Region
+           - ".amazonaws.com/prod/"
+           - "\nXCE_CLOUD_REGION="
+           - !Ref AWS::Region
+           - "\nXCE_CLOUD_PREFIX=xc\nXCE_CLOUD_HASH_KEY=id\n"
+
 Outputs:
   LambdaFunctionConsoleUrl:
     Description: Console URL for the Lambda Function.

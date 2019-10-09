@@ -106,13 +106,15 @@ Parameters:
       - 'true'
     Type: String
   SessionTable:
-    Description: Authenticaton Sessopn Table Name
+    Description: Authenticaton Session Table Name
     Type: String
     Default: 'saas-auth-session-table'
-  ConfigLambda:
-    Description: Configuration Lambda Name
+{%- if enableCloudAuth %}
+  AuthStackName:
+    Description: Name of the cloud Auth stack being used for authentication
     Type: String
-    Default: 'ConfigFunction'
+    Default: ''
+{%- endif %}
 {%- if enableLicense %}
   License:
     Description: XDP License Key
@@ -648,6 +650,15 @@ Resources:
               mode: '000400'
               owner: root
               group: root
+{%- if enableCloudAuth %}
+            /var/lib/cloud/instance/cloudauth.env:
+              content: !Sub
+                - |
+                  AUTH_STACK_NAME=${AuthStackName}
+              mode: '000400'
+              owner: root
+              group: root
+{%- endif %}
             /var/lib/cloud/instance/bootstrap.sh:
               source: '{{ bootstrapUrl }}'
               mode: '000700'
@@ -872,12 +883,6 @@ Resources:
                   - dynamodb:DescribeTable
                 Resource:
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
-              - Effect: Allow
-                Action:
-                  - lambda:InvokeFunction
-                  - lambda:ListFunction
-                Resource:
-                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:${ConfigLambda}'
 
 {%- if enableLifecycle %}
               - Effect: Allow

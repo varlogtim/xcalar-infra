@@ -34,6 +34,7 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
         --parameters ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE} \
                     ParameterKey=ImageId,ParameterValue=${AMI} \
                     ParameterKey=LicenseKey,ParameterValue=${KEY} \
+                    ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
         --tags Key=available,Value=true \
                 Key=deployment,Value=saas \
         --capabilities CAPABILITY_IAM)

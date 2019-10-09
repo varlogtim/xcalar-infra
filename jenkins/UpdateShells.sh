@@ -39,6 +39,7 @@ for STACK in ${STACK_LIST[@]}; do
                                     --parameters  ParameterKey=ImageId,ParameterValue="${AMI}",UsePreviousValue=false \
                                                 ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE},UsePreviousValue=false \
                                                 ParameterKey=LicenseKey,ParameterValue=${KEY},UsePreviousValue=false \
+                                                ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME},UsePreviousValue=false \
                                     --role-arn ${ROLE} \
                                     --capabilities CAPABILITY_IAM
 done
