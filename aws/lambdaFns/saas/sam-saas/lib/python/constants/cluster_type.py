@@ -1,18 +1,22 @@
 cluster_type_table = {
-    'small': {
+    'XS': {
         'clusterSize': '1',
-        'instanceType': 'm5.xlarge'
+        'instanceType': 'r5d.xlarge'
     },
-    'medium': {
+    'S': {
         'clusterSize': '1',
-        'instanceType': 'm5.2xlarge'
+        'instanceType': 'r5d.2xlarge'
     },
-    'large': {
+    'M': {
         'clusterSize': '1',
-        'instanceType': 'm5.4xlarge'
+        'instanceType': 'r5d.4xlarge'
     },
-    'xlarge': {
+    'L': {
         'clusterSize': '1',
-        'instanceType': 'm5.8xlarge'
+        'instanceType': 'r5d.8xlarge'
+    },
+    'XL': {
+        'clusterSize': '1',
+        'instanceType': 'r5d.16xlarge'
     }
 }

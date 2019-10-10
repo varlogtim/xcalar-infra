@@ -9,7 +9,7 @@ from util.http_util import _http_status, _make_reply
 from util.cfn_util import get_stack_info
 from util.user_util import init_user, get_user_info, update_user_info
 from constants.cluster_type import cluster_type_table
-from constants.price import price_table, price_factor
+from constants.price import price_table
 
 # Intialize all service clients
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
@@ -69,8 +69,8 @@ def start_cluster(user_name, cluster_params):
     if 'clusterType' in cluster_params and cluster_params['clusterType'] in cluster_type_table:
         cluster_type = cluster_type_table[cluster_params['clusterType']]
     else:
-        # default to use 'small'
-        cluster_type = cluster_type_table['small']
+        # default to use 'XS'
+        cluster_type = cluster_type_table['XS']
 
     parameters.append(
         {
@@ -238,7 +238,7 @@ def check_cluster_status(user_name, stack_info):
                 s.close()
             return {'status': Status.OK,
                     'clusterUrl': stack_info['cluster_url'],
-                    'clusterPrice': price_table[stack_info['type']] * price_factor * cluster_count / 60,
+                    'clusterPrice': price_table[stack_info['type']] * cluster_count / 60,
                     'isPending': False}
         else:
             return {'status': Status.STACK_ERROR,
@@ -277,7 +277,7 @@ def get_cluster(user_name):
         elif stack_info['stack_status'] == 'UPDATE_COMPLETE':
             cluster_status = check_cluster_status(user_name, stack_info)
             price = price_table[stack_info['type']]
-            credit_change = str(-1 * price_factor * price * stack_info['size'] / 60)
+            credit_change = str(-1 * price * stack_info['size'] / 60)
             return _make_reply(200, cluster_status)
         #error(more detailed failure check)
         else:
