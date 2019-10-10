@@ -652,9 +652,8 @@ Resources:
               group: root
 {%- if enableCloudAuth %}
             /var/lib/cloud/instance/cloudauth.env:
-              content: !Sub
-                - |
-                  AUTH_STACK_NAME=${AuthStackName}
+              content: !Sub |
+                AUTH_STACK_NAME=${AuthStackName}
               mode: '000400'
               owner: root
               group: root
