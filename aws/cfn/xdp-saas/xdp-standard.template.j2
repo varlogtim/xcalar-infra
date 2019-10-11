@@ -679,7 +679,7 @@ Resources:
                   # The ec2-tags utility prints instance tags as key=value pairs suitable for parsing from bash
                   AWS_AUTOSCALING_GROUPNAME="$(ec2-tags -s -i | tr -d "'" | awk -F'=' '/^AWS_AUTOSCALING_GROUPNAME/{print $2}')"
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
-                  bash /var/lib/cloud/instance/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" \
+                  bash /var/lib/cloud/instance/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" {% if enableLicense %}--license "${License}"{% endif %} \
                             --cluster-size "$DESIREDCAP" --tag-key "aws:autoscaling:groupName" --tag-value "$AWS_AUTOSCALING_GROUPNAME" --cluster-name "${AWS::StackName}" \
                             --bucket "${Bucket}" --cgroups "${Cgroups}" --certstore /xcalar/cloud/${HostedZoneName} --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic "${ClusterNIC}"
                   rc=$?
