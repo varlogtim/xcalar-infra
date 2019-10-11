@@ -5,7 +5,7 @@ Parameters:
     Type: String
     Description: Xcalar node instance type
     ConstraintDescription: Choose an instance type.
-    Default: '{{ instance_default | default("m5.xlarge") }}'
+    Default: '{{ instance_default | default("r5d.xlarge") }}'
     AllowedValues: {{ instance_types }}
     {#  {% for instance_type in instance_types -%}
     #  - {{ instance_type }}
