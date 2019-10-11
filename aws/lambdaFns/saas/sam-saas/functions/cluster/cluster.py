@@ -96,6 +96,12 @@ def start_cluster(user_name, cluster_params):
             'UsePreviousValue': True
         }
     )
+    parameters.append(
+        {
+            'ParameterKey': 'License',
+            'UsePreviousValue': True
+        }
+    )
     if 'AMI' in cluster_params:
         parameters.append(
             {
@@ -178,7 +184,12 @@ def stop_cluster(user_name):
             {
                 'ParameterKey': 'AuthStackName',
                 'UsePreviousValue': True
+            },
+            {
+                'ParameterKey': 'License',
+                'UsePreviousValue': True
             }
+
         ],
         Capabilities=[
             'CAPABILITY_IAM',
