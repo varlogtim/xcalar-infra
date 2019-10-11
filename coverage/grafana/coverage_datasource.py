@@ -24,20 +24,21 @@ from py_common.env_configuration import EnvConfiguration
 from coverage.xce_func_test_coverage import XCEFuncTestCoverageData
 from coverage.xd_unit_test_coverage import XDUnitTestCoverageData
 
-config = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
+cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
+                        'JENKINS_HOST': {'required': True}})
 
 from flask import Flask, request, jsonify, json, abort
 from flask_cors import CORS, cross_origin
 
 # It's log, it's log... :)
 logging.basicConfig(
-                level=config.get('LOG_LEVEL'),
+                level=cfg.get('LOG_LEVEL'),
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-xce_coverage_data = XCEFuncTestCoverageData()
-xd_coverage_data = XDUnitTestCoverageData()
+xce_coverage_data = XCEFuncTestCoverageData(jenkins_host=cfg.get('JENKINS_HOST'))
+xd_coverage_data = XDUnitTestCoverageData(jenkins_host=cfg.get('JENKINS_HOST'))
 
 app = Flask(__name__)
 cors = CORS(app)

@@ -52,12 +52,12 @@ class JMQClient(object):
         params = {'job_name': job_name, 'build_number': bnum}
         return self._cmd(uri = '/jenkins_downstream', params = params)
 
-    def find(self, *, job_name, query, verbose=False):
+    def find_builds(self, *, job_name, query, verbose=False):
         params = {'job_name': job_name, 'query': json.dumps(query)}
         if not verbose:
             params['projection'] = json.dumps({'_id': 1})
 
-        rtn = self._cmd(uri = '/jenkins_find', params = params)
+        rtn = self._cmd(uri = '/jenkins_find_builds', params = params)
         if verbose:
             return rtn
         return rtn.keys()
@@ -140,10 +140,10 @@ if __name__ == '__main__':
         query['result'] = 'ABORTED'
 
     if args.dlt:
-        query['duration'] = {'$lt': (args.dlt * 1000)}
+        query['duration_ms'] = {'$lt': (args.dlt * 1000)}
 
     if args.dgt:
-        query['duration'] = {'$gt': (args.dgt * 1000)}
+        query['duration_ms'] = {'$gt': (args.dgt * 1000)}
 
     if args.bnum:
         query['_id'] = args.bnum
@@ -164,9 +164,9 @@ if __name__ == '__main__':
         query['start_time_ms'] = {'$lt': _days_ago_ms(args.before)}
 
     print("query {}".format(query))
-    resp = jmqClient.find(job_name = args.job,
-                          query = query,
-                          verbose = args.verbose)
+    resp = jmqClient.find_builds(job_name = args.job,
+                                 query = query,
+                                 verbose = args.verbose)
     if not args.verbose:
         # Just a list of matching build numbers
         for bnum in resp:

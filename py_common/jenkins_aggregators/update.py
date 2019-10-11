@@ -21,14 +21,14 @@ import time
 sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-from py_common.mongo import MongoDB
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
 from py_common.jenkins_aggregators import JenkinsJobMetaCollection
+from py_common.jenkins_aggregators import JenkinsAllJobIndex
 from py_common.jenkins_aggregators import JenkinsJobInfoAggregator
 from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
 from py_common.jenkins_aggregators import Plugins
 from py_common.jenkins_api import JenkinsApi
-from py_common.mongo import MongoDBKeepAliveLock
+from py_common.mongo import JenkinsMongoDB, MongoDBKeepAliveLock
 from py_common.sorts import nat_sort
 
 
@@ -46,18 +46,19 @@ class JenkinsJobAggregators(object):
                      'type': EnvConfiguration.NUMBER,
                      'default': 300} }
 
-    def __init__(self, *, job_name, db, additional=None):
+    def __init__(self, *, jenkins_host, job_name, jmdb, additional=None):
         """
         Initializer.
 
         Required parameters:
             job_name:   Jenkins job name
-            db:         MongoDB instance
+            jmdb:       JenkinsMongoDB instance
 
         Optional parameters:
             additional: additional (custom) aggregator classes
         """
         self.logger = logging.getLogger(__name__)
+        self.jenkins_host = jenkins_host
         self.job_name = job_name
         self.additional = additional
 
@@ -69,10 +70,10 @@ class JenkinsJobAggregators(object):
         #         time has passed.
         self.freq_sec = cfg.get('JENKINS_AGGREGATOR_UPDATE_FREQ_SEC')
 
-        self.data_coll = JenkinsJobDataCollection(job_name=job_name, db=db)
-        self.meta_coll = JenkinsJobMetaCollection(job_name=job_name, db=db)
-
-        self.japi = JenkinsApi()
+        self.job_data_coll = JenkinsJobDataCollection(job_name=job_name, db=jmdb.byjob_db())
+        self.job_meta_coll = JenkinsJobMetaCollection(job_name=job_name, db=jmdb.byjob_db())
+        self.alljob_idx = JenkinsAllJobIndex(db=jmdb.alljob_db())
+        self.japi = JenkinsApi(jenkins_host=jenkins_host)
 
     def _update_build(self, *, bnum):
         """
@@ -83,12 +84,12 @@ class JenkinsJobAggregators(object):
         """
         self.logger.info("process bnum: {}".format(bnum))
         # Already have a data entry?
-        if self.data_coll.get_data(bnum=bnum) is not None:
+        if self.job_data_coll.get_data(bnum=bnum) is not None:
             self.logger.debug("already seen, skipping...")
             return
 
         # Waiting for retry timeout?
-        if self.meta_coll.retry_pending(bnum=bnum):
+        if self.job_meta_coll.retry_pending(bnum=bnum):
             self.logger.debug("retry pending, skipping...")
             return
 
@@ -103,13 +104,13 @@ class JenkinsJobAggregators(object):
 
         except Exception as e:
             self.logger.exception("exception processing bnum: {}".format(bnum))
-            if not self.meta_coll.schedule_retry(bnum=bnum):
-                self.data_coll.store_data(bnum=bnum, data=None)
+            if not self.job_meta_coll.schedule_retry(bnum=bnum):
+                self.job_data_coll.store_data(bnum=bnum, data=None)
             return
 
         # Everybody gets the default aggregator.
         # XXXrs - future black/white list?
-        aggregators = [JenkinsJobInfoAggregator(job_name=job_name)]
+        aggregators = [JenkinsJobInfoAggregator(jenkins_host=self.jenkins_host, job_name=job_name)]
 
         # Add any additional aggregators (plugin(s)) registered for the job.
         if additional:
@@ -128,11 +129,11 @@ class JenkinsJobAggregators(object):
                 console_log = jbi.console()
             except Exception as e:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not self.meta_coll.schedule_retry(bnum=bnum):
-                    self.data_coll.store_data(bnum=bnum, data=None)
+                if not self.job_meta_coll.schedule_retry(bnum=bnum):
+                    self.job_data_coll.store_data(bnum=bnum, data=None)
                 return
 
-        all_data = {}
+        merged_data = {}
         for agg in aggregators:
             try:
                 self.logger.debug("call update_build")
@@ -146,31 +147,38 @@ class JenkinsJobAggregators(object):
                 # while trying to gather build information. 
                 # Bail, and try again in a bit (if we can).
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not self.meta_coll.schedule_retry(bnum=bnum):
-                    self.data_coll.store_data(bnum=bnum, data=None)
+                if not self.job_meta_coll.schedule_retry(bnum=bnum):
+                    self.job_data_coll.store_data(bnum=bnum, data=None)
                 return
 
             for k,v in data.items():
-                if k in all_data:
+                if k in merged_data:
                     raise Exception("duplicate key: {}".format(k))
-                all_data[k] = v
+                merged_data[k] = v
 
-        if not all_data:
+        if not merged_data:
             self.logger.debug("no data")
             # Make an entry indicating there are no data for this build.
-            self.data_coll.store_data(bnum=bnum, data=None)
+            self.job_data_coll.store_data(bnum=bnum, data=None)
             return
 
         self.logger.debug("store/index data")
-        self.logger.debug(all_data)
-        # index_data may extract "private" stuff from all_data so call it first.
-        self.meta_coll.index_data(bnum=bnum, data=all_data)
-        self.data_coll.store_data(bnum=bnum, data=all_data)
+        self.logger.debug(merged_data)
+        # index_data may side-effect merged_data by extracting "private" stuff
+        # (e.g. "commands" like "_add_to_meta_list") so call it first!
+        #
+        # XXXrs - CONSIDER - this "private" "command" hints that
+        #         might want custom post-aggregation "indexers" that
+        #         are paired with the "aggregators".
+        #
+        self.job_meta_coll.index_data(bnum=bnum, data=merged_data)
+        self.job_data_coll.store_data(bnum=bnum, data=merged_data)
+        self.alljob_idx.index_data(job_name=self.job_name, bnum=bnum, data=merged_data)
 
     def update_builds(self):
         self.logger.info("start")
 
-        completed_builds = set(self.data_coll.all_builds())
+        completed_builds = set(self.job_data_coll.all_builds())
         self.logger.debug("completed builds: {}".format(completed_builds))
 
         last_build = self.japi.get_job_info(job_name=self.job_name).last_build_number()
@@ -184,6 +192,7 @@ class JenkinsJobAggregators(object):
 # MAIN -----
 
 cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
+                        'JENKINS_HOST': {'required': True},
                         'UPDATE_JOB_LIST': {'default': None}})
 
 # It's log, it's log... :)
@@ -192,8 +201,7 @@ logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-db = MongoDB()
-
+jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
 process_lock = None
 try:
     plugins = Plugins()
@@ -202,7 +210,7 @@ try:
         job_list = job_list.split(',')
     else:
         logger.info("no job list")
-        job_list = JenkinsApi().list_jobs()
+        job_list = JenkinsApi(jenkins_host=cfg.get('JENKINS_HOST')).list_jobs()
     logger.info("job list: {}".format(job_list))
     for job_name in job_list:
         logger.info("process {}".format(job_name))
@@ -210,7 +218,7 @@ try:
         # Try to obtain the process lock
         process_lock_name = "{}_process_lock".format(job_name)
         process_lock_meta = {"reason": "locked by JenkinsJobAggregators for update_builds()"}
-        process_lock = MongoDBKeepAliveLock(db=db, name=process_lock_name)
+        process_lock = MongoDBKeepAliveLock(db=jmdb.byjob_db(), name=process_lock_name)
         try:
             process_lock.lock(meta=process_lock_meta)
         except MongoDBKALockTimeout as e:
@@ -218,7 +226,8 @@ try:
             continue
 
         additional = plugins.by_job(job_name=job_name)
-        JenkinsJobAggregators(job_name=job_name, db=db, additional=additional).update_builds()
+        JenkinsJobAggregators(jenkins_host=cfg.get('JENKINS_HOST'),
+                              job_name=job_name, jmdb = jmdb, additional=additional).update_builds()
         process_lock.unlock()
 
 except Exception as e:

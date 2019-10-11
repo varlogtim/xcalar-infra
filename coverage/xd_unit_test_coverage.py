@@ -25,7 +25,7 @@ from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
 from py_common.jenkins_aggregators import JenkinsJobMetaCollection
 from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
-from py_common.mongo import MongoDB
+from py_common.mongo import MongoDB, JenkinsMongoDB
 
 from coverage.file_groups import FileGroups
 
@@ -166,14 +166,16 @@ class XDUnitTestCoverageData(object):
         "/ts/components/sql/workspace/SQLWorkSpace.js"]}
 
 
-    def __init__(self):
+    def __init__(self, *, jenkins_host):
 
         self.logger = logging.getLogger(__name__)
         cfg = EnvConfiguration(XDUnitTestCoverageData.ENV_PARAMS)
-        self.job_name = cfg.get("XD_UNIT_TEST_JOB_NAME")
-        self.db = MongoDB()
-        self.data = JenkinsJobDataCollection(job_name=self.job_name, db=self.db)
-        self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=self.db)
+        job_name = cfg.get("XD_UNIT_TEST_JOB_NAME")
+
+        # XXXrs - This is clunky!
+        db = JenkinsMongoDB(jenkins_host=jenkins_host).byjob_db()
+        self.data = JenkinsJobDataCollection(job_name=job_name, db=db)
+        self.meta = JenkinsJobMetaCollection(job_name=job_name, db=db)
 
         # XXXrs - TEMPORARY (!?!) initialize every time with static configuration.
         #         Eventually, this configuration should be managed elsewhere.

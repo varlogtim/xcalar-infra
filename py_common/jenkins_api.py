@@ -23,6 +23,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from py_common.env_configuration import EnvConfiguration
+"""
 CONFIG = EnvConfiguration({'JENKINS_HOST':     {'required': True,
                                                 'default': 'jenkins.int.xcalar.com'},
                            'JENKINS_SSH_PORT': {'required': True,
@@ -30,10 +31,9 @@ CONFIG = EnvConfiguration({'JENKINS_HOST':     {'required': True,
                                                 'default': 22022},
                            'USER':             {'required': True,
                                                 'default': 'jenkins'}})
+"""
 
-class JenkinsAPIError(Exception):
-    pass
-
+"""
 class JenkinsSSH(object):
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -57,12 +57,16 @@ class JenkinsSSH(object):
         self.logger.debug("subprocess.run cargs: {}".format(cargs))
         cp = subprocess.run(cargs, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         return cp.stdout.decode('utf-8')
+"""
 
+class JenkinsApiError(Exception):
+    pass
 
 class JenkinsREST(object):
-    def __init__(self):
+    def __init__(self, *, jenkins_host):
         self.logger = logging.getLogger(__name__)
-        self.url_root="https://{}".format(CONFIG.get('JENKINS_HOST'))
+        self.jenkins_host = jenkins_host
+        self.url_root="https://{}".format(jenkins_host)
 
     def cmd(self, *, uri):
         url = "{}{}".format(self.url_root, uri)
@@ -71,7 +75,6 @@ class JenkinsREST(object):
         if response.status_code != 200:
             return None
         return response.text
-
 
 class JenkinsJobInfo(object):
     def __init__(self, *, job_name, japi):
@@ -85,7 +88,7 @@ class JenkinsJobInfo(object):
         if not self.data:
             err = "no data for job: {}".format(self.job_name)
             self.logger.error(err)
-            raise JenkinsAPIError(err)
+            raise JenkinsApiError(err)
 
     def last_build_number(self):
         """
@@ -106,8 +109,6 @@ class JenkinsBuildInfo(object):
 
     def __init__(self, *, job_name, build_number, japi):
         self.logger = logging.getLogger(__name__)
-        self.rest = JenkinsREST()
-        self.ssh = JenkinsSSH()
         self.job_name = job_name
         self.build_number = build_number
         self.japi = japi
@@ -121,7 +122,7 @@ class JenkinsBuildInfo(object):
             err = "no data for job: {} build: {}"\
                   .format(self.job_name, self.build_number)
             self.logger.error(err)
-            raise JenkinsAPIError(err)
+            raise JenkinsApiError(err)
 
     def is_done(self):
         """
@@ -137,26 +138,17 @@ class JenkinsBuildInfo(object):
             err = "no building value in data for job: {} build: {}"\
                   .format(self.job_name, self.build_number)
             self.logger.error(err)
-            raise JenkinsAPIError(err)
+            raise JenkinsApiError(err)
         self.logger.info("job: {} build: {} building: {}"
                           .format(self.job_name, self.build_number, building))
         return not(building)
-
-    def OLD_console(self):
-        """
-        Return the console log for the job/build.
-        """
-        cmd = "console {}".format(self.job_name)
-        if build_number:
-            cmd += " {}".format(self.build_number)
-        return self.ssh.cmd(cmd=cmd)
 
     def console(self):
         """
         Return the console log for the job/build.
         """
-        text = self.rest.cmd(uri="/job/{}/{}/logText/progressiveText/start=0"
-                                 .format(self.job_name, self.build_number))
+        text = self.japi.rest.cmd(uri="/job/{}/{}/logText/progressiveText/start=0"
+                                      .format(self.job_name, self.build_number))
         return text
 
     def parameters(self):
@@ -181,7 +173,7 @@ class JenkinsBuildInfo(object):
     def start_time_ms(self):
         return self.data.get('timestamp', None)
 
-    def duration(self):
+    def duration_ms(self):
         return self.data.get('duration', None)
 
     def upstream(self):
@@ -233,18 +225,12 @@ class JenkinsBuildInfo(object):
 
 
 class JenkinsApi(object):
-    def __init__(self):
+    def __init__(self, *, jenkins_host):
         self.logger = logging.getLogger(__name__)
+        self.jenkins_host = jenkins_host
+        self.rest = JenkinsREST(jenkins_host=jenkins_host)
         self.job_info_cache = {}
         self.build_info_cache = {}
-        self.ssh = JenkinsSSH()
-        self.rest = JenkinsREST()
-
-    def OLD_list_jobs(self):
-        jobs = []
-        for name in self.ssh.cmd(cmd="list-jobs").splitlines():
-            jobs.append(name)
-        return jobs
 
     def list_jobs(self):
         jobs = []
@@ -312,13 +298,17 @@ class JenkinsApi(object):
 if __name__ == '__main__':
     from pprint import pformat
     print("Compile check A-OK!")
+
+    cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
+                            'JENKINS_HOST': {'default': 'jenkins.int.xcalar.com'}})
+
     # It's log, it's log... :)
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                         format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    japi = JenkinsApi()
+    japi = JenkinsApi(jenkins_host=cfg.get('JENKINS_HOST'))
 
     jobs = japi.list_jobs()
     print("All jobs: {}".format(jobs))
@@ -342,7 +332,7 @@ if __name__ == '__main__':
     print("\tparameters: {}".format(jbi.parameters()))
     print("\tbuilt on: {}".format(jbi.built_on()))
     print("\tstart time (ms): {}".format(jbi.start_time_ms()))
-    print("\tduration: {}".format(jbi.duration()))
+    print("\tduration: {}".format(jbi.duration_ms()))
     print("\tresult: {}".format(jbi.result()))
     print("\tupstream: {}".format(jbi.upstream()))
     print("\tlast 20 build done status:")

@@ -30,7 +30,6 @@ mongo_db_user = 'root'
 mongo_db_pass = 'Welcome1'
 mongo_db_host = 'mongodb.service.consul'
 mongo_db_port = '27017'
-mongo_db_name = 'jenkins'
 
 class MongoDB(object):
 
@@ -42,12 +41,9 @@ class MongoDB(object):
                   'MONGO_DB_USER': {'required': True,
                                     'default': mongo_db_user},
                   'MONGO_DB_PASS': {'required': True,
-                                    'default': mongo_db_pass},
-                  'MONGO_DB_NAME': {'required': True,
-                                    'default': mongo_db_name}
-                 }
+                                    'default': mongo_db_pass} }
 
-    def __init__(self):
+    def __init__(self, *, db_name):
         self.logger = logging.getLogger(__name__)
         self.cfg = EnvConfiguration(MongoDB.ENV_CONFIG)
         self.url = "mongodb://{}:{}@{}:{}/"\
@@ -59,19 +55,11 @@ class MongoDB(object):
         # Quick connectivity check...
         # The ismaster command is cheap and does not require auth.
         self.client.admin.command('ismaster')
-        self.db = self.client[self.cfg.get('MONGO_DB_NAME')]
+        self.db = self.client[db_name]
         self.logger.info(self.db)
 
     def collection(self, name):
         return self.db[name]
-
-    def job_collections(self):
-        jobs = []
-        for name in self.db.collection_names():
-            if '_meta' in name:
-                continue
-            jobs.append(name)
-        return jobs
 
     @staticmethod
     def encode_key(key):
@@ -98,7 +86,7 @@ class MongoDBKeepAliveLock(object):
 
     ENV_CONFIG = {'MONGO_DB_KALOCK_COLLECTION_NAME':
                         {'required': True,
-                         'default': 'ka_locks'},
+                         'default': '_ka_locks'},
                   'MONGO_DB_KALOCK_TIMEOUT':
                         {'required': True,
                          'type': EnvConfiguration.NUMBER,
@@ -229,6 +217,24 @@ class MongoDBKeepAliveLock(object):
             raise MongoDBKALockUnlockFail(err)
 
 
+class JenkinsMongoDB(object):
+    def __init__(self, *, jenkins_host):
+        self.byjob_db_name = "{}_byjob".format(jenkins_host).replace('.', '_')
+        self.alljob_db_name = "{}_alljob".format(jenkins_host).replace('.', '_')
+        self._byjob_db = None
+        self._alljob_db = None
+
+    def byjob_db(self):
+        if not self._byjob_db:
+            self._byjob_db = MongoDB(db_name=self.byjob_db_name)
+        return self._byjob_db
+
+    def alljob_db(self):
+        if not self._alljob_db:
+            self._alljob_db = MongoDB(db_name=self.alljob_db_name)
+        return self._alljob_db
+
+
 if __name__ == '__main__':
     print("Compile check A-OK!")
 
@@ -239,7 +245,7 @@ if __name__ == '__main__':
                     handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    mongo = MongoDB()
+    mongo = MongoDB(db_name='unit_test_db')
     kal1 = MongoDBKeepAliveLock(db=mongo, name="some-test-lock")
     kal2 = MongoDBKeepAliveLock(db=mongo, name="some-test-lock")
     print("lock 1...")

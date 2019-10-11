@@ -26,7 +26,7 @@ from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
 from py_common.jenkins_aggregators import JenkinsJobMetaCollection
 from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
-from py_common.mongo import MongoDB
+from py_common.mongo import MongoDB, JenkinsMongoDB
 from py_common.sorts import nat_sort
 
 class SqlPerfIter(object):
@@ -352,7 +352,8 @@ class SqlPerfResultsAggregator(JenkinsAggregatorBase):
 
 class SqlPerfResultsData(object):
 
-    ENV_PARAMS = {"SQL_PERF_JOB_NAME": {"default": "SqlScaleTest"}}
+    ENV_PARAMS = {"SQL_PERF_JOB_NAME": {"default": "SqlScaleTest"},
+                  "JENKINS_HOST": {"required": True}}
 
     def __init__(self):
         """
@@ -364,7 +365,7 @@ class SqlPerfResultsData(object):
         self.logger = logging.getLogger(__name__)
         cfg = EnvConfiguration(SqlPerfResultsData.ENV_PARAMS)
         self.job_name = cfg.get("SQL_PERF_JOB_NAME")
-        self.db = MongoDB()
+        self.db = JenkinsMongoDB(jenkins_host=cfg.get("JENKINS_HOST")).byjob_db()
         self.data = JenkinsJobDataCollection(job_name=self.job_name, db=self.db)
         self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=self.db)
         self.results_cache = {}
@@ -514,4 +515,10 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
 
     results = SqlPerfResults(bnum = args.bnum, dir_path = dir_path)
-    print(pformat(results.index_data()))
+    data = results.index_data()
+    #print(pformat(data))
+    for query,vals in data['tpcdsTest']['query_vals'].items():
+        print("{}: {}".format(query, vals))
+
+
+    #print(pformat(results.index_data()))

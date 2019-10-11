@@ -14,9 +14,10 @@ import sys
 sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-from py_common.mongo import MongoDB
+from py_common.mongo import JenkinsMongoDB
 
-cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
+cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
+                        'JENKINS_HOST': {'default': 'jenkins.int.xcalar.com'}})
 
 # It's log, it's log... :)
 logging.basicConfig(level=cfg.get('LOG_LEVEL'),
@@ -24,7 +25,8 @@ logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-db = MongoDB().db
+db = JenkinsMongoDB(jenkins_host = cfg.get('JENKINS_HOST')).byjob_db().db
+
 for name in sorted(db.list_collection_names()):
     if "meta" in name:
         continue

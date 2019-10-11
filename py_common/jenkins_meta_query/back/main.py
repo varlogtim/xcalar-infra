@@ -21,16 +21,18 @@ if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-config = EnvConfiguration({'LOG_LEVEL': {'default': logging.DEBUG}})
+cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.DEBUG},
+                        'JENKINS_HOST': {'required': True}})
 
-from py_common.mongo import MongoDB
+from py_common.mongo import JenkinsMongoDB
+from py_common.jenkins_aggregators import JenkinsAllJobIndex
 
 from flask import Flask, request, jsonify, json, abort, make_response
 from flask_cors import CORS, cross_origin
 
 # It's log, it's log... :)
 logging.basicConfig(
-                level=config.get('LOG_LEVEL'),
+                level=cfg.get('LOG_LEVEL'),
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
-mongo = MongoDB()
+jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
 
 methods=['GET']
 @app.route('/', methods=methods)
@@ -50,14 +52,13 @@ def test_connection():
     """
     return "Connection check A-OK!"
 
-
-def _upstream_from(*, job_name, build_number):
-
+def _get_upstream(*, job_name, build_number):
+    byjob_db = jmdb.byjob_db()
     upstream = []
-    doc = mongo.db[job_name].find_one({'_id': build_number}, projection={'upstream':1})
+    doc = byjob_db.db[job_name].find_one({'_id': build_number}, projection={'upstream':1})
     logger.debug(doc)
     if not doc:
-        return
+        return None
     for item in doc.get('upstream', []):
         us_job = item.get('job_name', None)
         us_bnum = str(item.get('build_number', None))
@@ -65,8 +66,10 @@ def _upstream_from(*, job_name, build_number):
             continue
         upstream.append({'job_name': us_job,
                          'build_number': us_bnum,
-                         'upstream': _upstream_from(job_name=us_job,
+                         'upstream': _get_upstream(job_name=us_job,
                                                     build_number=us_bnum)})
+    if not len(upstream):
+        return None
     return upstream
 
 @app.route('/jenkins_upstream', methods=methods)
@@ -82,29 +85,16 @@ def jenkins_upstream():
     if not build_number:
         abort(400, 'missing downstream build_number')
 
-    return make_response(jsonify({'upstream_jobs':
-                                    _upstream_from(job_name=job_name,
-                                                   build_number=build_number)}))
+    return make_response(jsonify({'upstream':
+                                  _get_upstream(job_name=job_name,
+                                                build_number=build_number)}))
 
-
-def _downstream_from(*, job_name, build_number, collection_names):
-
-    downstream = []
-    query = {'upstream.job_name': job_name, 'upstream.build_number': int(build_number)}
-    logger.debug(query)
-    for name in collection_names:
-        logger.debug("name: {}".format(name))
-        for doc in mongo.db[name].find(query, projection={'_id': 1}):
-            logger.debug("doc: {}".format(doc))
-            ds_job = name
-            ds_bnum = doc['_id']
-            downstream.append({'job_name':ds_job,
-                               'build_number':ds_bnum,
-                               'downstream':_downstream_from(job_name=ds_job,
-                                                             build_number=ds_bnum,
-                                                             collection_names=collection_names)})
-    return downstream
-
+def _get_downstream(*, job_name, bnum, coll):
+    key = "{}:{}".format(job_name, bnum)
+    doc = coll.find({'_id': key})
+    if not doc:
+        return None
+    pass
 
 @app.route('/jenkins_downstream', methods=methods)
 @cross_origin()
@@ -119,17 +109,13 @@ def jenkins_downstream():
     if not build_number:
         abort(400, 'missing upstream build_number')
 
-
-    downstream = {'downstream_jobs':
-                    _downstream_from(job_name=job_name,
-                                     build_number=build_number,
-                                     collection_names=mongo.job_collections())}
+    alljob_idx = JenkinsAllJobIndex(db=jmdb.alljob_db())
+    downstream = alljob_idx.downstream_jobs(job_name=job_name, bnum=build_number)
     return make_response(jsonify(downstream))
 
-
-@app.route('/jenkins_find', methods=methods)
+@app.route('/jenkins_find_builds', methods=methods)
 @cross_origin()
-def jenkins_find():
+def jenkins_find_builds():
     job_name = request.args.get('job_name', None)
     if not job_name:
         abort(400, 'missing job_name')
@@ -151,15 +137,25 @@ def jenkins_find():
         abort(400, str(e))
 
     try:
+        byjob_db = jmdb.byjob_db()
         found = {}
         args = {}
         if proj:
             args['projection'] = proj
-        for doc in mongo.db[job_name].find(query, **args):
+        for doc in byjob_db.db[job_name].find(query, **args):
             found[doc['_id']] = doc
         return make_response(jsonify(found))
     except Exception as e:
         abort(400, str(e))
+
+@app.route('/jenkins_find_bytime', methods=methods)
+@cross_origin()
+def jenkins_find_bytime():
+    now = time.time()
+    start = request.args.get('start', 0)
+    end = request.args.get('end', now)
+    alljob_idx = JenkinsAllJobIndex(db=jmdb.alljob_db())
+    return make_response(jsonify(alljob_idx.jobs_bytime(start=int(start), end=int(end))))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True)

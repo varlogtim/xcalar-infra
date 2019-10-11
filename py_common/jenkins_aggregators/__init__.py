@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 import json
 import logging
 import os
+import pymongo
 from pymongo.errors import DuplicateKeyError
 from pymongo import ReturnDocument
 import re
@@ -24,15 +25,129 @@ if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-from py_common.jenkins_api import JenkinsApi, JenkinsAPIError
-from py_common.mongo import MongoDB
+from py_common.jenkins_api import JenkinsApi
+from py_common.mongo import MongoDB, JenkinsMongoDB
 from py_common.sorts import nat_sort
+
+
+class JenkinsAllJobIndex(object):
+    """
+    Interface to the all-job index collection(s)
+    """
+
+    # XXXrs - WORKING HERE
+    #
+    # Consider augmenting cross-job "meta data" here.
+    #   - collection with start time as key containing job/build
+    #   - collection with slave as key containing job/build/time
+    #   - collection containing downstream test structures
+
+    def __init__(self, *, db):
+        self.logger = logging.getLogger(__name__)
+        self.db = db
+
+        # need a job_name/build_number uniqueness constraint
+        self.db.collection('all_jobs').create_index([('job_name', pymongo.ASCENDING),
+                                                     ('build_number', pymongo.ASCENDING)],
+                                                     unique=True)
+
+    def index_data(self, *, job_name, bnum, data):
+        """
+        Expects to find at least the following in data:
+            {'parameters': jbi.parameters(),
+             'git_branches': jbi.git_branches(),
+             'built_on': jbi.built_on(),
+             'start_time_ms': jbi.start_time_ms(),
+             'duration_ms': jbi.duration_ms(),
+             'result': jbi.result()}
+        """
+        self.logger.debug("job_name: {} bnum: {}".format(job_name, bnum))
+
+        # XXXrs - more fields?
+        job_entry = {'job_name': job_name,
+                     'build_number': bnum,
+                     'start_time_ms': data.get('start_time_ms', None),
+                     'duration_ms': data.get('duration_ms', None),
+                     'built_on': data.get('built_on', None),
+                     'result': data.get('result', None)}
+
+        self.logger.debug("job_entry: {}".format(job_entry))
+
+        # All Jobs
+        try:
+            self.db.collection('all_jobs').insert(job_entry)
+        except DuplicateKeyError as e:
+            self.logger.debug("all_jobs duplicate {}".format(job_entry))
+
+        '''
+        # Built on (XXXrs useful?)
+        built_on = data.get('built_on', None)
+        if built_on is not None:
+            coll = self.db.collection(built_on)
+            if coll.count() == 0: # First we've seen this collection, create uniqueness constraint
+                coll.create_index([('job_name', pymongo.ASCENDING),
+                                   ('build_number', pymongo.ASCENDING)],
+                                    unique=True)
+                coll.create_index([('start_time_ms', pymongo.ASCENDING)])
+            try:
+                coll.insert(job_entry)
+            except DuplicateKeyError as e:
+                self.logger.debug("built_on {} duplicate {}".format(built_on, job_entry))
+        '''
+
+        # Downstream Jobs
+        coll = self.db.collection('downstream_jobs')
+        down_key = "{}:{}".format(job_name, bnum)
+        for item in data.get('upstream', []):
+            self.logger.debug('upstream: {}'.format(item))
+            up_jname = item.get('job_name', None)
+            if not up_jname:
+                self.logger.debug("missing expected upstream job_name: {}".format(item))
+                continue
+            up_bnum = item.get('build_number', None)
+            if not up_bnum:
+                self.logger.debug("missing expected upstream build_number: {}".format(item))
+                continue
+            up_key = "{}:{}".format(up_jname, up_bnum)
+            self.logger.debug("up_key {} down_key {}".format(up_key, down_key))
+            coll.find_one_and_update({'_id': up_key},
+                                     {'$addToSet': {'down': down_key}},
+                                     upsert = True)
+
+    def jobs_bytime(self, *, start, end):
+        jobs = []
+        query = {'$and': [{'start_time_ms': {'$gte': start*1000}},
+                          {'start_time_ms': {'$lte': end*1000}}]}
+        for doc in self.db.collection('all_jobs').find(query):
+            doc.pop('_id')
+            jobs.append(doc)
+        return {'jobs': jobs}
+
+    def _get_downstream(self, *, job_name, bnum):
+        rtn = []
+        key = "{}:{}".format(job_name, bnum)
+        doc = self.db.collection('downstream_jobs').find_one({'_id': key})
+        if not doc:
+            return None
+        for downkey in doc.get('down'):
+            job_name, bnum = downkey.split(':')
+            rtn.append({'job_name': job_name,
+                        'build_number': bnum,
+                        'downstream': self._get_downstream(job_name=job_name, bnum=bnum)})
+        if not len(rtn):
+            return None
+        return rtn
+
+    def downstream_jobs(self, *, job_name, bnum):
+        return {'downstream': self._get_downstream(job_name=job_name, bnum=bnum)}
+
 
 class JenkinsJobDataCollection(object):
     """
     Interface to the per-build job data collection.
     """
     def __init__(self, *, job_name, db):
+        self.logger = logging.getLogger(__name__)
         self.coll = db.collection(job_name)
 
     def _no_data(self, *, doc):
@@ -47,7 +162,6 @@ class JenkinsJobDataCollection(object):
         else:
             data['_id'] = bnum
             self.coll.insert(data)
-
     def get_data(self, *, bnum):
         # Return the data, if any.
         doc = self.coll.find_one({'_id': bnum})
@@ -87,6 +201,7 @@ class JenkinsJobMetaCollection(object):
                      'default': 300} }
 
     def __init__(self, *, job_name, db):
+        self.logger = logging.getLogger(__name__)
         self.coll = db.collection("{}_meta".format(job_name))
         cfg = EnvConfiguration(JenkinsJobMetaCollection.ENV_PARAMS)
         self.retry_max = cfg.get('JENKINS_AGGREGATOR_UPDATE_RETRY_MAX')
@@ -311,28 +426,32 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
     Returns common Jenkins-supplied build information.
     Used for all jobs.
     """
-    def __init__(self, *, job_name):
+    def __init__(self, *, jenkins_host, job_name):
         super().__init__(job_name=job_name)
         self.logger = logging.getLogger(__name__)
+        self.japi = JenkinsApi(jenkins_host=jenkins_host)
         self.jbi_by_bnum = {}
 
     def build_info(self, *, bnum):
         jbi = self.jbi_by_bnum.get(bnum, None)
         if jbi:
             return jbi
-        jbi = JenkinsApi().get_build_info(job_name = self.job_name,
-                                          build_number = bnum)
+        jbi = self.japi.get_build_info(job_name = self.job_name,
+                                       build_number = bnum)
         self.jbi_by_bnum[bnum] = jbi
         return jbi
 
     def update_build(self, *, bnum, jbi, log):
         rtn = {}
         try:
+            # This is the "standard" set of job data.
+            # Note that the JenkinsAllJobIndex class counts
+            # on what's here.
             rtn = {'parameters': jbi.parameters(),
                    'git_branches': jbi.git_branches(),
                    'built_on': jbi.built_on(),
                    'start_time_ms': jbi.start_time_ms(),
-                   'duration': jbi.duration(),
+                   'duration_ms': jbi.duration_ms(),
                    'result': jbi.result()}
             upstream = jbi.upstream()
             if upstream:
@@ -394,11 +513,38 @@ class Plugins(object):
 # In-line "unit test"
 if __name__ == '__main__':
     print("Compile check A-OK!")
+
+    cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
+                            'JENKINS_HOST': {'default': 'jenkins.int.xcalar.com'}})
+
     # It's log, it's log... :)
     logging.basicConfig(
-                    level=logging.DEBUG,
+                    level=cfg.get('LOG_LEVEL'),
                     format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                     handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
-    pi = Plugins()
-    print(pi.byjob)
+
+    jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
+    logger.info('jmdb: {}'.format(jmdb))
+
+    byjob_db = jmdb.byjob_db()
+    logger.info('byjob_db: {}'.format(byjob_db))
+
+    alljob_db = jmdb.alljob_db()
+    logger.info('alljob_db: {}'.format(alljob_db))
+
+    alljob_idx = JenkinsAllJobIndex(db=alljob_db)
+    logging.info(alljob_idx)
+
+    logging.info(alljob_idx.downstream_jobs(job_name='DailyTests-Trunk', bnum='153'))
+
+    """
+    job_names = [n for n in byjob_db.db.collection_names() if not n.endswith('_meta') and not n.startswith('_')]
+    logging.info(job_names)
+
+    for job_name in job_names:
+        job_coll = byjob_db.collection(job_name)
+        for doc in job_coll.find({}):
+            alljob_db.index_data(job_name=job_name, bnum=doc['_id'], data=doc)
+
+    """

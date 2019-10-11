@@ -10,24 +10,20 @@
 import logging
 import os
 import sys
-import requests
-import time
 
 if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
-                        'BACKEND_HOST': {'required': True},
-                        'BACKEND_PORT': {'required': True}})
-    
+config = EnvConfiguration({'LOG_LEVEL': {'default': logging.DEBUG}})
+
 from flask import Flask, request
-from flask import render_template, make_response, jsonify
+from flask import render_template, make_response
 from flask_cors import CORS, cross_origin
 
 # It's log, it's log... :)
 logging.basicConfig(
-                level=cfg.get('LOG_LEVEL'),
+                level=config.get('LOG_LEVEL'),
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
@@ -46,19 +42,17 @@ def test_connection():
     return "Connection check A-OK!"
 
 # Template expects passed parameter
-@app.route('/jenkins_find_bytime', methods=methods)
+@app.route('/hello', methods=methods)
+@app.route('/hello/<name>', methods=methods)
 @cross_origin()
-def jenkins_find_bytime():
-    now = int(time.time())
-    start = request.args.get('start', 0)
-    end = request.args.get('end', now)
-    back_url = "http://{}:{}/jenkins_find_bytime?start={}&end={}"\
-               .format(cfg.get('BACKEND_HOST'), cfg.get('BACKEND_PORT'), start, end)
-    response = requests.get(back_url, verify=False) # XXXrs disable verify!
-    jobs = response.json()
-    logger.info("jobs {}".format(jobs))
-    logger.info("jobs length: {}".format(len(jobs)))
-    return render_template("jobs_table.html", jobs=jobs['jobs'])
+def hello(name=None):
+    return render_template("hello.html", name=name)
+
+# Template accesses the request object
+@app.route('/hello_qs', methods=methods)
+@cross_origin()
+def hello_qs():
+    return render_template("hello_qs.html")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4001, debug=True)

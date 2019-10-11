@@ -4,6 +4,7 @@ MAINTAINER Robert Stephens <rstephens@xcalar.com>
 
 # Environment configuration override as needed...
 ENV LOG_LEVEL=DEBUG
+ENV JENKINS_HOST=jenkins.int.xcalar.com
 
 # Context is set to xcalar-infra/ by dbuild
 

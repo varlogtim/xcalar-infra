@@ -4,6 +4,8 @@ MAINTAINER Robert Stephens <rstephens@xcalar.com>
 
 # Environment configuration override as needed...
 ENV LOG_LEVEL=DEBUG
+ENV BACKEND_HOST=cvraman3.int.xcalar.com
+ENV BACKEND_PORT=4000
 
 # Context is set to xcalar-infra/ by dbuild
 

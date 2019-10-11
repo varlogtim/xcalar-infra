@@ -134,10 +134,14 @@ class GitHelper(object):
 if __name__ == '__main__':
     from py_common.jenkins_api import JenkinsApi
     print("Compile check A-OK!")
-    logging.basicConfig(level=logging.DEBUG,
+
+    cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
+                            'JENKINS_HOST': {'default': 'jenkins.int.xcalar.com'}})
+
+    logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                         format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                         handlers=[logging.StreamHandler()])
-    japi = JenkinsApi()
+    japi = JenkinsApi(jenkins_host=cfg.get('JENKINS_HOST'))
     log = japi.console(job_name="XDUnitTest", build_number=8522)
 
     gh = GitHelper()

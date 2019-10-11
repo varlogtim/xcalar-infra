@@ -4,11 +4,7 @@ MAINTAINER Robert Stephens <rstephens@xcalar.com>
 
 # Environment configuration override as needed...
 ENV LOG_LEVEL="INFO"
-
-# TEST/DEBUG
-#ENV MONGO_DB_NAME="aggregator_testing"
-#ENV UPDATE_JOB_LIST="XCEFuncTest,SqlScaleTest"
-# TEST/DEBUG
+ENV JENKINS_HOST="jenkins.int.xcalar.com"
 
 WORKDIR /usr/src/app
 
