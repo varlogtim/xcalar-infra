@@ -309,7 +309,7 @@ cloudXccli() {
 
     # only want to send to one node in the cluster
     local node=$(getSingleNodeFromCluster $cluster)
-    local cmd="nodeSsh $cluster $node \"/opt/xcalar/bin/xccli\""
+    local cmd="nodeSsh $cluster $node \"sudo\" \"/opt/xcalar/bin/xccli\""
     local arg
     for arg in "$@"; do
         arg="${arg//\\/\\\\}"
@@ -317,4 +317,49 @@ cloudXccli() {
         cmd="$cmd \"$arg\""
     done
     $cmd
+}
+
+
+clusterCollectCoverage() {
+    # Expects the following from Jenkins Environment
+    #
+    # JOB_NAME
+    # BUIlD_NUMBER
+    # PERSIST_COVERAGE_ROOT
+
+    cvgRoot=${PERSIST_COVERAGE_ROOT}/${JOB_NAME}/${BUILD_NUMBER}
+    echo "COVERAGE cvgRoot: $cvgRoot"
+
+    if [ -z "$1" ]; then
+        echo "Must provide a cluster to clusterCollectCoverage" >&2
+        exit 1
+    fi
+    local cluster="$1"
+    if [ "$VmProvider" = "GCE" ]; then
+        echo 2>&1 "clusterCollectCoverage not supported for $VmProvider"
+        exit 1
+    elif [ "$VmProvider" = "Azure" ]; then
+        local host
+        for host in $(getNodes "$cluster"); do
+            echo "COVERAGE host: $host"
+
+            dst_dir=${cvgRoot}/${host}/rawprof
+            mkdir -p $dst_dir
+            echo "COVERAGE raw profile dst_dir: $dst_dir"
+            nodeSsh "$cluster" "$host" "ls -l /var/opt/xcalar/coverage"
+            scp -r -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure "azureuser@${host}:/var/opt/xcalar/coverage/*" ${dst_dir}/
+
+            dst_dir=${cvgRoot}/${host}/bin
+            mkdir -p $dst_dir
+            echo "COVERAGE binary dst_dir: $dst_dir"
+            scp -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure azureuser@${host}:/opt/xcalar/bin/usrnode $dst_dir
+
+        done
+    elif [ "$VmProvider" = "Ovirt" ]; then
+        echo 2>&1 "clusterCollectCoverage not supported for $VmProvider"
+        exit 1
+    else
+        echo 2>&1 "Unknown VmProvider $VmProvider"
+        exit 1
+    fi
 }

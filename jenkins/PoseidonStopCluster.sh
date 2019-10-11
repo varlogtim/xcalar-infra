@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+export PERSIST_COVERAGE_ROOT="${PERSIST_COVERAGE_ROOT:-/netstore/qa/coverage}"
 export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$PATH"
 
@@ -16,6 +17,12 @@ initClusterCmds
 set -x
 
 cluster=`echo $CLUSTER | tr A-Z a-z`
+
+# Collect coverage data if present
+set +e
+stopXcalar "$cluster"
+clusterCollectCoverage "$cluster"
+set -e
 
 if [ "$LEAVE_ON_FAILURE" = "true" ]; then
     echo "Make sure you delete the cluster once done"
