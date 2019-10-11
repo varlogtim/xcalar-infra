@@ -13,6 +13,10 @@
 # }
 # JSON.stringify(pricing, undefined, 2)
 price_table = {
+    'm5.xlarge': 1,
+    'm5.2xlarge': 2,
+    'm5.4xlarge': 4,
+    'm5.8xlarge': 8,
     'r5d.xlarge': 1,
     'r5d.2xlarge': 2,
     'r5d.4xlarge': 4,
