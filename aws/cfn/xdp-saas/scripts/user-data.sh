@@ -36,7 +36,7 @@ asg_capacity() {
 
 expserver_config() {
    if [ -n "$AUTH_STACK_NAME" ]; then
-       XCE_EXPSERVER_CLOUD_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//')"
+       XCE_EXPSERVER_CLOUD_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
 
        sed --follow-symlinks -i '/^## Xcalar Cloud Auth Start/,/## Xcalar Cloud Auth End/d' /etc/default/xcalar
 
