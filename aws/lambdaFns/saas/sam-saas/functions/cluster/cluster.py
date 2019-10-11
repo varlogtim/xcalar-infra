@@ -90,6 +90,12 @@ def start_cluster(user_name, cluster_params):
             'UsePreviousValue': True
         }
     )
+    parameters.append(
+        {
+            'ParameterKey': 'AuthStackName',
+            'UsePreviousValue': True
+        }
+    )
     if 'AMI' in cluster_params:
         parameters.append(
             {
@@ -167,6 +173,10 @@ def stop_cluster(user_name):
             },
             {
                 'ParameterKey': 'CNAME',
+                'UsePreviousValue': True
+            },
+            {
+                'ParameterKey': 'AuthStackName',
                 'UsePreviousValue': True
             }
         ],
