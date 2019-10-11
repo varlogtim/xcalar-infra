@@ -81,7 +81,7 @@ for STACK in ${STACK_LIST[@]}; do
     fi
     if [ $SIZE != 0 ]; then
         aws cloudformation update-stack --stack-name ${STACK} --use-previous-template \
-                                        --parameters ParameterKey=ClusterSize,ParameterValue=0, $CNAME_PARAMETER $AUTHSTACKNAME_PARAMETER \
+                                        --parameters ParameterKey=ClusterSize,ParameterValue=0 $CNAME_PARAMETER $AUTHSTACKNAME_PARAMETER \
                                         --role-arn ${ROLE} \
                                         --capabilities CAPABILITY_IAM
     fi
