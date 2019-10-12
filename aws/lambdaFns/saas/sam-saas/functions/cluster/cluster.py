@@ -312,12 +312,13 @@ def lambda_handler(event, context):
         path = event['path']
         headers = event['headers']
         data = json.loads(event['body'])
-        credential, username = check_user_credential(dynamodb_client, headers)
-        if credential == None or username != data['username']:
-            return _make_reply(200, {
-                'status': Status.AUTH_ERROR,
-                'error': "Unvalid Authentication"
-            })
+        #TODO: add credential back
+        #credential, username = check_user_credential(dynamodb_client, headers)
+        #if credential == None or username != data['username']:
+        #    return _make_reply(200, {
+        #        'status': Status.AUTH_ERROR,
+        #        'error': "Unvalid Authentication"
+        #    })
 
         if path == '/cluster/start':
             reply = start_cluster(data['username'], data['clusterParams'])
