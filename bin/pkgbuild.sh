@@ -220,11 +220,12 @@ package() {
     local source0="\$(basename "\${sources[0]}")"
     local tool="\$source0"
     case "\$source0" in
-        *.tar.gz) tool="\${source0%%.tar.gz}";;
-        *.tar.bz2) tool="\${source0%%.tar.bz2}";;
-        *.gz) tool="\${source0%%.gz}";;
-        *.bz2) tool="\${source0%%.bz2}";;
-        *.zip) tool="\${source0%%.zip}";;
+        *.tar.gz) tool="\${source0%.tar.gz}";;
+        *.tar.bz2) tool="\${source0%.tar.bz2}";;
+        *.tgz) tool="%{source0%.tgz}";;
+        *.gz) tool="\${source0%.gz}";;
+        *.bz2) tool="\${source0%.bz2}";;
+        *.zip) tool="\${source0%.zip}";;
     esac
     if ! [ -e "\$tool" ]; then
         local found_tool=false
@@ -347,8 +348,9 @@ pkgmain() {
         fi
         case "$filen" in
             *.tar.gz|*.tgz) tar zxf "$filen" ;;
-            *.tar.bz2) tar xf "$filen" ;;
+            *.tar.bz2) tar axf "$filen" ;;
             *.tar) tar xf "$filen" ;;
+            *.tgz) tar axf "$filen" ;;
             *.zip) unzip -q -o "$filen" ;;
             *.gz) gzip -dc "$filen" > "$(basename $filen .gz)" ;;
             *.bz2) bzip2 -dc "$filen" > "$(basename $filen .bz2)" ;;
@@ -424,6 +426,10 @@ pkgmain() {
     if [ -n "$conffiles" ]; then
         info "Marking config files ${conffiles[*]}"
         FPM_COMMON+=(--config-files "${conffiles[@]}")
+    elif [[ -e $pkgdir/etc ]]; then
+        FPM_COMMON+=(--config-files /etc)
+    else
+        FPM_COMMON+=(--deb-no-default-config-files)
     fi
     for scriptbase in after-install after-remove after-upgrade before-install before-remove before-upgrade; do
         for script in ${srcdir}/${scriptbase}.sh ${PKGBUILDdir}/${scriptbase}.sh; do

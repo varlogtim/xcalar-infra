@@ -2,11 +2,25 @@
 
 SSH_VERSION=$(ssh -V 2>&1 | sed -r 's/^OpenSSH_([0-9])\.([0-9]).*$/\1\2/g')
 
+onexit() {
+    ssh-agent -k
+    rm -vf $CERT
+}
+
 vssh() {
     # try to guess the user's intentions
     local -a sshargs=()
     local mode=ca role='' id=''
     local cmd='' userhost=''
+    if [ -z "$VAULT_ADDR" ]; then
+        export VAULT_ADDR=https://vault.service.consul:8200
+        echo >&2 "vssh: WARNING: VAULT_ADDR is not setting. Defaulting to $VAULT_ADDR"
+    fi
+    if ! vault read auth/token/lookup-self | grep policies; then
+        echo >&2 "There was an error talking to vault. Try to login first: vault login -method=ldap username=emailalias-without-at-xcalar.com"
+        return 1
+    fi
+
     while [ $# -gt 0 ]; do
         cmd="$1"
         case "$cmd" in
@@ -45,7 +59,7 @@ vssh() {
     if ! test -r "${id}"; then
         test -d "$(dirname "$id")" || mkdir "$(dirname "$id")"
         chmod 0700 "$(dirname "$id")"
-        echo >&2 "Generating a new vault key ..."
+        echo >&2 "vssh: Generating a new vault key ..."
         ssh-keygen -N '' -q -f "$id" -C "vault-$USER@$HOSTNAME"
     fi
     if [ -z "$role" ]; then
@@ -59,6 +73,7 @@ vssh() {
             user=ec2-user
             role=cloud
         elif [[ "$*" =~ jenkins ]]; then
+            user=jenkins
             role=jenkins
         elif [[ "$*" =~ int.xcalar.com ]]; then
             role=jenkins
@@ -70,31 +85,36 @@ vssh() {
             role=jenkins
             user=jenkins
         fi
+        echo >&2 "vssh: No role specified, guessing user=$user, role=$role ..."
     fi
 
-    tmpdir="${TMPDIR:-/tmp}/vssh-$(id -u)"
-    mkdir -m 0700 -p "$tmpdir" || exit 1
-    chmod 0700 $tmpdir
-    rm -fv ${id}-cert.pub # clean up old certs
-    local cert="${tmpdir}/$(basename ${id} .pem)-cert.pub" now=$(date +%s) expires='0'
-    expires=$(test -e $cert && date -d $(ssh-keygen -Lf $cert | awk '/Valid: from/{print $(NF)}') +%s || echo 0)
+    CERT="${id%.pem}-cert.pub"
+    # let's not worry about caching for now.
+    rm -f "$CERT"
+    local now=$(date +%s) expires='0'
+    expires=$(test -e $CERT && date -d $(ssh-keygen -Lf $CERT | awk '/Valid: from/{print $(NF)}') +%s || echo 0)
     if [[ $expires -eq 0 ]] || [[ $(( expires-now )) -lt 100 ]]; then
-        if ! vault write -field=signed_key ssh/sign/$role public_key=@${id%.pem}.pub > ${cert}.tmp; then
+        if ! vault write -field=signed_key ssh/sign/$role public_key=@${id%.pem}.pub > ${CERT}.tmp; then
+            echo >&2 "There was an error talking to vault. Try to login first: vault login -method=ldap username=emailalias-without-at-xcalar.com"
             return 1
         fi
-        mv -f ${cert}.tmp ${cert}
+        mv -f ${CERT}.tmp ${CERT}
     fi
+    eval $(ssh-agent -s)
+    trap 'onexit' EXIT
+    ssh-add $id
+    sshargs+=(-oStrictHostKeyChecking=no)
+    sshargs+=(-oUserKnownHostsFile=/dev/null)
     sshargs+=(-oIdentitiesOnly=yes)
     sshargs+=(-oForwardAgent=yes)
-    sshargs+=(-oIdentityFile=${id})
-    if [[ $SSH_VERSION -ge 70 ]]; then
-        sshargs+=(-oAddKeysToAgent=yes)
-        sshargs+=(-oCertificateFile=${cert})
-    fi
+    sshargs+=(-i $id -i $CERT)
     if [ -n "$user" ]; then
         sshargs+=(-oUser=${user})
     fi
+    set +e
     ssh "${sshargs[@]}" "$@"
+    rc=$?
+    return $rc
 }
 
 vssh "$@"

@@ -64,8 +64,8 @@ if [ -z "$IMAGE" ]; then
         *.xcalar.io | xcalar.io) IMAGE=certbot/dns-google ;;
         *.xcalar.com | xcalar.com) IMAGE=certbot/dns-google ;;
         *)
-            echo >&2 "Unrecognized domain: ${DOMAIN}"
-            exit 1
+            IMAGE=certbot/certbot
+            echo >&2 "Unrecognized domain: ${DOMAIN}. Using manual verification."
             ;;
     esac
 fi
@@ -97,6 +97,14 @@ elif [[ $IMAGE == certbot/dns-route53 ]]; then
             $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 30 \
             --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
     )
+else
+        docker run $DOCKER_FLAGS \
+            $IMAGE certonly \
+            --preferred-challenges "dns-01" \
+            --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
+fi
+if [ $? -ne 0 ]; then
+    exit 1
 fi
 
 echo >&2 "The key is in ${LE_DIR}/live/${DOMAIN}/privkey.pem and the certificate is in ${LE_DIR}/live/${DOMAIN}/fullchain.pem"
