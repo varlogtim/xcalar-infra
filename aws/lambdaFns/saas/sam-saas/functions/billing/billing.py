@@ -7,7 +7,7 @@ from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
 from util.user_util import get_user_info
 from util.cfn_util import get_stack_info
-from constants.price import price_table
+from util.billing_util import get_price
 # To-do all hard-coded values need to be read from enviornemnt variables
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
@@ -100,8 +100,7 @@ def deduct_credit(user_name):
             'status': Status.NO_RUNNING_CLUSTER,
             'error': 'No running cluster'
         })
-    price = price_table[stack_info['type']]
-    credit_change = str(-1 * price * stack_info['size'] / 60)
+    credit_change = str(-1 * get_price(stack_info['type'], stack_info['size']))
     return update_credit(user_name, credit_change)
 
 def lambda_handler(event, context):
