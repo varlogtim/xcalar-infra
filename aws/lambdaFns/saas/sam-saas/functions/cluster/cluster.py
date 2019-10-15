@@ -7,7 +7,7 @@ import requests
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
 from util.cfn_util import get_stack_info
-from util.user_util import init_user, get_user_info, update_user_info, check_user_credential
+from util.user_util import init_user, reset_user_cfn, get_user_info, update_user_info, check_user_credential
 from util.billing_util import get_price
 from constants.cluster_type import cluster_type_table
 
@@ -281,10 +281,14 @@ def get_cluster(user_name):
         })
     cfn_id = user_info['Item']['cfn_id']['S']
     stack_info = get_stack_info(cfn_client, cfn_id)
-    if 'error' in stack_info:
-        return _make_reply(_http_status(stack_info['error']), {
+    if 'errorCode' in stack_info:
+        if _http_status(reset_user_cfn(dynamodb_client, user_name, user_table)) != 200:
+            error = 'Stack %s not found and failed to clean user table' % cfn_id
+        else:
+            error = 'Stack %s not found' % cfn_id
+        return _make_reply(stack_info['errorCode'], {
             'status': Status.STACK_NOT_FOUND,
-            'error': 'Stack %s not found' % user_info['cfn_id']['S']
+            'error': error
         })
     # To-do more detailed stack status
     else:

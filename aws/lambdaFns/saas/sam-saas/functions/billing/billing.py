@@ -5,7 +5,7 @@ import traceback
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply
-from util.user_util import get_user_info
+from util.user_util import get_user_info, reset_user_cfn
 from util.cfn_util import get_stack_info
 from util.billing_util import get_price
 # To-do all hard-coded values need to be read from enviornemnt variables
@@ -90,8 +90,8 @@ def deduct_credit(user_name):
             'error': '%s does not have a stack' % user_name
         })
     stack_info = get_stack_info(cfn_client, cfn_id)
-    if 'error' in stack_info:
-        return _make_reply(_http_status(stack_info['error']), {
+    if 'errorCode' in stack_info:
+        return _make_reply(stack_info['errorCode'], {
             'status': Status.STACK_NOT_FOUND,
             'error': 'Stack %s not found' % cfn_id
         })

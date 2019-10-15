@@ -21,12 +21,11 @@ def get_bucket(user_name):
             'error': "%s does not exist" % user_name
         })
     cfn_id = response['Item']['cfn_id']['S']
-    try:
-        stack_info = get_stack_info(cfn_client, cfn_id)
-    except Exception as e:
-        return _make_reply(200, {
+    stack_info = get_stack_info(cfn_client, cfn_id)
+    if 'errorCode' in stack_info:
+        return _make_reply(stack_info['errorCode'], {
             'status': Status.STACK_NOT_FOUND,
-            'error': 'Could not find stack %s' % cfn_id
+            'error': 'Stack %s not found' % cfn_id
         })
     if 's3_url' not in stack_info:
         return _make_reply(200, {

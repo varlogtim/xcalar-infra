@@ -1,8 +1,12 @@
+from util.http_util import _http_status
 def get_stack_info(client, cfn_id):
     cluster_url = None
-    response = client.describe_stacks(StackName=cfn_id)
+    try:
+        response = client.describe_stacks(StackName=cfn_id)
+    except Exception as e:
+        return {'errorCode': 400}
     if 'Stacks' not in response or len(response['Stacks']) == 0:
-        return {'error': response}
+        return {'errorCode': _http_status(response)}
     stack_info = response['Stacks'][0]
     ret_struct = {}
     for param in stack_info['Parameters']:

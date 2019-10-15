@@ -164,3 +164,14 @@ def update_user_info(client, user_info, updates, user_table):
         ExpressionAttributeValues=expr_values
     )
     return response
+
+def reset_user_cfn(client, user_name, user_table):
+    return client.update_item(
+        TableName=user_table,
+        Key={
+            'user_name': {
+                'S': user_name
+            }
+        },
+        UpdateExpression='remove cfn_id'
+    )
