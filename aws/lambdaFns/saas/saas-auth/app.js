@@ -71,7 +71,6 @@ var readUser = function(id, callback) {
             result = null;
         }
 
-        console.log(`result: ${JSON.stringify(result)}`);
         return callback(err, result);
     });
 }
@@ -161,8 +160,6 @@ function(iss, sub, profile, accessToken, refreshToken, awsConfig,
     // asynchronous verification, for effect...
     process.nextTick(function () {
         findById(profile.id, function(err, user) {
-            console.log(`IDENTITYID: ${identityId}`);
-
             if (err) {
                 return done(err);
             }
@@ -176,7 +173,7 @@ function(iss, sub, profile, accessToken, refreshToken, awsConfig,
                     'identityPoolId': identityPoolId,
                     'awsLoginString': awsLoginString,
                     'identityId': identityId
-                }
+                };
                 // "Auto-registration"
                 writeUser(profile.id, item, (err, user) => {
 
@@ -205,28 +202,29 @@ var sessionOpts = {
         AWSRegion: config.creds.region
         }),
     secret: config.sessionSecret,
-    cookie: { maxAge: config.sessionAges[config.defaultSessionAge] }
+    cookie: { maxAge: config.sessionAges[config.defaultSessionAge],
+              domain: `.execute-api.${config.creds.region}.amazonaws.com` }
 };
 app.use(expressSession(sessionOpts));
 
 
-app.set('view engine', 'pug')
+app.set('view engine', 'pug');
 
 if (process.env.NODE_ENV === 'test') {
   // NOTE: aws-serverless-express uses this app for its integration tests
   // and only applies compression to the /sam endpoint during testing.
-  router.use('/sam', compression())
+    router.use('/sam', compression());
 } else {
-  router.use(compression())
+    router.use(compression());
 }
 
-router.use(cors({ "origin": true, credentials: true }))
-router.use(bodyParser.json())
-router.use(bodyParser.urlencoded({ extended: true }))
-router.use(awsServerlessExpressMiddleware.eventContext())
+router.use(cors({ "origin": true, credentials: true }));
+router.use(bodyParser.json());
+router.use(bodyParser.urlencoded({ extended: true }));
+router.use(awsServerlessExpressMiddleware.eventContext());
 
 // NOTE: tests can't find the views directory without this
-app.set('views', path.join(__dirname, 'views'))
+app.set('views', path.join(__dirname, 'views'));
 
 function ensureAuthenticated(req, res, next) {
     if (req.isAuthenticated()) { return next(); }
@@ -238,40 +236,62 @@ function setSessionCookie(res, name, val, secret, options) {
     var signed = 's:' + signature.sign(val, secret);
     var data = cookie.serialize(name, signed, options);
 
-    var prev = res.getHeader('Set-Cookie') || []
+    var prev = res.getHeader('Set-Cookie') || [];
     var header = Array.isArray(prev) ? prev.concat(data) : [prev, data];
 
-    res.setHeader('Set-Cookie', header)
+    res.setHeader('Set-Cookie', header);
 }
 
 function setServerCookie(res, name, val, secret, options) {
     var signed = jwt.sign(val, secret);
     var data = cookie.serialize(name, signed, options);
 
-    var prev = res.getHeader('Set-Cookie') || []
+    var prev = res.getHeader('Set-Cookie') || [];
     var header = Array.isArray(prev) ? prev.concat(data) : [prev, data];
 
-    res.setHeader('Set-Cookie', header)
+    res.setHeader('Set-Cookie', header);
 }
 
 router.get('/', (req, res) => {
   res.render('index', {
     apiUrl: req.apiGateway ? `https://${req.apiGateway.event.headers.Host}/${req.apiGateway.event.requestContext.stage}` : 'http://localhost:3000'
-  })
-})
+  });
+});
 
 router.get('/sam', (req, res) => {
-    res.sendFile(`${__dirname}/sam-logo.png`)
-})
+    res.sendFile(`${__dirname}/sam-logo.png`);
+});
 
 router.post('/login', 
-    passport.authenticate('cognito'),
+    (req, res, next) => {
+        passport.authenticate('cognito', (err, user, info) => {
+            // three cases:
+            // 1. user is good: user not false, err and info null
+            // 2. passport handled an error: user false, err null, info has message
+            // 3. passport hit an unhandled error: err not null OR user is false
+            var message = '{ message: "User is not authorized.", code: "AuthorizationException", object: null }';
+            var respCode = 401;
+            // console.log(`info: ${JSON.stringify(info)}`);
+            if (err) return res.status(respCode).json(err);
+            if (!user && info) {
+                switch(info.code) {
+                case 'UserNotFoundException':
+                case 'NotAuthorizedException':
+                    // hide username/password problems for security
+                    return res.status(respCode).json(message);
+                    break;
+                default:
+                    return res.status(respCode).json(info);
+                }
+            }
+            if (!user) return res.status(respCode).json(message);
+            req.logIn(user, (err) => {
+                if (err) return res.status(respCode).json(err);
+                return next();
+            });
+        })(req, res, next);
+    },
     function(req, res, next) {
-        console.log(`req.session: ${JSON.stringify(req.session, null, 4)}`);
-        console.log(`req.user: ${JSON.stringify(req.user, null, 4)}`);
-
-        console.log('!!!!!! YES !!!!!!!!!!!!');
-
         req.session.loggedIn = true;
 
         req.session.loggedInAdmin = false;
@@ -337,7 +357,7 @@ router.get('/status',
                        username: req.session.username,
                        timeout: config.sessionAges['interactive']/1000,
                        sessionId: Buffer.from(req.sessionID).toString('base64')
-                   }
+                   };
 
                    if (req.session.hasOwnProperty('timeout')) {
                        message.timeout = req.session.timeout;
@@ -392,7 +412,7 @@ router.get("/logout", ensureAuthenticated, function(req, res, next) {
 // app.listen(3000)
 app.use(passport.initialize());
 app.use(passport.session());
-app.use('/', router)
+app.use('/', router);
 
 // Export your express server so you can import it in the lambda function.
-module.exports = app
+module.exports = app;

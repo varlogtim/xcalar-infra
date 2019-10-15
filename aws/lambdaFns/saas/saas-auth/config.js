@@ -18,7 +18,7 @@ exports.creds = {
     identityPoolId: 'YOUR_IDENTITY_POOL_ID',
 
     // Optional. The amount of logging that the strategy does.
-    loggingLevel: 'info',
+    loggingLevel: 'warn',
 
     // Required to set to true if the `verify` function has 'req' as the first parameter
     passReqToCallback: false

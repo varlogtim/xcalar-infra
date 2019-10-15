@@ -72,6 +72,8 @@ Resources:
               - dynamodb:PutItem
               - dynamodb:UpdateItem
               - dynamodb:DeleteItem
+              - dynamodb:CreateTable
+              - dynamodb:Scan
             Resource: !GetAtt DynamoDBSessionTable.Arn
       - PolicyName: userListAccess
         PolicyDocument:
@@ -84,6 +86,8 @@ Resources:
               - dynamodb:PutItem
               - dynamodb:UpdateItem
               - dynamodb:DeleteItem
+              - dynamodb:CreateTable
+              - dynamodb:Scan
             Resource: !GetAtt DynamoDBUserTable.Arn
 
   SessionTableAccessRole:
