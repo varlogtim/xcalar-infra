@@ -69,6 +69,7 @@ for STACK in ${STACK_LIST[@]}; do
     SIZE=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="ClusterSize")' | jq .ParameterValue | cut -d '"' -f 2)
     CNAME=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="CNAME")' | jq .ParameterValue | cut -d '"' -f 2)
     AUTHSTACKNAME=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="AuthStackName")' | jq .ParameterValue | cut -d '"' -f 2)
+    SESSIONTABLE=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="SessionTable")' | jq .ParameterValue | cut -d '"' -f 2)
     if [ -z "$CNAME" ]; then
         CNAME_PARAMETER=''
     else
@@ -77,11 +78,16 @@ for STACK in ${STACK_LIST[@]}; do
     if [ -z "$AUTHSTACKNAME" ]; then
         AUTHSTACKNAME_PARAMETER=''
     else
-        AUTHSTACKNAME='ParameterKey=AuthStackName,UsePreviousValue=true'
+        AUTHSTACKNAME_PARAMETER='ParameterKey=AuthStackName,UsePreviousValue=true'
+    fi
+    if [ -z "$SESSIONTABLE" ]; then
+        SESSIONTABLE_PARAMETER=''
+    else
+        SESSIONTABLE_PARAMETER='ParameterKey=SessionTable,UsePreviousValue=true'
     fi
     if [ $SIZE != 0 ]; then
         aws cloudformation update-stack --stack-name ${STACK} --use-previous-template \
-                                        --parameters ParameterKey=ClusterSize,ParameterValue=0 $CNAME_PARAMETER $AUTHSTACKNAME_PARAMETER \
+                                        --parameters ParameterKey=ClusterSize,ParameterValue=0 $CNAME_PARAMETER $AUTHSTACKNAME_PARAMETER $SESSIONTABLE_PARAMETER \
                                         --role-arn ${ROLE} \
                                         --capabilities CAPABILITY_IAM
     fi
@@ -118,7 +124,7 @@ for STACK in ${STACK_LIST[@]}; do
                                                     ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE}\
                                                     ParameterKey=License,ParameterValue=${KEY} \
                                                     ParameterKey=CNAME,ParameterValue="${CNAME}" \
-                                                    ParameterKey=SessionTable,UsePreviousValue=true \
+                                                    ParameterKey=SessionTable,ParameterValue=${SESSION_TABLE} \
                                                     ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
                                         --role-arn ${ROLE} \
                                         --capabilities CAPABILITY_IAM
