@@ -8,12 +8,9 @@ onExit() {
     set +e
     if [ $retval = 0 ]; then
         exit 0
-    elif [ "$cluster" = "localhost" ]; then
+    else
         genBuildArtifacts
         echo "Build artifacts copied to ${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
-    else
-        genSupport
-        echo "support bundle generated"
     fi
     exit $retval
 }
