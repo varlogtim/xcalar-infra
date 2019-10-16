@@ -228,7 +228,8 @@ def check_cluster_status(user_name, stack_info):
                 cluster = instances[j]
                 if cluster['State']['Name'] == 'pending':
                     return {'status': Status.OK,
-                            'isPending': True}
+                            'isPending': True,
+                            'isStarting': True}
                 #all running, keep counting
                 elif cluster['State']['Name'] == 'running':
                     running_count = running_count + 1
@@ -250,10 +251,12 @@ def check_cluster_status(user_name, stack_info):
                 r = requests.get(stack_info['cluster_url'] + '/assets/htmlFiles/login.html', verify=False)
                 if r.status_code != 200:
                     return {'status': Status.OK,
-                            'isPending': True}
+                            'isPending': True,
+                            'isStarting': True}
             except Exception as e:
                 return {'status': Status.OK,
-                        'isPending': True}
+                        'isPending': True,
+                        'isStarting': True}
             finally:
                 s.settimeout(None)
                 s.close()
@@ -296,7 +299,8 @@ def get_cluster(user_name):
         if stack_info['stack_status'].endswith('IN_PROGRESS'):
             return _make_reply(200, {
                 'status': Status.OK,
-                'isPending': True
+                'isPending': True,
+                'isStarting': False if stack_info['size'] == 0 else True
             })
         #updated completed, then check cluster status
         elif stack_info['stack_status'] == 'UPDATE_COMPLETE':
