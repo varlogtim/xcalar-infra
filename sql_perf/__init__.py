@@ -365,9 +365,9 @@ class SqlPerfResultsData(object):
         self.logger = logging.getLogger(__name__)
         cfg = EnvConfiguration(SqlPerfResultsData.ENV_PARAMS)
         self.job_name = cfg.get("SQL_PERF_JOB_NAME")
-        self.db = JenkinsMongoDB(jenkins_host=cfg.get("JENKINS_HOST")).byjob_db()
-        self.data = JenkinsJobDataCollection(job_name=self.job_name, db=self.db)
-        self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=self.db)
+        jdb = JenkinsMongoDB(jenkins_host=cfg.get("JENKINS_HOST")).jenkins_db()
+        self.data = JenkinsJobDataCollection(job_name=self.job_name, db=jdb)
+        self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=jdb)
         self.results_cache = {}
 
     def test_groups(self):
@@ -384,7 +384,21 @@ class SqlPerfResultsData(object):
         doc = self.meta.coll.find_one({'_id': key})
         return doc.get('values', None)
 
-    def find_builds(self, *, test_group,
+    def builds_for_version(self, *, test_group, xce_version):
+        key = MongoDB.encode_key("{}_XCE_{}_builds".format(test_group, xce_version))
+        doc = self.meta.coll.find_one({'_id': key})
+        return doc.get('values', None)
+
+    def builds_for_type(self, *, test_group, test_type):
+        builds = []
+        pat = {'{}.test_type'.format(test_group):test_type}
+        self.logger.info("XXX: pat: {}".format(pat))
+        for doc in self.data.coll.find(pat, projection={'_id':1}):
+            builds.append(doc['_id'])
+        self.logger.info("XXX: builds: {}".format(builds))
+        return builds
+
+    def find_builds_old(self, *, test_group,
                              xce_versions=None,
                              first_bnum=None,
                              last_bnum=None,
@@ -409,23 +423,28 @@ class SqlPerfResultsData(object):
             reverse:        if True, results will be sorted in decending order.
         """
         # XXXrs - FUTURE - Replace silly brute-force scan with proper query...
+        self.logger.debug("start")
         found = []
         for bnum,data in self.data.get_data_by_build().items():
+
+            self.logger.debug("processing bnum {}".format(bnum))
+
             if test_group not in data:
+                self.logger.debug("test_group {} not in data".format(test_group))
                 # no results
                 continue
 
             xce_ver = data.get('xce_version', None)
             if xce_versions and (not xce_ver or xce_ver not in xce_versions):
-                self.logger.info("xce_version mismatch want {} build {} has {}"
-                                 .format(xce_versions, bnum, xce_ver))
+                self.logger.debug("xce_version mismatch want {} build {} has {}"
+                                  .format(xce_versions, bnum, xce_ver))
                 continue
 
             tg_data = data[test_group]
 
             if test_type and tg_data['test_type'] != test_type:
-                self.logger.info("test_type mismatch want {} build {} has {}"
-                                 .format(test_type, bnum, tg_data['test_type']))
+                self.logger.debug("test_type mismatch want {} build {} has {}"
+                                  .format(test_type, bnum, tg_data['test_type']))
                 continue
             if start_ts_ms and tg_data['start_ts_ms'] < start_ts_ms:
                 continue
@@ -436,33 +455,99 @@ class SqlPerfResultsData(object):
             if last_bnum and int(bnum) > int(last_bnum):
                 continue
             found.append(bnum)
+        self.logger.info("returning: {}".format(found))
         return sorted(found, key=nat_sort, reverse=reverse)
+
+    def find_builds(self, *, test_group,
+                             xce_versions=None,
+                             test_type=None,
+                             first_bnum=None,
+                             last_bnum=None,
+                             reverse=False):
+        """
+        Return list of build numbers matching the given attributes.
+        By default, list is sorted in ascending natural number order.
+
+        Required parameter:
+            test_group:     the test group
+
+        Optional parameters:
+            xce_versions:   list of Xcalar versions
+            test_type:      results for build must be of this test_type
+            first_bnum:     matching build number must be gte this value
+            last_bnum:      matching build number must be lte this value
+            reverse:        if True, results will be sorted in decending order.
+        """
+
+        self.logger.debug("start")
+        found = set([])
+        if xce_versions:
+            for version in xce_versions:
+                bfv = self.builds_for_version(test_group=test_group,
+                                              xce_version=version)
+                found = found.union(set(bfv))
+
+        if test_type:
+            self.logger.info("test_type: {}".format(test_type))
+            for_type = self.builds_for_type(test_group=test_group, test_type=test_type)
+            found = found.intersection(for_type)
+
+        if not found:
+            return []
+
+        rtn = []
+        if first_bnum or last_bnum:
+            for bnum in found:
+                if first_bnum and int(bnum) < int(first_bnum):
+                    continue
+                if last_bnum and int(bnum) > int(last_bnum):
+                    continue
+                rtn.append(bnum)
+        else:
+            rtn = found
+
+        rtn = sorted(rtn, key=nat_sort, reverse=reverse)
+        self.logger.info("returning: {}".format(rtn))
+        return rtn
 
     def results(self, *, test_group, bnum):
         cache_key = '{}:{}'.format(test_group, bnum)
         if cache_key in self.results_cache:
             return self.results_cache[cache_key]
         doc = self.data.get_data(bnum=bnum)
-        data = doc.get(test_group, None)
+        data = {}
+        if doc:
+            data = doc.get(test_group, {})
         self.results_cache[cache_key] = data
         return data
 
     def test_type(self, *, test_group, bnum):
-        data = self.results(test_group=test_group, bnum=bnum)
-        return data['test_type']
+        try:
+            data = self.results(test_group=test_group, bnum=bnum)
+            return data['test_type']
+        except Exception as e:
+            self.logger.exception("exception finding test type")
+            return None
+
 
     def query_names(self, *, test_group, bnum):
-        data = self.results(test_group=test_group, bnum=bnum)
-        query_vals = data.get('query_vals', None)
-        if not query_vals:
+        try:
+            data = self.results(test_group=test_group, bnum=bnum)
+            query_vals = data['query_vals']
+            return sorted(query_vals.keys(), key=nat_sort)
+        except Exception as e:
+            self.logger.exception("exception finding query names")
             return []
-        return sorted(query_vals.keys(), key=nat_sort)
 
     def query_vals(self, *, test_group, bnum, qname, mname):
-        data = self.results(test_group=test_group, bnum=bnum)
-        if mname == 'total':
-            return[v['exe']+v['fetch'] for v in data['query_vals'][qname]]
-        return [v[mname] for v in data['query_vals'][qname]]
+        try:
+            data = self.results(test_group=test_group, bnum=bnum)
+            if mname == 'total':
+                return[v['exe']+v['fetch'] for v in data['query_vals'][qname]]
+            return [v[mname] for v in data['query_vals'][qname]]
+        except Exception as e:
+            self.logger.exception("exception finding query values")
+            return []
 
 
 """

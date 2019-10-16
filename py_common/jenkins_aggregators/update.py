@@ -52,7 +52,7 @@ class JenkinsJobAggregators(object):
 
         Required parameters:
             job_name:   Jenkins job name
-            jmdb:       JenkinsMongoDB instance
+            jmdb:       JenkinsMongoDB.jenkins_db() instance
 
         Optional parameters:
             additional: additional (custom) aggregator classes
@@ -70,9 +70,9 @@ class JenkinsJobAggregators(object):
         #         time has passed.
         self.freq_sec = cfg.get('JENKINS_AGGREGATOR_UPDATE_FREQ_SEC')
 
-        self.job_data_coll = JenkinsJobDataCollection(job_name=job_name, db=jmdb.byjob_db())
-        self.job_meta_coll = JenkinsJobMetaCollection(job_name=job_name, db=jmdb.byjob_db())
-        self.alljob_idx = JenkinsAllJobIndex(db=jmdb.alljob_db())
+        self.job_data_coll = JenkinsJobDataCollection(job_name=job_name, db=jmdb.jenkins_db())
+        self.job_meta_coll = JenkinsJobMetaCollection(job_name=job_name, db=jmdb.jenkins_db())
+        self.alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
         self.japi = JenkinsApi(jenkins_host=jenkins_host)
 
     def _update_build(self, *, bnum):
@@ -201,7 +201,12 @@ logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
+jenkins_host = cfg.get('JENKINS_HOST')
+logger.info("using jenkins_host {}".format(jenkins_host))
+
+jmdb = JenkinsMongoDB(jenkins_host=jenkins_host)
+logger.info("jmdb {}".format(jmdb))
+
 process_lock = None
 try:
     plugins = Plugins()
@@ -218,16 +223,16 @@ try:
         # Try to obtain the process lock
         process_lock_name = "{}_process_lock".format(job_name)
         process_lock_meta = {"reason": "locked by JenkinsJobAggregators for update_builds()"}
-        process_lock = MongoDBKeepAliveLock(db=jmdb.byjob_db(), name=process_lock_name)
+        process_lock = MongoDBKeepAliveLock(db=jmdb.jenkins_db(), name=process_lock_name)
         try:
             process_lock.lock(meta=process_lock_meta)
         except MongoDBKALockTimeout as e:
-            self.logger.info("timeout acquiring {}".format(process_lock_name))
+            logger.info("timeout acquiring {}".format(process_lock_name))
             continue
 
         additional = plugins.by_job(job_name=job_name)
-        JenkinsJobAggregators(jenkins_host=cfg.get('JENKINS_HOST'),
-                              job_name=job_name, jmdb = jmdb, additional=additional).update_builds()
+        JenkinsJobAggregators(jenkins_host=jenkins_host,
+                              job_name=job_name, jmdb=jmdb, additional=additional).update_builds()
         process_lock.unlock()
 
 except Exception as e:

@@ -173,7 +173,7 @@ class XDUnitTestCoverageData(object):
         job_name = cfg.get("XD_UNIT_TEST_JOB_NAME")
 
         # XXXrs - This is clunky!
-        db = JenkinsMongoDB(jenkins_host=jenkins_host).byjob_db()
+        db = JenkinsMongoDB(jenkins_host=jenkins_host).jenkins_db()
         self.data = JenkinsJobDataCollection(job_name=job_name, db=db)
         self.meta = JenkinsJobMetaCollection(job_name=job_name, db=db)
 

@@ -83,12 +83,12 @@ def find_metrics():
         names = xce_coverage_data.xce_versions()
 
     elif target == 'xd_filegroups':
-        names = ["All Files"]
-        names.extend(xd_coverage_data.file_groups.group_names())
+        names = xd_coverage_data.file_groups.group_names()
+        names.append("All Files")
 
     elif target == 'xce_filegroups':
-        names = ["All Files"]
-        names.extend(xce_coverage_data.file_groups.group_names())
+        names = xce_coverage_data.file_groups.group_names()
+        names.append("All Files")
 
     # <xd_vers>:xdbuilds
     elif ':xdbuilds' in target:

@@ -234,9 +234,11 @@ class SqlPerfComparisonPdf(object):
 
     def _create_pdf(self, *, test_group, b1_path, b2_path=None, is_spark=False, out_path):
         b1_plot = SqlPerfPlot(test_group=test_group, path=b1_path)
+        self.logger.info("b1_plot: {}".format(b1_plot))
         b2_plot = None
         if b2_path:
             b2_plot = SqlPerfPlot(test_group=test_group, path=b2_path, is_spark=is_spark)
+        self.logger.info("b2_plot: {}".format(b2_plot))
         figList = []
         figList.append(b1_plot.plotAve(vsPlt=b2_plot, is_spark=is_spark))
         if b2_path:
@@ -246,7 +248,9 @@ class SqlPerfComparisonPdf(object):
             figList.append(b2_plot.plotIntervals(padding=0.2))
 
         with PdfPages(out_path) as pdf:
+            self.logger.info("saving figures...")
             for fig in figList:
+                self.logger.info("fig {}".format(fig))
                 pdf.savefig(fig)
 
         """
@@ -284,8 +288,6 @@ class SqlPerfComparisonPdf(object):
             self.path_cache[key] = out_path
             return out_path
 
-        self.logger.info("creating {}".format(out_path))
-
         # Find appropriate input files for the given builds
         b1_path = self._path_for_build(test_group=test_group, bnum=bnum1)
         if not b1_path:
@@ -297,9 +299,17 @@ class SqlPerfComparisonPdf(object):
             raise ValueError("no appropriate input data file for {} {}"
                              .format(test_group, bnum2))
 
+        self.logger.info("creating {}".format(out_path))
 
         self._create_pdf(test_group=test_group, b1_path=b1_path, b2_path=b2_path, out_path=out_path)
+
+        self.logger.info("closing all figures")
+        plt.close("all")
+
+        self.logger.info("cache key {}: {}".format(key, out_path))
         self.path_cache[key] = out_path
+
+        self.logger.info("returning: {}".format(out_path))
         return out_path
 
 # In-line "unit test"
@@ -311,4 +321,4 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     sql_pdf = SqlPerfComparisonPdf()
     #print(sql_pdf.compare(test_group='tpcdsTest', bnum1=772, bnum2=776))
-    print(sql_pdf.compare(test_group='tpcdsTest', bnum1=772, bnum2=776))
+    print(sql_pdf.compare(test_group='tpchTest', bnum1=750, bnum2=812))

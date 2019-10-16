@@ -42,6 +42,7 @@ cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
 jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
+jdb = jmdb.jenkins_db()
 
 methods=['GET']
 @app.route('/', methods=methods)
@@ -53,9 +54,8 @@ def test_connection():
     return "Connection check A-OK!"
 
 def _get_upstream(*, job_name, build_number):
-    byjob_db = jmdb.byjob_db()
     upstream = []
-    doc = byjob_db.db[job_name].find_one({'_id': build_number}, projection={'upstream':1})
+    doc = jdb.db[job_name].find_one({'_id': build_number}, projection={'upstream':1})
     logger.debug(doc)
     if not doc:
         return None
@@ -109,7 +109,7 @@ def jenkins_downstream():
     if not build_number:
         abort(400, 'missing upstream build_number')
 
-    alljob_idx = JenkinsAllJobIndex(db=jmdb.alljob_db())
+    alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
     downstream = alljob_idx.downstream_jobs(job_name=job_name, bnum=build_number)
     return make_response(jsonify(downstream))
 
@@ -126,9 +126,6 @@ def jenkins_find_builds():
     except Exception as e:
         abort(400, str(e))
 
-    if not query:
-        abort(400, 'missing query')
-
     try:
         proj = request.args.get('projection', '{}')
         logger.debug('proj: {}'.format(proj))
@@ -137,25 +134,24 @@ def jenkins_find_builds():
         abort(400, str(e))
 
     try:
-        byjob_db = jmdb.byjob_db()
         found = {}
         args = {}
         if proj:
             args['projection'] = proj
-        for doc in byjob_db.db[job_name].find(query, **args):
+        for doc in jdb.db[job_name].find(query, **args):
             found[doc['_id']] = doc
         return make_response(jsonify(found))
     except Exception as e:
         abort(400, str(e))
 
-@app.route('/jenkins_find_bytime', methods=methods)
+@app.route('/jenkins_jobs_by_time', methods=methods)
 @cross_origin()
-def jenkins_find_bytime():
+def jenkins_jobs_by_time():
     now = time.time()
     start = request.args.get('start', 0)
     end = request.args.get('end', now)
-    alljob_idx = JenkinsAllJobIndex(db=jmdb.alljob_db())
-    return make_response(jsonify(alljob_idx.jobs_bytime(start=int(start), end=int(end))))
+    alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
+    return make_response(jsonify(alljob_idx.jobs_by_time(start=int(start), end=int(end))))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True)

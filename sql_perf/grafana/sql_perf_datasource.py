@@ -89,10 +89,12 @@ def find_metrics():
         # Once selected, the remaining metrics will be queried in context of the
         # selected build (comparable builds will have matching test type).
         tgroup,xce_vers,rest = target.split(':')
+        xce_versions = _parse_multi(xce_vers)
+        logger.info("finding builds for tgroup {} xce_versions {}"
+                    .format(tgroup, xce_versions))
         values = sql_perf_results_data.find_builds(test_group=tgroup,
                                                    xce_versions=_parse_multi(xce_vers),
                                                    reverse=True)
-        logger.info("XXX: {}".format(values))
 
     # <test_group>:<xce_vers>:<bnum1>:build2
     elif ':build2' in target:
@@ -100,14 +102,12 @@ def find_metrics():
         # and of same test type as build1 (suitable for comparison).
         tgroup,xce_vers,bnum1,rest = target.split(':')
         test_type = sql_perf_results_data.test_type(test_group=tgroup, bnum=bnum1)
-        logger.info("XXX build1 test_type {}".format(test_type))
         # Only display choices where test type (hash of test parameters)
         # is the same as the "base" build (since otherwise comparison is misleading).
         values = sql_perf_results_data.find_builds(test_group=tgroup,
                                                    test_type=test_type,
                                                    xce_versions=_parse_multi(xce_vers),
                                                    reverse=True)
-
     # <test_group>:<bnum1>:query
     elif ':query' in target:
         # Return list of all supported query names (as determined by selected build1).
@@ -138,8 +138,15 @@ def _table_results(*, target):
     except Exception as e:
         abort(404, Exception('incomprehensible target: {}'.format(target)))
 
+    logger.info("tgroup {} bnum1 {} bnum2 {} mname {}"
+                .format(tgroup, bnum1, bnum2, mname))
+
     # Spin up a comparison pdf file for the comparison of interest.
-    sql_perf_pdf.compare(test_group=tgroup, bnum1=bnum1, bnum2=bnum2)
+    try:
+        sql_perf_pdf.compare(test_group=tgroup, bnum1=bnum1, bnum2=bnum2)
+    except Exception as e:
+        logger.exception("failed to generate pdf comparison tgroup: {} bnum1: {} bnum2: {}"
+                         .format(tgroup, bnum1, bnum2))
 
     rows = []
     columns = [
@@ -193,6 +200,7 @@ def _get_datapoints(*, tgroup, bnum, qname, mname, request_ts_ms=None):
         return [[qv,ts_ms] for qv in qvals]
 
 
+# XXXrs --- NOT USED ----------------------------vvvvvvvvvvvvvvvvvvvvvvvvvvvv
 def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     """
     Target name specifies query.
@@ -243,9 +251,9 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     builds = sql_perf_results_data.find_builds(test_group=tgroup,
                                                first_bnum=bnum,
                                                xce_versions=_parse_multi(xver),
-                                               test_type=test_type,
-                                               start_ts_ms=from_ts_ms,
-                                               end_ts_ms=to_ts_ms)
+                                               test_type=test_type)
+                                               #start_ts_ms=from_ts_ms,
+                                               #end_ts_ms=to_ts_ms)
 
     qnames = _parse_multi(qname)
     for bnum in builds:

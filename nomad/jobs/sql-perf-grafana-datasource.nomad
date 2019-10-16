@@ -17,7 +17,8 @@ job "sql-perf-grafana-datasource" {
         }
 
         volumes = [
-          "/netstore/qa/jenkins/SqlScaleTest:/netstore/qa/jenkins/SqlScaleTest"
+          "/netstore/qa/jenkins/SqlScaleTest:/netstore/qa/jenkins/SqlScaleTest",
+          "/netstore/qa/sqlPerfCompare:/netstore/qa/sqlPerfCompare"
         ]
       }
 

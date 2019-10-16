@@ -32,24 +32,13 @@ from py_common.sorts import nat_sort
 
 class JenkinsAllJobIndex(object):
     """
-    Interface to the all-job index collection(s)
+    Interface to the collections that keep particular meta-data
+    spanning multiple jobs.
     """
 
-    # XXXrs - WORKING HERE
-    #
-    # Consider augmenting cross-job "meta data" here.
-    #   - collection with start time as key containing job/build
-    #   - collection with slave as key containing job/build/time
-    #   - collection containing downstream test structures
-
-    def __init__(self, *, db):
+    def __init__(self, *, jmdb):
         self.logger = logging.getLogger(__name__)
-        self.db = db
-
-        # need a job_name/build_number uniqueness constraint
-        self.db.collection('all_jobs').create_index([('job_name', pymongo.ASCENDING),
-                                                     ('build_number', pymongo.ASCENDING)],
-                                                     unique=True)
+        self.jmdb = jmdb
 
     def index_data(self, *, job_name, bnum, data):
         """
@@ -64,39 +53,29 @@ class JenkinsAllJobIndex(object):
         self.logger.debug("job_name: {} bnum: {}".format(job_name, bnum))
 
         # XXXrs - more fields?
+        start_time_ms = data.get('start_time_ms', None)
         job_entry = {'job_name': job_name,
                      'build_number': bnum,
-                     'start_time_ms': data.get('start_time_ms', None),
+                     'start_time_ms': start_time_ms,
                      'duration_ms': data.get('duration_ms', None),
                      'built_on': data.get('built_on', None),
                      'result': data.get('result', None)}
 
         self.logger.debug("job_entry: {}".format(job_entry))
 
-        # All Jobs
-        try:
-            self.db.collection('all_jobs').insert(job_entry)
-        except DuplicateKeyError as e:
-            self.logger.debug("all_jobs duplicate {}".format(job_entry))
-
-        '''
-        # Built on (XXXrs useful?)
-        built_on = data.get('built_on', None)
-        if built_on is not None:
-            coll = self.db.collection(built_on)
-            if coll.count() == 0: # First we've seen this collection, create uniqueness constraint
-                coll.create_index([('job_name', pymongo.ASCENDING),
-                                   ('build_number', pymongo.ASCENDING)],
-                                    unique=True)
-                coll.create_index([('start_time_ms', pymongo.ASCENDING)])
+        # Jobs by time
+        if start_time_ms is not None:
+            coll = self.jmdb.jobs_by_time_collection(time_ms=start_time_ms)
+            coll.create_index([('job_name', pymongo.ASCENDING),
+                               ('build_number', pymongo.ASCENDING)],
+                              unique=True)
             try:
                 coll.insert(job_entry)
             except DuplicateKeyError as e:
-                self.logger.debug("built_on {} duplicate {}".format(built_on, job_entry))
-        '''
+                self.logger.debug("jobs_by_time duplicate {}".format(job_entry))
 
         # Downstream Jobs
-        coll = self.db.collection('downstream_jobs')
+        coll = self.jmdb.downstream_jobs()
         down_key = "{}:{}".format(job_name, bnum)
         for item in data.get('upstream', []):
             self.logger.debug('upstream: {}'.format(item))
@@ -114,19 +93,28 @@ class JenkinsAllJobIndex(object):
                                      {'$addToSet': {'down': down_key}},
                                      upsert = True)
 
-    def jobs_bytime(self, *, start, end):
+    def jobs_by_time(self, *, start, end):
+        start_ms = start*1000
+        end_ms = end*1000
+        query = {'$and': [{'start_time_ms': {'$gte': start_ms}},
+                          {'start_time_ms': {'$lte': end_ms}}]}
+        colls = self.jmdb.jobs_by_time_collections(
+                                        start_time_ms=start_ms,
+                                        end_time_ms=end_ms)
         jobs = []
-        query = {'$and': [{'start_time_ms': {'$gte': start*1000}},
-                          {'start_time_ms': {'$lte': end*1000}}]}
-        for doc in self.db.collection('all_jobs').find(query):
-            doc.pop('_id')
-            jobs.append(doc)
+        for coll in colls:
+            docs = coll.find(query)
+            if not docs:
+                continue
+            for doc in docs:
+                doc.pop('_id')
+                jobs.append(doc)
         return {'jobs': jobs}
 
     def _get_downstream(self, *, job_name, bnum):
         rtn = []
         key = "{}:{}".format(job_name, bnum)
-        doc = self.db.collection('downstream_jobs').find_one({'_id': key})
+        doc = self.jmdb.downstream_jobs().find_one({'_id': key})
         if not doc:
             return None
         for downkey in doc.get('down'):
@@ -163,18 +151,25 @@ class JenkinsJobDataCollection(object):
             data['_id'] = bnum
             self.coll.insert(data)
     def get_data(self, *, bnum):
+        self.logger.debug("start bnum {}".format(bnum))
         # Return the data, if any.
         doc = self.coll.find_one({'_id': bnum})
         if self._no_data(doc=doc):
+            self.logger.debug("return None")
             return None
+        self.logger.debug("return match")
         return doc
 
     def get_data_by_build(self):
+        self.logger.debug("start")
         rtn = {}
         for doc in self.coll.find({}):
+            doc_id = doc["_id"]
+            self.logger.debug("_id: {}".format(doc_id))
             if self._no_data(doc=doc):
                 continue
-            rtn[doc['_id']] = doc
+            rtn[doc_id] = doc
+        self.logger.debug("rtn: {}".format(rtn))
         return rtn
 
     def all_builds(self):
@@ -526,16 +521,8 @@ if __name__ == '__main__':
 
     jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
     logger.info('jmdb: {}'.format(jmdb))
-
-    byjob_db = jmdb.byjob_db()
-    logger.info('byjob_db: {}'.format(byjob_db))
-
-    alljob_db = jmdb.alljob_db()
-    logger.info('alljob_db: {}'.format(alljob_db))
-
-    alljob_idx = JenkinsAllJobIndex(db=alljob_db)
+    alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
     logging.info(alljob_idx)
-
     logging.info(alljob_idx.downstream_jobs(job_name='DailyTests-Trunk', bnum='153'))
 
     """

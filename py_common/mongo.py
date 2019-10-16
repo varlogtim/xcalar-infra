@@ -218,22 +218,61 @@ class MongoDBKeepAliveLock(object):
 
 
 class JenkinsMongoDB(object):
+
     def __init__(self, *, jenkins_host):
-        self.byjob_db_name = "{}_byjob".format(jenkins_host).replace('.', '_')
-        self.alljob_db_name = "{}_alljob".format(jenkins_host).replace('.', '_')
-        self._byjob_db = None
-        self._alljob_db = None
+        self._db_name = "{}".format(jenkins_host).replace('.', '_')
+        self._db = None
 
-    def byjob_db(self):
-        if not self._byjob_db:
-            self._byjob_db = MongoDB(db_name=self.byjob_db_name)
-        return self._byjob_db
+    def jenkins_db(self):
+        if not self._db:
+            self._db = MongoDB(db_name=self._db_name)
+        return self._db
 
-    def alljob_db(self):
-        if not self._alljob_db:
-            self._alljob_db = MongoDB(db_name=self.alljob_db_name)
-        return self._alljob_db
+    def _time_idx(self, *, time_ms):
+        return int(time_ms/5000000000)
 
+    def jobs_by_time_collection_name(self, *, time_ms):
+        """
+        Return the collection name associated with the timestamp
+        """
+        return '_jobs_by_time_{}'.format(self._time_idx(time_ms=time_ms))
+
+    def jobs_by_time_collection(self, *, time_ms):
+        """
+        Return the collection associated with the timestamp
+        """
+        return self._db.collection(self.jobs_by_time_collection_name(time_ms=time_ms))
+
+    def jobs_by_time_collections(self, *, start_time_ms, end_time_ms):
+        """
+        Return the list of collections spanning the
+        requested time period.
+
+            Collection names take the form:
+                _jobs_by_time_<time_index>
+
+            Each collection spans 5000000000ms (roughly 59 days).
+            The "time_index" is an integer divisible by 5000000000
+            A job with start time T(ms) is placed into the collection
+            with time_index int(T/5000000000)
+
+        It is the responsibility of the caller to iterate over the
+        collections and merge search results.
+        """
+        if start_time_ms > end_time_ms:
+            raise ValueError("start_time_ms after end_time_ms")
+        start = self._time_idx(time_ms=start_time_ms)
+        end = self._time_idx(time_ms=end_time_ms)
+        colls = []
+        for i in range(start,end+1):
+            colls.append(self._db.collection('_jobs_by_time_{}'.format(i)))
+        return colls
+
+    def downstream_jobs(self):
+        """
+        Return the downstream jobs collection.
+        """
+        return self._db.collection('_downstream_jobs')
 
 if __name__ == '__main__':
     print("Compile check A-OK!")

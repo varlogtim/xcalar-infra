@@ -46,13 +46,13 @@ def test_connection():
     return "Connection check A-OK!"
 
 # Template expects passed parameter
-@app.route('/jenkins_find_bytime', methods=methods)
+@app.route('/jenkins_jobs_by_time', methods=methods)
 @cross_origin()
-def jenkins_find_bytime():
+def jenkins_jobs_by_time():
     now = int(time.time())
     start = request.args.get('start', 0)
     end = request.args.get('end', now)
-    back_url = "http://{}:{}/jenkins_find_bytime?start={}&end={}"\
+    back_url = "http://{}:{}/jenkins_jobs_by_time?start={}&end={}"\
                .format(cfg.get('BACKEND_HOST'), cfg.get('BACKEND_PORT'), start, end)
     response = requests.get(back_url, verify=False) # XXXrs disable verify!
     jobs = response.json()

@@ -105,26 +105,28 @@ if __name__ == '__main__':
     if args.up:
         if not args.bnum:
             raise ValueError("--up requires both --job and --bnum")
-        print(pprint.pformat(jmqClient.upstream(job_name=args.job, bnum=args.bnum)))
+        #print(pprint.pformat(jmqClient.upstream(job_name=args.job, bnum=args.bnum)))
+        sys.exit(0)
 
 
     if args.down:
         if not args.bnum:
             raise ValueError("--down requires both --job and --bnum")
-        print(pprint.pformat(jmqClient.downstream(job_name=args.job, bnum=args.bnum)))
+        #print(pprint.pformat(jmqClient.downstream(job_name=args.job, bnum=args.bnum)))
+        sys.exit(0)
 
     query = {}
     for item in args.peq:
-        print("peq: {}".format(item))
+        #print("peq: {}".format(item))
         name,val = item.split(':')
         query["parameters.{}".format(name)] = val
 
     for item in args.ptrue:
-        print("true: {}".format(item))
+        #print("true: {}".format(item))
         query["parameters.{}".format(item)] = True
 
     for item in args.pfalse:
-        print("false: {}".format(item))
+        #print("false: {}".format(item))
         query["parameters.{}".format(item)] = False
 
     if args.heq:
@@ -163,7 +165,6 @@ if __name__ == '__main__':
     elif args.before:
         query['start_time_ms'] = {'$lt': _days_ago_ms(args.before)}
 
-    print("query {}".format(query))
     resp = jmqClient.find_builds(job_name = args.job,
                                  query = query,
                                  verbose = args.verbose)
