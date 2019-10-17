@@ -15,29 +15,25 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: YOUR_DYNAMODB_SESSION_TABLE_NAME
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
       KeySchema:
         - AttributeName: id
           KeyType: HASH
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
+      BillingMode: 'PAY_PER_REQUEST'
 
   DynamoDBUserTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: YOUR_DYNAMODB_USER_TABLE_NAME
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
       KeySchema:
         - AttributeName: id
           KeyType: HASH
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
+      BillingMode: 'PAY_PER_REQUEST'
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
