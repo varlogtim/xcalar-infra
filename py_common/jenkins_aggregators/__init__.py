@@ -336,6 +336,7 @@ class JenkinsJobMetaCollection(object):
         all_builds = self.all_builds()
         if not all_builds:
             return []
+        all_builds = sorted(all_builds, key=nat_sort)
         if first_bnum or last_bnum and not (first_bnum and last_bnum):
             if not first_bnum:
                 first_bnum = all_builds[0]
