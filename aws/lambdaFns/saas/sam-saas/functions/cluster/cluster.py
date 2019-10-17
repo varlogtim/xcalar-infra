@@ -8,7 +8,7 @@ import os
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply, _make_options_reply, _replace_headers_origin
-from util.cfn_util import get_stack_info
+from util.cfn_util import get_stack_info, get_stack_params
 from util.user_util import init_user, reset_user_cfn, get_user_info, update_user_info, check_user_credential, validate_user_instance
 from util.billing_util import get_price
 from constants.cluster_type import cluster_type_table
@@ -74,52 +74,27 @@ def start_cluster(user_name, cluster_params):
     else:
         # default to use 'XS'
         cluster_type = cluster_type_table['XS']
+    stack_params = get_stack_params(cfn_client, cfn_id)
 
-    parameters = [
-        {
-            'ParameterKey': 'ClusterSize',
-            'ParameterValue': cluster_type['clusterSize']
-        },
-        {
-            'ParameterKey': 'InstanceType',
-            'ParameterValue': cluster_type['instanceType']
-        },
-        {
-            'ParameterKey': 'CNAME',
-            'UsePreviousValue': True
-        },
-        {
-            'ParameterKey': 'AuthStackName',
-            'UsePreviousValue': True
-        },
-        {
-            'ParameterKey': 'MainStackName',
-            'UsePreviousValue': True
-        },
-        {
-            'ParameterKey': 'License',
-            'UsePreviousValue': True
-        }
-    ]
-    if 'AMI' in cluster_params:
-        parameters.append(
-            {
-                'ParameterKey': 'ImageId',
-                'ParameterValue': cluster_params['AMI']
-            }
-        )
-    else:
-        parameters.append(
-            {
-                'ParameterKey': 'ImageId',
-                'UsePreviousValue': True
-            }
-        )
+    for param in stack_params:
+        if param['ParameterKey'] == 'ClusterSize':
+            param.update(ParameterValue=cluster_type['clusterSize'])
+
+        if param['ParameterKey'] == 'instanceType':
+            param.update(ParameterValue=cluster_type['instanceType'])
+
+        if param['ParameterKey'] == 'ImageId' and 'AMI' in cluster_params:
+            param.update(ParameterValue=cluster_params['AMI'])
+
+        if param['ParameterKey'] == 'AdminPassword':
+            param.pop('ParameterValue', None)
+            param['UsePreviousValue']=True
+
     if is_new == False:
         response = cfn_client.update_stack(
             StackName=cfn_id,
             UsePreviousTemplate=True,
-            Parameters=parameters,
+            Parameters=stack_params,
             Capabilities=[
                 'CAPABILITY_IAM',
             ],
@@ -129,7 +104,7 @@ def start_cluster(user_name, cluster_params):
         cfn_client.update_stack(
             StackName=cfn_id,
             UsePreviousTemplate=True,
-            Parameters=parameters,
+            Parameters=stack_params ,
             Capabilities=[
                 'CAPABILITY_IAM',
             ],
@@ -160,40 +135,19 @@ def stop_cluster(user_name):
             'error': '%s does not have a stack' % user_name
         })
     cfn_id = user_info['Item']['cfn_id']['S']
+    stack_params = get_stack_params(cfn_client, cfn_id)
+    for param in stack_params:
+        if param['ParameterKey'] == 'ClusterSize':
+            param.update(ParameterValue='0')
+
+        if param['ParameterKey'] == 'AdminPassword':
+            param.pop('ParameterValue', None)
+            param['UsePreviousValue']=True
+
     response = cfn_client.update_stack(
         StackName = cfn_id,
         UsePreviousTemplate = True,
-        Parameters = [
-            {
-                'ParameterKey': 'ClusterSize',
-                'ParameterValue': "0"
-            },
-            {
-                'ParameterKey': 'InstanceType',
-                'UsePreviousValue': True
-            },
-            {
-                'ParameterKey': 'ImageId',
-                'UsePreviousValue': True
-            },
-            {
-                'ParameterKey': 'CNAME',
-                'UsePreviousValue': True
-            },
-            {
-                'ParameterKey': 'AuthStackName',
-                'UsePreviousValue': True
-            },
-            {
-                'ParameterKey': 'MainStackName',
-                'UsePreviousValue': True
-            },
-            {
-                'ParameterKey': 'License',
-                'UsePreviousValue': True
-            }
-
-        ],
+        Parameters = stack_params,
         Capabilities=[
             'CAPABILITY_IAM',
         ],
