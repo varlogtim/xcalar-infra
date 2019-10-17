@@ -19,7 +19,7 @@ fi
 
 if ! aws dynamodb describe-table --table-name ${BILLING_TABLE_NAME}; then
     aws dynamodb create-table --table-name ${BILLING_TABLE_NAME} \
-        --attribute-definitions AttributeName=user_name,AttributeType=S AttributeName=timestamp,AttributeType=S \
+        --attribute-definitions AttributeName=user_name,AttributeType=S AttributeName=timestamp,AttributeType=N \
         --key-schema AttributeName=user_name,KeyType=HASH AttributeName=timestamp,KeyType=RANGE \
         --billing-mode PAY_PER_REQUEST
 fi
