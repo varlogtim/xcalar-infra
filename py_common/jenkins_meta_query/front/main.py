@@ -7,8 +7,10 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
+import datetime
 import logging
 import os
+import pytz
 import sys
 import requests
 import time
@@ -19,7 +21,8 @@ if __name__ == '__main__':
 from py_common.env_configuration import EnvConfiguration
 cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
                         'BACKEND_HOST': {'required': True},
-                        'BACKEND_PORT': {'required': True}})
+                        'BACKEND_PORT': {'required': True},
+                        'TIMEZONE': {'default': 'America/Los_Angeles'}})
     
 from flask import Flask, request
 from flask import render_template, make_response, jsonify
@@ -31,6 +34,8 @@ logging.basicConfig(
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
+
+timezone = pytz.timezone(cfg.get('TIMEZONE'))
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -45,20 +50,69 @@ def test_connection():
     """
     return "Connection check A-OK!"
 
-# Template expects passed parameter
+
+@app.route('/jmd', methods=methods)
+@cross_origin()
+def jenkins_meta_data_index():
+    # XXXrs - WORKING HERE - want to put up a page with options that
+    #         click through to other places here...
+    return render_template("jmd_index.html")
+
+def _get_jobs_data(*, start, end):
+    back_url = "http://{}:{}/jenkins_jobs_by_time?start={}&end={}"\
+               .format(cfg.get('BACKEND_HOST'), cfg.get('BACKEND_PORT'), start, end)
+    response = requests.get(back_url, verify=False) # XXXrs disable verify!
+    rsp = response.json()
+    logger.info("rsp {}".format(rsp))
+    logger.info("rsp length: {}".format(len(rsp)))
+
+    # XXXrs - WORKING HERE - convert the start_time_ms to "YY/MM/DD HH:MM:SS"
+    for item in rsp['jobs']:
+        start_time_ms = item.get('start_time_ms', None)
+        if not start_time_ms:
+            fmt = "00/00/00 00:00:00"
+        else:
+            fmt = datetime.datetime.fromtimestamp(start_time_ms/1000, tz=timezone).strftime("%Y/%m/%d %H:%M:%S")
+        item["start_time_fmt"] = fmt
+
+        item["duration_s"] = int(item.get('duration_ms', 0)/1000)
+    return rsp['jobs']
+
+DAY = 60*60*24
+WEEK = DAY*7
+
 @app.route('/jenkins_jobs_by_time', methods=methods)
 @cross_origin()
 def jenkins_jobs_by_time():
     now = int(time.time())
     start = request.args.get('start', 0)
     end = request.args.get('end', now)
-    back_url = "http://{}:{}/jenkins_jobs_by_time?start={}&end={}"\
-               .format(cfg.get('BACKEND_HOST'), cfg.get('BACKEND_PORT'), start, end)
-    response = requests.get(back_url, verify=False) # XXXrs disable verify!
-    jobs = response.json()
-    logger.info("jobs {}".format(jobs))
-    logger.info("jobs length: {}".format(len(jobs)))
-    return render_template("jobs_table.html", jobs=jobs['jobs'])
+    jobs = _get_jobs_data(start=start, end=end)
+    return render_template("jobs_table.html", jobs=jobs)
+
+@app.route('/jenkins_jobs_last_1w', methods=methods)
+@cross_origin()
+def jenkins_jobs_last_1w():
+    now = int(time.time())
+    start = now-(WEEK)
+    jobs = _get_jobs_data(start=start, end=now)
+    return render_template("jobs_table.html", jobs=jobs)
+
+@app.route('/jenkins_jobs_last_2w', methods=methods)
+@cross_origin()
+def jenkins_jobs_last_2w():
+    now = int(time.time())
+    start = now-(2*WEEK)
+    jobs = _get_jobs_data(start=start, end=now)
+    return render_template("jobs_table.html", jobs=jobs)
+
+@app.route('/jenkins_jobs_last_30d', methods=methods)
+@cross_origin()
+def jenkins_jobs_last_30d():
+    now = int(time.time())
+    start = now-(30*DAY)
+    jobs = _get_jobs_data(start=start, end=now)
+    return render_template("jobs_table.html", jobs=jobs)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4001, debug=True)

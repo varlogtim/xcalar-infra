@@ -9,7 +9,6 @@
 </head>
 
 <body>
-
 <script type="text/javascript" class="init">
 $(document).ready( function () {
     $('#jobs_table').DataTable();
@@ -19,10 +18,10 @@ $(document).ready( function () {
 <table id="jobs_table" class="display">
         <thead>
             <tr>
+                <th>Start Time</th>
+                <th>Duration (s)</th>
                 <th>Job Name</th>
                 <th>Build Number</th>
-                <th>Start Time (ms)</th>
-                <th>Duration (ms)</th>
                 <th>Result</th>
                 <th>Built On</th>
             </tr>
@@ -30,10 +29,10 @@ $(document).ready( function () {
         <tbody>
             {% for item in jobs %}
             <tr>
+                <td>{{item.start_time_fmt}}</td>
+                <td align='right'>{{item.duration_s}}</td>
                 <td>{{item.job_name}}</td>
-                <td>{{item.build_number}}</td>
-                <td>{{item.start_time_ms}}</td>
-                <td>{{item.duration_ms}}</td>
+                <td align='right'>{{item.build_number}}</td>
                 <td>{{item.result}}</td>
                 <td>{{item.built_on}}</td>
             </tr>
