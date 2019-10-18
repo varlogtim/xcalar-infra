@@ -6,12 +6,13 @@ import os
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply, _make_options_reply, _replace_headers_origin
-from util.user_util import get_user_info, reset_user_cfn
+from util.user_util import get_user_info, reset_user_cfn, validate_user_instance
 from util.cfn_util import get_stack_info
 from util.billing_util import get_price
 # To-do all hard-coded values need to be read from enviornemnt variables
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
+ec2_client = boto3.client('ec2', region_name='us-west-2')
 
 user_table = os.environ.get('USER_TABLE')
 billing_table = os.environ.get('BILLING_TABLE')
@@ -108,6 +109,7 @@ def deduct_credit(user_name):
 
 def lambda_handler(event, context):
     try:
+        path = event['path']
         headers = event['headers']
         headers_origin = '*'
         headers_cookies = None
@@ -116,10 +118,27 @@ def lambda_handler(event, context):
                 headers_origin = headerLine
             if (key.lower() == "cookie"):
                 headers_cookies = headerLine
-        if (event['httpMethod'] == 'OPTIONS'):
+        if headers_origin == '*':
+            data = json.loads(event['body'])
+            if 'username' in data and 'instanceId' in data:
+                if not validate_user_instance(ec2_client, data['username'], data['instanceId']):
+                    return _make_reply(401, {
+                        'status': Status.AUTH_ERROR,
+                        'error': 'Authentication failed'
+                    }, headers_origin)
+        elif re.match('^https://\w+.'+domain, headers_origin, re.M|re.I):
+            if (event['httpMethod'] == 'OPTIONS'):
                 return _make_options_reply(200,  headers_origin)
-        path = event['path']
-        data = json.loads(event['body'])
+            data = json.loads(event['body'])
+            credential, username = check_user_credential(dynamodb_client, headers_cookies)
+            if credential == None or username != data['username']:
+                return _make_reply(401, {
+                    'status': Status.AUTH_ERROR,
+                    'error': "Authentication Failed"
+                }, headers_origin)
+        else:
+            return _make_reply(403, "Forbidden",  headers_origin)]
+
         if path == '/billing/get':
             reply = get_credit(data['username'])
         elif path == '/billing/update':

@@ -170,6 +170,10 @@ Resources:
               Resource: '*'
             - Effect: Allow
               Action:
+                - ec2:DescribeInstances
+              Resource: '*'
+            - Effect: Allow
+              Action:
                 - dynamodb:GetItem
               Resource:
                 !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UserTable}'

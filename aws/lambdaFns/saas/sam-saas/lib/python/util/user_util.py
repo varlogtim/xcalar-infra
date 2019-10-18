@@ -185,4 +185,3 @@ def validate_user_instance(ec2_client, user_name, instance_id):
             if 'Value' in tag and tag['Key'] == 'Owner' and tag['Value'] == user_name:
                 return True
     return False
-

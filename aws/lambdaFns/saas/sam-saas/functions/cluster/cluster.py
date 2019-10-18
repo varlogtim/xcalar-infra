@@ -341,7 +341,6 @@ def lambda_handler(event, context):
             if (event['httpMethod'] == 'OPTIONS'):
                 return _make_options_reply(200,  headers_origin)
             data = json.loads(event['body'])
-
             credential, username = check_user_credential(dynamodb_client, headers_cookies)
             if credential == None or username != data['username']:
                 return _make_reply(401, {

@@ -15,9 +15,6 @@ def get_stack_info(client, cfn_id):
                 ret_struct['type'] = param['ParameterValue']
             elif param['ParameterKey'] == 'ClusterSize':
                 ret_struct['size'] = int(param['ParameterValue'])
-    for tag in stack_info['Tags']:
-        if 'Value' in tag and tag['Key'] == 'saas_owner':
-            ret_struct['owner_tag'] = tag
     for output in stack_info['Outputs']:
         if output['OutputKey'] == 'S3Bucket':
             ret_struct['s3_url'] = output['OutputValue']
