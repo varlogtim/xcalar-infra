@@ -3,12 +3,13 @@ import json
 import traceback
 import socket
 import requests
+import re
 import os
 
 from enums.status_enum import Status
-from util.http_util import _http_status, _make_reply
+from util.http_util import _http_status, _make_reply, _make_options_reply, _replace_headers_origin
 from util.cfn_util import get_stack_info
-from util.user_util import init_user, reset_user_cfn, get_user_info, update_user_info, check_user_credential
+from util.user_util import init_user, reset_user_cfn, get_user_info, update_user_info, check_user_credential, validate_user_instance
 from util.billing_util import get_price
 from constants.cluster_type import cluster_type_table
 
@@ -16,6 +17,7 @@ from constants.cluster_type import cluster_type_table
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
 ec2_client = boto3.client('ec2', region_name='us-west-2')
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
+domain = os.environ.get('DOMAIN')
 
 # XXX To-do Read from env variables
 user_table = os.environ.get('USER_TABLE')
@@ -319,14 +321,35 @@ def lambda_handler(event, context):
     try:
         path = event['path']
         headers = event['headers']
-        data = json.loads(event['body'])
-        #TODO: add credential back
-        #credential, username = check_user_credential(dynamodb_client, headers)
-        #if credential == None or username != data['username']:
-        #    return _make_reply(200, {
-        #        'status': Status.AUTH_ERROR,
-        #        'error': "Unvalid Authentication"
-        #    })
+        headers_origin = '*'
+        headers_cookies = None
+        for key, headerLine in headers.items():
+            if (key.lower() == "origin"):
+                headers_origin = headerLine;
+            if (key.lower() == "cookie"):
+                headers_cookies = headerLine;
+        if headers_origin == '*':
+            data = json.loads(event['body'])
+            if 'username' in data and 'instanceId' in data:
+                if not validate_user_instance(ec2_client, data['username'], data['instanceId']):
+                    return _make_reply(401, {
+                        'status': Status.AUTH_ERROR,
+                        'error': 'Authentication failed'
+                    }, headers_origin)
+
+        elif re.match('^https://\w+.'+domain, headers_origin, re.M|re.I):
+            if (event['httpMethod'] == 'OPTIONS'):
+                return _make_options_reply(200,  headers_origin)
+            data = json.loads(event['body'])
+
+            credential, username = check_user_credential(dynamodb_client, headers_cookies)
+            if credential == None or username != data['username']:
+                return _make_reply(401, {
+                    'status': Status.AUTH_ERROR,
+                    'error': "Authentication Failed"
+                }, headers_origin)
+        else:
+            return _make_reply(403, "Forbidden",  headers_origin)
 
         if path == '/cluster/start':
             reply = start_cluster(data['username'], data['clusterParams'])
@@ -336,7 +359,9 @@ def lambda_handler(event, context):
             reply = get_cluster(data['username'])
         else:
             reply = _make_reply(400, "Invalid endpoint: %s" % path)
+
     except Exception as e:
         traceback.print_exc()
         reply = _make_reply(400, "Exception has occured: {}".format(e))
+    reply = _replace_headers_origin(reply, headers_origin)
     return reply

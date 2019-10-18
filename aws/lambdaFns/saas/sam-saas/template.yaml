@@ -4,13 +4,11 @@ Description: Xcalar Cluster Serverless Application\nSAM Template for sam-cluster
 Globals:
   Function:
     Timeout: 300
-  Api:
-    Cors:
-      AllowMethods: "'OPTIONS,POST,GET'"
-      AllowHeaders: "'Content-Type'"
-      AllowOrigin: "'*'"
 
 Parameters:
+  Domain:
+    Type: String
+    Default: 'test.xcalar.cloud'
   UserTable:
     Type: String
     Default: 'saas_user'
@@ -47,16 +45,31 @@ Resources:
           Properties:
             Path: /cluster/start
             Method: post
+        StartClusterOption:
+          Type: Api
+          Properties:
+            Path: /cluster/start
+            Method: options
         StopCluster:
           Type: Api
           Properties:
             Path: /cluster/stop
             Method: post
+        StopClusterOption:
+          Type: Api
+          Properties:
+            Path: /cluster/stop
+            Method: options
         GetClusterUrl:
           Type: Api
           Properties:
             Path: /cluster/get
             Method: post
+        GetClusterUrlOption:
+          Type: Api
+          Properties:
+            Path: /cluster/get
+            Method: options
       Environment:
         Variables:
           USER_TABLE:
@@ -65,6 +78,8 @@ Resources:
               Ref: BillingTable
           CFN_ROLE_ARN:
               Ref: Role
+          DOMAIN:
+              Ref: Domain
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -170,20 +185,37 @@ Resources:
           Properties:
             Path: /s3/upload
             Method: post
+        UploadFileOptions:
+          Type: Api
+          Properties:
+            Path: /s3/upload
+            Method: options
         DeleteFile:
           Type: Api
           Properties:
             Path: /s3/delete
             Method: post
+        DeleteFileOptions:
+          Type: Api
+          Properties:
+            Path: /s3/delete
+            Method: options
         BucketInfo:
           Type: Api
           Properties:
             Path: /s3/describe
             Method: post
+        BucketInfoOptions:
+          Type: Api
+          Properties:
+            Path: /s3/describe
+            Method: options
       Environment:
         Variables:
           USER_TABLE:
               Ref: UserTable
+          DOMAIN:
+              Ref: Domain
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -202,6 +234,12 @@ Resources:
                 - s3:DeleteObject
               Resource:
                 !Sub 'arn:aws:s3:::${UserStackPrefix}*' # For test only
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas-auth-session-table'
   ConfigFunction:
     Type: AWS::Serverless::Function
     Properties:

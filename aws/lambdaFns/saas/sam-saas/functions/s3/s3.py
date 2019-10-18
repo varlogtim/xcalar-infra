@@ -1,16 +1,17 @@
 import boto3
 import json
 import traceback
+import re
 import os
 from enums.status_enum import Status
-from util.http_util import _http_status, _make_reply
+from util.http_util import _http_status, _make_reply, _make_options_reply, _replace_headers_origin
 from util.cfn_util import get_stack_info
-from util.user_util import get_user_info
+from util.user_util import get_user_info, check_user_credential
 
 # Intialize all service clients
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
 dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
-
+domain = os.environ.get('DOMAIN')
 # XXX To-do Read from env variables
 user_table = os.environ.get('USER_TABLE')
 
@@ -79,7 +80,29 @@ def bucket_info(user_name):
 def lambda_handler(event, context):
     try:
         path = event['path']
-        data = json.loads(event['body'])
+        headers = event['headers']
+        headers_origin = '*'
+        headers_cookies = None
+        for key, headerLine in headers.items():
+            if (key.lower() == "origin"):
+                headers_origin = headerLine;
+            if (key.lower() == "cookie"):
+                headers_cookies = headerLine;
+        if re.match('^https://\w+.'+domain, headers_origin, re.M|re.I):
+            if (event['httpMethod'] == 'OPTIONS'):
+                return _make_options_reply(200,  headers_origin)
+
+            data = json.loads(event['body'])
+            credential, username = check_user_credential(dynamodb_client, headers_cookies)
+            if credential == None or username != data['username']:
+                return _make_reply(401, {
+                    'status': Status.AUTH_ERROR,
+                    'error': "Authentication Failed"
+                },
+                headers_origin)
+        else:
+            return _make_reply(403, "Forbidden",  headers_origin)
+
         if path == '/s3/upload':
             reply = upload_file(data)
         elif path == '/s3/delete':
@@ -88,7 +111,9 @@ def lambda_handler(event, context):
             reply = bucket_info(data['username'])
         else:
             reply = _make_reply(400, "Invalid endpoint: %s" % path)
+
     except Exception as e:
         traceback.print_exc()
         reply = _make_reply(400, "Exception has occured: {}".format(e))
+    reply = _replace_headers_origin(reply, headers_origin)
     return reply

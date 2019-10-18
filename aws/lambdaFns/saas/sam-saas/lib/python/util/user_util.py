@@ -9,23 +9,25 @@ authCookieName = 'connect.sid'
 rawAuthCookie = ""
 sessionPrefix = "xc"
 sessionTableName = "saas-auth-session-table"
-def check_user_credential(dynamodb_client, headers):
-    authCookie = extractCookieValue(headers)
+deltaTime = 60
+def check_user_credential(dynamodb_client, cookies):
+    authCookie = extractCookieValue(cookies)
     if authCookie is None:
-        return None
+        return None, None
     response = dynamodb_client.get_item(TableName=sessionTableName,
                                 ConsistentRead=True,
                                 Key={
                                     'id': {'S': sessionPrefix + authCookie}
                                 })
     if 'Item' not in response:
-        return None
+        return None, None
     sessionInfo = json.loads(response['Item']['sess']['S'])
+    if 'idToken' not in sessionInfo:
+        return None, None
     idToken = parseJWT(sessionInfo['idToken'])
     if idToken is None:
-        return None
-    if (int(time.time()) > idToken['exp']):
-        print('heere')
+        return None, None
+    if (int(time.time())-deltaTime > idToken['exp']):
         sessionInfo = refreshSession(dynamodb_client, sessionInfo, idToken, authCookie)
     cognitoLogins = {}
     cognitoLogins[sessionInfo['awsLoginString']] = sessionInfo['idToken']
@@ -64,7 +66,6 @@ def refreshSession(dynamodb_client, sessionInfo, idToken, authCookie):
                              ExpressionAttributeValues={
                                  ':v1': {'S': json.dumps(sessionInfo)}
                              })
-    print(updateResponse)
     return sessionInfo
 
 def parseJWT(data):
@@ -79,7 +80,7 @@ def parseJWT(data):
         return json.loads(base64.b64decode(tokenPayload))
     return None
 
-def extractCookieValue(headers):
+def extractCookieValue(cookies):
     #
     # First extract the cookie value
     #
@@ -92,18 +93,18 @@ def extractCookieValue(headers):
     #   <cookie payload>.<signature>
     # - So, we want this:  connect.sid=<part we want>.<signature>
     #
-    for key, headerLine in headers.items():
-        if (key.lower() == "cookie"):
-            rawCookies = headerLine.split('; ')
-            for cookie in rawCookies:
-                if (cookie.startswith(authCookieName)):
-                    lidx = cookie.find('=')
-                    ridx = cookie[(lidx+1):].find('.')
-                    rawAuthCookie = cookie[(lidx+1):(lidx+1+ridx)]
-                    # it turns out the cookie is signed with a urlencoded
-                    # 's:' at the beginning
-                    return unquote(rawAuthCookie)[2:]
-    return None
+    try:
+        rawCookies = cookies.split('; ')
+        for cookie in rawCookies:
+            if (cookie.startswith(authCookieName)):
+                lidx = cookie.find('=')
+                ridx = cookie[(lidx+1):].find('.')
+                rawAuthCookie = cookie[(lidx+1):(lidx+1+ridx)]
+                # it turns out the cookie is signed with a urlencoded
+                # 's:' at the beginning
+                return unquote(rawAuthCookie)[2:]
+    except Exception as e:
+        return None
 
 def init_user(client, user_name, credit, user_table, billing_table):
     user_data = {
@@ -175,3 +176,16 @@ def reset_user_cfn(client, user_name, user_table):
         },
         UpdateExpression='remove cfn_id'
     )
+
+def validate_user_instance(ec2_client, user_name, instance_id):
+    try:
+        response = ec2_client.describe_instances(InstanceIds=[instance_id])
+    except Exception as e:
+        return False
+    if 'Reservations' in response and 'Instances' in response['Reservations'][0] and 'Tags' in response['Reservations'][0]['Instances'][0]:
+        tags = response['Reservations'][0]['Instances'][0]['Tags']
+        for tag in tags:
+            if 'Value' in tag and tag['Key'] == 'Owner' and tag['Value'] == user_name:
+                return True
+    return False
+
