@@ -23,6 +23,10 @@ var config = require('./config');
 var defaultJwtHmac = process.env.JWT_SECRET ?
     process.env.JWT_SECRET : "xcalarSsssh";
 
+var saasCookieDomain = process.env.XCE_SAAS_COOKIE_DOMAIN ?
+    process.env.XCE_SAAS_COOKIE_DOMAIN :
+    `.execute-api.${config.creds.region}.amazonaws.com`;
+
 // Start QuickStart here
 
 var CognitoStrategy = require('passport-cognito').CognitoStrategy;
@@ -194,6 +198,8 @@ function(iss, sub, profile, accessToken, refreshToken, awsConfig,
 // set up the express-session back end
 //
 
+
+
 var sessionOpts = {
     store: new DynamoDBStore({
         table: config.dynamoDBSessionStoreTable,
@@ -203,7 +209,7 @@ var sessionOpts = {
         }),
     secret: config.sessionSecret,
     cookie: { maxAge: config.sessionAges[config.defaultSessionAge],
-              domain: `.execute-api.${config.creds.region}.amazonaws.com` }
+              domain: saasCookieDomain }
 };
 app.use(expressSession(sessionOpts));
 
@@ -318,11 +324,17 @@ router.post('/login',
 
             var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
             var token = jwt.sign(payload, defaultJwtHmac);
-            res.cookie("jwt_token", token, { maxAge: 1000*req.session.timeout, httpOnly: true, signed: false });
+            res.cookie("jwt_token", token, { maxAge: 1000*req.session.timeout,
+                                             domain: saasCookieDomain,
+                                             httpOnly: true, signed: false });
 
             req.session.save(function(err) {
-                res.status(200).send({"message": "Authentication successful",
-                                      "sessionId": Buffer.from(req.sessionID).toString('base64')});
+                var successResp = {"message": "Authentication successful",
+                                   "sessionId": Buffer.from(req.sessionID).toString('base64')};
+                if (req.body.sendDomain === true) {
+                    successResp['cookieDomain'] = saasCookieDomain;
+                }
+                res.status(200).send(successResp);
                 return next();
             });
         });
@@ -338,7 +350,7 @@ router.get('/status',
                                username: null,
                                timeout: 0 };
                var expirationDate = (new Date(req.session.cookie.expires)).getTime();
-               var now = (new Date).getTime()
+               var now = (new Date).getTime();
 
                if (req.session.hasOwnProperty('loggedIn') &&
                    req.session.hasOwnProperty('loggedInAdmin') &&
