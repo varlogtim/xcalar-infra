@@ -75,36 +75,32 @@ def start_cluster(user_name, cluster_params):
         # default to use 'XS'
         cluster_type = cluster_type_table['XS']
 
-    parameters.append(
+    parameters = [
         {
             'ParameterKey': 'ClusterSize',
             'ParameterValue': cluster_type['clusterSize']
-        }
-    )
-    parameters.append(
+        },
         {
             'ParameterKey': 'InstanceType',
             'ParameterValue': cluster_type['instanceType']
-        }
-    )
-    parameters.append(
+        },
         {
             'ParameterKey': 'CNAME',
             'UsePreviousValue': True
-        }
-    )
-    parameters.append(
+        },
         {
             'ParameterKey': 'AuthStackName',
             'UsePreviousValue': True
-        }
-    )
-    parameters.append(
+        },
+        {
+            'ParameterKey': 'MainStackName',
+            'UsePreviousValue': True
+        },
         {
             'ParameterKey': 'License',
             'UsePreviousValue': True
         }
-    )
+    ]
     if 'AMI' in cluster_params:
         parameters.append(
             {
@@ -186,6 +182,10 @@ def stop_cluster(user_name):
             },
             {
                 'ParameterKey': 'AuthStackName',
+                'UsePreviousValue': True
+            },
+            {
+                'ParameterKey': 'MainStackName',
                 'UsePreviousValue': True
             },
             {

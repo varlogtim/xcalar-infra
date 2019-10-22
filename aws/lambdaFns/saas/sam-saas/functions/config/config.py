@@ -4,7 +4,10 @@ from util.http_util import _make_reply
 
 envNames = {"XCE_CLOUD_MODE": "",
             "XCE_CLOUD_SESSION_TABLE": None,
-            "XCE_SAAS_LAMBDA_URL": None,
+            "XCE_CLOUD_USER_POOL_ID": None,
+            "XCE_CLOUD_CLIENT_ID": None,
+            "XCE_SAAS_AUTH_LAMBDA_URL": None,
+            "XCE_SAAS_MAIN_LAMBDA_URL": None,
             "XCE_CLOUD_REGION": "",
             "XCE_CLOUD_PREFIX": "xc",
             "XCE_CLOUD_HASH_KEY": "id"}

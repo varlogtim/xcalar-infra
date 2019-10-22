@@ -21,6 +21,9 @@ Parameters:
   Role:
     Type: String
     Default: 'arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationAdmin'
+  StackName:
+    Type: String
+    Default: ''
 
 Resources:
   LibLayer:
@@ -259,6 +262,14 @@ Resources:
           Properties:
             Path: /config
             Method: get
+  LambdaConfigurationInformation:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/xcalar/cloud/main/${StackName}'
+      Type: String
+      Value:
+        - "XCE_SAAS_MAIN_LAMBDA_URL="
+        - !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/v1/'
 
 Outputs:
   SaaSApi:
