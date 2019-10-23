@@ -53,6 +53,12 @@ def test_connection():
     """
     return "Connection check A-OK!"
 
+@app.route('/jenkins_job_names', methods=methods)
+@cross_origin()
+def jenkins_job_names():
+    names = [n for n in jdb.db.collection_names() if not n.endswith('_meta') and not n.startswith('_')]
+    return make_response(jsonify({'job_names':names}))
+
 def _get_upstream(*, job_name, build_number):
     upstream = []
     doc = jdb.db[job_name].find_one({'_id': build_number}, projection={'upstream':1})
