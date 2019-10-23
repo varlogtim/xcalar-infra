@@ -33,6 +33,8 @@ sam deploy --template-file packaged.yaml \
            --stack-name ${STACK_NAME} \
            --role-arn ${ROLE} \
            --parameter-overrides UserTable=${USER_TABLE_NAME} BillingTable=${BILLING_TABLE_NAME} \
+                                 SessionTable=${SESSION_TABLE_NAME} \
+                                 CredsTable=${CREDS_TABLE_NAME} \
                                  UserStackPrefix=${USER_STACK_PREFIX} \
                                  Role=${ROLE} Domain=${DOMAIN} StackName=${STACK_NAME})
 

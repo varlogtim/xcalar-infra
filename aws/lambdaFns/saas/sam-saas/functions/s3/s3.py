@@ -14,6 +14,8 @@ dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 domain = os.environ.get('DOMAIN')
 # XXX To-do Read from env variables
 user_table = os.environ.get('USER_TABLE')
+session_table = os.environ.get('SESSION_TABLE')
+creds_table = os.environ.get('CREDS_TABLE')
 
 def get_bucket(user_name):
     response = get_user_info(dynamodb_client, user_name, user_table)
@@ -149,7 +151,10 @@ def lambda_handler(event, context):
                 return _make_options_reply(200,  headers_origin)
 
             data = json.loads(event['body'])
-            credential, username = check_user_credential(dynamodb_client, headers_cookies)
+            credential, username = check_user_credential(dynamodb_client,
+                                                         session_table,
+                                                         creds_table,
+                                                         headers_cookies)
             if credential == None or username != data['username']:
                 return _make_reply(401, {
                     'status': Status.AUTH_ERROR,
