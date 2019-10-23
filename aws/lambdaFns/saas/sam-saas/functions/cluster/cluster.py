@@ -67,8 +67,8 @@ def start_cluster(user_name, cluster_params):
         tags = stack_info['tags']
         is_new = True
 
-    if 'clusterType' in cluster_params and cluster_params['clusterType'] in cluster_type_table:
-        cluster_type = cluster_type_table[cluster_params['clusterType']]
+    if 'type' in cluster_params and cluster_params['type'] in cluster_type_table:
+        cluster_type = cluster_type_table[cluster_params['type']]
     else:
         # default to use 'XS'
         cluster_type = cluster_type_table['XS']
