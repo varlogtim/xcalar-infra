@@ -15,6 +15,12 @@ Parameters:
   BillingTable:
     Type: String
     Default: 'saas_billing'
+  SessionTable:
+    Type: String
+    Default: 'saas-auth-session-table'
+  CredsTable:
+    Type: String
+    Default: 'saas-auth-creds-table'
   UserStackPrefix:
     Type: String
     Default: 'saas-test'
@@ -79,6 +85,10 @@ Resources:
               Ref: UserTable
           BILLING_TABLE:
               Ref: BillingTable
+          SESSION_TABLE:
+              Ref: SessionTable
+          CREDS_TABLE:
+              Ref: CredsTable
           CFN_ROLE_ARN:
               Ref: Role
           DOMAIN:
@@ -112,7 +122,13 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas-auth-session-table'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/{CredsTable}'
             - Effect: Allow
               Action:
                 - iam:PassRole
@@ -171,6 +187,10 @@ Resources:
               Ref: UserTable
           BILLING_TABLE:
               Ref: BillingTable
+          SESSION_TABLE:
+              Ref: SessionTable
+          CREDS_TABLE:
+              Ref: CredsTable
           DOMAIN:
               Ref: Domain
       Policies:
@@ -200,7 +220,13 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas-auth-session-table'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/{CredsTable}'
   S3Function:
     Type: AWS::Serverless::Function
     Properties:
@@ -264,6 +290,10 @@ Resources:
         Variables:
           USER_TABLE:
               Ref: UserTable
+          SESSION_TABLE:
+              Ref: SessionTable
+          CREDS_TABLE:
+              Ref: CredsTable
           DOMAIN:
               Ref: Domain
       Policies:
@@ -290,7 +320,13 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas-auth-session-table'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/{CredsTable}'
   ConfigFunction:
     Type: AWS::Serverless::Function
     Properties:

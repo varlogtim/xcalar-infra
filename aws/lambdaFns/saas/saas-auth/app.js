@@ -77,7 +77,7 @@ var readUser = function(id, callback) {
 
         return callback(err, result);
     });
-}
+};
 
 var writeUser = function(id, item, callback) {
     var params = {
@@ -98,7 +98,7 @@ var writeUser = function(id, item, callback) {
     ddb.putItem(params, function(err, data) {
         return callback(err, data);
     });
-}
+};
 
 var deleteUser = function(id, callback) {
     var params = {
@@ -111,7 +111,61 @@ var deleteUser = function(id, callback) {
     ddb.deleteItem(params, function(err, data) {
         return callback(err, data);
     });
-}
+};
+
+var writeCreds = function(username, sessionID, creds, callback) {
+    var params = {
+        TableName: config.dynamoDBCredsTable,
+        Item: {
+            'userid': {S: username},
+            'sessionID': {S: sessionID},
+            'cognito': {S: creds}
+        }
+    };
+
+    ddb.putItem(params, function(err, data) {
+        return callback(err, data);
+    });
+};
+
+var readCreds = function(username, sessionID, callback) {
+    var params = {
+        TableName: config.dynamoDBCredsTable,
+        Creds: {
+            'userid': {S: username},
+            'sessionID': {S: sessionID}
+        },
+    };
+
+    ddb.getItem(params, function(err, data) {
+        var result = data;
+
+        if (!err && Object.keys(data).length)  {
+            result = {
+                'cognito': data.Item.cognito.S,
+            };
+        } else {
+            result = null;
+        }
+
+        return callback(err, result);
+    });
+};
+
+var deleteCreds = function(username, sessionID, callback) {
+    var params = {
+        TableName: config.dynamoDBCredsTable,
+        Creds: {
+            'userid': {S: username},
+            'sessionID': {S: sessionID}
+        },
+    };
+
+    ddb.deleteItem(params, function(err, data) {
+        return callback(err, data);
+    });
+};
+
 
 // array to hold logged in users
 var users = [];
@@ -308,44 +362,61 @@ router.post('/login',
         req.session.timeout = config.sessionAges['interactive']/1000;
 
         findByIdFull(req.user.id, (err, user) => {
-
             if (err) {
-                res.status(500).send({"errMsg": JSON.stringify(result.err)});
+                res.status(500).send({"message": `Authentication id error: ${JSON.stringify(err)}`,
+                                      "code": "AuthorizationException",
+                                      "object": null});
                 return next();
             }
 
-            req.session.idToken = user.idToken;
-            req.session.refreshToken = user.refreshToken;
-            req.session.region = user.region;
-            req.session.identityPoolId = user.identityPoolId;
-            req.session.awsLoginString = user.awsLoginString;
-            req.session.identityId = user.identityId;
+            var creds = {
+                'idToken': user.idToken,
+                'refreshToken': user.refreshToken,
+                'region': user.region,
+                'identityPoolId': user.identityPoolId,
+                'awsLoginString': user.awsLoginString,
+                'identityId': user.identityId
+            };
 
-            var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
-
-            req.session.save(function(err) {
-                var successResp = {"message": "Authentication successful",
-                                   "sessionId": Buffer.from(req.sessionID).toString('base64')};
-                if (req.body.sendDomain === true) {
-                    successResp['cookieDomain'] = saasCookieDomain;
+            // first we create a random key and attempt to write it
+            // to the key table, in case it has not been set
+            // writeKey should only actually put it in the table if
+            // there is no key already there
+            writeCreds(req.session.username, req.sessionID,
+                       JSON.stringify(creds), (err, data) => {
+                if (err) {
+                    res.status(500).send({"message": `Authentication write error: ${JSON.stringify(err)}`,
+                                          "code": "AuthorizationException",
+                                          "object": null});
+                    return next();
                 }
 
-                setServerCookie(res, "jwt_token", payload,
-                                defaultJwtHmac,
-                                { maxAge: 1000*req.session.timeout,
-                                  domain: saasCookieDomain,
-                                  httpOnly: true, signed: false,
-                                  path: '/' });
+                var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
 
-                setSessionCookie(res, "connect.sid", req.sessionID,
-                                 config.sessionSecret,
-                                 { maxAge: 1000*req.session.timeout,
-                                   domain: saasCookieDomain,
-                                   httpOnly: true, signed: true,
-                                   path: '/' });
+                req.session.save(function(err) {
+                    var successResp = {"message": "Authentication successful",
+                                       "sessionId": Buffer.from(req.sessionID).toString('base64')};
+                    if (req.body.sendDomain === true) {
+                        successResp['cookieDomain'] = saasCookieDomain;
+                    }
 
-                res.status(200).send(successResp);
-                return;
+                    setServerCookie(res, "jwt_token", payload,
+                                    defaultJwtHmac,
+                                    { maxAge: 1000*req.session.timeout,
+                                      domain: saasCookieDomain,
+                                      httpOnly: true, signed: false,
+                                      path: '/' });
+
+                    setSessionCookie(res, "connect.sid", req.sessionID,
+                                     config.sessionSecret,
+                                     { maxAge: 1000*req.session.timeout,
+                                       domain: saasCookieDomain,
+                                       httpOnly: true, signed: true,
+                                       path: '/' });
+
+                    res.status(200).send(successResp);
+                    return next();
+                });
             });
         });
     });
@@ -408,6 +479,9 @@ router.get('/status',
 
 router.get("/logout", ensureAuthenticated, function(req, res, next) {
     var id = req.user.id;
+    var username = req.session.username;
+    var sessionID = req.sessionID;
+
     req.session.destroy(function(sessionErr) {
         if (sessionErr) {
             res.status(500).send({"errMsg": `destroy: ${JSON.stringify(sessionErr)}`});
@@ -432,16 +506,28 @@ router.get("/logout", ensureAuthenticated, function(req, res, next) {
             if (user) {
                 deleteUser(id, (deleteErr, user) => {
                     if (deleteErr) {
-                        res.status(500).send({"errMsg": `delete: ${JSON.stringify(deleteErr)}`});
+                        res.status(500).send({"message": `Authentication delete error: ${JSON.stringify(err)}`,
+                                              "code": "AuthorizationException",
+                                              "object": null});
                         return next();
                     } else {
-                        res.status(200).send({"message": "Logout successful"});
-                        return next();
+                        deleteCreds(username, sessionID, (deleteErr2, creds) => {
+                            if (deleteErr2) {
+                                res.status(500).send({"message": `Authentication delete error: ${JSON.stringify(err)}`,
+                                                      "code": "AuthorizationException",
+                                                      "object": null});
+                                return next();
+                            } else {
+                                res.status(200).send({"message": "Logout successful"});
+                                return next();
+                            }
+                        });
                     }
-
                 });
             } else {
-                res.status(500).send({"errMsg": "user not found"});
+                res.status(500).send({"message": `User not found error`,
+                                      "code": "AuthorizationException",
+                                      "object": null});
                 return next();
             }
         });
