@@ -31,9 +31,9 @@ sam package --output-template packaged.yaml --s3-bucket ${S3_BUCKET} &&
 sam deploy --template-file packaged.yaml \
            --capabilities CAPABILITY_IAM \
            --stack-name ${STACK_NAME} \
-           --role-arn ${ROLE}) \
-           --parameter-overrides userTable=${USER_TABLE_NAME} billingTable=${BILLING_TABLE_NAME} \
-                                 stackPrefix=${STACK_PREFIX}
+           --role-arn ${ROLE} \
+           --parameter-overrides UserTable=${USER_TABLE_NAME} BillingTable=${BILLING_TABLE_NAME} \
+                                 UserStackPrefix=${USER_STACK_PREFIX})
 
 
 
