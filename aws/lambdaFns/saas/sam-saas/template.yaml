@@ -20,6 +20,9 @@ Parameters:
   UserStackPrefix:
     Type: String
     Default: 'saas-test'
+  Role:
+    Type: String
+    Default: 'arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationAdmin'
 
 Resources:
   LibLayer:
@@ -60,6 +63,8 @@ Resources:
               Ref: UserTable
           BILLING_TABLE:
               Ref: BillingTable
+          CFN_ROLE_ARN:
+              Ref: Role
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -94,7 +99,7 @@ Resources:
               Action:
                 - iam:PassRole
               Resource:
-                !Sub 'arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationAdmin'
+                !Sub '${Role}'
             - Effect: Allow
               Action:
                 - ec2:DescribeInstances

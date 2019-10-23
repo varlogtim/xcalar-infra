@@ -20,8 +20,8 @@ dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 # XXX To-do Read from env variables
 user_table = os.environ.get('USER_TABLE')
 billing_table = os.environ.get('BILLING_TABLE')
-# cfn_role_arn = 'arn:aws:iam::559166403383:role/AWS-For-Users-CloudFormation'
-cfn_role_arn = 'arn:aws:iam::043829555035:role/AWSCloudFormationAdmin'
+
+cfn_role_arn = os.environ.get('CFN_ROLE_ARN')
 default_credit = '500'
 
 def get_available_stack(user_name):
