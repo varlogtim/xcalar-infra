@@ -150,6 +150,7 @@ class JenkinsJobDataCollection(object):
         else:
             data['_id'] = bnum
             self.coll.insert(data)
+
     def get_data(self, *, bnum):
         self.logger.debug("start bnum {}".format(bnum))
         # Return the data, if any.

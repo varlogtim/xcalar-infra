@@ -78,6 +78,9 @@ def find_metrics():
     if target == 'job_names':
         values.append('All Jobs') # Special :)
         values.extend(jmq_client.job_names())
+    elif ':parameter_names' in target:
+        job_name,rest = target.split(':')
+        values = jmq_client.parameter_names(job_name=job_name.replace('\.', '.'))
     else:
         pass # XXXrs - exception?
 
@@ -160,7 +163,8 @@ def _map_result(result):
     # Presume failure
     return 2
 
-def _job_table(*, job_name, from_ms, to_ms):
+def _job_table(*, job_name, parameter_names, from_ms, to_ms):
+
 
     rows = []
     columns = [
@@ -170,6 +174,9 @@ def _job_table(*, job_name, from_ms, to_ms):
         {"text":"Built On", "type": "string"},
         {"text":"Result", "type":"string"}
     ]
+    for name in parameter_names:
+        columns.append({"text": name, "type":"string"})
+
 
     query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
                       {'start_time_ms':{'$lt': to_ms}}]}
@@ -180,12 +187,14 @@ def _job_table(*, job_name, from_ms, to_ms):
 
     for bnum,item in resp.items():
         duration_s = int(item.get('duration_ms', 0)/1000)
-        rows.append([str(bnum),
-                     item.get('start_time_ms', 0),
-                     duration_s,
-                     item.get('built_on', 'unknown'),
-                     _map_result(item.get('result'))])
-
+        vals = [str(bnum),
+                item.get('start_time_ms', 0),
+                duration_s,
+                item.get('built_on', 'unknown'),
+                _map_result(item.get('result'))]
+        for name in parameter_names:
+            vals.append(item.get('parameters', {}).get(name, "N/A"))
+        rows.append(vals)
     return [{"columns": columns, "rows": rows, "type" : "table"}]
 
 @app.route('/query', methods=methods)
@@ -231,13 +240,20 @@ def query_metrics():
     request_type = target.get('type', 'table')
     if request_type != 'table':
         abort(404, Exception('only table type supported'))
-    job_name = target.get('target', None)
-    if not job_name:
+    fields = target.get('target', "").split(':')
+    if not fields:
         abort(404, Exception('missing target (job name)'))
+    job_name = fields[0]
     if job_name == "All Jobs":
         results = _all_jobs_table(from_ms=from_ts_ms, to_ms=to_ts_ms)
     else:
-        results = _job_table(job_name=job_name.replace('\.', '.'), from_ms=from_ts_ms, to_ms=to_ts_ms)
+        parameter_names = []
+        if len(fields) == 2:
+            parameter_names = _parse_multi(fields[1])
+
+        results = _job_table(job_name=job_name.replace('\.', '.'),
+                             parameter_names=parameter_names,
+                             from_ms=from_ts_ms, to_ms=to_ts_ms)
 
     logger.debug("table results: {}".format(results))
     return jsonify(results)

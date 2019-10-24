@@ -43,7 +43,12 @@ class JMQClient(object):
 
     def job_names(self):
         resp = self._cmd(uri = '/jenkins_job_names')
-        return resp.get('job_names', None)
+        return sorted(resp.get('job_names', []))
+
+    def parameter_names(self, *, job_name):
+        params = {'job_name': job_name}
+        resp = self._cmd(uri = '/jenkins_job_parameters', params=params)
+        return sorted(resp.get('parameter_names', []))
 
     def upstream(self, *, job_name, bnum):
         params = {'job_name': job_name, 'build_number': bnum}
@@ -69,3 +74,4 @@ if __name__ == '__main__':
 
     client = JMQClient(host='cvraman3.int.xcalar.com', port=4000)
     print(pprint.pformat(client.downstream(job_name="DailyTests-Trunk", bnum=144)))
+    print(pprint.pformat(client.parameter_names(job_name="DailyTests-Trunk")))

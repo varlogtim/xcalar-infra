@@ -26,6 +26,8 @@ cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.DEBUG},
 
 from py_common.mongo import JenkinsMongoDB
 from py_common.jenkins_aggregators import JenkinsAllJobIndex
+from py_common.jenkins_aggregators import JenkinsJobDataCollection
+from py_common.jenkins_aggregators import JenkinsJobMetaCollection
 
 from flask import Flask, request, jsonify, json, abort, make_response
 from flask_cors import CORS, cross_origin
@@ -158,6 +160,28 @@ def jenkins_jobs_by_time():
     end = request.args.get('end', now)
     alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
     return make_response(jsonify(alljob_idx.jobs_by_time(start=int(start), end=int(end))))
+
+@app.route('/jenkins_job_parameters', methods=methods)
+@cross_origin()
+def jenkins_job_parameters():
+    job_name = request.args.get('job_name', None)
+    if not job_name:
+        abort(400, 'missing job_name')
+
+    # Find the latest build for the job in the DB and extract the parameter
+    # names and return.
+
+    all_builds = JenkinsJobMetaCollection(job_name=job_name, db=jdb).all_builds()
+    if not all_builds:
+        return make_response(jsonify({}))
+
+    latest_bnum = sorted([int(n) for n in all_builds])[-1]
+    latest = JenkinsJobDataCollection(job_name=job_name, db=jdb).get_data(bnum=str(latest_bnum))
+    if not latest:
+        return make_response(jsonify({}))
+
+    parameter_names = list(latest.get('parameters', {}).keys())
+    return make_response(jsonify({"parameter_names":parameter_names}))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True)
