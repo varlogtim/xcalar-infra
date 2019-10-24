@@ -187,7 +187,7 @@ def _job_table(*, job_name, parameter_names, from_ms, to_ms):
 
     for bnum,item in resp.items():
         duration_s = int(item.get('duration_ms', 0)/1000)
-        vals = [str(bnum),
+        vals = [int(bnum),
                 item.get('start_time_ms', 0),
                 duration_s,
                 item.get('built_on', 'unknown'),
