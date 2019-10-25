@@ -11,6 +11,8 @@ fi
 
 MAIN_URL=`aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/main/${MAIN_LAMBDA_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^".*XCE_SAAS_LAMBDA_URL=//' -e 's/\\\\n.*"$//'`
 AUTH_URL=`aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_LAMBDA_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^".*XCE_SAAS_LAMBDA_URL=//' -e 's/\\\\n.*"$//'`
+USER_POOL_ID=`aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_LAMBDA_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^".*XCE_CLOUD_USER_POOL_ID=//' -e 's/\\\\n.*"$//'`
+CLIENT_ID=`aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_LAMBDA_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^".*XCE_CLOUD_CLIENT_ID=//' -e 's/\\\\n.*"$//'`
 
 echo "Building XD"
 cd $XLRGUIDIR
