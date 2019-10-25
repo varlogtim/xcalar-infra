@@ -267,9 +267,14 @@ Resources:
     Properties:
       Name: !Sub '/xcalar/cloud/main/${StackName}'
       Type: String
-      Value:
-        - "XCE_SAAS_MAIN_LAMBDA_URL="
-        - !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/v1/'
+      Value: !Join
+        - ''
+        - - "XCE_SAAS_MAIN_LAMBDA_URL="
+          - https://
+          - !Ref ServerlessRestApi
+          - ".execute-api."
+          - !Ref AWS::Region
+          - ".amazonaws.com/Prod"
 
 Outputs:
   SaaSApi:
