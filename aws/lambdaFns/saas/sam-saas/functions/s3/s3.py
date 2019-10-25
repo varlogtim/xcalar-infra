@@ -77,6 +77,62 @@ def bucket_info(user_name):
         'bucketName': bucket_resp
     })
 
+def create_multipart_upload(params):
+    user_name = params['username']
+    file_name = params['fileName']
+    bucket_resp = get_bucket(user_name)
+    if type(bucket_resp) != str:
+        return bucket_resp
+    s3_client = boto3.client('s3', region_name='us-west-2')
+    create_resp = s3_client.create_multipart_upload(Bucket=bucket_resp, Key=file_name)
+    return _make_reply(200, {
+        'status': Status.OK,
+        'uploadId': create_resp['UploadId']
+    })
+
+def upload_part(params):
+    user_name = params['username']
+    file_name = params['fileName']
+    upload_id = params['uploadId']
+    data = params['data']
+    part_number = params['partNumber']
+    bucket_resp = get_bucket(user_name)
+    if type(bucket_resp) != str:
+        return bucket_resp
+    s3_client = boto3.client('s3', region_name='us-west-2')
+    upload_resp = s3_client.upload_part(Body=data, Bucket=bucket_resp, Key=file_name, PartNumber=part_number, UploadId=upload_id)
+    return _make_reply(200, {
+        'status': Status.OK,
+        'ETag': upload_resp['ETag']
+    })
+
+def complete_multipart_upload(params):
+    user_name = params['username']
+    file_name = params['fileName']
+    upload_id = params['uploadId']
+    upload_info = params['uploadInfo']
+    bucket_resp = get_bucket(user_name)
+    if type(bucket_resp) != str:
+        return bucket_resp
+    s3_client = boto3.client('s3', region_name='us-west-2')
+    s3_client.complete_multipart_upload(Bucket=bucket_resp, Key=file_name, MultipartUpload=upload_info, UploadId=upload_id)
+    return _make_reply(200, {
+        'status': Status.OK
+    })
+
+def abort_multipart_upload(params):
+    user_name = params['username']
+    file_name = params['fileName']
+    upload_id = params['uploadId']
+    bucket_resp = get_bucket(user_name)
+    if type(bucket_resp) != str:
+        return bucket_resp
+    s3_client = boto3.client('s3', region_name='us-west-2')
+    s3_client.abort_multipart_upload(Bucket=bucket_resp, Key=file_name, UploadId=upload_id)
+    return _make_reply(200, {
+        'status': Status.OK
+    })
+
 def lambda_handler(event, context):
     try:
         path = event['path']
@@ -109,6 +165,14 @@ def lambda_handler(event, context):
             reply = delete_file(data)
         elif path == '/s3/describe':
             reply = bucket_info(data['username'])
+        elif path == '/s3/multipart/start':
+            reply = create_multipart_upload(data)
+        elif path == '/s3/multipart/upload':
+            reply = upload_part(data)
+        elif path == '/s3/multipart/complete':
+            reply = complete_multipart_upload(data)
+        elif path == '/s3/multipart/abort':
+            reply = abort_multipart_upload(data)
         else:
             reply = _make_reply(400, "Invalid endpoint: %s" % path)
 

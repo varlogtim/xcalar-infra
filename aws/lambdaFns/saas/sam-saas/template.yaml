@@ -222,6 +222,26 @@ Resources:
           Properties:
             Path: /s3/describe
             Method: options
+        StartMultipartUpload:
+          Type: Api
+          Properties:
+            Path: /s3/multipart/start
+            Method: post
+        UploadPart:
+          Type: Api
+          Properties:
+            Path: /s3/multipart/upload
+            Method: post
+        CompleteMultipartUpload:
+          Type: Api
+          Properties:
+            Path: /s3/multipart/complete
+            Method: post
+        AbortMultipartUpload:
+          Type: Api
+          Properties:
+            Path: /s3/multipart/abort
+            Method: post
       Environment:
         Variables:
           USER_TABLE:
@@ -244,6 +264,7 @@ Resources:
               Action:
                 - s3:PutObject
                 - s3:DeleteObject
+                - s3:AbortMultipartUpload
               Resource:
                 !Sub 'arn:aws:s3:::${UserStackPrefix}*' # For test only
             - Effect: Allow
