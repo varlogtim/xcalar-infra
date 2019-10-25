@@ -36,20 +36,13 @@ asg_capacity() {
 
 expserver_config() {
    if [ -n "$AUTH_STACK_NAME" ]; then
-       XCE_EXPSERVER_CLOUD_AUTH_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
+       XCE_EXPSERVER_CLOUD_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
+
        sed --follow-symlinks -i '/^## Xcalar Cloud Auth Start/,/## Xcalar Cloud Auth End/d' /etc/default/xcalar
 
        echo '## Xcalar Cloud Auth Start' >> /etc/default/xcalar
-       printf "$XCE_EXPSERVER_CLOUD_AUTH_CONFIG" >> /etc/default/xcalar
+       printf "$XCE_EXPSERVER_CLOUD_CONFIG" >> /etc/default/xcalar
        echo '## Xcalar Cloud Auth End' >> /etc/default/xcalar
-   fi
-   if [ -n "$STACK_NAME" ]; then
-       XCE_EXPSERVER_CLOUD_MAIN_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/main/${MAIN_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
-       sed --follow-symlinks -i '/^## Xcalar Cloud Main Start/,/## Xcalar Cloud Main End/d' /etc/default/xcalar
-
-       echo '## Xcalar Cloud Main Start' >> /etc/default/xcalar
-       printf "$XCE_EXPSERVER_CLOUD_MAIN_CONFIG" >> /etc/default/xcalar
-       echo '## Xcalar Cloud Main End' >> /etc/default/xcalar
    fi
 }
 
@@ -221,14 +214,14 @@ main() {
 
     # shellcheck disable=SC2046
     ENV_FILE=/var/lib/cloud/instance/ec2.env
-    CLOUD_ENV_FILE=/var/lib/cloud/instance/cloud.env
+    CLOUD_AUTH_ENV_FILE=/var/lib/cloud/instance/cloudauth.env
 
     if [ -e "$ENV_FILE" ]; then
         . $ENV_FILE
     fi
 
-    if [ -e "$CLOUD_ENV_FILE" ]; then
-        . $CLOUD_ENV_FILE
+    if [ -e "$CLOUD_AUTH_ENV_FILE" ]; then
+        . $CLOUD_AUTH_ENV_FILE
     fi
 
     set +x

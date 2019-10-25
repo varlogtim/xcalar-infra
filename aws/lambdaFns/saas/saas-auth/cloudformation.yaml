@@ -159,9 +159,7 @@ Resources:
          - ''
          - - "XCE_CLOUD_MODE=1\n"
            - "XCE_CLOUD_SESSION_TABLE=YOUR_DYNAMODB_SESSION_TABLE_NAME\n"
-           - "XCE_CLOUD_USER_POOL_ID=YOUR_USER_POOL_ID\n"
-           - "XCE_CLOUD_CLIENT_ID=YOUR_CLIENT_ID\n"
-           - "XCE_SAAS_AUTH_LAMBDA_URL="
+           - "XCE_SAAS_LAMBDA_URL="
            - https://
            - !Ref ApiGatewayApi
            - ".execute-api."
