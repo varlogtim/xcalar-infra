@@ -25,8 +25,6 @@ def check_user_credential(dynamodb_client, cookies):
     if 'idToken' not in sessionInfo:
         return None, None
     idToken = parseJWT(sessionInfo['idToken'])
-    if idToken is None:
-        return None, None
     if (int(time.time())-deltaTime > idToken['exp']):
         sessionInfo = refreshSession(dynamodb_client, sessionInfo, idToken, authCookie)
     cognitoLogins = {}
@@ -77,8 +75,7 @@ def parseJWT(data):
     missing_padding = len(tokenPayload) % 4
     if missing_padding:
         tokenPayload += '=' * (4 - missing_padding)
-        return json.loads(base64.b64decode(tokenPayload))
-    return None
+    return json.loads(base64.b64decode(tokenPayload))
 
 def extractCookieValue(cookies):
     #
