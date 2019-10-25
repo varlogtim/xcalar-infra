@@ -5,7 +5,7 @@ import traceback
 import os
 
 from enums.status_enum import Status
-from util.http_util import _http_status, _make_reply
+from util.http_util import _http_status, _make_reply, _make_options_reply, _replace_headers_origin
 from util.user_util import get_user_info, reset_user_cfn
 from util.cfn_util import get_stack_info
 from util.billing_util import get_price
@@ -108,6 +108,16 @@ def deduct_credit(user_name):
 
 def lambda_handler(event, context):
     try:
+        headers = event['headers']
+        headers_origin = '*'
+        headers_cookies = None
+        for key, headerLine in headers.items():
+            if (key.lower() == "origin"):
+                headers_origin = headerLine
+            if (key.lower() == "cookie"):
+                headers_cookies = headerLine
+        if (event['httpMethod'] == 'OPTIONS'):
+                return _make_options_reply(200,  headers_origin)
         path = event['path']
         data = json.loads(event['body'])
         if path == '/billing/get':
@@ -121,4 +131,5 @@ def lambda_handler(event, context):
     except Exception as e:
         traceback.print_exc()
         reply = _make_reply(400, "Exception has occured: {}".format(e))
+    reply = _replace_headers_origin(reply, headers_origin)
     return reply

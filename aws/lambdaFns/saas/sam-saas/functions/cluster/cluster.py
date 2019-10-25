@@ -325,9 +325,9 @@ def lambda_handler(event, context):
         headers_cookies = None
         for key, headerLine in headers.items():
             if (key.lower() == "origin"):
-                headers_origin = headerLine;
+                headers_origin = headerLine
             if (key.lower() == "cookie"):
-                headers_cookies = headerLine;
+                headers_cookies = headerLine
         if headers_origin == '*':
             data = json.loads(event['body'])
             if 'username' in data and 'instanceId' in data:

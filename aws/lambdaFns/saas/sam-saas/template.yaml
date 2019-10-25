@@ -137,6 +137,11 @@ Resources:
           Properties:
             Path: /billing/get
             Method: post
+        GetCreditOptions:
+          Type: Api
+          Properties:
+            Path: /billing/get
+            Method: options
         UpdateCredit:
           Type: Api
           Properties:

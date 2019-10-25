@@ -85,9 +85,9 @@ def lambda_handler(event, context):
         headers_cookies = None
         for key, headerLine in headers.items():
             if (key.lower() == "origin"):
-                headers_origin = headerLine;
+                headers_origin = headerLine
             if (key.lower() == "cookie"):
-                headers_cookies = headerLine;
+                headers_cookies = headerLine
         if re.match('^https://\w+.'+domain, headers_origin, re.M|re.I):
             if (event['httpMethod'] == 'OPTIONS'):
                 return _make_options_reply(200,  headers_origin)
