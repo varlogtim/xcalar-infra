@@ -109,9 +109,13 @@ Parameters:
     Description: Authenticaton Session Table Name
     Type: String
     Default: 'saas-auth-session-table'
-{%- if enableCloudAuth %}
+{%- if enableCloud %}
   AuthStackName:
     Description: Name of the cloud Auth stack being used for authentication
+    Type: String
+    Default: ''
+  MainStackName:
+    Description: Name of the cloud main stack being used for cluster, billing, s3, etc.
     Type: String
     Default: ''
 {%- endif %}
@@ -650,13 +654,15 @@ Resources:
               mode: '000400'
               owner: root
               group: root
-{%- if enableCloudAuth %}
-            /var/lib/cloud/instance/cloudauth.env:
+{%- if enableCloud %}
+            /var/lib/cloud/instance/cloud.env:
               content: !Sub
                 - |
                   AUTH_STACK_NAME=${AuthStack}
+                  MAIN_STACK_NAME=${MainStack}
                   CLUSTER_SIZE=${CSize}
                 - AuthStack: !Ref AuthStackName
+                  MainStack: !Ref MainStackName
                   CSize: !Ref ClusterSize
               mode: '000400'
               owner: root

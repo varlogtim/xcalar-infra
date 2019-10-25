@@ -39,6 +39,7 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
                     ParameterKey=CNAME,ParameterValue=${CNAME} \
                     ParameterKey=SessionTable,ParameterValue=${SESSION_TABLE} \
                     ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
+                    ParameterKey=MainStackName,ParameterValue=${MAIN_STACK_NAME} \
         --tags Key=available,Value=true \
                 Key=deployment,Value=saas \
         --capabilities CAPABILITY_IAM)
@@ -77,6 +78,7 @@ for STACK in ${AVAILABLE_STACKS[@]}; do
                                                     ParameterKey=CNAME,ParameterValue="${CNAME}" \
                                                     ParameterKey=SessionTable,ParameterValue=${SESSION_TABLE} \
                                                     ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
+                                                    ParameterKey=MainStackName,ParameterValue=${MAIN_STACK_NAME} \
                                         --role-arn ${ROLE} \
                                         --capabilities CAPABILITY_IAM
     fi

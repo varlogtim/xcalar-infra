@@ -66,7 +66,7 @@ if [ "0" == "$DEPLOY_STATUS" ]; then
                   --stack-name ${CLOUDFORMATION_STACK_NAME} \
                   --query "Stacks[*].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
                   --output text)"
-    PARAM_STR="XCE_CLOUD_MODE=1\nXCE_CLOUD_SESSION_TABLE=${SESSION_TABLE_NAME}\nXCE_SAAS_LAMBDA_URL=${API_URL}\nXCE_CLOUD_REGION=${AWS_REGION}\nXCE_CLOUD_PREFIX=xc\nXCE_CLOUD_HASH_KEY=id\n"
+    PARAM_STR="XCE_CLOUD_MODE=1\nXCE_CLOUD_SESSION_TABLE=${SESSION_TABLE_NAME}\nXCE_CLOUD_USER_POOL_ID=${USER_POOL_ID}\nXCE_CLOUD_CLIENT_ID=${CLIENT_ID}\nXCE_SAAS_AUTH_LAMBDA_URL=${API_URL}\nXCE_CLOUD_REGION=${AWS_REGION}\nXCE_CLOUD_PREFIX=xc\nXCE_CLOUD_HASH_KEY=id\n"
 else
     aws cloudformation describe-stack-events --stack-name ${CLOUDFORMATION_STACK_NAME}
 fi

@@ -69,25 +69,35 @@ for STACK in ${STACK_LIST[@]}; do
     SIZE=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="ClusterSize")' | jq .ParameterValue | cut -d '"' -f 2)
     CNAME=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="CNAME")' | jq .ParameterValue | cut -d '"' -f 2)
     AUTHSTACKNAME=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="AuthStackName")' | jq .ParameterValue | cut -d '"' -f 2)
+    MAINSTACKNAME=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="MainStackName")' | jq .ParameterValue | cut -d '"' -f 2)
     SESSIONTABLE=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="SessionTable")' | jq .ParameterValue | cut -d '"' -f 2)
-    if [ -z "$CNAME" ]; then
+    if [ -z "${CNAME}" ]; then
         CNAME_PARAMETER=''
     else
         CNAME_PARAMETER='ParameterKey=CNAME,UsePreviousValue=true'
     fi
-    if [ -z "$AUTHSTACKNAME" ]; then
+    if [ -z "${AUTHSTACKNAME}" ]; then
         AUTHSTACKNAME_PARAMETER=''
     else
         AUTHSTACKNAME_PARAMETER='ParameterKey=AuthStackName,UsePreviousValue=true'
     fi
-    if [ -z "$SESSIONTABLE" ]; then
+    if [ -z "${MAINSTACKNAME}" ]; then
+        MAINSTACKNAME_PARAMETER=''
+    else
+        MAINSTACKNAME_PARAMETER='ParameterKey=MainStackName,UsePreviousValue=true'
+    fi
+    if [ -z "${SESSIONTABLE}" ]; then
         SESSIONTABLE_PARAMETER=''
     else
         SESSIONTABLE_PARAMETER='ParameterKey=SessionTable,UsePreviousValue=true'
     fi
-    if [ $SIZE != 0 ]; then
+    if [ ${SIZE} != 0 ]; then
         aws cloudformation update-stack --stack-name ${STACK} --use-previous-template \
-                                        --parameters ParameterKey=ClusterSize,ParameterValue=0 $CNAME_PARAMETER $AUTHSTACKNAME_PARAMETER $SESSIONTABLE_PARAMETER \
+                                        --parameters ParameterKey=ClusterSize,ParameterValue=0 \
+                                        ${CNAME_PARAMETER} \
+                                        ${AUTHSTACKNAME_PARAMETER} \
+                                        ${MAINSTACKNAME_PARAMETER} \
+                                        ${SESSIONTABLE_PARAMETER} \
                                         --role-arn ${ROLE} \
                                         --capabilities CAPABILITY_IAM
     fi
@@ -126,6 +136,7 @@ for STACK in ${STACK_LIST[@]}; do
                                                     ParameterKey=CNAME,ParameterValue="${CNAME}" \
                                                     ParameterKey=SessionTable,ParameterValue=${SESSION_TABLE} \
                                                     ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
+                                                    ParameterKey=MainStackName,ParameterValue=${MAIN_STACK_NAME} \
                                         --role-arn ${ROLE} \
                                         --capabilities CAPABILITY_IAM
     fi
