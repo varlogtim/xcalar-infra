@@ -208,8 +208,7 @@ var sessionOpts = {
         AWSRegion: config.creds.region
         }),
     secret: config.sessionSecret,
-    cookie: { maxAge: config.sessionAges[config.defaultSessionAge],
-              domain: saasCookieDomain }
+    cookie: { maxAge: config.sessionAges[config.defaultSessionAge] }
 };
 app.use(expressSession(sessionOpts));
 
@@ -268,14 +267,14 @@ router.get('/sam', (req, res) => {
     res.sendFile(`${__dirname}/sam-logo.png`);
 });
 
-router.post('/login', 
+router.post('/login',
     (req, res, next) => {
         passport.authenticate('cognito', (err, user, info) => {
             // three cases:
             // 1. user is good: user not false, err and info null
             // 2. passport handled an error: user false, err null, info has message
             // 3. passport hit an unhandled error: err not null OR user is false
-            var message = '{ message: "User is not authorized.", code: "AuthorizationException", object: null }';
+            var message = { message: "Wrong Email or Passord.", code: "AuthorizationException", object: null };
             var respCode = 401;
             // console.log(`info: ${JSON.stringify(info)}`);
             if (err) return res.status(respCode).json(err);
@@ -323,10 +322,6 @@ router.post('/login',
             req.session.identityId = user.identityId;
 
             var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
-            var token = jwt.sign(payload, defaultJwtHmac);
-            res.cookie("jwt_token", token, { maxAge: 1000*req.session.timeout,
-                                             domain: saasCookieDomain,
-                                             httpOnly: true, signed: false });
 
             req.session.save(function(err) {
                 var successResp = {"message": "Authentication successful",
@@ -334,8 +329,23 @@ router.post('/login',
                 if (req.body.sendDomain === true) {
                     successResp['cookieDomain'] = saasCookieDomain;
                 }
+
+                setServerCookie(res, "jwt_token", payload,
+                                defaultJwtHmac,
+                                { maxAge: 1000*req.session.timeout,
+                                  domain: saasCookieDomain,
+                                  httpOnly: true, signed: false,
+                                  path: '/' });
+
+                setSessionCookie(res, "connect.sid", req.sessionID,
+                                 config.sessionSecret,
+                                 { maxAge: 1000*req.session.timeout,
+                                   domain: saasCookieDomain,
+                                   httpOnly: true, signed: true,
+                                   path: '/' });
+
                 res.status(200).send(successResp);
-                return next();
+                return;
             });
         });
     });
@@ -379,6 +389,20 @@ router.get('/status',
                    res.clearCookie('jwt_token', { httpOnly: true, signed: false });
                }
 
+                setServerCookie(res, "jwt_token", payload,
+                                defaultJwtHmac,
+                                { maxAge: 1000*req.session.timeout,
+                                  domain: saasCookieDomain,
+                                  httpOnly: true, signed: false,
+                                  path: '/' });
+
+                setSessionCookie(res, "connect.sid", req.sessionID,
+                                 config.sessionSecret,
+                                 { maxAge: 1000*req.session.timeout,
+                                   domain: saasCookieDomain,
+                                   httpOnly: true, signed: true,
+                                   path: '/' });
+
                res.status(200).send(message);
            });
 
@@ -392,7 +416,12 @@ router.get("/logout", ensureAuthenticated, function(req, res, next) {
 
         req.logOut();
         res.clearCookie('connect.sid');
-        res.clearCookie('jwt_token', { httpOnly: true, signed: false });
+        res.clearCookie('connect.sid', { domain: saasCookieDomain,
+                                         httpOnly: true, signed: true,
+                                         path: '/' });
+        res.clearCookie('jwt_token', { domain: saasCookieDomain,
+                                       httpOnly: true, signed: false,
+                                       path: '/' });
 
         findByIdFull(id, (findErr, user) => {
             if (findErr) {
