@@ -160,10 +160,14 @@ Mappings:
   AWSAMIRegionMap:
     AMI:
       AMZN1HVM: amazon/amzn-ami-hvm-2018.03.0.20181129-x86_64-gp2
+{%- if ami_us_east_1 %}
     us-east-1:
       AMZN1HVM: {{ ami_us_east_1 }}
+{%- endif %}
+{%- if ami_us_west_2 %}
     us-west-2:
       AMZN1HVM: {{ ami_us_west_2 }}
+{%- endif %}
 Resources:
 {%- if createVpc %}
   VpcId:
@@ -255,6 +259,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
+          CidrIp: !Ref 'AllowedCIDR'
+        - IpProtocol: tcp
+          FromPort: 10000
+          ToPort: 10000
           CidrIp: !Ref 'AllowedCIDR'
       Tags:
         - Key: Name
@@ -365,6 +373,7 @@ Resources:
         - Key: MountTarget
           Value: !Ref EfsMountTarget
           PropagateAtLaunch: true
+{%- if ami %}
 {%- if ami.Version %}
         - Key: Version
           Value: '{{ ami.Version }}'
@@ -379,6 +388,7 @@ Resources:
         - Key: Product
           Value: '{{ ami.Product }}'
           PropagateAtLaunch: true
+{%- endif %}
 {%- endif %}
     CreationPolicy:
       ResourceSignal:
@@ -423,6 +433,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
+          CidrIp: !Ref 'AllowedCIDR'
+        - IpProtocol: tcp
+          FromPort: 10000
+          ToPort: 10000
           CidrIp: !Ref 'AllowedCIDR'
       Tags:
         - Key: Name
