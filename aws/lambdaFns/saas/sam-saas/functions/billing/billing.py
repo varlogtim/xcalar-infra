@@ -15,6 +15,7 @@ dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
 cfn_client = boto3.client('cloudformation', region_name='us-west-2')
 ec2_client = boto3.client('ec2', region_name='us-west-2')
 
+domain = os.environ.get('DOMAIN')
 user_table = os.environ.get('USER_TABLE')
 billing_table = os.environ.get('BILLING_TABLE')
 
