@@ -161,6 +161,8 @@ Resources:
               Ref: UserTable
           BILLING_TABLE:
               Ref: BillingTable
+          DOMAIN:
+              Ref: Domain
       Policies:
         - Version: '2012-10-17'
           Statement:
