@@ -38,7 +38,7 @@ TMPDIR=$(mktemp --tmpdir -d sqldfpub.XXXXXX)
 cd "$TMPDIR"
 
 wget https://jenkins.int.xcalar.com/job/BuildSqldf-with-spark-branch/${ITER}/artifact/xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
-$XLRDIR/bin/reposync.sh rpmcommon -- xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
+$XLRDIR/bin/reposync.sh common -- xcalar-sqldf-${VERSION}-${ITER}.noarch.rpm
 
 wget https://jenkins.int.xcalar.com/job/BuildSqldf-with-spark-branch/${ITER}/artifact/xcalar-sqldf_${VERSION}-${ITER}_all.deb
 $XLRDIR/bin/apt-includedeb.sh -d all xcalar-sqldf_${VERSION}-${ITER}_all.deb
