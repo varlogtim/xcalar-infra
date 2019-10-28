@@ -65,9 +65,9 @@ class SqlPerfIter(object):
         if not threads:
             raise ValueError("no threads in data")
 
-        num_users = len(threads)
-        notes = self.data.get('notes', None)
-        if not notes:
+        self.num_users = len(threads)
+        self.notes = self.data.get('notes', None)
+        if not self.notes:
             raise ValueError("no notes in data")
 
         ds = self.data.get('dataSource', None)
@@ -75,7 +75,7 @@ class SqlPerfIter(object):
             ds = ds.get('dataSource', None)
         if not ds:
             raise ValueError("no dataSource in data")
-        data_source = os.path.basename(os.path.abspath(ds))
+        self.data_source = os.path.basename(os.path.abspath(ds))
 
         for tnum, queryStats in self.data['threads'].items():
             self.logger.debug("tnum: {}, queryStats: {}".format(tnum, queryStats))
@@ -91,7 +91,8 @@ class SqlPerfIter(object):
 
         # Test type is an md5 hash of test parameters for easy identification
         # of like tests which can be sanely compared.
-        hashstr = "{}{}{}{}{}".format(self.test_group, num_users, notes, data_source,
+        hashstr = "{}{}{}{}{}".format(self.test_group, self.num_users,
+                                      self.notes, self.data_source,
                                       ":".join(self.query_names()))
         self.test_type = hashlib.md5(hashstr.encode()).hexdigest()
 
