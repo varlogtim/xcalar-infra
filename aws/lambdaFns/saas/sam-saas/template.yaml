@@ -150,11 +150,21 @@ Resources:
           Properties:
             Path: /billing/update
             Method: post
+        UpdateCreditOptions:
+          Type: Api
+          Properties:
+            Path: /billing/update
+            Method: options
         DeductCredit:
           Type: Api
           Properties:
             Path: /billing/deduct
             Method: post
+        DeductCreditOptions:
+          Type: Api
+          Properties:
+            Path: /billing/deduct
+            Method: options
       Environment:
         Variables:
           USER_TABLE:
