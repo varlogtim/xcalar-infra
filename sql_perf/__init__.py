@@ -534,6 +534,16 @@ class SqlPerfResultsData(object):
             self.logger.exception("exception finding test type")
             return None
 
+    def config_params(self, *, test_group, bnum):
+        try:
+            data = self.results(test_group=test_group, bnum=bnum)
+            return {'test_group': data.get('test_group'),
+                    'num_users': data.get('num_users'),
+                    'notes': data.get('notes'),
+                    'data_source': data.get('data_source')}
+        except Exception as e:
+            self.logger.exception("exception finding config params")
+            return {}
 
     def query_names(self, *, test_group, bnum):
         try:

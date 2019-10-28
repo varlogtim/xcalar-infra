@@ -124,8 +124,32 @@ def find_metrics():
     logger.debug("values: {}".format(values))
     return jsonify(values)
 
+def _config_table(*, target_name):
+    """
+    Target name specifes query.
+    Format:
+        <test_group>:<bnum>:configparams
+    """
+    try:
+        tgroup,bnum,rest = target_name.split(':')
+    except Exception as e:
+        abort(404, Exception('incomprehensible target_name: {}'.format(target_name)))
+    config_params = sql_perf_results_data.config_params(test_group=tgroup, bnum=bnum)
+    columns = [
+        {"text":"Number of Users", "type":"string"},
+        {"text":"Notes", "type":"string"},
+        {"text":"Data Source", "type":"string"}
+    ]
+    rows = [[config_params.get('num_users', 'Unknown'),
+             config_params.get('notes', 'Unknown'),
+             config_params.get('data_source', 'Unknown')]]
+    results = [{"columns": columns,
+                "rows": rows,
+                "type" : "table"}]
 
-def _table_results(*, target):
+    return results
+
+def _results_table(*, target_name):
     """
     Target name specifes query.
     Format:
@@ -133,10 +157,9 @@ def _table_results(*, target):
     """
 
     try:
-        tgt = target.get('target', None)
-        tgroup,bnum1,bnum2,mname = tgt.split(':')
+        tgroup,bnum1,bnum2,mname = target_name.split(':')
     except Exception as e:
-        abort(404, Exception('incomprehensible target: {}'.format(target)))
+        abort(404, Exception('incomprehensible target_name: {}'.format(target_name)))
 
     logger.info("tgroup {} bnum1 {} bnum2 {} mname {}"
                 .format(tgroup, bnum1, bnum2, mname))
@@ -210,16 +233,16 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
 
     logger.info("start")
 
-    t_name = target.get('target', None)
-    logger.info("t_name: {}".format(t_name))
-    if not t_name:
+    target_name = target.get('target', None)
+    logger.info("target_name: {}".format(target_name))
+    if not target_name:
         err = 'target has no name: {}'.format(target)
         logger.exception(err)
         abort(404, ValueError(err))
     try:
-        tgroup,xver,bnum,qname,mname,mode = t_name.split(':')
+        tgroup,xver,bnum,qname,mname,mode = target_name.split(':')
     except Exception as e:
-        err = 'incomprehensible target name: {}'.format(t_name)
+        err = 'incomprehensible target name: {}'.format(target_name)
         logger.exception(err)
         abort(404, ValueError(err))
 
@@ -314,9 +337,14 @@ def query_metrics():
         if not request_type:
             request_type = target.get('type', 'timeserie')
         if request_type == 'table':
-            # Table target name contains enough meta-data to produce the entire
-            # comparison table.  We're done in one.
-            results = _table_results(target=target)
+            target_name = target.get('target', None)
+            logger.debug("target name: {}".format(target_name))
+            if "configparams" in target_name:
+                results = _config_table(target_name=target_name)
+            else:
+                # Table target name contains enough meta-data to produce the entire
+                # comparison table.  We're done in one.
+                results = _results_table(target_name=target_name)
             logger.debug("table results: {}".format(results))
             return jsonify(results)
 
