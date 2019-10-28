@@ -299,7 +299,11 @@ class SqlPerfResults(object):
 
             data[tg] = {'start_ts_ms': iters[iter_nums[0]].start_ts_ms,
                         'end_ts_ms': iters[iter_nums[-1]].end_ts_ms,
-                        'test_type': iters[iter_nums[0]].test_type, # XXXrs - assume all same
+                        # Assume the configuration is the same for all iterations...
+                        'test_type': iters[iter_nums[0]].test_type,
+                        'num_users': iters[iter_nums[0]].num_users,
+                        'notes': iters[iter_nums[0]].notes,
+                        'data_source': iters[iter_nums[0]].data_source,
                         'query_vals': self.query_vals(test_group = tg)}
         return data
 
