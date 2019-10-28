@@ -18,7 +18,7 @@ echo "Building XD"
 cd $XLRGUIDIR
 npm install --save-dev
 node_modules/grunt/bin/grunt init
-node_modules/grunt/bin/grunt dev --XCE_SAAS_MAIN_LAMBDA_URL=${MAIN_URL} --XCE_SAAS_AUTH_LAMBDA_URL=${AUTH_URL} --XCE_CLOUD_USER_POOL_ID=${USER_POOL_ID} --XCE_CLOUD_CLIENT_ID=${CLIENT_ID}
+node_modules/grunt/bin/grunt cloud_login --XCE_SAAS_MAIN_LAMBDA_URL=${MAIN_URL} --XCE_SAAS_AUTH_LAMBDA_URL=${AUTH_URL} --XCE_CLOUD_USER_POOL_ID=${USER_POOL_ID} --XCE_CLOUD_CLIENT_ID=${CLIENT_ID}
 
 aws s3 sync --acl public-read ${XLRGUIDIR}/xcalar-gui/cloudLogin s3://${S3_BUCKET}/${TARGET_PATH} --region ${AWS_REGION}
 aws s3 sync --acl public-read ${XLRGUIDIR}/xcalar-gui/ s3://${S3_BUCKET}/${TARGET_PATH} --exclude "*" --include "favicon.ico" --include "*assets/fonts/*" --include "*assets/js/cloudConstants.js" --region ${AWS_REGION}
