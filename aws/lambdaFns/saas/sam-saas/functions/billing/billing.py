@@ -137,7 +137,7 @@ def lambda_handler(event, context):
                     'error': "Authentication Failed"
                 }, headers_origin)
         else:
-            return _make_reply(403, "Forbidden",  headers_origin)]
+            return _make_reply(403, "Forbidden",  headers_origin)
 
         if path == '/billing/get':
             reply = get_credit(data['username'])
