@@ -195,6 +195,12 @@ Resources:
                 - dynamodb:Query
               Resource:
                 !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${BillingTable}'
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+                - dynamodb:GetItem
+              Resource:
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/saas-auth-session-table'
   S3Function:
     Type: AWS::Serverless::Function
     Properties:
