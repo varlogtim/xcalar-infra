@@ -7,7 +7,7 @@ import os
 
 from enums.status_enum import Status
 from util.http_util import _http_status, _make_reply, _make_options_reply, _replace_headers_origin
-from util.user_util import get_user_info, reset_user_cfn, validate_user_instance
+from util.user_util import get_user_info, reset_user_cfn, validate_user_instance, check_user_credential
 from util.cfn_util import get_stack_info
 from util.billing_util import get_price
 # To-do all hard-coded values need to be read from enviornemnt variables
