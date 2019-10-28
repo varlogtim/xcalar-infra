@@ -2,6 +2,7 @@ import boto3
 import json
 import time
 import traceback
+import re
 import os
 
 from enums.status_enum import Status
