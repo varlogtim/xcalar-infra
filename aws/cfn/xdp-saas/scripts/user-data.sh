@@ -43,7 +43,7 @@ expserver_config() {
        printf "$XCE_EXPSERVER_CLOUD_AUTH_CONFIG" >> /etc/default/xcalar
        echo '## Xcalar Cloud Auth End' >> /etc/default/xcalar
    fi
-   if [ -n "$STACK_NAME" ]; then
+   if [ -n "$MAIN_STACK_NAME" ]; then
        XCE_EXPSERVER_CLOUD_MAIN_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/main/${MAIN_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
        sed --follow-symlinks -i '/^## Xcalar Cloud Main Start/,/## Xcalar Cloud Main End/d' /etc/default/xcalar
 
