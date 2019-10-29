@@ -317,7 +317,7 @@ Resources:
           - !Ref ServerlessRestApi
           - ".execute-api."
           - !Ref AWS::Region
-          - ".amazonaws.com/Prod"
+          - ".amazonaws.com/Prod\n"
 
 Outputs:
   SaaSApi:
