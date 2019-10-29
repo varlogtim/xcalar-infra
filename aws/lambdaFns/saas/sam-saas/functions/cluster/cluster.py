@@ -330,8 +330,7 @@ def lambda_handler(event, context):
                 headers_cookies = headerLine
         if headers_origin == '*':
             data = json.loads(event['body'])
-            if 'username' in data and 'instanceId' in data:
-                if not validate_user_instance(ec2_client, data['username'], data['instanceId']):
+            if 'username' not in data or 'instanceId' not in data or validate_user_instance(ec2_client, data['username'], data['instanceId']) != True:
                     return _make_reply(401, {
                         'status': Status.AUTH_ERROR,
                         'error': 'Authentication failed'
