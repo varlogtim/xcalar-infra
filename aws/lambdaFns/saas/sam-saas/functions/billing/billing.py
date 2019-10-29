@@ -123,10 +123,10 @@ def lambda_handler(event, context):
         if headers_origin == '*':
             data = json.loads(event['body'])
             if 'username' not in data or 'instanceId' not in data or validate_user_instance(ec2_client, data['username'], data['instanceId']) != True:
-                    return _make_reply(401, {
-                        'status': Status.AUTH_ERROR,
-                        'error': 'Authentication failed'
-                    }, headers_origin)
+                return _make_reply(401, {
+                    'status': Status.AUTH_ERROR,
+                    'error': 'Authentication failed'
+                }, headers_origin)
         elif re.match('^https://\w+.'+domain, headers_origin, re.M|re.I):
             if (event['httpMethod'] == 'OPTIONS'):
                 return _make_options_reply(200,  headers_origin)

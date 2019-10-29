@@ -251,6 +251,11 @@ def check_cluster_status(user_name, stack_info):
             try:
                 s.settimeout(0.5)
                 s.connect((stack_info['cluster_url'].split('https://', 1)[-1], 443))
+                r = requests.get(stack_info['cluster_url'] + '/app/service/status', verify=False)
+                if r.status_code != 200:
+                    return {'status': Status.OK,
+                            'isPending': True,
+                            'isStarting': True}
                 r = requests.get(stack_info['cluster_url'] + '/assets/htmlFiles/login.html', verify=False)
                 if r.status_code != 200:
                     return {'status': Status.OK,
@@ -331,10 +336,10 @@ def lambda_handler(event, context):
         if headers_origin == '*':
             data = json.loads(event['body'])
             if 'username' not in data or 'instanceId' not in data or validate_user_instance(ec2_client, data['username'], data['instanceId']) != True:
-                    return _make_reply(401, {
-                        'status': Status.AUTH_ERROR,
-                        'error': 'Authentication failed'
-                    }, headers_origin)
+                return _make_reply(401, {
+                    'status': Status.AUTH_ERROR,
+                    'error': 'Authentication failed'
+                }, headers_origin)
 
         elif re.match('^https://\w+.'+domain, headers_origin, re.M|re.I):
             if (event['httpMethod'] == 'OPTIONS'):
