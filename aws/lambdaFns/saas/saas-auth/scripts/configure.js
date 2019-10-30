@@ -20,7 +20,6 @@ const args = require('minimist')(process.argv.slice(2), {
     'region',
     'user-table-name',
     'session-table-name',
-    'creds-table-name',
     'identity-pool-id',
     'user-pool-id',
     'client-id',
@@ -42,7 +41,6 @@ const bucketName = args['bucket-name']
 const functionName = args['function-name']
 const userTableName = args['user-table-name']
 const sessionTableName = args['session-table-name']
-const credsTableName = args['creds-table-name']
 const userPoolId = args['user-pool-id']
 const identityPoolId = args['identity-pool-id']
 const clientId = args['client-id']
@@ -69,11 +67,6 @@ if (!userTableName) {
 
 if (!sessionTableName) {
   console.error('You must supply a session table name as --sesson-table-name="<sessionTableName>"')
-  process.exit(1)
-}
-
-if (!credsTableName) {
-  console.error('You must supply a creds table name as --creds-table-name="<credsTableName>"')
   process.exit(1)
 }
 
@@ -114,9 +107,6 @@ modifyFiles(['./simple-proxy-api.yaml', './package.json', './cloudformation.yaml
 }, {
   regexp: /YOUR_DYNAMODB_USER_TABLE_NAME/g,
   replacement: userTableName
-}, {
-  regexp: /YOUR_DYNAMODB_CREDS_TABLE_NAME/g,
-  replacement: credsTableName
 }, {
   regexp: /YOUR_IDENTITY_POOL_ID/g,
   replacement: identityPoolId

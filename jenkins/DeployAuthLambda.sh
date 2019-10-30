@@ -41,7 +41,6 @@ fi
          --region ${AWS_REGION} \
          --user-table-name ${USER_TABLE_NAME} \
          --session-table-name ${SESSION_TABLE_NAME} \
-         --creds-table-name ${CREDS_TABLE_NAME} \
          --identity-pool-id ${IDENTITY_POOL_ID} \
          --user-pool-id ${USER_POOL_ID} \
          --client-id ${CLIENT_ID} \

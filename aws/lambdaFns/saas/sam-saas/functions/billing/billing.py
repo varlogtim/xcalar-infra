@@ -18,8 +18,6 @@ ec2_client = boto3.client('ec2', region_name='us-west-2')
 domain = os.environ.get('DOMAIN')
 user_table = os.environ.get('USER_TABLE')
 billing_table = os.environ.get('BILLING_TABLE')
-session_table = os.environ.get('SESSION_TABLE')
-creds_table = os.environ.get('CREDS_TABLE')
 
 
 def get_credit(user_name):
@@ -124,11 +122,7 @@ def lambda_handler(event, context):
                 headers_cookies = headerLine
         if headers_origin == '*':
             data = json.loads(event['body'])
-            if 'username' not in data or \
-               'instanceId' not in data or \
-               validate_user_instance(ec2_client,
-                                      data['username'],
-                                      data['instanceId']) != True:
+            if 'username' not in data or 'instanceId' not in data or validate_user_instance(ec2_client, data['username'], data['instanceId']) != True:
                 return _make_reply(401, {
                     'status': Status.AUTH_ERROR,
                     'error': 'Authentication failed'
@@ -137,11 +131,8 @@ def lambda_handler(event, context):
             if (event['httpMethod'] == 'OPTIONS'):
                 return _make_options_reply(200,  headers_origin)
             data = json.loads(event['body'])
-            credential, username = check_user_credential(dynamodb_client,
-                                                         session_table,
-                                                         creds_table,
-                                                         headers_cookies)
-            if credential is None or username != data['username']:
+            credential, username = check_user_credential(dynamodb_client, headers_cookies)
+            if credential == None or username != data['username']:
                 return _make_reply(401, {
                     'status': Status.AUTH_ERROR,
                     'error': "Authentication Failed"

@@ -43,6 +43,4 @@ exports.defaultSessionAge = 'interactive';
 
 exports.dynamoDBUserTable = 'YOUR_DYNAMODB_USER_TABLE_NAME';
 
-exports.dynamoDBCredsTable = 'YOUR_DYNAMODB_CREDS_TABLE_NAME';
-
 exports.sessionSecret = 'keyboard cat';

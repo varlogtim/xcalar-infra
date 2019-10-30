@@ -11,7 +11,6 @@
     "accountId": "YOUR_ACCOUNT_ID",
     "sessionTableName": "YOUR_DYNAMODB_SESSION_TABLE_NAME",
     "userTableName": "YOUR_DYNAMODB_USER_TABLE_NAME",
-    "credsTableName": "YOUR_DYNAMODB_CREDS_TABLE_NAME",
     "userPoolId": "YOUR_USER_POOL_ID",
     "identityPoolId": "YOUR_IDENTITY_POOL_ID",
     "clientId": "YOUR_CLIENT_ID",

@@ -21,9 +21,6 @@ modifyFiles(['./simple-proxy-api.yaml', './package.json', './cloudformation.yaml
   regexp: new RegExp(config.userTableName, 'g'),
   replacement: 'YOUR_DYNAMODB_USER_TABLE_NAME'
 }, {
-  regexp: new RegExp(config.credsTableName, 'g'),
-  replacement: 'YOUR_DYNAMODB_CREDS_TABLE_NAME'
-}, {
   regexp: new RegExp(config.identityPoolId, 'g'),
   replacement: 'YOUR_IDENTITY_POOL_ID'
 }, {

@@ -8,102 +8,63 @@ import requests
 authCookieName = 'connect.sid'
 rawAuthCookie = ""
 sessionPrefix = "xc"
+sessionTableName = "saas-auth-session-table"
 deltaTime = 60
-
-
-def check_user_credential(dynamodb_client, session_table_name,
-                          creds_table_name, cookies):
+def check_user_credential(dynamodb_client, cookies):
     authCookie = extractCookieValue(cookies)
     if authCookie is None:
         return None, None
-
-    sessionResponse = \
-        dynamodb_client.get_item(TableName=session_table_name,
-                                 ConsistentRead=True,
-                                 Key={
-                                     'id': {'S': sessionPrefix + authCookie}
-                                 })
-    if 'Item' not in sessionResponse:
+    response = dynamodb_client.get_item(TableName=sessionTableName,
+                                ConsistentRead=True,
+                                Key={
+                                    'id': {'S': sessionPrefix + authCookie}
+                                })
+    if 'Item' not in response:
         return None, None
-    if 'sess' not in sessionResponse['Item']:
+    sessionInfo = json.loads(response['Item']['sess']['S'])
+    if 'idToken' not in sessionInfo:
         return None, None
-
-    sessionInfo = json.loads(sessionResponse['Item']['sess']['S'])
-    credsResponse = \
-        dynamodb_client.get_item(TableName=creds_table_name,
-                                 ConsistentRead=True,
-                                 Key={
-                                     'userid': {'S': sessionInfo['username']},
-                                     'sessionID': {'S': authCookie}
-                                 })
-    if 'Item' not in credsResponse:
-        return None, None
-    if 'key' not in credsResponse['Item']:
-        return None, None
-
-    awsCreds = credsResponse['Item']['cognito']['S']
-    awsCreds = json.loads(awsCreds)
-    if 'idToken' not in awsCreds:
-        return None, None
-
-    idToken = parseJWT(awsCreds['idToken'])
-    if idToken is None:
-        return None, None
+    idToken = parseJWT(sessionInfo['idToken'])
     if (int(time.time())-deltaTime > idToken['exp']):
-        awsCreds = refreshSession(dynamodb_client, sessionInfo['username'],
-                                  awsCreds, idToken, creds_table_name,
-                                  authCookie)
-        if awsCreds is None:
-            return None, None
-
+        sessionInfo = refreshSession(dynamodb_client, sessionInfo, idToken, authCookie)
     cognitoLogins = {}
-    cognitoLogins[awsCreds['awsLoginString']] = awsCreds['idToken']
+    cognitoLogins[sessionInfo['awsLoginString']] = sessionInfo['idToken']
     cognitoClient = boto3.client('cognito-identity')
     cognitoCreds = cognitoClient.get_credentials_for_identity(
-                    IdentityId=awsCreds['identityId'],
+                    IdentityId=sessionInfo['identityId'],
                     Logins=cognitoLogins)
     return cognitoCreds, sessionInfo['username']
 
-
-def refreshSession(dynamodb_client, username, awsCreds,
-                   idToken, creds_table_name, authCookie):
+def refreshSession(dynamodb_client, sessionInfo, idToken, authCookie):
     # if the idToken is expired, we can use the refreshToken to directly
     # request one since boto3 does not expose the InitiateAuth interface.
     postData = {
         'ClientId': idToken['aud'],
         'AuthFlow': 'REFRESH_TOKEN_AUTH',
         'AuthParameters': {
-            'REFRESH_TOKEN': awsCreds['refreshToken'],
+            'REFRESH_TOKEN': sessionInfo['refreshToken'],
         }
     }
     postHeaders = {
         'Content-Type': 'application/x-amz-json-1.1',
         'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth'
     }
-    postUrl = 'https://cognito-idp.' + awsCreds['region'] + '.amazonaws.com'
+    postUrl = 'https://cognito-idp.' + sessionInfo['region'] + '.amazonaws.com'
     refreshReq = requests.post(postUrl, data=json.dumps(postData),
                                headers=postHeaders)
-    if refreshReq.status_code != 200:
-        return None
-
     updateData = refreshReq.json()
-    awsCreds['idToken'] = updateData['AuthenticationResult']['IdToken']
-    awsCreds['accessToken'] = \
+    sessionInfo['idToken'] = updateData['AuthenticationResult']['IdToken']
+    sessionInfo['accessToken'] = \
         updateData['AuthenticationResult']['AccessToken']
-
-    updateResponse = \
-        dynamodb_client.update_item(TableName=creds_table_name,
-                                    Key={
-                                        'userid': {'S': username},
-                                        'sessionID': {'S': authCookie}
-                                    },
-                                    UpdateExpression='SET cognito = :v1',
-                                    ExpressionAttributeValues={
-                                        ':v1': {'S': json.dumps(awsCreds)}
-                                    })
-    print(updateResponse)
-    return awsCreds
-
+    updateResponse = dynamodb_client.update_item(TableName=sessionTableName,
+                             Key={
+                                 'id': {'S': sessionPrefix + authCookie}
+                             },
+                             UpdateExpression='SET sess = :v1',
+                             ExpressionAttributeValues={
+                                 ':v1': {'S': json.dumps(sessionInfo)}
+                             })
+    return sessionInfo
 
 def parseJWT(data):
     # A JWT has three parts separated by '.' characers:
@@ -115,7 +76,6 @@ def parseJWT(data):
     if missing_padding:
         tokenPayload += '=' * (4 - missing_padding)
     return json.loads(base64.b64decode(tokenPayload))
-
 
 def extractCookieValue(cookies):
     #
@@ -143,14 +103,13 @@ def extractCookieValue(cookies):
     except Exception as e:
         return None
 
-
 def init_user(client, user_name, credit, user_table, billing_table):
     user_data = {
-        'user_name': {'S': user_name}
+        'user_name': {'S':user_name}
     }
     credit_data = {
         'user_name': {
-            'S': user_name
+            'S':user_name
         },
         'timestamp': {
             'N': str(round(time.time() * 1000))
