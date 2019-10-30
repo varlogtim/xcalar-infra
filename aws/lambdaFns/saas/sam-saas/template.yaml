@@ -128,7 +128,7 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/{CredsTable}'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CredsTable}'
             - Effect: Allow
               Action:
                 - iam:PassRole
@@ -226,7 +226,7 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/{CredsTable}'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CredsTable}'
   S3Function:
     Type: AWS::Serverless::Function
     Properties:
@@ -326,7 +326,7 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:GetItem
               Resource:
-                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/{CredsTable}'
+                !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CredsTable}'
   ConfigFunction:
     Type: AWS::Serverless::Function
     Properties:
