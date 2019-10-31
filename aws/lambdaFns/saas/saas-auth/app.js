@@ -455,26 +455,31 @@ router.get('/status',
                    if (req.session.hasOwnProperty('timeout')) {
                        message.timeout = req.session.timeout;
                    }
+
+                   var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
+
+                   setServerCookie(res, "jwt_token", payload,
+                                   defaultJwtHmac,
+                                   { maxAge: 1000*req.session.timeout,
+                                     domain: saasCookieDomain,
+                                     httpOnly: true, signed: false,
+                                     path: '/' });
+
+                   setSessionCookie(res, "connect.sid", req.sessionID,
+                                    config.sessionSecret,
+                                    { maxAge: 1000*req.session.timeout,
+                                      domain: saasCookieDomain,
+                                      httpOnly: true, signed: false,
+                                      path: '/' });
                } else {
                    res.clearCookie('connect.sid');
-                   res.clearCookie('jwt_token', { httpOnly: true, signed: false });
+                   res.clearCookie('connect.sid', { domain: saasCookieDomain,
+                                                    httpOnly: true, signed: false,
+                                                    path: '/' });
+                   res.clearCookie('jwt_token', { domain: saasCookieDomain,
+                                                  httpOnly: true, signed: false,
+                                                  path: '/' });
                }
-
-               var payload = {expiresIn: req.session.timeout, audience: "xcalar", issuer: "XCE", subject: "auth id"};
-
-               setServerCookie(res, "jwt_token", payload,
-                               defaultJwtHmac,
-                               { maxAge: 1000*req.session.timeout,
-                                 domain: saasCookieDomain,
-                                 httpOnly: true, signed: false,
-                                 path: '/' });
-
-               setSessionCookie(res, "connect.sid", req.sessionID,
-                                config.sessionSecret,
-                                { maxAge: 1000*req.session.timeout,
-                                  domain: saasCookieDomain,
-                                  httpOnly: true, signed: false,
-                                  path: '/' });
 
                res.status(200).send(message);
            });
