@@ -82,7 +82,7 @@ def start_cluster(user_name, cluster_params):
         if param['ParameterKey'] == 'ClusterSize':
             param.update(ParameterValue=cluster_type['clusterSize'])
 
-        if param['ParameterKey'] == 'instanceType':
+        if param['ParameterKey'] == 'InstanceType':
             param.update(ParameterValue=cluster_type['instanceType'])
 
         if param['ParameterKey'] == 'ImageId' and 'AMI' in cluster_params:
