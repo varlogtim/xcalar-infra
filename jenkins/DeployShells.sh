@@ -8,6 +8,11 @@ export XLRINFRADIR=${XLRINFRADIR:-$PWD}
 export PATH=$XLRINFRADIR/bin:/opt/xcalar/bin:$HOME/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin:$PATH
 
 EXIT_CODE=0
+
+get_stack_param() {
+    echo "$1" | jq -r '.[][0].Parameters[] | select(.ParameterKey=="'$2'") | .ParameterValue'
+}
+
 AVAILABLE_STACKS+=( $(aws cloudformation describe-stacks --query 'Stacks[?Tags[?Key==`available`]]' | jq .[].StackId | cut -d '"' -f 2) )
 NUM_AVAIL=${#AVAILABLE_STACKS[@]}
 if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
@@ -48,39 +53,42 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
 fi
 
 for STACK in ${AVAILABLE_STACKS[@]}; do
-    STACK_NAME=$(echo ${STACK} | cut -d "/" -f 2)
-    STACK_LIST+=("${STACK}")
     RET=$(aws cloudformation describe-stacks --stack-name ${STACK})
     UPDATE_STATUS=$(echo $RET| jq .[][0].StackStatus | cut -d '"' -f 2)
-    CNAME=$(echo $RET | jq '.[][0].Parameters[] | select(.ParameterKey=="CNAME")' | jq .ParameterValue | cut -d '"' -f 2 | cut -d '.' -f 1)
-    if [ $UPDATE_STATUS == "UPDATE_COMPLETE" ] || [ $UPDATE_STATUS == "CREATE_COMPLETE" ]; then
-        if [ -z "$CNAME" ]; then
-            CNAME=$(cat /dev/urandom | tr -dc 'a-z1-9' | fold -w 4 | head -n 1)
+    CNAME=$(get_stack_param "$RET" CNAME)
+    IMAGE_ID=$(get_stack_param "$RET" ImageId)
+    if [ "${IMAGE_ID}" != "${AMI}" ]; then
+        if [ $UPDATE_STATUS == "UPDATE_COMPLETE" ] || [ $UPDATE_STATUS == "CREATE_COMPLETE" ]; then
+            STACK_NAME=$(echo ${STACK} | cut -d "/" -f 2)
+            STACK_LIST+=("${STACK}")
+            if [ -z "$CNAME" ]; then
+                CNAME=$(cat /dev/urandom | tr -dc 'a-z1-9' | fold -w 4 | head -n 1)
+            fi
+            if [ "${LICENSE_TYPE}" == "dev" ]; then
+                KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK_NAME}"'","licenseType":"Developer","compress":true,
+                    "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
+                    "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+            elif [ "${LICENSE_TYPE}" == "prod" ]; then
+                KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK_NAME}"'","licenseType":"Production","compress":true,
+                    "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
+                    "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
+            else
+                echo "Need to provide the licenseType"
+                exit 1
+            fi
+            aws cloudformation update-stack --stack-name ${STACK} \
+                                            --no-use-previous-template \
+                                            --template-url ${CFN_TEMPLATE_URL} \
+                                            --parameters  ParameterKey=ImageId,ParameterValue="${AMI}" \
+                                                        ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE} \
+                                                        ParameterKey=License,ParameterValue=${KEY} \
+                                                        ParameterKey=CNAME,ParameterValue="${CNAME}" \
+                                                        ParameterKey=SessionTable,ParameterValue=${SESSION_TABLE} \
+                                                        ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
+                                                        ParameterKey=MainStackName,ParameterValue=${MAIN_STACK_NAME} \
+                                            --role-arn ${ROLE} \
+                                            --capabilities CAPABILITY_IAM
         fi
-        if [ "${LICENSE_TYPE}" == "dev" ]; then
-            KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK_NAME}"'","licenseType":"Developer","compress":true,
-                "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
-                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
-        elif [ "${LICENSE_TYPE}" == "prod" ]; then
-            KEY=$(curl -d '{"secret":"xcalarS3cret","userId":"'"${STACK_NAME}"'","licenseType":"Production","compress":true,
-                "usercount":1,"nodecount":1025,"expiration":90,"licensee":"Xcalar, Inc","product":"Xcalar Data Platform",
-                "onexpiry":"Warn","jdbc":true}' -H "Content-type: application/json" -X POST "${LICENSE_ENDPOINT}" | jq .Compressed_Sig | cut -d '"' -f 2)
-        else
-            echo "Need to provide the licenseType"
-            exit 1
-        fi
-        aws cloudformation update-stack --stack-name ${STACK} \
-                                        --no-use-previous-template \
-                                        --template-url ${CFN_TEMPLATE_URL} \
-                                        --parameters  ParameterKey=ImageId,ParameterValue="${AMI}" \
-                                                    ParameterKey=ClusterSize,ParameterValue=${STARTING_CLUSTER_SIZE} \
-                                                    ParameterKey=License,ParameterValue=${KEY} \
-                                                    ParameterKey=CNAME,ParameterValue="${CNAME}" \
-                                                    ParameterKey=SessionTable,ParameterValue=${SESSION_TABLE} \
-                                                    ParameterKey=AuthStackName,ParameterValue=${AUTH_STACK_NAME} \
-                                                    ParameterKey=MainStackName,ParameterValue=${MAIN_STACK_NAME} \
-                                        --role-arn ${ROLE} \
-                                        --capabilities CAPABILITY_IAM
     fi
 done
 
