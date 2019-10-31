@@ -38,7 +38,7 @@ def check_user_credential(dynamodb_client, session_table_name,
                                  })
     if 'Item' not in credsResponse:
         return None, None
-    if 'key' not in credsResponse['Item']:
+    if 'cognito' not in credsResponse['Item']:
         return None, None
 
     awsCreds = credsResponse['Item']['cognito']['S']
