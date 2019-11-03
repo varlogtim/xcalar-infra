@@ -1,13 +1,12 @@
 #!/bin/bash
 
-# XXX: This needs to use clusterCmds.sh
-
 set -e
 
 myName=$(basename $0)
 
 XLRINFRADIR=${XLRINFRADIR-$HOME/xcalar-infra}
-
+PERSIST_COVERAGE_ROOT="${PERSIST_COVERAGE_ROOT:-/netstore/qa/coverage}"
+RUN_COVERAGE="${RUN_COVERAGE:-false}"
 
 optClusterName=""
 optKeep=false
@@ -254,7 +253,11 @@ installDeps() {
     gscpTo "$XLRDIR/src/sqldf/tests/IMDTest/loadData.py" "$imdTestDir"
 
     gscpTo "$XLRINFRADIR/misc/sqlrunner/jodbc.xml" /tmp
-    gscpTo "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" /tmp
+    if [ "$RUN_COVERAGE" = "true" ]; then
+        gscpTo "$XLRINFRADIR/misc/sqlrunner/supervisor_coverage.conf" /tmp/supervisor.conf
+    else
+        gscpTo "$XLRINFRADIR/misc/sqlrunner/supervisor.conf" /tmp
+    fi
     gscpToAll "$XLRINFRADIR/misc/sqlrunner/LocalUtils.sh" /tmp
     #running the command on remote cluster as user "xcalar"
     rcmdAll echo "source /tmp/LocalUtils.sh >> ~/.bashrc"
@@ -320,7 +323,37 @@ runTest() {
     echo "######## Ending iteration $testIter ########"
 }
 
-destroyCluster() {
+collectCoverage() {
+    # Collect any coverage files
+
+    echo "COVERAGE collectCoverage called"
+
+    # Create persistent storage for our coverage data
+    coverageRoot=${PERSIST_COVERAGE_ROOT}/${JOB_NAME}/${BUILD_NUMBER}
+    mkdir -p "$coverageRoot"
+    echo "COVERAGE coverageRoot: $coverageRoot"
+
+    # Copy off the coverage rawprof files
+    for nodeNum in $(seq 1 $optNumNodes)
+    do
+        echo "COVERAGE processing node $nodeNum"
+
+        src_dir="/var/opt/xcalar/coverage/*"
+        dst_dir="${coverageRoot}/node_${nodeNum}/rawprof"
+        mkdir -p $dst_dir
+        gscpFromNode $nodeNum ${src_dir} ${dst_dir}
+    done
+
+    # Get a copy of the usrnode binary
+    src_bin="/opt/xcalar/bin/usrnode"
+    dst_dir="${coverageRoot}/bin"
+    mkdir -p $dst_dir
+    gscpFrom ${src_bin} ${dst_dir}
+
+    chmod -R o+rx "$coverageRoot" # Play nice with others :)
+}
+
+exitHandler() {
     # Preserve the value for use here, but note bash returns the $? value from prior to exit handler invocation.
     retval=$?
 
@@ -341,12 +374,27 @@ destroyCluster() {
         gscpFrom "*.bz2" "$optResultsPath"
     fi
 
+    if [ "$RUN_COVERAGE" = "true" ]; then
+        echo "RUN_COVERAGE is TRUE"
+        # Have to shut down the cluster in order to collect coverage.
+        $XLRINFRADIR/gce/gce-cluster-stop.sh $optNumNodes $optClusterName
+        collectCoverage
+    else
+        echo "RUN_COVERAGE is FALSE"
+    fi
+
     if ! $optKeep
     then
+
         $XLRINFRADIR/gce/gce-cluster-delete.sh --all-disks $optClusterName
         if $optEnableSpark
         then
             $XLRINFRADIR/bin/gce-dataproc-delete.sh -c "$optClusterName-spark" -f "$optClusterName-port"
+        fi
+    else
+        # Need to start it back up again...
+        if [ "$RUN_COVERAGE" = "true" ]; then
+            $XLRINFRADIR/gce/gce-cluster-start.sh $optNumNodes $optClusterName
         fi
     fi
 
@@ -354,7 +402,7 @@ destroyCluster() {
     rm -rf "$SPARKRESULTPATH"
 }
 
-trap destroyCluster EXIT
+trap exitHandler EXIT
 
 if $optEnableAnswer
 then

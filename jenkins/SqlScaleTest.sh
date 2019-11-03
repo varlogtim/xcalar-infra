@@ -8,6 +8,8 @@ fi
 
 export XLRGUIDIR="${XLRGUIDIR:-$XLRDIR/xcalar-gui}"
 export NETSTORE="${NETSTORE:-/netstore/qa/jenkins}"
+export RUN_COVERAGE="${RUN_COVERAGE:-false}"
+export PERSIST_COVERAGE_ROOT="${PERSIST_COVERAGE_ROOT:-/netstore/qa/coverage}"
 
 RESULTS_PATH="${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
 mkdir -p "$RESULTS_PATH"
