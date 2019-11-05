@@ -30,8 +30,7 @@ default_credit = '500'
 
 def get_available_stack(user_name):
     all_stacks = cfn_client.describe_stacks()['Stacks']
-    available_status = ['CREATE_COMPLETE', 'ROLLBACK_COMPLETE',
-                        'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE']
+    available_status = ['CREATE_COMPLETE','UPDATE_COMPLETE']
     for stack in all_stacks:
         if stack['StackStatus'] in available_status:
             for i in range(len(stack['Tags'])):
