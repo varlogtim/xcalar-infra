@@ -141,7 +141,9 @@ def lambda_handler(event, context):
                                                          session_table,
                                                          creds_table,
                                                          headers_cookies)
-            if credential is None or username != data['username']:
+            if credential is None or (username != data['username'] and \
+                                      path != '/billing/update' and \
+                                      path != '/billing/get'):
                 return _make_reply(401, {
                     'status': Status.AUTH_ERROR,
                     'error': "Authentication Failed"
