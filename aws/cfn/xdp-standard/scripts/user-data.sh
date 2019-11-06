@@ -111,7 +111,7 @@ AVZONE=$(curl -sSf http://169.254.169.254/latest/meta-data/placement/availabilit
 INSTANCE_TYPE=$(curl -sSf http://169.254.169.254/latest/meta-data/instance-type)
 export AWS_DEFAULT_REGION="${AVZONE%[a-f]}"
 
-export PATH=/opt/mssql-tools/bin:/opt/xcalar/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/opt/aws/bin:/bin
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin:/opt/xcalar/bin
 echo "export PATH=$PATH" > /etc/profile.d/path.sh
 
 set +e

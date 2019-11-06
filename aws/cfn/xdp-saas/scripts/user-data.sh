@@ -373,7 +373,7 @@ main() {
     export JAVA_HOME="${JAVA_HOME%/bin/java}"
     echo "export JAVA_HOME=$JAVA_HOME" > /etc/profile.d/java.sh
 
-    export PATH=/opt/mssql-tools/bin:/opt/xcalar/bin:/opt/aws/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin:/opt/xcalar/bin
     echo "export PATH=$PATH" > /etc/profile.d/path.sh
 
     NFSHOST="${NFSMOUNT%%:*}"
