@@ -11,6 +11,7 @@ from util.http_util import _http_status, _make_reply, _make_options_reply, _repl
 from util.cfn_util import get_stack_info, get_stack_params
 from util.user_util import init_user, reset_user_cfn, get_user_info, update_user_info, check_user_credential, validate_user_instance
 from util.billing_util import get_price
+from util.cluster_util import node_status
 from constants.cluster_type import cluster_type_table
 
 # Intialize all service clients
@@ -202,31 +203,16 @@ def check_cluster_status(user_name, stack_info):
         # else something wrong
         if running_count == cluster_count:
             # One last check to make sure the url is available
-            s = socket.socket()
-            try:
-                s.settimeout(0.5)
-                s.connect((stack_info['cluster_url'].split('https://', 1)[-1], 443))
-                r = requests.get(stack_info['cluster_url'] + '/app/service/status', verify=False)
-                if r.status_code != 200:
-                    return {'status': Status.OK,
-                            'isPending': True,
-                            'isStarting': True}
-                r = requests.get(stack_info['cluster_url'] + '/assets/htmlFiles/login.html', verify=False)
-                if r.status_code != 200:
-                    return {'status': Status.OK,
-                            'isPending': True,
-                            'isStarting': True}
-            except Exception as e:
+            status_result = node_status(stack_info['cluster_url'])
+            if status_result['status'] == 'up':
+                return {'status': Status.OK,
+                        'clusterUrl': stack_info['cluster_url'],
+                        'clusterPrice': get_price(stack_info['type'], cluster_count),
+                        'isPending': False}
+            else:
                 return {'status': Status.OK,
                         'isPending': True,
                         'isStarting': True}
-            finally:
-                s.settimeout(None)
-                s.close()
-            return {'status': Status.OK,
-                    'clusterUrl': stack_info['cluster_url'],
-                    'clusterPrice': get_price(stack_info['type'], cluster_count),
-                    'isPending': False}
         else:
             return {'status': Status.STACK_ERROR,
                     'error': 'The number of clusters is wrong'}
