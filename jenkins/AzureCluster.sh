@@ -1,6 +1,4 @@
 #!/bin/bash
-set -x
-
 if [ -z "$XLRINFRADIR" ]; then
     XLRINFRADIR="$(cd $(dirname ${BASH_SOURCE[0]})/.. && pwd)"
 fi
@@ -10,7 +8,9 @@ export PATH=$XLRINFRADIR/bin:$PATH
 source $XLRINFRADIR/bin/infra-sh-lib || exit 1
 source $XLRINFRADIR/azure/azure-sh-lib || exit 1
 
-az_login
+if [ -n "$AZURE_CLIENT_ID" ]; then
+    az_login
+fi
 
 if [ "${INSTALLER_URL:0:1}" == / ]; then
     echo "Uploading $INSTALLER_URL to Azure Blobstore..."
