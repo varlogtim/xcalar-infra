@@ -123,7 +123,7 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_E8s_v3",
+      "defaultValue": "Standard_E8_v3",
       "metadata": {
         "description": "Size of the VM"
       }
