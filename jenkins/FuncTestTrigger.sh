@@ -21,7 +21,7 @@ restartXcalar() {
 }
 
 genSupport() {
-    miniDumpOn=`echo "$FuncParams" | grep "Constants.Minidump" | cut -d= -f 2`
+    miniDumpOn=`echo "$CONFIG_PARAMS" | grep "Constants.Minidump" | cut -d= -f 2`
     miniDumpOn=${miniDumpOn:-true}
     if [ "$miniDumpOn" = "true" ]; then
         sudo $XLRDIR/scripts/support-generate.sh
@@ -134,7 +134,7 @@ rm $XCE_CONFIG
 set -e
 
 $XLRDIR/scripts/genConfig.sh $INSTALL_OUTPUT_DIR/etc/xcalar/template.cfg $XCE_CONFIG `hostname`
-echo "$FuncParams" | tee -a $XCE_CONFIG
+echo "$CONFIG_PARAMS" | tee -a $XCE_CONFIG
 
 # Enable XEM
 #echo "Constants.XcalarEnterpriseManagerEnabled=true" >> $XCE_CONFIG
