@@ -115,6 +115,7 @@ for STACK in ${STACK_LIST[@]}; do
             if [ ${SIZE} != 0 ]; then
                 aws cloudformation update-stack --stack-name ${STACK} --use-previous-template \
                                                 --parameters ParameterKey=ClusterSize,ParameterValue=0 \
+                                                ParameterKey=InstanceType,UsePreviousValue=true \
                                                 ${CNAME_PARAMETER} \
                                                 ${AUTHSTACKNAME_PARAMETER} \
                                                 ${MAINSTACKNAME_PARAMETER} \
@@ -172,7 +173,7 @@ for STACK in ${CHECKED_STACK_LIST[@]}; do
         #Assue only template url and iamge id will change.
         #If image id won't change, that means we only update license key
         #will add more check
-        if [ "${IMAGE_ID}" != "${AMI}"]; then
+        if [ "${IMAGE_ID}" != "${AMI}" ]; then
             if [ -z "${PREV_INFO}" ]; then
                 aws dynamodb put-item --table-name ${STACK_INFO_TABLE} \
                                 --item '{
@@ -189,7 +190,6 @@ for STACK in ${CHECKED_STACK_LIST[@]}; do
             fi
         fi
     else
-        FAILURE_STACK_LIST+=("${STACK}")
         echo "cannot update %{STACK}"
         EXIT_CODE=1
     fi
