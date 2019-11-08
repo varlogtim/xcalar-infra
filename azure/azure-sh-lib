@@ -7,13 +7,13 @@
 
 source $XLRINFRADIR/bin/infra-sh-lib
 
+
 az_setup() {
-    AZ_CACHEDIR="$HOME/.cache/azure"
+    AZTMP=${AZTMP:-${TMPDIR:-/tmp}}/aztmp-$(id -u)
+    AZ_CACHEDIR="${XDG_CACHE_DIR:-$HOME/.cache}/azure"
     HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
     AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
-    HOSTED_ZONEID="Z2S03H582J2UUD" ## .xcalar.io
     TODAY=$(date +%Y%m%d)
-    NOW="${TODAY}$(date +%H%M%S)"
     TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
     TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v9/mainTemplate.json
     DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
@@ -24,6 +24,7 @@ az_setup() {
     AZ_PUBLIC_CONTAINER=${AZ_PUBLIC_CONTAINER:-public}
     AZ_PUBKEY="${AZ_PUBKEY:-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b azureuser@xdp-standard}"
     AZ_DEFAULT_TEMPLATE="$TEMPLATE"
+    test -e $AZTMP || mkdir -p $AZTMP
     az_export_all
 }
 
@@ -109,16 +110,18 @@ az_vm_ids() {
 az_groups() {
     mkdir -p "$AZ_CACHEDIR"
     local groups=$AZ_CACHEDIR/allgroups.json name group groupdir
+    local now=$(date +%Y%m%d%H%M%S)
+
     az group list -ojson > $groups
     jq -r '.[].id' < $groups > $AZ_CACHEDIR/allgroups.txt
-    groupdir=$AZ_CACHEDIR/groups/${NOW}
+    groupdir=$AZ_CACHEDIR/groups/${now}
     mkdir -p $groupdir
     for name in $(cat $AZ_CACHEDIR/allgroups.txt); do
         name=$(basename $name)
         echo >&2 "Updating $name ..."
         az group show -g ${name} -ojson > $groupdir/${name}.json
     done
-    ln -sfn $NOW $groupdir/../current
+    ln -sfn $now $groupdir/../current
 }
 
 az_rg_vms() {
@@ -277,7 +280,7 @@ az_fix_deploysh() {
 }
 
 az_vm_cache() {
-    http_proxy= https_proxy= curl "${HTTPCACHE}" -s -o $AZ_ALLVMS
+    http_proxy='' https_proxy='' curl "${HTTPCACHE}" -s -o $AZ_ALLVMS
 }
 
 az_vms() {
@@ -499,13 +502,14 @@ az_deploy_usage() {
     cat << EOF
     az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer installer] [--dnslabel dns]
               [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
-              [--parameters-file params.json] [-n|--name name] [--dnslabel dns] ${str[*]}
+              [--parameters-file params.json] [-n|--name name] [--dnslabel dns] [--mode Incremental|Complete] ${str[*]}
 EOF
     return 0
 }
 
 az_deploy() {
-    local uid=$((RANDOM % 511)) template ii cmd location=westus2
+    local uid=$((RANDOM % 511)) ii cmd location=westus2
+    local now=$(date +%Y%m%d%H%M%S)
     local -a extra_params=()
     local email=$(git config user.email) retry ip_address
     local location=${LOCATION}
@@ -514,6 +518,7 @@ az_deploy() {
     local parameters_file=${DEFAULTS}
     local installer_url installer dnslabel
     local licenseParamFile=$LICENSEDEV
+    local mode=Incremental
     local osDiskSize=127
     while [ $# -gt 0 ]; do
         cmd="$1"
@@ -521,6 +526,10 @@ az_deploy() {
             -h | --help)
                 az_deploy_usage
                 return 1
+                ;;
+            --timezone=*)
+                timezone="${1##*=}"
+                shift 1
                 ;;
             --email=*)
                 email="${1##*=}"
@@ -562,6 +571,10 @@ az_deploy() {
                 name="${1##*=}"
                 shift 1
                 ;;
+            --mode=*)
+                mode="${1##*=}"
+                shift 1
+                ;;
             --installer=*)
                 installer="${1##*=}"
                 shift 1
@@ -576,6 +589,14 @@ az_deploy() {
                 ;;
             -n | --name)
                 name="$2"
+                shift 2
+                ;;
+            --mode)
+                mode="$2"
+                shift 2
+                ;;
+            --timezone)
+                timezone="${2}"
                 shift 2
                 ;;
             --email)
@@ -677,7 +698,9 @@ az_deploy() {
         storageAccount_arg="storageAccountNewOrExisting=new"
     fi
     local TMP="$(az_mktemp)"
-
+    local OUTPUT=${XLRINFRADIR}/output
+    rm -rf $OUTPUT/*
+    mkdir -p $OUTPUT
     az group deployment validate -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
@@ -694,7 +717,7 @@ az_deploy() {
     say " and your deployment here: $(az_rg_deployment_url $group)"
     say
 
-    az group deployment create --name deploy-${NOW} -g $group $template_arg \
+    az group deployment create --mode $mode --name deploy-${now} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
         "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
@@ -703,25 +726,34 @@ az_deploy() {
         say "Failed to deploy!"
         return 1
     fi
-    az_rg_scheduled_shutdown $group 2359
+    az_rg_scheduled_shutdown -g $group --time 2259 --timezone "$timezone"
 
-    local dns=${dnslabel}.${location}.cloudapp.azure.com
+    dns=${dnslabel}.${location}.cloudapp.azure.com
 
     say "Finished. Browse your deployment here: https://${dns}"
     say
-    say "You can ssh into the head node of your cluster: ssh azureuser@${dns}"
+    say "You can ssh into the head node of your cluster: vssh azureuser@${dns}"
     say
-    say "Finally, you can delete your cluster: az group delete -g $group"
+    say "Finally, you can delete your cluster: az group delete -g $group, or by using Jenkins"
+    say "Perform these actions on your cluster by running the AzureClusterControl job:"
     say
+    for cmd in stop start delete; do
+        local url="https://jenkins.int.xcalar.com/job/AzureClusterControl/buildWithParameters?CLUSTER_NAME=$group&RG_COMMAND=$cmd"
+        say "$cmd your cluster: $url"
+        echo $url > ${group}-${cmd}.url
+
+    done
+    say
+    say "Your URL: $dns"
+    echo $dns > $XLRINFRADIR/${group}.url
 }
 
 az_quickdeploy() {
     local dir="${XLRINFRADIR}/azure" cmd
-    local name="$(curl http://petname.service.consul:9999/)"
+    local name="$(curl -fsSL http://petname.service.consul:9999/)"
     local group="xdp-${name}-rg"
     local location=westus2
-    local installer="/netstore/builds/ReleaseCandidates/xcalar-2.0.3-RC7/prod/xcalar-2.0.3-3458-installer-el7"
-    local cgroup=
+    local installer="/netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod"
 
     az group create -g ${group} -l ${location}
     az_deploy -g ${group} -i "${installer}" --count 1 --name xdp-${name} \
@@ -729,23 +761,74 @@ az_quickdeploy() {
         --parameters-file ${dir}/xdp-standard/mainTemplate.defaults.json "$@"
 }
 
+az_timezone_str() {
+    local timezone=''
+    case "$1" in
+        [Pp][Ss][Tt]) timezone="Pacific Standard Time"; shift;;
+        [Ii][Ss][Tt]) timezone="India Standard Time"; shift;;
+        [Ee][Ss][Tt]) timezone="Eastern Standard Time"; shift;;
+        Pacific\ Standard\ Time|Eastern\ Standard\ Time|India\ Standard\ Time)
+            timezone="$1"
+            shift
+            ;;
+        Pacific|Eastern|India)
+            timezone="${1} Standard Time"
+            shift
+            ;;
+        *)
+            say "Unknown timezone. Using PST"
+            timezone="Pacific Standard Time"
+            shift
+            ;;
+    esac
+    echo $timezone
+}
+
+az_argparse() {
+    while [ $# -gt 0 ]; do
+        local cmd="$1"
+        case "$cmd" in
+            -g|--group) group="$2"; shift 2;;
+            --timezone) timezone="$(az_timezone_str "$2")"; shift 2;;
+            --time) time="$2"; shift 2;;
+            --disable) enabled=false; shift 1;;
+            --enable) enabled=true; shift 1;;
+            --) shift; return 0;;
+            -*) return 1;;
+            *) return 1;;
+        esac
+    done
+    if test -z "$group"; then
+        say "Must specify -g|--group"
+        return 1
+    fi
+    return 0
+}
+
 # Call this function with the resourceGroup name and optionally
 # a time in 24h (default 2200 = 10pm PST). This will deploy
 # shutdown rules to all vms in the resourcegroups.
 az_rg_scheduled_shutdown() {
-    local group="$1"
-    shift
-    time="${2:-2200}"
-    shift
-    if [ -z "$group" ]; then
-        echo >&2 "Need to specify resource group"
+    if ! az_argparse "$@"; then
+        # More arguments left
+        true
+    fi
+    local -a vms
+    if ! vms=($(az vm list -g "$group" --query '[].id' -otsv)); then
         return 1
     fi
-    local -a vms=($(az vm list -g "$group" --query '[].id' -otsv))
+    local now=$(date +%Y%m%d%H%M%S)
     local count="${#vms[@]}"
     local vm0="${vms[0]}"
     vm0="${vm0##*/}"
-    az group deployment create -n scheduledShutdown-${NOW} -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json --parameters vmName="${vm0%[0-9]*}" time=${time} timeZoneId='Pacific Standard Time' scaleNumber=$count "$@" -ojson --no-wait
+    az group deployment create --handle-extended-json-format \
+        -n scheduledShutdown-${group}-${now} \
+        -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json \
+        --parameters \
+        enabled=${enabled:-true} \
+        vmName="${vm0%[0-9]*}"\
+        time=${time} timeZoneId="${timezone:-Pacific Standard Time}" \
+        scaleNumber=$count -ojson --no-wait
 }
 
 az_disk_info() {
@@ -755,13 +838,39 @@ az_disk_info() {
 az_disk_update() {
     local cluster="$1" size_gb="${2:-127}" storage_sku="${3:-StandardSSD_LRS}" disks=''
     disks=($(az disk list -otsv | grep "$cluster" | awk '{print $5}'))
-
     az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids "${disks[@]}"
 }
 
 # List out private DNS entries as an array [{name: "foo", rec: "10.1.1.1"}]
-az_priv_dns_list() {
-    az network private-dns record-set list -g "${1:-xcalardev-rg}" -z "${2:-azure.xcalar.io}" -ojson | tee ~/tmp/dns.json | jq -r '[.[]|{name:.name,rec:.aRecords[0].ipv4Address}|{(.name):.rec}]'
+az_privdns_dns_list() {
+    az network private-dns record-set list -g "${1:-xcalardev-rg}" -z "${2:-azure.xcalar.io}" -ojson \
+        | tee $AZTMP/dns-raw.json | jq -r '[.[]|{name:.name,rec:.aRecords[0].ipv4Address}|{(.name):.rec}]' | jq -r '. as $a| $a[1:]' | cfn-flip | cut -c2- | awk -F: '{printf "%s: %s\n",$2,$1}' | cfn-flip
+}
+
+# $1 azure.xcalar.io
+az_privdns_hosts_list() {
+    local dnsname="${1:-azure.xcalar.io}"
+    local shortdns="${1%%\.*}"
+    local subnet="${2-10.11}"
+    az vm list-ip-addresses -o table | grep "${subnet//./\\.}" |  tr -s ' ' \
+        | awk  '{printf "%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1 }'
+}
+
+## Pass in IP/HOSTS in stdout
+az_privdns_update_hosts() {
+    if [ -z "$1" ]; then
+        say "Missing argument for ssh"
+        return 1
+    fi
+    [[ $# -gt 0 ]] || return 1
+    ssh "$@" /bin/bash -c 'cat - > htmp && test -s htmp && sudo mv htmp /etc/azure-fqdn.hosts.test && sudo service dnsmasq restart'
+}
+
+az_privdns_update_ssh_hosts() {
+    local dnsname="${1:-azure.xcalar.io}"
+    local subnet="${2:-10.11}"
+    local sshhost="${3:-root@enigma}"
+    az_privdns_hosts_list "$1" "$2" | az_privdns_update_hosts $sshhost
 }
 
 az_setup

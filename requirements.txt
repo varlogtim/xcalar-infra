@@ -9,14 +9,13 @@ azure-storage-common==2.1.0
 azure-storage-queue==2.1.0
 bumpversion
 cfn-flip
+cfn-lint
 cookiecutter
-#cfn-lint
 crcmod
 diceware
 docker
 exodus-bundler
 flake8
-jinja2-cli
 jinja2-cli[yaml]
 ovirt-engine-sdk-python
 paramiko
@@ -25,6 +24,7 @@ pylint
 pytest
 python-consul
 pyvmomi
+PyYAML==5.1.2
 requests==2.22.0
 testinfra
 troposphere

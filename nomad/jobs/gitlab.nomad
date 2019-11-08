@@ -50,13 +50,14 @@ job "gitlab" {
       config {
         image = "gitlab/gitlab-ce:latest"
 
-        #force_pull = true
+        force_pull = true
 
         volumes = [
           "/netstore/infra/gitlab/config:/etc/gitlab",
           "/netstore/infra/gitlab/logs:/var/log/gitlab",
           "/netstore/infra/gitlab/data:/var/opt/gitlab",
         ]
+
         port_map {
           ui_port = 80
 
@@ -76,7 +77,7 @@ EOD
       }
 
       resources {
-        memory = 6000
+        memory = 8000
         cpu    = 6000
 
         network {

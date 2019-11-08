@@ -1,27 +1,20 @@
-.PHONY: all venv hooks clean update frozen.txt
+.PHONY: all venv hooks clean update frozen clean
 
 SHELL=/bin/bash
 
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
 
-# PYTHON_VERSION = $(shell $(PYTHON) --version 2>&1 | sed -e 's/^P/p/; s/ /-/')
-
-VIRTUAL_ENV = .venv
-
 ifeq ($(XLRINFRADIR),)
 $(error Must set XLRINFRADIR. Please source .env file)
 endif
 
-PYTHON = python3.6
-PYTHON_VERSION = $(shell $(PYTHON) --version 2>&1 | head -1 | sed 's/^Python //')
-DIRENV_VENV = $(XLRINFRADIR)/.direnv/python-$(PYTHON_VERSION)
 VIRTUAL_ENV = .venv
-REQUIRES = requirements.txt
-FROZEN = frozen.txt
-
-CDUP = cd $(shell -x git rev-parse --show-cdup)
-HOOKS = .git/hooks/pre-commit
+PIP_FLAGS   ?= -q
+REQUIRES     = requirements.txt
+CONSTRAINTS  = constraints.txt
+HOOKS        = .git/hooks/pre-commit
+PYTHON  ?= /opt/xcalar/bin/python3.6
 
 all: venv
 
@@ -30,24 +23,31 @@ hooks: $(HOOKS)
 $(HOOKS) : scripts/hooks/pre-commit.sh
 	ln -sfT ../../$< $@
 
-venv: $(VIRTUAL_ENV)/.updated
+venv: .updated
+
+.updated: $(VIRTUAL_ENV)/bin/pip
+	@/usr/bin/touch $@
+
+$(VIRTUAL_ENV)/bin/pip: $(VIRTUAL_ENV) $(REQUIRES)
+	@echo "Updating virtualenv in $(VIRTUAL_ENV) with packages in $(REQUIRES) ..."
+	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) pip setuptools wheel
+	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -r $(REQUIRES) -c $(CONSTRAINTS)
+	@/usr/bin/touch $@
 
 $(VIRTUAL_ENV):
 	@echo "Creating new virtualenv in $@ ..."
 	@mkdir -p $@
-	@deactivate 2>/dev/null || true; /opt/xcalar/bin/virtualenv -q --prompt='('$(shell basename $(current_dir))') ' $@
+	@deactivate 2>/dev/null || true; $(PYTHON) -m venv --prompt=$(shell basename $(current_dir)) $@
+	@deactivate 2>/dev/null || true; $(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools wheel pipenv
 
-$(VIRTUAL_ENV)/.updated: $(VIRTUAL_ENV) requirements.txt
-	@echo "Updating virtualenv in $(VIRTUAL_ENV) with plugins from $(FROZEN) ..."
-	$(VIRTUAL_ENV)/bin/pip install -q -r $(FROZEN)
-	@touch $@
-
-frozen.txt:
+$(CONSTRAINTS): venv
 	@echo "Saving requirements to $@ ..."
-	$(VIRTUAL_ENV)/bin/pip freeze -r $(REQUIRES) | grep -v pkg-resources > $@
+	$(VIRTUAL_ENV)/bin/pip freeze -r $(REQUIRES) | grep -v pkg-resources > $@.tmp
+	mv $@.tmp $@
 
 clean:
-	rm -r $(VIRTUAL_ENV)
+	@echo Removing $(VIRTUAL_ENV) ...
+	@if test -e $(VIRTUAL_ENV); then rm -r $(VIRTUAL_ENV); fi
 
 # Used for running testing/verifying sources and json data
 include mk/check.mk

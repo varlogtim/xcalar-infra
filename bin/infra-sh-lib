@@ -32,6 +32,11 @@ debug() {
     test "${DEBUG-1}" = "1" && say "debug: $*" || :
 }
 
+traceon() {
+    set -x
+    export PS4='# ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
+}
+
 warn() {
     if test -t 2; then
         YELLOW='\e[33m'
@@ -88,6 +93,11 @@ die_with_status() {
 die() {
     error "$*"
     exit 1
+}
+
+# a,b,c,d -> a b c d
+csv() {
+    echo "${1//,/ }"
 }
 
 strjoin() {
@@ -176,6 +186,21 @@ check_url() {
         fi
     fi
     return 1
+}
+
+pyvenv3() {
+    local venv="${1:-.venv}"
+    local prompt="${2:-$(basename $(realpath $venv))}"
+    if ! py=$(PATH=/opt/xcalar/bin:/usr/local/bin:/usr/bin:/bin /bin/bash -c "command -v python3"); then
+        say "Unable to find python3"
+        return 1
+    fi
+    [ -z "$VIRTUAL_ENV" ] || deactivate 2>/dev/null || true
+    test -d "$venv" || ($py -m venv --prompt "$prompt" "$venv" || return 1) \
+        || return 1
+    source "$venv"/bin/activate
+    hash -r
+    pip install -U pip setuptools wheel
 }
 
 s3_exists() {

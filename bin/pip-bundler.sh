@@ -13,12 +13,11 @@
 set -eu
 
 DIR=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
-USER_INSTALL=
+USER_INSTALL=""
 INSTALL=0
 BUNDLE=0
 DEBUG=${DEBUG:-0}
 TMPENV=
-readonly REQS=requirements.txt
 
 say() {
     echo >&2 "$@"
@@ -46,32 +45,46 @@ die() {
 }
 
 pip() {
-     trace $TMPENV/bin/python3 -m pip "$@"
+     trace $VIRTUAL_ENV/bin/python -m pip "$@"
 }
 
 do_bundle() {
     deactivate 2> /dev/null || true
-    [ $# -gt 0 ] || set -- -r requirements.txt
-    TMPENV=$TMPDIR/venv
-    python3 -m venv $TMPENV --clear
-    source $TMPENV/bin/activate
+    ARGS=()
+    if [ $# -eq 0 ]; then
+        if test -e requirements.txt; then
+            ARGS+=(-r requirements.txt)
+        fi
+        if test -e constraints.txt; then
+            ARGS+=(-c constraints.txt);
+        fi
+    fi
+    if test -d /netstore/infra; then
+        ARGS+=(--find-links file:///netstore/infra/wheels --trusted-host netstore)
+    fi
+
+    deactivate 2>/dev/null || true
+    VIRTUAL_ENV=$TMPDIR/venv
+    /opt/xcalar/bin/python3.6 -m venv $VIRTUAL_ENV --clear
     pip install -U pip setuptools wheel
-    pip download -d ${PACKAGES} "$@"
-    pip wheel -w "$WHEELS" --no-index --no-cache-dir --find-links file://${PACKAGES}/ "$@"
+    pip wheel -w "$WHEELS" "${ARGS[@]}" pip setuptools wheel
+    pip wheel -w "$WHEELS" "${ARGS[@]}" "$@"
 }
 
 do_install() {
-    [ $# -gt 0 ] || set -- -r requirements.txt
     pip install --no-index --no-cache-dir --find-links file://${DIR}/wheels/ "$@"
 }
 
 sha256() {
-    shasum -a 256 | cut -d' ' -f1
+    if command -v sha256sum >/dev/null; then
+        sha256sum | cut -d' ' -f1
+    else
+        shasum -a 256 | cut -d' ' -f1
+    fi
 }
 
 main() {
-    local output=${OUTPUT:-bundle.tar}
-    declare -a reqs=()
+    local output=''
 
     if [[ $0 =~ bundle ]] || [[ $0 =~ wheel ]]; then
         BUNDLE=1
@@ -79,10 +92,13 @@ main() {
         INSTALL=1
     fi
 
-    TMPDIR=$(mktemp -d /tmp/pip.XXXXXX)
+    export TMPDIR="${TMPDIR:-/tmp/pip-bundle-$(id -u)}"
     # shellcheck disable=SC2064
-    trap "rm -rf $TMPDIR" EXIT
+    mkdir -p $TMPDIR/wheels $TMPDIR/cache
+    rm -rf $TMPDIR/venv
 
+    req='requirements.txt'
+    const='constraints.txt'
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -90,7 +106,8 @@ main() {
             install) INSTALL=1 ;;
             bundle) BUNDLE=1 ;;
             -h | --help) usage; exit 0;;
-            -r | --requirements) user_req="$1"; shift ;;
+            -r | --requirements) req="$1"; shift ;;
+            -c | --constraints) const="$1"; shift;;
             -i | --install) install_links="$1"; shift;;
             -o | --output) output="$1"; shift ;;
             --) break;;
@@ -111,23 +128,19 @@ main() {
         else
             USER_INSTALL='--user'
         fi
-        if [ -z "$output" ]; then
-            sha1req="$(sha1 < "${req[@]}")"
-            output="${req0dir}/${req0file}-${sha256:0:8}.tar"
-        fi
-        args=''
-        do_install $USER_INSTALL -r ${req:-${DIR}/requirements.txt} virtualenv
+        do_install $USER_INSTALL -U pip -c ${const}
+        do_install $USER_INSTALL -r ${req} -c ${const} virtualenv
     elif ((BUNDLE)); then
         PACKAGES=$TMPDIR/packages
         WHEELS=$TMPDIR/wheels
         mkdir -p "$PACKAGES" "$WHEELS"
         info "Building packages from $req ..."
-        cp $req $TMPDIR/${REQ}
+        sort $req > $TMPDIR/requirements.txt
+        if [ -e "$const" ]; then cp $const $TMPDIR/constraints.txt; fi
         cp ${BASH_SOURCE[0]} $TMPDIR/install.sh
-        do_bundle -r $req virtualenv
+        do_bundle -r $TMPDIR/requirements.txt -c ${TMPDIR}/constraints.txt virtualenv
         echo >&2 "Creating $output ..."
-        tar caf "${output:-pip-bundler.tar.gz}" --owner=root --group=root -C "${TMPDIR}" install.sh $(basename $req) wheels
-        rm -rf $TMPDIR
+        tar caf "${output:-pip-bundler.tar.gz}" --owner=root --group=root -C "${TMPDIR}" install.sh requirements.txt constraints.txt wheels
     fi
 }
 

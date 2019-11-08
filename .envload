@@ -11,11 +11,13 @@ env_load()  {
     local this_dir
     if this_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; then
         export XLRINFRADIR="$this_dir"
-        if [ -n "${VIRTUAL_ENV}" ]; then
-            deactivate 2>/dev/null || true
+        if [ -z "${PIPENV_ACTIVE:-}" ]; then
+            if [ -n "${VIRTUAL_ENV}" ]; then
+                deactivate 2>/dev/null || true
+            fi
+            (cd $XLRINFRADIR && make -s venv)
+            . $XLRINFRADIR/.venv/bin/activate
         fi
-        (cd $XLRINFRADIR && make -s venv)
-        . $XLRINFRADIR/.venv/bin/activate
         #if [ "$VIRTUAL_ENV" != "$XLRINFRADIR/.venv" ] && ! test -d "$XLRINFRADIR/.venv"; then
         #    ln -sfn "$VIRTUAL_ENV" "$XLRINFRADIR/.venv"
         #fi
