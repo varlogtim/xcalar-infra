@@ -1,5 +1,11 @@
 import requests
 from urllib.parse import urlparse, urlunparse
+from urllib3.exceptions import ConnectTimeoutError, ConnectionError, \
+    InvalidHeader, MaxRetryError, NewConnectionError, TimeoutError, \
+    ReadTimeoutError, InsecureRequestWarning
+from urllib3 import disable_warnings
+from socket import timeout as socketTimeout, gaierror
+disable_warnings(InsecureRequestWarning)
 
 
 def node_status(base_url, time_out=5):
@@ -14,8 +20,12 @@ def node_status(base_url, time_out=5):
             service_resp = \
                 requests.get(urlunparse(service_url),
                              verify=False, timeout=time_out)
-        except (TimeoutError, ConnectionError,
-                ConnectionRefusedError) as e:
+        except (ConnectTimeoutError, ConnectionError, InvalidHeader,
+                MaxRetryError, NewConnectionError, TimeoutError,
+                ConnectionRefusedError, ConnectionResetError,
+                ConnectionAbortedError, socketTimeout, gaierror,
+                ReadTimeoutError, requests.ReadTimeout,
+                requests.ConnectionError) as e:
             return is_running
 
         if not check_struct and service_resp.status_code == 200:
