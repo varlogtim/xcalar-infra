@@ -2,6 +2,7 @@
 
 set -e
 export PERSIST_COVERAGE_ROOT="${PERSIST_COVERAGE_ROOT:-/netstore/qa/coverage}"
+export RUN_COVERAGE="${RUN_COVERAGE:-false}"
 export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$PATH"
 
@@ -19,10 +20,12 @@ set -x
 cluster=`echo $CLUSTER | tr A-Z a-z`
 
 # Collect coverage data if present
-set +e
-stopXcalar "$cluster"
-clusterCollectCoverage "$cluster"
-set -e
+if [ "$RUN_COVERAGE" = "true" ]; then
+    set +e
+    stopXcalar "$cluster"
+    clusterCollectCoverage "$cluster"
+    set -e
+fi
 
 if [ "$LEAVE_ON_FAILURE" = "true" ]; then
     echo "Make sure you delete the cluster once done"

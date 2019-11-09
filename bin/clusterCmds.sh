@@ -340,21 +340,23 @@ clusterCollectCoverage() {
         exit 1
     elif [ "$VmProvider" = "Azure" ]; then
         local host
+        firsthost=true
         for host in $(getNodes "$cluster"); do
             echo "COVERAGE host: $host"
-
+            if $firsthost; then
+                dst_dir=${cvgRoot}/bin
+                mkdir -p $dst_dir
+                echo "COVERAGE binary dst_dir: $dst_dir"
+                scp -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure azureuser@${host}:/opt/xcalar/bin/usrnode $dst_dir
+                firsthost=false
+            fi
             dst_dir=${cvgRoot}/${host}/rawprof
             mkdir -p $dst_dir
             echo "COVERAGE raw profile dst_dir: $dst_dir"
             nodeSsh "$cluster" "$host" "ls -l /var/opt/xcalar/coverage"
             scp -r -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure "azureuser@${host}:/var/opt/xcalar/coverage/*" ${dst_dir}/
-
-            dst_dir=${cvgRoot}/${host}/bin
-            mkdir -p $dst_dir
-            echo "COVERAGE binary dst_dir: $dst_dir"
-            scp -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure azureuser@${host}:/opt/xcalar/bin/usrnode $dst_dir
-
         done
+
     elif [ "$VmProvider" = "Ovirt" ]; then
         echo 2>&1 "clusterCollectCoverage not supported for $VmProvider"
         exit 1
