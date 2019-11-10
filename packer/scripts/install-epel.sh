@@ -10,7 +10,7 @@ supported_version_check(){
         6*) echo "EL 6 is supported" ;;
         7*) echo "EL 7 is supported" ;;
         201*) echo "AMZN 1 is supported" ;;
-        2*) echo "AMZN 2 is supported" ;;
+        2) echo "AMZN 2 is supported" ;;
         *)
             echo "Unsupported OS version ${RELEASE}"
             exit 1
@@ -32,11 +32,16 @@ centos_install_epel(){
     import_epel_key
 }
 
+amazon_install_epel() {
+    case ${RELEASE} in
+        201*) yum -y -q install epel-release || yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-6.noarch.rpm;;
+        2) amazon-linux-extras install -y epel;;
+    esac
+}
+
 rhel_install_epel(){
     # NOTE: Use our repo as a backup because we've seen fedoraproject.org be down
     case ${RELEASE} in
-        201*) yum -y -q install epel-release || yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-6-8.noarch.rpm;;
-        2) amazon-linux-extras install -y epel;;
         6*) yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-6-8.noarch.rpm;;
         7*) yum -y -q install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm || yum localinstall -y -q http://repo.xcalar.net/deps/epel-release-7-9.noarch.rpm;;
     esac
@@ -90,7 +95,7 @@ install_epel() {
             system-release*)
                 echo "detected AMZN ${RELEASE}"
                 supported_version_check
-                rhel_install_epel
+                amazon_install_epel
                 ;;
             *)
                 echo "unknown EL clone"

@@ -7,6 +7,11 @@ set -ex
 export XLRINFRADIR=${XLRINFRADIR:-$PWD}
 export PATH=$XLRINFRADIR/bin:/opt/xcalar/bin:$HOME/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin:$PATH
 export OUTDIR=${OUTDIR:-$PWD/output}
+MANIFEST=$OUTDIR/packer-manifest.json
+export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+
+. infra-sh-lib
+. aws-sh-lib
 
 if [ -n "$JENKINS_URL" ]; then
     if test -e .venv/bin/python2; then
@@ -18,17 +23,18 @@ if [ -n "$JENKINS_URL" ]; then
     fi
 fi
 
-test -d ".venv" || python3 -m venv .venv
+if ! make venv; then
+    make clean
+    make venv
+fi
+
 source .venv/bin/activate
-python3 -m pip install -U pip
+python -m pip install -U pip
 
-pip3 install -U cfn-flip
-pip3 install -U awscli
+python -m pip install -U cfn-flip
+python -m pip install -U awscli
 
-. infra-sh-lib
-. aws-sh-lib
-
-test -d $OUTDIR || mkdir -p $OUTDIR
+test -d "$OUTDIR" || mkdir -p "$OUTDIR"
 
 do_parse_yaml() {
     local yaml="${1:-$OUTDIR/amis.yaml}"
@@ -73,26 +79,60 @@ do_packer() {
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         exit 1
     fi
+    cp packer-manifest.json $MANIFEST
 
-    grep -A5 "${BUILDER}: AMIs were created:" $OUTDIR/output.txt | grep "ami-" | tee $OUTDIR/amis.yaml
-    do_parse_yaml $OUTDIR/amis.yaml
+    rm -f $OUTDIR/amis.yaml
+    local builder
+    for builder in ${BUILDER//,/ }; do
+        grep -A5 "${builder}: AMIs were created:" $OUTDIR/output.txt | grep "ami-" | tee -a $OUTDIR/amis.yaml
+    done
+}
+
+get_ami_from_manifest() {
+    local builder="$1"
+    local package=${2:-packer-manifest.json}
+    local region="${3:-$AWS_DEFAULT_REGION}"
+    local uuid="$4"
+    if [ -z "$uuid" ]; then
+        if ! uuid=$(jq -r ".last_run_uuid" < $package); then
+            return 1
+        fi
+    fi
+    local ami_id
+    if ! ami_id=$(jq -r '.builds[]|select(.name == "'$builder'")|select(.packer_run_uuid == "'$uuid'") .artifact_id' < $package | grep $region); then
+        return 1
+    fi
+    echo "${ami_id#$region:}"
 }
 
 do_upload_template() {
     cd $XLRINFRADIR/aws/cfn
+    do_parse_yaml
     cat > vars/amis.yaml <<-EOF
 	ami_us_east_1: ${AMI_US_EAST_1}
 	ami_us_west_2: ${AMI_US_WEST_2}
 	EOF
-    dc2 upload --project ${PROJECT:-xdp-awsmp} --version ${VERSION} --release ${BUILD_NUMBER} --url-file $OUTDIR/template.url
+	#case "$AWS_DEFAULT_REGION" in
+    #    us-west-2) image_id=${AMI_US_WEST_2};;
+    #    us-east-1)  image_id=${AMI_US_EAST_1};;
+    #    *) die "Unsupported region";;
+    #esac
+
+    local builder osid image_id
+    for builder in ${BUILDER//,/ }; do
+        osid="${builder##*-}"
+        if image_id="$(get_ami_from_manifest ${builder} $OUTDIR/packer-manifest.json)"; then
+            echo "ami_${AWS_DEFAULT_REGION//-/_}: $image_id" > vars/amis.yaml
+            dc2 upload --project ${PROJECT:-xdp-awsmp} --image-id ${image_id} --version ${VERSION} --release ${RELEASE:-$BUILD_NUMBER}-${osid} --url-file $OUTDIR/template-${builder}.url
+        fi
+    done
 }
 
 if [ "${DO_PACKER:-true}" == true ]; then
     do_packer
 else
-    if ! test -e $OUTDIR/amis.yaml; then
-        curl -fsSL ${JOB_URL}/lastSuccessfulBuild/artifact/output/amis.yaml -o $OUTDIR/amis.yaml
+    if ! test -e $MANIFEST; then
+        curl -fsSL ${JOB_URL}/lastSuccessfulBuild/artifact/output/packer-manifest.json -o $MANIFEST
     fi
-    do_parse_yaml $OUTDIR/amis.yaml
 fi
 do_upload_template

@@ -102,6 +102,9 @@ if [ -n "$INSTALLER_URL" ]; then
     rm -v -f "${INSTALLER_FILE}"
 fi
 
+echo >&2 "Setting up cgroups"
+/opt/xcalar/bin/cgconfig-setup.sh
+
 LICENSE_FILE="${XCE_CONFDIR}/XcalarLic.key"
 if [ -z "$LICENSE" ] && [ -n "$LICENSE_URL" ]; then
     set +e

@@ -30,7 +30,7 @@ venv: .updated
 
 $(VIRTUAL_ENV)/bin/pip: $(VIRTUAL_ENV) $(REQUIRES)
 	@echo "Updating virtualenv in $(VIRTUAL_ENV) with packages in $(REQUIRES) ..."
-	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) pip setuptools wheel
+	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools wheel
 	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -r $(REQUIRES) -c $(CONSTRAINTS)
 	@/usr/bin/touch $@
 

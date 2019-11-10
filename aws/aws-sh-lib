@@ -461,6 +461,12 @@ aws_cfn_template_default() {
     esac
 }
 
+# In: StackName, ParameterKey
+# Out: ParameterValue or empty string if it doesn't exist
+aws_cfn_stack_parameter_value() {
+    aws cloudformation describe-stacks --stack-name "$1" --query 'Stacks[].Parameters[?ParameterKey==`'"$2"'`].ParameterValue' --output text
+}
+
 aws_canonical_user_id() {
     aws s3api list-buckets --query 'Owner.ID' --output text
 }

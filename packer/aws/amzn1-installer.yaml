@@ -1,78 +1,27 @@
 ---
 variables:
-  uid: '1000'
-  disk_size: '16'
-  home: '{{env `HOME`}}'
-  device_name: /dev/xvda
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
-  region: '{{env `AWS_DEFAULT_REGION`}}'
-  destination_regions: '{{env `REGIONS`}}'
-  today: '{{isotime "20060102"}}'
-  image_build_number: '1'
-  build_id: '{{env `BUILD_ID`}}'
-  product: xdp-standard
-  product_desc: Xcalar Data Platform
-  installer_url: '{{env `INSTALLER_URL`}}'
+  baseos_owner: '559166403383'
   baseos: 'xdp-base'
-  baseos_owners: '559166403383'
-  shared_with: '{{env `SHARED_WITH` }}'
-  version: '1.0'
+  build_id: '{{env `BUILD_ID`}}'
+  build_number: '{{env `BUILD_NUMBER`}}'
+  destination_regions: '{{env `REGIONS`}}'
+  device_name: /dev/xvda
+  disk_size: '16'
+  home: '{{env `HOME`}}'
+  installer_build_number: '1'
+  installer_url: '{{env `INSTALLER_URL`}}'
+  installer_version: '1.0'
   license: '{{env `LICENSE`}}'
-  build_number: '1'
+  product_desc: Xcalar Data Platform
+  product: xdp-standard
+  region: '{{env `AWS_DEFAULT_REGION`}}'
+  shared_with: '{{env `SHARED_WITH` }}'
   ssh_username: ec2-user
+  today: '{{isotime "20060102"}}'
+  uid: '1000'
 builders:
-  - type: amazon-ebs
-    name: amazon-ebs-amzn1
-    access_key: '{{user `aws_access_key`}}'
-    secret_key: '{{user `aws_secret_key`}}'
-    ssh_keypair_name: 'xcalar-{{user `region`}}'
-    ssh_private_key_file: '{{user `home`}}/.ssh/xcalar-{{user `region`}}.pem'
-    region: '{{user `region`}}'
-    ami_regions: '{{user `destination_regions`}}'
-    ami_users: '{{user `shared_with`}}'
-    source_ami_filter:
-      filters:
-        virtualization-type: hvm
-        root-device-type: ebs
-        block-device-mapping.volume-type: gp2
-        name: '{{user `baseos` }}-{{split build_name "-" 2}}*'
-      owners: '{{user `baseos_owners`}}'
-      most_recent: true
-    instance_type: c5d.xlarge
-    iam_instance_profile: ec2-default
-    ssh_username: '{{user `ssh_username`}}'
-    ssh_pty: true
-    ena_support: true
-    ebs_optimized: true
-    force_deregister: true
-    force_delete_snapshot: true
-    shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `image_build_number`}}'
-    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `version`}}-{{user `build_number`}} ({{user `today`}}-{{user `image_build_number`}}))'
-    snapshot_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}'
-      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
-      Version: '{{user `version`}}'
-      Build: '{{user `build_number`}}'
-      Product: '{{user `product`}}'
-      Today: '{{user `today`}}'
-    tags:
-      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
-      Version: '{{user `version`}}'
-      Build: '{{user `build_number`}}'
-      Product: '{{user `product`}}'
-      Today: '{{user `today`}}'
-    launch_block_device_mappings:
-      - device_name: '{{user `device_name`}}'
-        volume_size: '{{user `disk_size`}}'
-        volume_type: gp2
-        delete_on_termination: true
-    ami_block_device_mappings:
-      - device_name: /dev/sdb
-        virtual_name: ephemeral0
-      - device_name: /dev/sdc
-        virtual_name: ephemeral1
   - type: amazon-ebs
     name: amazon-ebs-amzn2
     access_key: '{{user `aws_access_key`}}'
@@ -87,8 +36,8 @@ builders:
         virtualization-type: hvm
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}-{{split build_name "-" 2}}*'
-      owners: '{{user `baseos_owners`}}'
+        name: '{{user `baseos` }}-{{split build_name "-" 2}}*'
+      owners: '{{user `baseos_owner`}}'
       most_recent: true
     instance_type: c5d.xlarge
     iam_instance_profile: ec2-default
@@ -99,21 +48,78 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}-{{user `image_build_number`}}'
-    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `version`}}-{{user `build_number`}} ({{user `today`}}-{{user `image_build_number`}}))'
+    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
+    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
+    run_tags:
+      Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
     snapshot_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `version`}}-{{user `build_number`}}-{{user `today`}}'
       BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
-      Version: '{{user `version`}}'
-      Build: '{{user `build_number`}}'
+      Version: '{{user `installer_version`}}'
+      Build: '{{user `installer_build_number`}}'
+      ImageBuild: '{{user `build_number`}}'
+      Release: '{{user `release`}}'
       Product: '{{user `product`}}'
-      Today: '{{user `today`}}'
     tags:
       BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
-      Version: '{{user `version`}}'
-      Build: '{{user `build_number`}}'
+      Version: '{{user `installer_version`}}'
+      Build: '{{user `installer_build_number`}}'
+      ImageBuild: '{{user `build_number`}}'
+      Release: '{{user `release`}}'
       Product: '{{user `product`}}'
-      Today: '{{user `today`}}'
+    launch_block_device_mappings:
+      - device_name: '{{user `device_name`}}'
+        volume_size: '{{user `disk_size`}}'
+        volume_type: gp2
+        delete_on_termination: true
+    ami_block_device_mappings:
+      - device_name: /dev/sdb
+        virtual_name: ephemeral0
+      - device_name: /dev/sdc
+        virtual_name: ephemeral1
+  - type: amazon-ebs
+    name: amazon-ebs-amzn1
+    access_key: '{{user `aws_access_key`}}'
+    secret_key: '{{user `aws_secret_key`}}'
+    ssh_keypair_name: 'xcalar-{{user `region`}}'
+    ssh_private_key_file: '{{user `home`}}/.ssh/xcalar-{{user `region`}}.pem'
+    region: '{{user `region`}}'
+    ami_regions: '{{user `destination_regions`}}'
+    ami_users: '{{user `shared_with`}}'
+    source_ami_filter:
+      filters:
+        virtualization-type: hvm
+        root-device-type: ebs
+        block-device-mapping.volume-type: gp2
+        name: '{{user `baseos`}}-{{split build_name "-" 2}}*'
+      owners: '{{user `baseos_owner`}}'
+      most_recent: true
+    instance_type: c5d.xlarge
+    iam_instance_profile: ec2-default
+    ssh_username: '{{user `ssh_username`}}'
+    ssh_pty: true
+    ena_support: true
+    ebs_optimized: true
+    force_deregister: true
+    force_delete_snapshot: true
+    shutdown_behavior: terminate
+    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
+    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
+    run_tags:
+      Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
+    snapshot_tags:
+      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
+      Version: '{{user `installer_version`}}'
+      Build: '{{user `installer_build_number`}}'
+      ImageBuild: '{{user `build_number`}}'
+      Release: '{{user `release`}}'
+      Product: '{{user `product`}}'
+    tags:
+      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
+      Version: '{{user `installer_version`}}'
+      Build: '{{user `installer_build_number`}}'
+      ImageBuild: '{{user `build_number`}}'
+      Release: '{{user `release`}}'
+      Product: '{{user `product`}}'
     launch_block_device_mappings:
       - device_name: '{{user `device_name`}}'
         volume_size: '{{user `disk_size`}}'
@@ -149,3 +155,5 @@ provisioners:
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
       - '{{ template_dir }}/../scripts/finish.sh'
+post-processors:
+  - type: manifest

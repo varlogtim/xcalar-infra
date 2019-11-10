@@ -6,6 +6,8 @@ echo >&2 "Starting user-data.sh"
 
 set -x
 LOGFILE=/var/log/user-data.log
+SHARED_CONFIG=false
+CGROUPS_ENABLED=false
 touch $LOGFILE
 chmod 0600 $LOGFILE
 if [ -t 1 ]; then
@@ -193,11 +195,13 @@ node_0() {
     (
     # We don't want the sensitive parts in the log
     set +x
-    /opt/xcalar/scripts/genDefaultAdmin.sh \
-        --username "${ADMIN_USERNAME}" \
-        --email "${ADMIN_EMAIL:-info@xcalar.com}" \
-        --password "${ADMIN_PASSWORD}" > /tmp/defaultAdmin.json \
+    if [ -n "${ADMIN_USERNAME}" ] && [ -n "${ADMIN_PASSWORD}" ]; then
+        /opt/xcalar/scripts/genDefaultAdmin.sh \
+            --username "${ADMIN_USERNAME}" \
+            --email "${ADMIN_EMAIL:-info@xcalar.com}" \
+            --password "${ADMIN_PASSWORD}" > /tmp/defaultAdmin.json \
         && mv /tmp/defaultAdmin.json $XLRROOT/config/defaultAdmin.json
+    fi
     chmod 0700 $XLRROOT/config
     chmod 0600 $XLRROOT/config/defaultAdmin.json
     if [ -n "$CERTSTORE" ]; then
@@ -211,8 +215,11 @@ node_0() {
         sed --follow-symlinks -i.bak "s@tls .*\$@tls $CERT $KEY@g" /etc/xcalar/Caddyfile
     fi
     )
-    mv $XCE_CONFIG $XLRROOT/default.cfg
-    chown -R xcalar:xcalar $XLRROOT
+    if [[ $SHARED_CONFIG = true ]]; then
+        mv $XCE_CONFIG $XLRROOT/default.cfg
+    fi
+
+    chown -R xcalar:xcalar $XLRROOT/
     pidof caddy >/dev/null && kill -USR1 $(pidof caddy) || true
 }
 
@@ -276,14 +283,6 @@ main() {
                 PREFIX="$1"
                 shift
                 ;;
-            --logbucket)
-                LOGBUCKET="$1"
-                shift
-                ;;
-            --logprefix)
-                LOGPREFIX="$1"
-                shift
-                ;;
             --cluster-size)
                 CLUSTER_SIZE="$1"
                 shift
@@ -328,6 +327,10 @@ main() {
                 CGROUPS_ENABLED="$1"
                 shift
                 ;;
+            --shared-config)
+                SHARED_CONFIG="$1"
+                shift
+                ;;
             *)
                 echo >&2 "WARNING: Unknown command $cmd"
                 ;;
@@ -335,13 +338,18 @@ main() {
     done
     set -x
 
+    VERSION=$(rpm -q xcalar --qf '%{VERSION}' | sed 's/\.//g')
+    BUILD_NUMBER=$(rpm -q xcalar --qf '%{RELEASE}' | sed -r 's/\..*$//')
+    if [ "$CGROUPS_ENABLED" = true ]; then
+        if [[ ${VERSION} -lt 203 ]] || [[ $VERSION -eq 210 ]] || [[ $BUILD_NUMBER -lt 3499 ]]; then
+            CGROUPS_ENABLED=false
+        fi
+    fi
+
     CLUSTER_SIZE=${CLUSTER_SIZE:-1}
 
     if [ -z "$XCE_CONFIG" ] || ! test -f "$XCE_CONFIG"; then
         XCE_CONFIG=/etc/xcalar/default.cfg
-        XCE_DEFAULT_CONFIG=1
-    else
-        XCE_DEFAULT_CONFIG=0
     fi
 
     XCE_TEMPLATE=${XCE_TEMPLATE:-/etc/xcalar/template.cfg}
@@ -440,7 +448,7 @@ main() {
                 TAG_VALUE="$CLUSTERNAME"
                 ;;
             Name)
-                TAG_VALUE="$NAME"
+                TAG_VALUE="${NAME%-[0-9]*}*"
                 ;;
             *)
                 echo >&2 "WARNING: Unrecognized clustering tag: TAG_KEY=$TAG_KEY"
@@ -460,7 +468,7 @@ main() {
             TAG_VALUE="$CLUSTERNAME"
         elif [ -n "$NAME" ]; then
             TAG_KEY=Name
-            TAG_VALUE=$NAME
+            TAG_VALUE="${NAME%-[0-9]*}*"
         else
             echo >&2 "No valid tags found"
         fi
@@ -498,11 +506,13 @@ main() {
         NODE_ID=0
     fi
 
+    stop_cluster
+
     MOUNT_OK=false
     XLRROOT=/var/opt/xcalar
     if [ -n "$NFSMOUNT" ]; then
-        mkdir -p /mnt/xcalar
-        if mount_xlrroot $NFSHOST:/${NFSDIR:-cluster/$CLUSTER_NAME} /mnt/xcalar; then
+        test -d /mnt/xcalar || mkdir -p /mnt/xcalar
+        if mountpoint -q /mnt/xcalar || mount_xlrroot $NFSHOST:/${NFSDIR:-cluster/$CLUSTER_NAME} /mnt/xcalar; then
             MOUNT_OK=true
             XLRROOT=/mnt/xcalar
         fi
@@ -516,8 +526,11 @@ main() {
             && mv ${XCE_TEMPLATE}.tmp ${XCE_TEMPLATE}
     fi
 
-    if test -L $XCE_CONFIG; then
-        rm $XCE_CONFIG
+
+    if [[ $SHARED_CONFIG = true ]]; then
+        if test -L $XCE_CONFIG; then
+            rm $XCE_CONFIG
+        fi
     fi
 
     /opt/xcalar/scripts/genConfig.sh ${XCE_TEMPLATE} - "${IPS[@]}" | sed 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='${XLRROOT}'@g' | tee $XCE_CONFIG
@@ -527,28 +540,26 @@ main() {
     cluster_ips
 
     aws ec2 create-tags --resources $INSTANCE_ID \
-        --tags Key=Name,Value="${AWS_CLOUDFORMATION_STACK_NAME}-${NODE_ID}"
+        --tags Key=Name,Value="${AWS_CLOUDFORMATION_STACK_NAME}-${NODE_ID}" \
+               Key=Node_ID,Value=$NODE_ID \
+               Key=Build,Value=$BUILD_NUMBER \
+               Key=Version,Value=$VERSION
 
     # Special node0 processing
     if [ $NODE_ID -eq 0 ]; then
         node_0
     fi
 
-    until test -e $XLRROOT/default.cfg; do
-        echo >&2 "Waiting for $XLRROOT/default.cfg ..."
-        sleep 1
-    done
-    test -e $XCE_CONFIG && mv $XCE_CONFIG ${XCE_CONFIG}.bak.$$ || true
-    ln -sfn $XLRROOT/default.cfg $XCE_CONFIG
-
-    if ((SYSTEMD)); then
-        systemctl daemon-reload
-        systemctl stop xcalar || true
-        systemctl start xcalar.service
-    else
-        /etc/init.d/xcalar stop-supervisor || true
-        /etc/init.d/xcalar start
+    if [[ $SHARED_CONFIG = true ]]; then
+        until test -e $XLRROOT/default.cfg; do
+            echo >&2 "Waiting for $XLRROOT/default.cfg ..."
+            sleep 1
+        done
+        test -e $XCE_CONFIG && mv $XCE_CONFIG ${XCE_CONFIG}.bak.$$ || true
+        ln -sfn $XLRROOT/default.cfg $XCE_CONFIG
     fi
+
+    start_cluster
     rc=$?
 
     if [ $rc -ne 0 ]; then
@@ -563,7 +574,6 @@ main() {
     fi
 
     echo >&2 "All done with user-data.sh"
-    exit 0
 }
 
 main "$@"

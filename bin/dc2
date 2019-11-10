@@ -29,7 +29,7 @@ EOF
 
 dc2_upload_help() {
     cat << EOF
-    usage: dc2 upload --project PROJECT [--version VERSION] [--release|-r RELEASE]
+    usage: dc2 upload --project PROJECT [--osid OSID] [--version VERSION] [--release|-r RELEASE]
               [--environment|-e ENVIRONMENT]
               [--flavors FLAVORS What flavors to build (eg, default,withvpc)]
               [--dry-run] [--force] [--debug] [--render]
@@ -186,6 +186,10 @@ dc2_parse_common() {
             NAME="$1"
             echo 2
             ;;
+        --image-id)
+            IMAGE_ID="$1"
+            echo 2
+            ;;
         --force) FORCE=1 ;;
         --quiet | -q) QUIET=1 ;;
         --create) MODE=create ;;
@@ -303,15 +307,6 @@ dc2_upload() {
     test -n "${VERSION:-}" || VERSION=$(cat $PORJECT/VERSION) || die "Need to set --version"
     PROJDIR="${TEMPLATEDIR}/${PROJECT}"
     CONTEXT="${ENVIRONMENT}/${PROJECT}/${VERSION}"
-    if test -z "${RELEASE:-}"; then
-        if [ -n "${BUILD_NUMBER:-}" ]; then
-            RELEASE="${BUILD_NUMBER}"
-        else
-            RELEASE=1
-        fi
-        #RELEASE=$(consul kv get "$CONTEXT/next") || RELEASE=1
-        #consul kv put $CONTEXT/next $((RELEASE + 1))
-    fi
     test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
 
     GENDIR="$TMPDIR"/gen
@@ -356,18 +351,23 @@ dc2_upload() {
 
     local -a urls=() quick_urls=()
     test -n "${URL_FILE:-}" && rm -f "${URL_FILE}" || true
-    local ami_id=$(cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | cfn-flip | jq -r '.ami_us_west_2')
-    debug "Found AMI: $ami_id"
-    if [ "$ami_id" = null ] || test -z "$ami_id" ; then
-        xcalar_latest
-        ami_id=$(aws --region us-west-2 ec2 describe-images --owners self --filters \
-            Name=tag:Version,Values=${VERSION} \
-            Name=tag:BaseOS,Values='XDP-AMZN1-BASE' \
-            Name=name,Values='xdp-*' | aws_format_images | head -1 | awk '{print $2}')
-        if [ $? -ne 0 ]; then
-            die "Failed to find valid AMI"
+    local ami_id
+    if [ -n "${IMAGE_ID:-}" ]; then
+        ami_id="$IMAGE_ID"
+    else
+        ami_id=$(cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | cfn-flip | jq -r '.ami_us_west_2')
+        debug "Found AMI: $ami_id"
+        if [ "$ami_id" = null ] || test -z "$ami_id" ; then
+            xcalar_latest
+            ami_id=$(aws ec2 describe-images --owners self --filters \
+                Name=tag:Version,Values=${VERSION} \
+                Name=tag:BaseOS,Values="*${osid}*" \
+                Name=name,Values='xdp-*' | aws_format_images | head -1 | awk '{print $2}')
+            if [ $? -ne 0 ]; then
+                die "Failed to find valid AMI"
+            fi
+            debug "Found New AMI: $ami_id"
         fi
-        debug "Found New AMI: $ami_id"
     fi
     aws ec2 describe-images --region us-west-2 --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TEMPLATEDIR"/vars/image.yaml
     for J2TEMPLATE in "$PROJDIR"/*.j2; do
@@ -385,7 +385,7 @@ dc2_upload() {
 
             local templateJson=${GENDIR}/${TEMPLATEOUT}.json
             # shellcheck disable=SC2002
-            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "templateUrl=$templateUrl" "$J2TEMPLATE" | tee ${TMPDIR}/${TEMPLATEOUT}.yaml | cfn-flip > "$templateJson"; then
+            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" | tee ${TMPDIR}/${TEMPLATEOUT}.yaml | cfn-flip > "$templateJson"; then
                 die "Failed to apply jinja template $templateJson"
             fi
             local templateMd5

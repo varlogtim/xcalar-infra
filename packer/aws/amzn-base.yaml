@@ -1,22 +1,20 @@
 ---
 variables:
-  uid: '1000'
-  disk_size: '8'
-  device_name: /dev/xvda
-  baseos: 'amzn-ami'
-  baseos_owner: '137112412989'
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
-  region: '{{env `AWS_DEFAULT_REGION`}}'
-  destination_regions: 'us-east-1,us-west-2'
-  today: '{{isotime "20060102"}}'
-  image_build_number: '1'
-  product: xdp-base
-  product_desc: Xcalar Base Image
-  description: Xcalar Base Image
+  baseos: 'amzn-ami'
+  baseos_owner: '137112412989'
   build_number: '{{env `BUILD_NUMBER`}}'
+  description: Xcalar Base Image
+  destination_regions: '{{env `REGIONS`}}'
+  device_name: /dev/xvda
+  disk_size: '8'
+  product: xdp-base
+  region: '{{env `AWS_DEFAULT_REGION`}}'
+  shared_with: '{{env `SHARED_WITH`}}'
   ssh_username: ec2-user
-  shared_with: '045297022527,043829555035,364047378361,876030232190'
+  today: '{{isotime "20060102"}}'
+  uid: '1000'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-amzn1
@@ -33,7 +31,7 @@ builders:
         architecture: 'x86_64'
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}*'
+        name: 'amzn-ami-*'
       owners: '{{user `baseos_owner`}}'
       most_recent: true
     instance_type: c5d.xlarge
@@ -45,27 +43,25 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}-{{user `build_number`}}'
-    ami_description: 'Xcalar AmazonLinux Base Image ({{user `today`}}-{{user `build_number`}})'
+    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
+    ami_description: 'Xcalar AmazonLinux1 Base Image {{user `today`}}'
     run_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}-{{user `build_number`}}'
+      Name: 'Packer build {{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
     snapshot_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}-{{user `build_number`}}'
+      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
       BaseAMI: '{{.SourceAMI}}'
       BaseOS: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
       Version: '{{split .SourceAMIName "-" 3}}'
-      Build: '{{user `build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
     tags:
-      AMIName: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}-{{user `build_number`}}'
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}-{{user `build_number`}}'
+      AMIName: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
+      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
       BaseAMI: '{{.SourceAMI}}'
       BaseOS: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
       Version: '{{split .SourceAMIName "-" 3}}'
-      Build: '{{user `build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
     launch_block_device_mappings:
@@ -93,7 +89,7 @@ builders:
         architecture: 'x86_64'
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}*'
+        name: 'amzn2-ami-*'
       owners: '{{user `baseos_owner`}}'
       most_recent: true
     instance_type: c5d.xlarge
@@ -105,27 +101,25 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}-{{user `build_number`}}'
-    ami_description: 'Xcalar AmazonLinux Base Image ({{user `today`}}-{{user `build_number`}})'
+    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
+    ami_description: 'Xcalar AmazonLinux2 Base Image {{user `today`}}'
     run_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}-{{user `build_number`}}'
+      Name: 'Packer build {{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
     snapshot_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}-{{user `build_number`}}'
+      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
       BaseAMI: '{{.SourceAMI}}'
       BaseOS: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
       Version: '{{split .SourceAMIName "-" 3}}'
-      Build: '{{user `build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
     tags:
-      AMIName: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}-{{user `build_number`}}'
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}-{{user `build_number`}}'
+      AMIName: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
+      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
       BaseAMI: '{{.SourceAMI}}'
       BaseOS: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
       Version: '{{split .SourceAMIName "-" 3}}'
-      Build: '{{user `build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
     launch_block_device_mappings:
@@ -158,8 +152,16 @@ provisioners:
       - chown root:root /tmp/aws-verify.sh
       - mv /tmp/aws-verify.sh /usr/bin/
   - type: shell
+    expect_disconnect: true
     environment_vars:
       - OSID={{split build_name "-" 2}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
+    inline:
+      - reboot -h now
+  - type: shell
+    environment_vars:
+      - OSID={{split build_name "-" 2}}
+    execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
+    pause_before: "1m"
     scripts:
       - '{{ template_dir }}/../scripts/finish.sh'

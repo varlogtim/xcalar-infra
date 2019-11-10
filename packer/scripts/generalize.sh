@@ -114,8 +114,9 @@ if have_package puppet-agent; then
     else
         svc_cmd disable puppet
     fi
-    rm -v -rf ${ROOTFS}/etc/puppetlabs/puppet/ssl ${ROOTFS}/etc/puppetlabs/code
+    rm -rf ${ROOTFS}/etc/puppetlabs/puppet/ssl ${ROOTFS}/etc/puppetlabs/code
     sed -i '/certname/d' ${ROOTFS}/etc/puppetlabs/puppet/puppet.conf
+    sed -i '/server/d' /etc/puppetlabs/puppet/puppet.conf
 fi
 
 if have_package collectd; then
@@ -168,7 +169,7 @@ if have_program consul; then
     svc_cmd stop consul
     svc_cmd disable consul
     rm -rf ${ROOTFS}/var/lib/consul/*
-    rm -rf ${ROOTFS}/etc/consul.d/*
+    rm -rfv ${ROOTFS}/etc/consul.d/*
 fi
 
 if have_program caddy; then
@@ -180,11 +181,11 @@ if have_program nomad; then
     svc_cmd stop nomad
     svc_cmd disable nomad
     rm -rf ${ROOTFS}/var/lib/nomad/*
-    rm -rfv ${ROOTFS}/var/lib/nomad/*
+    rm -rfv ${ROOTFS}/etc/nomad.d/*
 fi
 
 if ((DEPROVISION_NETWORK)); then
-    cat >/etc/sysconfig/network <<-EOF
+    cat >${ROOTFS}/etc/sysconfig/network <<-EOF
 	NETWORKING=yes
 	ONBOOT=yes
 	BOOTPROTO=dhcp
@@ -192,7 +193,7 @@ if ((DEPROVISION_NETWORK)); then
 
     rm -v -f ${ROOTFS}/etc/sysconfig/network-scripts/ifcfg-e*
 
-    cat >/etc/sysconfig/network-scripts/ifcfg-eth0 <<-EOF
+    cat >${ROOTFS}/etc/sysconfig/network-scripts/ifcfg-eth0 <<-EOF
 	DEVICE=eth0
 	NAME=eth0
 	ONBOOT=yes
@@ -248,5 +249,7 @@ if ((DEPROVISION_NETWORK)); then
         hostname 'localhost.localdomain'
     fi
 fi
+export HISTFILESIZE=0
+export HISTSIZE=0
 
 exit 0

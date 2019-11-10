@@ -427,6 +427,14 @@ version_build_from_filename() {
     grep -Eow '[0-9\.-]+' <<< "$1" | tr - ' '
 }
 
+build_type_from_installer_path() {
+    case "$1" in
+        */prod/*) echo "prod";;
+        */debug/*) echo "debug";;
+        *) echo "unknown";;
+    esac
+}
+
 dimages_list() {
     docker images --format '{{.Size}}\t{{.ID}}\t{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}} {{.CreatedSince}}'   | sort -h | column -t
 }

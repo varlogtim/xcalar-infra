@@ -40,6 +40,10 @@ Resources:
       ContentUri: lib/
       CompatibleRuntimes:
         - python3.6
+  SQSIn:
+    Type: AWS::SQS::Queue
+  SQSOut:
+    Type: AWS::SQS::Queue
   ClusterFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -49,6 +53,11 @@ Resources:
       Layers:
         - !Ref LibLayer
       Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SQSIn.Arn
+            BatchSize: 1
         StartCluster:
           Type: Api
           Properties:
@@ -94,6 +103,12 @@ Resources:
           DOMAIN:
               Ref: Domain
       Policies:
+        - SQSPollerPolicy:
+            QueueName:
+              !GetAtt SQSIn.QueueName
+        - SQSSendMessagePolicy:
+            QueueName:
+              !GetAtt SQSOut.QueueName
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -137,6 +152,10 @@ Resources:
             - Effect: Allow
               Action:
                 - ec2:DescribeInstances
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - cognito-identity:GetCredentialsForIdentity
               Resource: '*'
             - Effect: Allow
               Action:
@@ -359,6 +378,12 @@ Outputs:
   SaaSApi:
     Description: API Gateway endpoint URL for Prod stage for SaaS function
     Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/v1/'
+  SQSIn:
+    Description: Queue of incoming work
+    Value: !GetAtt 'SQSIn.Arn'
+  SQSOut:
+    Description: Queue of finished work
+    Value: !GetAtt 'SQSOut.Arn'
   ClusterFunction:
     Description: Cluster Lambda Function ARN
     Value: !GetAtt 'ClusterFunction.Arn'

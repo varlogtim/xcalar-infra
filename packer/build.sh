@@ -15,10 +15,11 @@ packer_do() {
     fi
     $PACKER $cmd \
         -var "product=$PRODUCT" \
-        -var "version=$INSTALLER_VERSION" \
-        -var "build_number=$INSTALLER_BUILD_NUMBER" \
-        -var "image_build_number=$IMAGE_BUILD_NUMBER" \
+        -var "installer_version=$INSTALLER_VERSION" \
+        -var "installer_build_number=$INSTALLER_BUILD_NUMBER" \
+        -var "build_number=$BUILD_NUMBER" \
         -var "installer_url=$INSTALLER_URL" \
+        ${RELEASE+-var "release=$RELEASE"} \
         ${REGIONS+-var "destination_regions=$REGIONS"} \
         ${SHARED_WITH+-var "shared_with=$SHARED_WITH"} \
         ${BUILD_URL+-var "build_url=$BUILD_URL"} \
@@ -36,6 +37,7 @@ check_or_upload_installer() {
     fi
 
     if [[ "$INSTALLER_URL" =~ ^http ]]; then
+        local URL_CODE
         if URL_CODE=$(curl -f -s -o /dev/null -w '%{http_code}' -H "Range: bytes=0-500" -L "$INSTALLER_URL"); then
             if ! [[ $URL_CODE =~ ^2 ]]; then
                 echo >&2 "InstallerURL failed! $INSTALLER_URL not found!"
@@ -56,7 +58,7 @@ check_or_upload_installer() {
 main() {
     PROVIDER=aws
     SHARED_WITH="${SHARED_WITH-045297022527,043829555035,364047378361,876030232190}"
-    REGIONS="${REGIONS-us-east-1,us-west-2}"
+    REGIONS="${REGIONS-us-west-2}"
 
     while [ $# -gt 0 ]; do
         cmd="$1"
@@ -127,7 +129,6 @@ main() {
         INSTALLER_URL="$(installer-url.sh -d s3 "$INSTALLER")"
     fi
 
-    IMAGE_BUILD_NUMBER=${BUILD_NUMBER:-1}
     PRODUCT="${PRODUCT:-xdp-standard}"
 
     INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
@@ -135,7 +136,7 @@ main() {
     INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
 
     set +e
-    if ! packer_do validate ${*/-color=*/} "$JSON_TEMPLATE" || ! packer_do build $* "$JSON_TEMPLATE"; then
+    if ! packer_do validate ${*/-color=*/} "$JSON_TEMPLATE" || ! packer_do build "$@" "$JSON_TEMPLATE"; then
         trap - EXIT
         echo "Failed! See $TMPDIR"
         exit 1

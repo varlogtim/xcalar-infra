@@ -13,6 +13,7 @@ truncate -s 0 /var/log/secure /var/log/messages /var/log/dmesg /var/log/audit/au
 
 rm -fv /var/log/startupscript.log /var/log/dmesg.old /var/log/cfn-* /var/log/cloud-init* /var/log/user-data*
 rm -fv /etc/hostname /root/.bash_history /home/*/.bash_history
+rm -rf $HOME/.cache /root/.cache
 if [[ "$PACKER_BUILDER_TYPE" =~ amazon ]] || [[ "$PACKER_BUILDER_TYPE" =~ azure ]]; then
     echo >&2 "Detected PACKER_BUILDER_TYPE=$PACKER_BUILDER_TYPE, deleting authorized_keys"
     rm -fv /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
