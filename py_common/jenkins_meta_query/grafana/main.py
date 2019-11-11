@@ -97,7 +97,8 @@ def _by_fail_pct(elem):
 def _all_jobs_table(*, from_ms, to_ms):
 
     columns = [
-        {"text":"Test Name", "type":"string"},
+        {"text":"Job Name", "type":"string"},
+        {"text":"More", "type":"string"},
         {"text":"Pass Count", "type":"number"},
         {"text":"Pass Avg. Duration (s)", "type":"number"},
         {"text":"Fail Count", "type":"number"},
@@ -110,12 +111,19 @@ def _all_jobs_table(*, from_ms, to_ms):
     query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
                       {'start_time_ms':{'$lt': to_ms}}]}
 
-    for job in jmq_client.job_names():
-        resp = jmq_client.find_builds(job_name = job,
-                                      query = query,
-                                      verbose = True)
+    for info in jmq_client.job_info():
+        job_name = info.get('job_name')
+        job_ref = ""
+        try:
+            job_ref = "<a href={}>here</a>".format(info.get('job_url'))
+        except Exception as e:
+            pass
+
+        resp = jmq_client.find_builds(job_name=job_name,
+                                      query=query,
+                                      verbose=True)
         if not resp:
-            logger.info("no builds found for job {}".format(job))
+            logger.info("no builds found for job {}".format(job_name))
             continue
 
         pass_cnt = 0
@@ -146,8 +154,10 @@ def _all_jobs_table(*, from_ms, to_ms):
         total = pass_cnt + fail_cnt
         if total:
             fail_pct = (fail_cnt*100)/(pass_cnt + fail_cnt)
-        rows.append([job, pass_cnt, pass_avg_duration_s,
-                     fail_cnt, fail_avg_duration_s, abort_cnt, fail_pct])
+        rows.append([job_name, job_ref,
+                     pass_cnt, pass_avg_duration_s,
+                     fail_cnt, fail_avg_duration_s,
+                     abort_cnt, fail_pct])
 
     return [{"columns": columns, "rows": rows, "type" : "table"}]
 
@@ -169,6 +179,7 @@ def _job_table(*, job_name, parameter_names, from_ms, to_ms):
     rows = []
     columns = [
         {"text":"Build No.", "type":"string"},
+        {"text":"More", "type":"string"},
         {"text":"Start Time", "type":"time"},
         {"text":"Duration (s)", "type":"time"},
         {"text":"Built On", "type": "string"},
@@ -176,7 +187,6 @@ def _job_table(*, job_name, parameter_names, from_ms, to_ms):
     ]
     for name in parameter_names:
         columns.append({"text": name, "type":"string"})
-
 
     query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
                       {'start_time_ms':{'$lt': to_ms}}]}
@@ -187,7 +197,13 @@ def _job_table(*, job_name, parameter_names, from_ms, to_ms):
 
     for bnum,item in resp.items():
         duration_s = int(item.get('duration_ms', 0)/1000)
+        build_ref = ""
+        try:
+            build_ref = "<a href={}>here</a>".format(item.get('build_url'))
+        except Exception as e:
+            pass
         vals = [int(bnum),
+                build_ref,
                 item.get('start_time_ms', 0),
                 duration_s,
                 item.get('built_on', 'unknown'),

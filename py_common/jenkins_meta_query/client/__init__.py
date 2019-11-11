@@ -42,8 +42,21 @@ class JMQClient(object):
         return response.json()
 
     def job_names(self):
-        resp = self._cmd(uri = '/jenkins_job_names')
-        return sorted(resp.get('job_names', []))
+        resp = self._cmd(uri = '/jenkins_jobs')
+        names = []
+        for item in resp.get('jobs'):
+            names.append(item.get('job_name'))
+        return sorted(names)
+
+    def job_info(self):
+
+        def _sortkey(x):
+            return x['job_name']
+
+        resp = self._cmd(uri = '/jenkins_jobs')
+        self.logger.info("XXX: {}".format(resp))
+        jobs = resp.get('jobs', [])
+        return sorted(jobs, key=_sortkey)
 
     def parameter_names(self, *, job_name):
         params = {'job_name': job_name}
@@ -72,6 +85,16 @@ if __name__ == '__main__':
     import pprint
     print("Compile check, A-OK!")
 
+    cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.DEBUG}})
+
+    # It's log, it's log... :)
+    logging.basicConfig(
+                level=cfg.get('LOG_LEVEL'),
+                format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
+                handlers=[logging.StreamHandler()])
+    logger = logging.getLogger(__name__)
+
     client = JMQClient(host='cvraman3.int.xcalar.com', port=4000)
     print(pprint.pformat(client.downstream(job_name="DailyTests-Trunk", bnum=144)))
     print(pprint.pformat(client.parameter_names(job_name="DailyTests-Trunk")))
+    print(pprint.pformat(client.job_info()))

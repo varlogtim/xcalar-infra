@@ -10,6 +10,7 @@
 import datetime
 import logging
 import os
+import pprint
 import pytz
 import random
 import re
@@ -43,7 +44,8 @@ app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
-jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
+jenkins_host = cfg.get('JENKINS_HOST')
+jmdb = JenkinsMongoDB(jenkins_host=jenkins_host)
 jdb = jmdb.jenkins_db()
 
 methods=['GET']
@@ -55,11 +57,16 @@ def test_connection():
     """
     return "Connection check A-OK!"
 
-@app.route('/jenkins_job_names', methods=methods)
+@app.route('/jenkins_jobs', methods=methods)
 @cross_origin()
-def jenkins_job_names():
-    names = [n for n in jdb.db.collection_names() if not n.endswith('_meta') and not n.startswith('_')]
-    return make_response(jsonify({'job_names':names}))
+def jenkins_jobs():
+    jobs = []
+    for job_name in jdb.db.collection_names():
+        if job_name.startswith('_') or job_name.endswith('_meta'):
+            continue
+        jobs.append({'job_name': job_name,
+                     'job_url': "http://{}/job/{}".format(jenkins_host, job_name)})
+    return make_response(jsonify({'jobs': jobs}))
 
 def _get_upstream(*, job_name, build_number):
     upstream = []
@@ -147,6 +154,8 @@ def jenkins_find_builds():
         if proj:
             args['projection'] = proj
         for doc in jdb.db[job_name].find(query, **args):
+            logger.debug('doc: {}'.format(pprint.pformat(doc)))
+            doc['build_url'] = "http://{}/job/{}/{}/".format(jenkins_host, job_name, doc['_id'])
             found[doc['_id']] = doc
         return make_response(jsonify(found))
     except Exception as e:
@@ -184,4 +193,4 @@ def jenkins_job_parameters():
     return make_response(jsonify({"parameter_names":parameter_names}))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=4000, debug=True)
+    app.run(host='0.0.0.0', port=3005, debug=True)
