@@ -310,9 +310,10 @@ setup_swap() {
     swapon -a
 }
 
-if test -b /dev/sdc; then
-    setup_swap /dev/sdc
-fi
+# Don't swap to HDD
+#if test -b /dev/sdc; then
+#    setup_swap /dev/sdc
+#fi
 
 
 # The root parition is not resized by default on Azure. Handy symlink provided
