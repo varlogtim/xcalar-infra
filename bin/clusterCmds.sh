@@ -350,11 +350,12 @@ clusterCollectCoverage() {
                 scp -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure azureuser@${host}:/opt/xcalar/bin/usrnode $dst_dir
                 firsthost=false
             fi
-            dst_dir=${cvgRoot}/${host}/rawprof
+            dst_dir=${cvgRoot}/${host}
             mkdir -p $dst_dir
             echo "COVERAGE raw profile dst_dir: $dst_dir"
             nodeSsh "$cluster" "$host" "ls -l /var/opt/xcalar/coverage"
-            scp -r -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure "azureuser@${host}:/var/opt/xcalar/coverage/*" ${dst_dir}/
+            nodeSsh "$cluster" "$host" "mv /var/opt/xcalar/coverage /var/opt/xcalar/rawprof"
+            scp -r -B -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_azure "azureuser@${host}:/var/opt/xcalar/rawprof" ${dst_dir}/
         done
 
     elif [ "$VmProvider" = "Ovirt" ]; then
