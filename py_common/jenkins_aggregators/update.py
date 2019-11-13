@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 import json
 import logging
 import os
+import pprint
 from pymongo.errors import DuplicateKeyError
 from pymongo import ReturnDocument
 import re
@@ -75,7 +76,7 @@ class JenkinsJobAggregators(object):
         self.alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
         self.japi = JenkinsApi(jenkins_host=jenkins_host)
 
-    def _update_build(self, *, bnum):
+    def _update_build(self, *, bnum, test_mode=False):
         """
         Call all aggregators on the build.  Consolidate results
         and store to the DB.  All or nothing.  All aggregators
@@ -83,13 +84,14 @@ class JenkinsJobAggregators(object):
         future (if allowed).
         """
         self.logger.info("process bnum: {}".format(bnum))
+
         # Already have a data entry?
-        if self.job_data_coll.get_data(bnum=bnum) is not None:
+        if not test_mode and self.job_data_coll.get_data(bnum=bnum) is not None:
             self.logger.debug("already seen, skipping...")
             return
 
         # Waiting for retry timeout?
-        if self.job_meta_coll.retry_pending(bnum=bnum):
+        if not test_mode and self.job_meta_coll.retry_pending(bnum=bnum):
             self.logger.debug("retry pending, skipping...")
             return
 
@@ -104,6 +106,8 @@ class JenkinsJobAggregators(object):
 
         except Exception as e:
             self.logger.exception("exception processing bnum: {}".format(bnum))
+            if test_mode:
+                return
             if not self.job_meta_coll.schedule_retry(bnum=bnum):
                 self.job_data_coll.store_data(bnum=bnum, data=None)
             return
@@ -129,6 +133,8 @@ class JenkinsJobAggregators(object):
                 console_log = jbi.console()
             except Exception as e:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
+                if test_mode:
+                    return
                 if not self.job_meta_coll.schedule_retry(bnum=bnum):
                     self.job_data_coll.store_data(bnum=bnum, data=None)
                 return
@@ -147,6 +153,8 @@ class JenkinsJobAggregators(object):
                 # while trying to gather build information. 
                 # Bail, and try again in a bit (if we can).
                 self.logger.exception("exception processing bnum: {}".format(bnum))
+                if test_mode:
+                    return
                 if not self.job_meta_coll.schedule_retry(bnum=bnum):
                     self.job_data_coll.store_data(bnum=bnum, data=None)
                 return
@@ -159,11 +167,15 @@ class JenkinsJobAggregators(object):
         if not merged_data:
             self.logger.debug("no data")
             # Make an entry indicating there are no data for this build.
+            if test_mode:
+                return
             self.job_data_coll.store_data(bnum=bnum, data=None)
             return
 
         self.logger.debug("store/index data")
-        self.logger.debug(merged_data)
+        self.logger.debug(pprint.pformat(merged_data))
+        if test_mode:
+            return
         # index_data may side-effect merged_data by extracting "private" stuff
         # (e.g. "commands" like "_add_to_meta_list") so call it first!
         #
@@ -175,8 +187,13 @@ class JenkinsJobAggregators(object):
         self.job_data_coll.store_data(bnum=bnum, data=merged_data)
         self.alljob_idx.index_data(job_name=self.job_name, bnum=bnum, data=merged_data)
 
-    def update_builds(self):
+    def update_builds(self, *, test_build=None):
         self.logger.info("start")
+
+        if test_build:
+            self.logger.info("test mode bnum: {}".format(test_build))
+            self._update_build(bnum=test_build, test_mode=True)
+            return
 
         completed_builds = set(self.job_data_coll.all_builds())
         self.logger.debug("completed builds: {}".format(completed_builds))
@@ -201,6 +218,17 @@ logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
+
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--test_job", help="test mode job name", required=False)
+parser.add_argument("--test_build", help="test mode build number", required=False)
+args = parser.parse_args()
+
+if args.test_job or args.test_build:
+    if not (args.test_job and args.test_build):
+        raise ValueError("both test_job and test_build required")
+
 jenkins_host = cfg.get('JENKINS_HOST')
 logger.info("using jenkins_host {}".format(jenkins_host))
 
@@ -210,7 +238,9 @@ logger.info("jmdb {}".format(jmdb))
 process_lock = None
 try:
     plugins = Plugins()
-    job_list = cfg.get('UPDATE_JOB_LIST')
+    job_list = args.test_job
+    if not job_list:
+        job_list = cfg.get('UPDATE_JOB_LIST')
     if job_list:
         job_list = job_list.split(',')
     else:
@@ -231,8 +261,10 @@ try:
             continue
 
         additional = plugins.by_job(job_name=job_name)
-        JenkinsJobAggregators(jenkins_host=jenkins_host,
-                              job_name=job_name, jmdb=jmdb, additional=additional).update_builds()
+        jja = JenkinsJobAggregators(jenkins_host=jenkins_host,
+                                    job_name=job_name, jmdb=jmdb,
+                                    additional=additional)
+        jja.update_builds(test_build=args.test_build)
         process_lock.unlock()
 
 except Exception as e:
