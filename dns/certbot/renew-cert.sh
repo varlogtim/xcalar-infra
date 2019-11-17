@@ -10,6 +10,7 @@ EMAIL="${EMAIL:-devaccounts@xcalar.com}"
 LE_ENDPOINT=https://acme-v02.api.letsencrypt.org/directory
 LE_DIR="/etc/letsencrypt"
 LE_ACCOUNTS=${CDUP}/letsencrypt-accounts-shared
+AWS_ACCOUNT=aws-xcalar
 
 usage() {
     echo >&2 "usage: $0 [--domain (default: $DOMAIN)] [--email (default: $EMAIL)] [--dryrun]"
@@ -23,6 +24,10 @@ while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
+        --aws-account)
+            AWS_ACCOUNT="$1"
+            shift
+            ;;
         -d | --domain)
             if [ -z "$DOMAIN" ]; then
                 DOMAIN="$1"
@@ -90,11 +95,14 @@ if [[ $IMAGE == certbot/dns-google ]]; then
     )
 elif [[ $IMAGE == certbot/dns-route53 ]]; then
     (
-        eval $(vault-aws-credentials-provider.sh --account aws-xcalar --export-env --ttl 15m) || exit 1
+        set +x
+        if [ -z "$AWS_SESSION_TOKEN" ]; then
+            eval $(vault-aws-credentials-provider.sh --account $AWS_ACCOUNT --export-env --ttl 900) || exit 1
+        fi
         set -x
         docker run $DOCKER_FLAGS \
             -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
-            $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 30 \
+            $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 60 \
             --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
     )
 else
