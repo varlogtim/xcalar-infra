@@ -45,8 +45,8 @@ EOT
       }
 
       resources {
-        memory = 512
-        cpu    = 800
+        memory = 32
+        cpu    = 4500
       }
     }
   }
