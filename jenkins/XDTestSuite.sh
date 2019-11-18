@@ -1,6 +1,4 @@
 #!/bin/bash
-set -x
-
 export XLRINFRADIR="${XLRINFRADIR:-$XLRDIR/xcalar-infra}"
 export XLRGUIDIR="${XLRGUIDIR:-$XLRDIR/xcalar-gui}"
 export XCE_LICENSEDIR=$XLRDIR/src/data
