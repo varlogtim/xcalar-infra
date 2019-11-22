@@ -62,15 +62,29 @@ def test_connection():
 def jenkins_jobs():
     jobs = []
     for job_name in jdb.db.collection_names():
-        if job_name.startswith('_') or job_name.endswith('_meta'):
+        if not job_name.startswith('job_') or job_name.endswith('_meta'):
             continue
+        job_name=job_name[4:]
         jobs.append({'job_name': job_name,
                      'job_url': "http://{}/job/{}".format(jenkins_host, job_name)})
     return make_response(jsonify({'jobs': jobs}))
 
+@app.route('/jenkins_hosts', methods=methods)
+@cross_origin()
+def jenkins_hosts():
+    hosts = []
+    for host_name in jdb.db.collection_names():
+        if not host_name.startswith('host_'):
+            continue
+        host_name=host_name[5:]
+        hosts.append({'host_name': host_name,
+                      'host_url': "http://{}/computer/{}".format(jenkins_host, host_name)})
+    return make_response(jsonify({'hosts': hosts}))
+
 def _get_upstream(*, job_name, build_number):
     upstream = []
-    doc = jdb.db[job_name].find_one({'_id': build_number}, projection={'upstream':1})
+    # XXXrs - assumes collection name! Fix!
+    doc = jdb.db["job_{}".format(job_name)].find_one({'_id': build_number}, projection={'upstream':1})
     logger.debug(doc)
     if not doc:
         return None
@@ -153,22 +167,25 @@ def jenkins_find_builds():
         args = {}
         if proj:
             args['projection'] = proj
-        for doc in jdb.db[job_name].find(query, **args):
+        # XXXrs - assumes collection name! Fix!
+        for doc in jdb.db["job_{}".format(job_name)].find(query, **args):
             logger.debug('doc: {}'.format(pprint.pformat(doc)))
-            doc['build_url'] = "http://{}/job/{}/{}/".format(jenkins_host, job_name, doc['_id'])
+            doc['build_url'] = "http://{}/job/{}/{}/"\
+                               .format(jenkins_host, job_name, doc['_id'])
             found[doc['_id']] = doc
         return make_response(jsonify(found))
     except Exception as e:
         abort(400, str(e))
 
-@app.route('/jenkins_jobs_by_time', methods=methods)
+@app.route('/jenkins_builds_by_time', methods=methods)
 @cross_origin()
-def jenkins_jobs_by_time():
-    now = time.time()
-    start = request.args.get('start', 0)
-    end = request.args.get('end', now)
+def jenkins_builds_by_time():
+    start_time_ms = int(request.args.get('start_time_ms', 0))
+    end_time_ms = int(request.args.get('end_time_ms', time.time()*1000))
     alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
-    return make_response(jsonify(alljob_idx.jobs_by_time(start=int(start), end=int(end))))
+    return make_response(jsonify(alljob_idx.builds_by_time(
+                                    start_time_ms=start_time_ms,
+                                    end_time_ms=end_time_ms)))
 
 @app.route('/jenkins_job_parameters', methods=methods)
 @cross_origin()

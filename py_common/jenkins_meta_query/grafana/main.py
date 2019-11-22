@@ -7,6 +7,7 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
+import copy
 import datetime
 import logging
 import os
@@ -96,6 +97,46 @@ def _by_fail_pct(elem):
 
 def _all_jobs_table(*, from_ms, to_ms):
 
+    resp = jmq_client.builds_by_time(start_time_ms=from_ms, end_time_ms=to_ms)
+    job_info = {}
+    job_info_empty = {'pass_cnt':0,
+                      'pass_total_duration_ms':0,
+                      'pass_avg_duration_s':0,
+                      'fail_cnt':0,
+                      'fail_total_duration_ms':0,
+                      'fail_avg_duration_s':0,
+                      'abort_cnt':0}
+
+    for bld in resp['builds']:
+        job_name = bld.get('job_name')
+        jinfo = job_info.setdefault(job_name, copy.deepcopy(job_info_empty))
+
+        result = bld.get('result', 'MISSING')
+        if result == 'SUCCESS':
+            jinfo['pass_cnt'] += 1
+            jinfo['pass_total_duration_ms'] += bld.get('duration_ms', 0)
+        elif result == 'FAILURE':
+            jinfo['fail_cnt'] += 1
+            jinfo['fail_total_duration_ms'] += bld.get('duration_ms', 0)
+        elif result == 'ABORTED':
+            jinfo['abort_cnt'] += 1
+
+    # Calculate the averages
+    for job_name, info in job_info.items():
+        pass_cnt = info['pass_cnt']
+        fail_cnt = info['fail_cnt']
+        if pass_cnt:
+            info['pass_avg_duration_s'] = int((info['pass_total_duration_ms']/pass_cnt)/1000)
+
+        if fail_cnt:
+            info['fail_avg_duration_s'] = int((info['fail_total_duration_ms']/fail_cnt)/1000)
+
+        info['fail_pct'] = 0
+        total = pass_cnt + fail_cnt
+        if total:
+            info['fail_pct'] = (fail_cnt*100)/total
+
+    # Build the table output
     columns = [
         {"text":"Job Name", "type":"string"},
         {"text":"More", "type":"string"},
@@ -107,58 +148,18 @@ def _all_jobs_table(*, from_ms, to_ms):
         {"text":"Fail %", "type":"number"}
     ]
     rows = []
-
-    query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
-                      {'start_time_ms':{'$lt': to_ms}}]}
-
-    for info in jmq_client.job_info():
-        job_name = info.get('job_name')
-        job_ref = ""
-        try:
-            job_ref = "<a href={}>here</a>".format(info.get('job_url'))
-        except Exception as e:
-            pass
-
-        resp = jmq_client.find_builds(job_name=job_name,
-                                      query=query,
-                                      verbose=True)
-        if not resp:
-            logger.info("no builds found for job {}".format(job_name))
-            continue
-
-        pass_cnt = 0
-        pass_total_duration_ms = 0
-        pass_avg_duration_s = 0
-        fail_cnt = 0
-        fail_total_duration_ms = 0
-        fail_avg_duration_s = 0
-        abort_cnt = 0
-        for bnum,item in resp.items():
-            result = item.get('result', 'foo')
-            if result == 'SUCCESS':
-                pass_cnt += 1
-                pass_total_duration_ms += item.get('duration_ms', 0)
-            elif result == 'FAILURE':
-                fail_cnt += 1
-                fail_total_duration_ms += item.get('duration_ms', 0)
-            elif result == 'ABORTED':
-                abort_cnt += 1
-
-        if pass_cnt:
-            pass_avg_duration_s = int((pass_total_duration_ms/pass_cnt)/1000)
-
-        if fail_cnt:
-            fail_avg_duration_s = int((fail_total_duration_ms/fail_cnt)/1000)
-
-        fail_pct = 0
-        total = pass_cnt + fail_cnt
-        if total:
-            fail_pct = (fail_cnt*100)/(pass_cnt + fail_cnt)
-        rows.append([job_name, job_ref,
-                     pass_cnt, pass_avg_duration_s,
-                     fail_cnt, fail_avg_duration_s,
-                     abort_cnt, fail_pct])
-
+    if job_info:
+        job_to_url = {i['job_name']:i['job_url'] for i in jmq_client.job_info()}
+        for job_name, info in job_info.items():
+            job_ref = "<a href={}>here</a>".format(job_to_url[job_name])
+            rows.append([job_name,
+                         job_ref,
+                         info['pass_cnt'],
+                         info['pass_avg_duration_s'],
+                         info['fail_cnt'],
+                         info['fail_avg_duration_s'],
+                         info['abort_cnt'],
+                         info['fail_pct']])
     return [{"columns": columns, "rows": rows, "type" : "table"}]
 
 def _map_result(result):
@@ -175,7 +176,6 @@ def _map_result(result):
 
 def _job_table(*, job_name, parameter_names, from_ms, to_ms):
 
-
     rows = []
     columns = [
         {"text":"Build No.", "type":"string"},
@@ -188,6 +188,42 @@ def _job_table(*, job_name, parameter_names, from_ms, to_ms):
     for name in parameter_names:
         columns.append({"text": name, "type":"string"})
 
+    query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
+                      {'start_time_ms':{'$lt': to_ms}}]}
+
+    resp = jmq_client.find_builds(job_name = job_name,
+                                  query = query,
+                                  verbose = True)
+
+    for bnum,item in resp.items():
+        duration_s = int(item.get('duration_ms', 0)/1000)
+        build_ref = ""
+        try:
+            build_ref = "<a href={}>here</a>".format(item.get('build_url'))
+        except Exception as e:
+            pass
+        vals = [int(bnum),
+                build_ref,
+                item.get('start_time_ms', 0),
+                duration_s,
+                item.get('built_on', 'unknown'),
+                _map_result(item.get('result'))]
+        for name in parameter_names:
+            vals.append(item.get('parameters', {}).get(name, "N/A"))
+        rows.append(vals)
+    return [{"columns": columns, "rows": rows, "type" : "table"}]
+
+def _host_table(*, host_name, from_ms, to_ms):
+
+    rows = []
+    columns = [
+        {"text":"Job Name", "type":"string"},
+        {"text":"Build No.", "type":"string"},
+        {"text":"More", "type":"string"},
+        {"text":"Start Time", "type":"time"},
+        {"text":"Duration (s)", "type":"time"},
+        {"text":"Result", "type":"string"}
+    ]
     query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
                       {'start_time_ms':{'$lt': to_ms}}]}
 

@@ -22,6 +22,7 @@ import time
 sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
+from py_common.jenkins_aggregators import JenkinsHostDataCollection
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
 from py_common.jenkins_aggregators import JenkinsJobMetaCollection
 from py_common.jenkins_aggregators import JenkinsAllJobIndex
@@ -186,6 +187,9 @@ class JenkinsJobAggregators(object):
         self.job_meta_coll.index_data(bnum=bnum, data=merged_data)
         self.job_data_coll.store_data(bnum=bnum, data=merged_data)
         self.alljob_idx.index_data(job_name=self.job_name, bnum=bnum, data=merged_data)
+        host_data_coll = JenkinsHostDataCollection(db=jmdb.jenkins_db(),
+                                                   host_name=merged_data['built_on'])
+        host_data_coll.store_data(job_name=self.job_name, bnum=bnum, data=merged_data)
 
     def update_builds(self, *, test_build=None):
         self.logger.info("start")

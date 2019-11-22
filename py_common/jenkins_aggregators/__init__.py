@@ -10,6 +10,7 @@
 __all__=[]
 
 from abc import ABC, abstractmethod
+import copy
 import json
 import logging
 import os
@@ -54,25 +55,37 @@ class JenkinsAllJobIndex(object):
 
         # XXXrs - more fields?
         start_time_ms = data.get('start_time_ms', None)
+        built_on = data.get('built_on', None)
         job_entry = {'job_name': job_name,
                      'build_number': bnum,
                      'start_time_ms': start_time_ms,
                      'duration_ms': data.get('duration_ms', None),
-                     'built_on': data.get('built_on', None),
+                     'built_on': built_on,
                      'result': data.get('result', None)}
 
         self.logger.debug("job_entry: {}".format(job_entry))
 
         # Jobs by time
         if start_time_ms is not None:
-            coll = self.jmdb.jobs_by_time_collection(time_ms=start_time_ms)
+            coll = self.jmdb.builds_by_time_collection(time_ms=start_time_ms)
             coll.create_index([('job_name', pymongo.ASCENDING),
                                ('build_number', pymongo.ASCENDING)],
                               unique=True)
             try:
                 coll.insert(job_entry)
             except DuplicateKeyError as e:
-                self.logger.debug("jobs_by_time duplicate {}".format(job_entry))
+                self.logger.debug("builds_by_time duplicate {}".format(job_entry))
+
+            if built_on is not None:
+                coll = self.jmdb.builds_by_time_collection(time_ms=start_time_ms)
+                coll.create_index([('job_name', pymongo.ASCENDING),
+                                   ('build_number', pymongo.ASCENDING)],
+                                  unique=True)
+                try:
+                    coll.insert(job_entry)
+                except DuplicateKeyError as e:
+                    self.logger.debug("host {} _builds_by_time duplicate {}"
+                                      .format(built_on, job_entry))
 
         # Downstream Jobs
         coll = self.jmdb.downstream_jobs()
@@ -93,23 +106,22 @@ class JenkinsAllJobIndex(object):
                                      {'$addToSet': {'down': down_key}},
                                      upsert = True)
 
-    def jobs_by_time(self, *, start, end):
-        start_ms = start*1000
-        end_ms = end*1000
-        query = {'$and': [{'start_time_ms': {'$gte': start_ms}},
-                          {'start_time_ms': {'$lte': end_ms}}]}
-        colls = self.jmdb.jobs_by_time_collections(
-                                        start_time_ms=start_ms,
-                                        end_time_ms=end_ms)
-        jobs = []
+    def builds_by_time(self, *, start_time_ms, end_time_ms):
+        query = {'$and': [{'start_time_ms': {'$gte': start_time_ms}},
+                          {'start_time_ms': {'$lte': end_time_ms}}]}
+
+        colls = self.jmdb.builds_by_time_collections(
+                                    start_time_ms=start_time_ms,
+                                    end_time_ms=end_time_ms)
+        builds = []
         for coll in colls:
             docs = coll.find(query)
             if not docs:
                 continue
             for doc in docs:
                 doc.pop('_id')
-                jobs.append(doc)
-        return {'jobs': jobs}
+                builds.append(doc)
+        return {'builds': builds}
 
     def _get_downstream(self, *, job_name, bnum):
         rtn = []
@@ -132,11 +144,11 @@ class JenkinsAllJobIndex(object):
 
 class JenkinsJobDataCollection(object):
     """
-    Interface to the per-build job data collection.
+    Interface to the per-job job data collection.
     """
     def __init__(self, *, job_name, db):
         self.logger = logging.getLogger(__name__)
-        self.coll = db.collection(job_name)
+        self.coll = db.collection("job_{}".format(job_name))
 
     def _no_data(self, *, doc):
         return not doc or 'NODATA' in doc
@@ -150,6 +162,7 @@ class JenkinsJobDataCollection(object):
         else:
             data['_id'] = bnum
             self.coll.insert(data)
+            data.pop('_id')
 
     def get_data(self, *, bnum):
         self.logger.debug("start bnum {}".format(bnum))
@@ -182,6 +195,31 @@ class JenkinsJobDataCollection(object):
             builds.append(doc['_id'])
         return sorted(builds)
 
+class JenkinsHostDataCollection(object):
+    """
+    Interface to the per-host data collection.
+    """
+    def __init__(self, *, host_name, db):
+        self.logger = logging.getLogger(__name__)
+        self.coll = db.collection("host_{}".format(host_name))
+
+    def _no_data(self, *, doc):
+        return not doc or 'NODATA' in doc
+
+    def store_data(self, *, job_name, bnum, data):
+        """
+        Store the data.  Duh.
+        """
+        if not data:
+            return
+        # Only selected data items.
+        store = {}
+        store['job_name']=job_name
+        store['build_number']=bnum
+        store['start_time_ms'] = data['start_time_ms']
+        store['duration_ms'] = data['duration_ms']
+        store['result'] = data['result']
+        self.coll.insert(store)
 
 class JenkinsJobMetaCollection(object):
     """
@@ -198,7 +236,7 @@ class JenkinsJobMetaCollection(object):
 
     def __init__(self, *, job_name, db):
         self.logger = logging.getLogger(__name__)
-        self.coll = db.collection("{}_meta".format(job_name))
+        self.coll = db.collection("job_{}_meta".format(job_name))
         cfg = EnvConfiguration(JenkinsJobMetaCollection.ENV_PARAMS)
         self.retry_max = cfg.get('JENKINS_AGGREGATOR_UPDATE_RETRY_MAX')
         self.retry_sec = cfg.get('JENKINS_AGGREGATOR_UPDATE_RETRY_SEC')
@@ -526,14 +564,3 @@ if __name__ == '__main__':
     alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
     logging.info(alljob_idx)
     logging.info(alljob_idx.downstream_jobs(job_name='DailyTests-Trunk', bnum='153'))
-
-    """
-    job_names = [n for n in byjob_db.db.collection_names() if not n.endswith('_meta') and not n.startswith('_')]
-    logging.info(job_names)
-
-    for job_name in job_names:
-        job_coll = byjob_db.collection(job_name)
-        for doc in job_coll.find({}):
-            alljob_db.index_data(job_name=job_name, bnum=doc['_id'], data=doc)
-
-    """

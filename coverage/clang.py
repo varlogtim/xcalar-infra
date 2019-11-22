@@ -95,7 +95,17 @@ class ClangCoverageFile(object):
 
 class ClangCoverageDir(object):
 
-    ENV_PARAMS = {"CLANG_BIN_DIR": {"default": "/opt/clang5/bin"},
+    local_clang_dir = "/usr/local/bin/clang"
+    clang_bin_default = "/opt/clang5/bin"
+
+    if os.path.exists(local_clang_dir):
+        if os.path.islink(local_clang_dir):
+            clang_bin_default = os.readlink(local_clang_dir)
+        else:
+            clang_bin_default = local_clang_dir
+
+    print("clang_bin_default: {}".format(clang_bin_default))
+    ENV_PARAMS = {"CLANG_BIN_DIR": {"default": clang_bin_default},
                   "CLANG_RAWPROF_DIR_NAME": {"default": "rawprof"},
                   "CLANG_USER_BIN_DIR_NAME": {"default": "bin"}}
 
@@ -308,6 +318,7 @@ class ClangCoverageDir(object):
             cdir.process(force=force,
                          create_json=create_json,
                          create_html=create_html)
+            # First binary encountered will be used for the final merge...
             if not bin_path:
                 bin_path = cdir.bin_path()
             profdata_files.append(cdir.profdata_path())

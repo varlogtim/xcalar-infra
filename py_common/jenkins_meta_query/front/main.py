@@ -58,9 +58,12 @@ def jenkins_meta_data_index():
     #         click through to other places here...
     return render_template("jmd_index.html")
 
-def _get_jobs_data(*, start, end):
-    back_url = "http://{}:{}/jenkins_jobs_by_time?start={}&end={}"\
-               .format(cfg.get('BACKEND_HOST'), cfg.get('BACKEND_PORT'), start, end)
+def _get_jobs_data(*, start, end, host=None):
+    args = "start={}&end={}".format(start, end)
+    if host is not None:
+        args += "&host={}".format(host)
+    back_url = "http://{}:{}/jenkins_builds_by_time?{}"\
+               .format(cfg.get('BACKEND_HOST'), cfg.get('BACKEND_PORT'), args)
     response = requests.get(back_url, verify=False) # XXXrs disable verify!
     rsp = response.json()
     logger.info("rsp {}".format(rsp))
@@ -81,13 +84,14 @@ def _get_jobs_data(*, start, end):
 DAY = 60*60*24
 WEEK = DAY*7
 
-@app.route('/jenkins_jobs_by_time', methods=methods)
+@app.route('/jenkins_builds_by_time', methods=methods)
 @cross_origin()
-def jenkins_jobs_by_time():
+def jenkins_builds_by_time():
     now = int(time.time())
     start = request.args.get('start', 0)
     end = request.args.get('end', now)
-    jobs = _get_jobs_data(start=start, end=end)
+    host = request.args.get('host', None)
+    jobs = _get_jobs_data(start=start, end=end, host=host)
     return render_template("jobs_table.html", jobs=jobs)
 
 @app.route('/jenkins_jobs_last_1w', methods=methods)
@@ -95,7 +99,8 @@ def jenkins_jobs_by_time():
 def jenkins_jobs_last_1w():
     now = int(time.time())
     start = now-(WEEK)
-    jobs = _get_jobs_data(start=start, end=now)
+    host = request.args.get('host', None)
+    jobs = _get_jobs_data(start=start, end=now, host=host)
     return render_template("jobs_table.html", jobs=jobs)
 
 @app.route('/jenkins_jobs_last_2w', methods=methods)
@@ -103,7 +108,8 @@ def jenkins_jobs_last_1w():
 def jenkins_jobs_last_2w():
     now = int(time.time())
     start = now-(2*WEEK)
-    jobs = _get_jobs_data(start=start, end=now)
+    host = request.args.get('host', None)
+    jobs = _get_jobs_data(start=start, end=now, host=host)
     return render_template("jobs_table.html", jobs=jobs)
 
 @app.route('/jenkins_jobs_last_30d', methods=methods)
@@ -111,7 +117,8 @@ def jenkins_jobs_last_2w():
 def jenkins_jobs_last_30d():
     now = int(time.time())
     start = now-(30*DAY)
-    jobs = _get_jobs_data(start=start, end=now)
+    host = request.args.get('host', None)
+    jobs = _get_jobs_data(start=start, end=now, host=host)
     return render_template("jobs_table.html", jobs=jobs)
 
 if __name__ == '__main__':

@@ -42,6 +42,9 @@ class JMQClient(object):
         return response.json()
 
     def job_names(self):
+        """
+        Returns list of all known job names.
+        """
         resp = self._cmd(uri = '/jenkins_jobs')
         names = []
         for item in resp.get('jobs'):
@@ -49,7 +52,9 @@ class JMQClient(object):
         return sorted(names)
 
     def job_info(self):
-
+        """
+        Returns interesting information about all known jobs.
+        """
         def _sortkey(x):
             return x['job_name']
 
@@ -80,6 +85,10 @@ class JMQClient(object):
         if verbose:
             return rtn
         return rtn.keys()
+
+    def builds_by_time(self, *, start_time_ms, end_time_ms):
+        params = {'start_time_ms': start_time_ms, 'end_time_ms': end_time_ms}
+        return self._cmd(uri = '/jenkins_builds_by_time', params = params)
 
 if __name__ == '__main__':
     import pprint

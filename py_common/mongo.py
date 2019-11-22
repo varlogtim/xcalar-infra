@@ -229,44 +229,47 @@ class JenkinsMongoDB(object):
         return self._db
 
     def _time_idx(self, *, time_ms):
+        """
+        Time-based collection names take the form:
+            _bla_bla_bla_<time_index>
+
+        Each collection spans 5000000000ms (roughly 59 days).
+        The "time_index" is an integer divisible by 5000000000
+        A job with start time T(ms) is placed into the collection
+        with time_index int(T/5000000000)
+        """
         return int(time_ms/5000000000)
 
-    def jobs_by_time_collection_name(self, *, time_ms):
+    def time_collection_indices(self, *, start_time_ms, end_time_ms=None):
         """
-        Return the collection name associated with the timestamp
+        Return the list of time index values spanning the requested time period.
         """
-        return '_jobs_by_time_{}'.format(self._time_idx(time_ms=time_ms))
+        start = self._time_idx(time_ms=start_time_ms)
+        if end_time_ms is None:
+            return [start]
+        if start_time_ms > end_time_ms:
+            raise ValueError("start_time_ms after end_time_ms")
+        end = self._time_idx(time_ms=end_time_ms)
+        colls = []
+        return [i for i in range(start,end+1)]
 
-    def jobs_by_time_collection(self, *, time_ms):
+    def builds_by_time_collection(self, *, time_ms):
         """
         Return the collection associated with the timestamp
         """
-        return self._db.collection(self.jobs_by_time_collection_name(time_ms=time_ms))
+        name = '_builds_by_time_{}'.format(self._time_idx(time_ms=time_ms))
+        return self._db.collection(name)
 
-    def jobs_by_time_collections(self, *, start_time_ms, end_time_ms):
+    def builds_by_time_collections(self, *, start_time_ms, end_time_ms):
         """
-        Return the list of collections spanning the
-        requested time period.
-
-            Collection names take the form:
-                _jobs_by_time_<time_index>
-
-            Each collection spans 5000000000ms (roughly 59 days).
-            The "time_index" is an integer divisible by 5000000000
-            A job with start time T(ms) is placed into the collection
-            with time_index int(T/5000000000)
+        Return the list of collections spanning the requested time period.
 
         It is the responsibility of the caller to iterate over the
         collections and merge search results.
         """
-        if start_time_ms > end_time_ms:
-            raise ValueError("start_time_ms after end_time_ms")
-        start = self._time_idx(time_ms=start_time_ms)
-        end = self._time_idx(time_ms=end_time_ms)
-        colls = []
-        for i in range(start,end+1):
-            colls.append(self._db.collection('_jobs_by_time_{}'.format(i)))
-        return colls
+        idxs = self.time_collection_indices(start_time_ms=start_time_ms,
+                                            end_time_ms=end_time_ms)
+        return [self._db.collection('_builds_by_time_{}'.format(i)) for i in idxs]
 
     def downstream_jobs(self):
         """
