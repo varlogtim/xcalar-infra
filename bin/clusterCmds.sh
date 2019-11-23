@@ -24,7 +24,7 @@ initClusterCmds() {
     if [ "$VmProvider" = "GCE" ]; then
         bash /netstore/users/jenkins/slave/setup.sh
     elif [ "$VmProvider" = "Azure" ]; then
-        az login --service-principal -u http://Xcalar/Jenkins/SP -p /netstore/infra/jenkins/jenkins-sp.pem --tenant 7bbd3477-af8b-483b-bb48-92976a1f9dfb
+        az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID && az account set --subscription $AZURE_SUBSCRIPTION_ID
     elif [ "$VmProvider" = "Ovirt" ]; then
         return 0 # there is no setup required in the Ovirt case
     else
