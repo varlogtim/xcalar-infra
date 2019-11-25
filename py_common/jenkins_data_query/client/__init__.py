@@ -18,14 +18,10 @@ if __name__ == '__main__':
 
 from py_common.env_configuration import EnvConfiguration
 
-class JMQClient(object):
-
-    ENV_PARAMS = {'JMQ_SERVICE_HOST': {'default': 'cvraman3.int.xcalar.com'},
-                  'JMQ_SERVICE_PORT': {'default': '4000'} }
+class JDQClient(object):
 
     def __init__(self, * , host, port):
         self.logger = logging.getLogger(__name__)
-        cfg = EnvConfiguration(JMQClient.ENV_PARAMS)
         self.url_root="http://{}:{}".format(host, port)
         self.logger.debug(self.url_root)
 
@@ -68,6 +64,18 @@ class JMQClient(object):
         resp = self._cmd(uri = '/jenkins_job_parameters', params=params)
         return sorted(resp.get('parameter_names', []))
 
+    def host_names(self, *, job_name):
+        """
+        Returns list of all known job names.
+        """
+        # XXXrs - WORKING HERE - to do this right, would limit to only
+        #         hosts associated with the job during the time period,
+        #         but I don't know if that's available when populating
+        #         the variables :/
+        params = {'job_name': job_name}
+        resp = self._cmd(uri = '/jenkins_job_parameters', params=params)
+        return sorted(resp.get('parameter_names', []))
+
     def upstream(self, *, job_name, bnum):
         params = {'job_name': job_name, 'build_number': bnum}
         return self._cmd(uri = '/jenkins_upstream', params = params)
@@ -103,7 +111,7 @@ if __name__ == '__main__':
                 handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    client = JMQClient(host='cvraman3.int.xcalar.com', port=4000)
+    client = JDQClient(host='cvraman3.int.xcalar.com', port=4000)
     print(pprint.pformat(client.downstream(job_name="DailyTests-Trunk", bnum=144)))
     print(pprint.pformat(client.parameter_names(job_name="DailyTests-Trunk")))
     print(pprint.pformat(client.job_info()))

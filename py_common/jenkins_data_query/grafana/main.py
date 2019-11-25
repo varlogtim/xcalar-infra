@@ -22,12 +22,12 @@ sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
 cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
-                        'JMQ_SERVICE_HOST': {'required': True},
-                        'JMQ_SERVICE_PORT': {'required': True}})
+                        'JDQ_SERVICE_HOST': {'required': True},
+                        'JDQ_SERVICE_PORT': {'required': True}})
 
-from py_common.jenkins_meta_query.client import JMQClient
-jmq_client = JMQClient(host = cfg.get('JMQ_SERVICE_HOST'),
-                       port = cfg.get('JMQ_SERVICE_PORT'))
+from py_common.jenkins_data_query.client import JDQClient
+jdq_client = JDQClient(host = cfg.get('JDQ_SERVICE_HOST'),
+                       port = cfg.get('JDQ_SERVICE_PORT'))
 
 from flask import Flask, request, jsonify, json, abort
 from flask_cors import CORS, cross_origin
@@ -78,10 +78,13 @@ def find_metrics():
 
     if target == 'job_names':
         values.append('All Jobs') # Special :)
-        values.extend(jmq_client.job_names())
+        values.extend(jdq_client.job_names())
+    elif target == ':host_names':
+        job_name,rest = target.split(':')
+        values = jdq_client.host_names(job_name=job_name.replace('\.', '.'))
     elif ':parameter_names' in target:
         job_name,rest = target.split(':')
-        values = jmq_client.parameter_names(job_name=job_name.replace('\.', '.'))
+        values = jdq_client.parameter_names(job_name=job_name.replace('\.', '.'))
     else:
         pass # XXXrs - exception?
 
@@ -97,7 +100,7 @@ def _by_fail_pct(elem):
 
 def _all_jobs_table(*, from_ms, to_ms):
 
-    resp = jmq_client.builds_by_time(start_time_ms=from_ms, end_time_ms=to_ms)
+    resp = jdq_client.builds_by_time(start_time_ms=from_ms, end_time_ms=to_ms)
     job_info = {}
     job_info_empty = {'pass_cnt':0,
                       'pass_total_duration_ms':0,
@@ -149,7 +152,7 @@ def _all_jobs_table(*, from_ms, to_ms):
     ]
     rows = []
     if job_info:
-        job_to_url = {i['job_name']:i['job_url'] for i in jmq_client.job_info()}
+        job_to_url = {i['job_name']:i['job_url'] for i in jdq_client.job_info()}
         for job_name, info in job_info.items():
             job_ref = "<a href={}>here</a>".format(job_to_url[job_name])
             rows.append([job_name,
@@ -191,7 +194,7 @@ def _job_table(*, job_name, parameter_names, from_ms, to_ms):
     query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
                       {'start_time_ms':{'$lt': to_ms}}]}
 
-    resp = jmq_client.find_builds(job_name = job_name,
+    resp = jdq_client.find_builds(job_name = job_name,
                                   query = query,
                                   verbose = True)
 
@@ -227,7 +230,7 @@ def _host_table(*, host_name, from_ms, to_ms):
     query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
                       {'start_time_ms':{'$lt': to_ms}}]}
 
-    resp = jmq_client.find_builds(job_name = job_name,
+    resp = jdq_client.find_builds(job_name = job_name,
                                   query = query,
                                   verbose = True)
 

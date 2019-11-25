@@ -51,9 +51,9 @@ def test_connection():
     return "Connection check A-OK!"
 
 
-@app.route('/jmd', methods=methods)
+@app.route('/jdq', methods=methods)
 @cross_origin()
-def jenkins_meta_data_index():
+def jenkins_data_query_index():
     # XXXrs - WORKING HERE - want to put up a page with options that
     #         click through to other places here...
     return render_template("jmd_index.html")

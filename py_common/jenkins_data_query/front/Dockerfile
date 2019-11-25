@@ -9,14 +9,14 @@ ENV BACKEND_PORT=4000
 
 # Context is set to xcalar-infra/ by dbuild
 
-COPY py_common/jenkins_meta_query/front/requirements.txt /app
+COPY py_common/jenkins_data_query/front/requirements.txt /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Flask app needs to be in /app/main.py for NGINX container
-COPY py_common/jenkins_meta_query/front/main.py /app/main.py
+COPY py_common/jenkins_data_query/front/main.py /app/main.py
 
 RUN mkdir -p /app/templates
-COPY py_common/jenkins_meta_query/front/templates /app/templates/
+COPY py_common/jenkins_data_query/front/templates /app/templates/
 
 RUN mkdir -p /app/py_common
 COPY py_common /app/py_common/

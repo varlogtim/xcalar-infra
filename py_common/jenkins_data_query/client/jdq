@@ -19,14 +19,14 @@ if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-from py_common.jenkins_meta_query.client import JMQClient
+from py_common.jenkins_data_query.client import JDQClient
 
 if __name__ == '__main__':
 
     # It's log, it's log... :)
     ENV_PARAMS = {'LOG_LEVEL': {'default': logging.INFO},
-                  'JMQ_SERVICE_HOST': {'default': 'cvraman3.int.xcalar.com'},
-                  'JMQ_SERVICE_PORT': {'default': '4000'} }
+                  'JDQ_SERVICE_HOST': {'default': 'cvraman3.int.xcalar.com'},
+                  'JDQ_SERVICE_PORT': {'default': '4000'} }
 
     cfg = EnvConfiguration(ENV_PARAMS)
     logging.basicConfig(level=cfg.get('LOG_LEVEL'),
@@ -35,8 +35,8 @@ if __name__ == '__main__':
 
     logger = logging.getLogger(__name__)
 
-    jmq_client = JMQClient(host=cfg.get('JMQ_SERVICE_HOST'),
-                           port=cfg.get('JMQ_SERVICE_PORT'))
+    jdq_client = JDQClient(host=cfg.get('JDQ_SERVICE_HOST'),
+                           port=cfg.get('JDQ_SERVICE_PORT'))
 
     import argparse
 
@@ -71,14 +71,14 @@ if __name__ == '__main__':
     if args.up:
         if not args.bnum:
             raise ValueError("--up requires both --job and --bnum")
-        #print(pprint.pformat(jmq_client.upstream(job_name=args.job, bnum=args.bnum)))
+        #print(pprint.pformat(jdq_client.upstream(job_name=args.job, bnum=args.bnum)))
         sys.exit(0)
 
 
     if args.down:
         if not args.bnum:
             raise ValueError("--down requires both --job and --bnum")
-        #print(pprint.pformat(jmq_client.downstream(job_name=args.job, bnum=args.bnum)))
+        #print(pprint.pformat(jdq_client.downstream(job_name=args.job, bnum=args.bnum)))
         sys.exit(0)
 
     query = {}
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     elif args.before:
         query['start_time_ms'] = {'$lt': _days_ago_ms(args.before)}
 
-    resp = jmq_client.find_builds(job_name = args.job,
+    resp = jdq_client.find_builds(job_name = args.job,
                                   query = query,
                                   verbose = args.verbose)
     if not args.verbose:

@@ -1,2 +1,0 @@
-#!/bin/bash
-docker build --no-cache -f $XLRINFRADIR/py_common/jenkins_meta_query/grafana/Dockerfile --rm -t jmq-grafana-datasource $XLRINFRADIR
