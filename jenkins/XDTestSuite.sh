@@ -463,6 +463,7 @@ else
     npm install
 fi
 
+curl -s http://localhost:27000/xcesql/info |jq '.'
 exitCode=1
 echo "Starting test driver"
 if  [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
