@@ -177,20 +177,17 @@ echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yum
 VERS="$(rpm -q $(rpm -qf /etc/redhat-release) --qf '%{VERSION}')"
 VERS="${VERS:0:1}"
 if ! rpm -q epel-release; then
-    case "$(rpm -qf /etc/redhat-release)" in
-        redhat*) EPEL=https://dl.fedoraproject.org/pub/epel/epel-release-latest-${VERS}.noarch.rpm;;
-        *) EPEL=epel-release;;
-    esac
-    yum install -y $EPEL
+    yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-${VERS}.noarch.rpm
 fi
 
 yum install -y http://repo.xcalar.net/xcalar-release-el${VERS}.rpm
 
 # BEGIN DEBUG
-yum install -y --enablerepo='xcalar-deps-common' xcalar-ssh-ca
+yum install -y --enablerepo='xcalar*' xcalar-ssh-ca optgdb8
+ln -sfn /opt/gdb8/bin/gdb /usr/local/bin/
 # END DEBUG
 
-yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart java-1.8.0-openjdk-headless
+yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart java-1.8.0-openjdk-headless freetds
 yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
 
 run_playload () {
