@@ -392,6 +392,8 @@ class SqlPerfResultsData(object):
     def builds_for_version(self, *, test_group, xce_version):
         key = MongoDB.encode_key("{}_XCE_{}_builds".format(test_group, xce_version))
         doc = self.meta.coll.find_one({'_id': key})
+        if not doc:
+            return None
         return doc.get('values', None)
 
     def builds_for_type(self, *, test_group, test_type):
