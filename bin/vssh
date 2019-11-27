@@ -72,15 +72,15 @@ vssh() {
         elif [[ "$*" =~ ec2 ]]; then
             user=ec2-user
             role=cloud
+        elif [[ "$*" =~ root@ ]]; then
+            role=admin
+            user=root
         elif [[ "$*" =~ jenkins ]]; then
             user=jenkins
             role=jenkins
         elif [[ "$*" =~ int.xcalar.com ]]; then
             role=jenkins
             user=jenkins
-        elif [[ "$*" =~ root@ ]]; then
-            role=admin
-            user=root
         else
             role=jenkins
             user=jenkins

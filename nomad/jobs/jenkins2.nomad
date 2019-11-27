@@ -27,7 +27,7 @@ job "jenkins2" {
       driver = "docker"
 
       config {
-        image = "jenkins/jenkins:lts"
+        image = "jenkins/jenkins:lts-slim"
 
         force_pull = true
 

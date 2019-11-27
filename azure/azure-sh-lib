@@ -514,6 +514,7 @@ az_deploy() {
     local parameters_file=${DEFAULTS}
     local installer_url installer dnslabel
     local licenseParamFile=$LICENSEDEV
+    local osDiskSize=127
     while [ $# -gt 0 ]; do
         cmd="$1"
         case "$cmd" in
@@ -680,7 +681,7 @@ az_deploy() {
     az group deployment validate -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
-        vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP" > /dev/null
+        vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" > /dev/null
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
         cat "$TMP" >&2
@@ -695,7 +696,7 @@ az_deploy() {
 
     az group deployment create --name deploy-${NOW} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
-        "appName=${name}" "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
+        "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
@@ -732,7 +733,10 @@ az_quickdeploy() {
 # a time in 24h (default 2200 = 10pm PST). This will deploy
 # shutdown rules to all vms in the resourcegroups.
 az_rg_scheduled_shutdown() {
-    local group="$1" time="${2:-2200}"
+    local group="$1"
+    shift
+    time="${2:-2200}"
+    shift
     if [ -z "$group" ]; then
         echo >&2 "Need to specify resource group"
         return 1
@@ -741,7 +745,7 @@ az_rg_scheduled_shutdown() {
     local count="${#vms[@]}"
     local vm0="${vms[0]}"
     vm0="${vm0##*/}"
-    az group deployment create -n scheduledShutdown-${NOW} -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json --parameters vmName="${vm0%[0-9]*}" time=${time} timeZoneId='Pacific Standard Time' scaleNumber=$count -ojson --no-wait
+    az group deployment create -n scheduledShutdown-${NOW} -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json --parameters vmName="${vm0%[0-9]*}" time=${time} timeZoneId='Pacific Standard Time' scaleNumber=$count "$@" -ojson --no-wait
 }
 
 az_disk_info() {
@@ -752,7 +756,7 @@ az_disk_update() {
     local cluster="$1" size_gb="${2:-127}" storage_sku="${3:-StandardSSD_LRS}" disks=''
     disks=($(az disk list -otsv | grep "$cluster" | awk '{print $5}'))
 
-    az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids ${disks[@]}
+    az disk update --sku StandardSSD_LRS --size-gb $size_gb --ids "${disks[@]}"
 }
 
 # List out private DNS entries as an array [{name: "foo", rec: "10.1.1.1"}]

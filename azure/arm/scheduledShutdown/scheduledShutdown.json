@@ -42,7 +42,7 @@
       "vmNameId": "[concat(resourceGroup().id,'/providers/Microsoft.Compute/virtualMachines/',concat(parameters('vmName')))]"
     },
     "resources": [{
-        "apiVersion": "2016-05-15",
+        "apiVersion": "2018-09-15",
         "type": "Microsoft.DevTestLab/schedules",
         "copy": {
             "name": "vmCount",
