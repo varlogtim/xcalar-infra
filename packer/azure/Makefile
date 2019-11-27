@@ -1,11 +1,25 @@
-all: azure-jenkins azure-devstation azure-infra
-.PHONY: azure-jenkins azure-devstation azure-infra
-
 SHELL = /bin/bash
 
+VERSION ?= $(shell date '+%Y.%m.%d')
+BUILD_NUMBER ?= 1
 
-azure-%: %.json
-	packer.io build \
+default: jenkins.azure
+
+all: jenkins.azure devstation.azure infra.azure
+
+%.json: %.yaml
+	cfn-flip < $< > $@
+
+build.json: build.yaml
+
+%.azure: build.json %.json
+	chmod 0600 ../ssh/*.pem
+	packer.io validate \
+		-var version=$(VERSION) -var build_number=$(BUILD_NUMBER) \
 		-var-file <(vault kv get -format=json -field=data secret/azure/packer-sp) \
-		-var-file $< \
-		build.json
+		$(patsubst %.json,-var-file %.json,$(filter-out $<,$^)) $<
+	packer.io build \
+		-force \
+		-var version=$(VERSION) -var build_number=$(BUILD_NUMBER) \
+		-var-file <(vault kv get -format=json -field=data secret/azure/packer-sp) \
+		$(patsubst %.json,-var-file %.json,$(filter-out $<,$^)) $<

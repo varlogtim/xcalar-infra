@@ -1,7 +1,6 @@
 #!/bin/bash
-#
 if [ -z "$CERTNAME" ]; then
-    if ! CERTNAME=$(awk '/^certname/{print $(NF)}' /etc/puppetlabs/puppet/puppet.conf) || [ -z "$CERTNAME" ]; then
+    if ! CERTNAME=$(awk -F= '$1 ~ "^certname" {print $(NF)}' /etc/puppetlabs/puppet/puppet.conf | sed -r 's/^[[:space:]]//g'); then
         CERTNAME="$(hostname -f)"
     fi
 fi
@@ -19,8 +18,6 @@ fi
 if [ $# -eq 0 ]; then
     set -- -token-only
 fi
-
-/usr/bin/sudo -H ${VAULT} login -address=${VAULT_ADDR} -method=cert -client-cert=${CERT} -client-key=${KEY} "$@"
 
 if test -r $KEY; then
     ${VAULT} login -method=cert -client-cert=${CERT} -client-key=${KEY} "$@"

@@ -6,7 +6,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/pu
 
 die() {
     echo >&2 "ERROR: $1"
-    exit ${2:-1}
+    exit 1
 }
 
 say() {
@@ -17,12 +17,21 @@ if [ $(id -u) != 0 ]; then
     die "This script needs to run as root!"
 fi
 
-if ! test -e /etc/system-release; then
-    die "This script is only for EL Operating Systems!" 2
+if ! test -e ${ROOTFS}/etc/system-release; then
+    die "This script is only for EL Operating Systems!"
 fi
 
-RELEASE=$(rpm -qf /etc/system-release --qf '%{NAME}')
-VERSION=$(rpm -qf /etc/system-release --qf '%{VERSION}')
+## Set DEPROVISION_NETWORK=0 or 1 to clean up network settings
+if [ -z "${DEPROVISION_NETWORK:-}" ]; then
+    if [ -n "$CLOUD" ] || [ -n "$FACTER_cloud" ]; then
+        DEPROVISION_NETWORK=0
+    else
+        DEPROVISION_NETWORK=1
+    fi
+fi
+
+RELEASE=$(rpm -qf ${ROOTFS}/etc/system-release --qf '%{NAME}')
+VERSION=$(rpm -qf ${ROOTFS}/etc/system-release --qf '%{VERSION}')
 case "$RELEASE" in
     centos* | oracle* | redhat*)
         ELVERSION="${VERSION:0:1}"
@@ -43,6 +52,7 @@ esac
 case "$ELVERSION" in
     6) INIT=init ;;
     7) INIT=systemd ;;
+    8) INIT=systemd ;;
     *) die "Shouldn't have gotten here: ${RELEASE} ${VERSION} ${ELVERSION}" ;;
 esac
 
@@ -61,7 +71,7 @@ if [ "$INIT" = systemd ]; then
     }
 else
     svc_exists() {
-        test -e /etc/init.d/$1
+        test -e ${ROOTFS}/etc/init.d/$1
     }
 
     svc_cmd() {
@@ -75,7 +85,7 @@ else
         case "$cmd" in
             disable) chkconfig $svc off ;;
             enable) chkconfig $svc on ;;
-            start | stop | restart | status | stop-supervisor) /sbin/service $svc $cmd ;;
+            start | stop | restart | status | stop-supervisor) ${ROOTFS}/sbin/service $svc $cmd ;;
             *) die "svc_cmd: Unknown command: $svc $cmd" ;;
         esac
     }
@@ -104,14 +114,20 @@ if have_package puppet-agent; then
     else
         svc_cmd disable puppet
     fi
-    rm -v -rf /etc/puppetlabs/puppet/ssl
-    sed -i '/^certname/d' /etc/puppetlabs/puppet/puppet.conf
+    rm -v -rf ${ROOTFS}/etc/puppetlabs/puppet/ssl ${ROOTFS}/etc/puppetlabs/code
+    sed -i '/certname/d' ${ROOTFS}/etc/puppetlabs/puppet/puppet.conf
 fi
 
 if have_package collectd; then
     svc_cmd stop collectd
     svc_cmd disable collectd
-    rm -fv /etc/collectd.d/*
+    rm -fv ${ROOTFS}/var/lib/collectd/*
+fi
+
+if have_package node_exporter; then
+    svc_cmd stop node_exporter
+    svc_cmd disable node_exporter
+    rm -fv ${ROOTFS}/var/lib/node_exporter/*
 fi
 
 if have_package cloud-init; then
@@ -119,7 +135,18 @@ if have_package cloud-init; then
     svc_cmd enable cloud-init
     svc_cmd enable cloud-init-local
     svc_cmd enable cloud-final
-    truncate -s 0 /var/log/cloud*.log
+    rm -rfv  ${ROOTFS}/var/lib/cloud/instance/*
+    rm -fv  ${ROOTFS}/var/lib/cloud/instance
+    truncate -s 0 ${ROOTFS}/var/log/cloud*.log ${ROOTFS}/var/log/user-data*.log
+    if [ -z "$CLOUD" ] || [ "$CLOUD" = none ]; then
+        cat > ${ROOTFS}/etc/cloud/cloud.cfg.d/90-networking-disabled.cfg <<EOF
+network:
+  config: disabled
+EOF
+        sed -i '/package-update-upgrade-install/d; /datasource_list/d; s/disable_root:.*$/disable_root: 0/g; s/ssh_pwauth.*$/ssh_pwauth: 1/g' ${ROOTFS}/etc/cloud/cloud.cfg
+        sed -i '/datasource_list:/d' ${ROOTFS}/etc/cloud/cloud.cfg
+        echo 'datasource_list: [ ConfigDrive, NoCloud, None ]' >> ${ROOTFS}/etc/cloud/cloud.cfg
+    fi
 fi
 
 if have_package chrony; then
@@ -137,11 +164,11 @@ if have_package at; then
 fi
 
 if have_program consul; then
-    consul leave
+    consul leave || true
     svc_cmd stop consul
     svc_cmd disable consul
-    rm -rfv /var/lib/consul/*
-    rm -rfv /etc/consul.d/*
+    rm -rf ${ROOTFS}/var/lib/consul/*
+    rm -rf ${ROOTFS}/etc/consul.d/*
 fi
 
 if have_program caddy; then
@@ -152,63 +179,46 @@ fi
 if have_program nomad; then
     svc_cmd stop nomad
     svc_cmd disable nomad
-    rm -rfv /var/lib/nomad/*
+    rm -rf ${ROOTFS}/var/lib/nomad/*
+    rm -rfv ${ROOTFS}/var/lib/nomad/*
 fi
 
-if have_program  node_exporter; then
-    svc_cmd stop node_exporter
-    svc_cmd disable node_exporter
-    rm -fv /var/lib/node_exporter/textfile_collector/*
-fi
+if ((DEPROVISION_NETWORK)); then
+    cat >/etc/sysconfig/network <<-EOF
+	NETWORKING=yes
+	ONBOOT=yes
+	BOOTPROTO=dhcp
+	EOF
 
-cat >/etc/sysconfig/network <<EOF
-NETWORKING=yes
-NOZEROCONF=yes
-NETWORKING_IPV6=no
-ONBOOT=yes
-BOOTPROTO=dhcp
-EOF
+    rm -v -f ${ROOTFS}/etc/sysconfig/network-scripts/ifcfg-e*
 
-sed -r -i '/(HWADDR|UUID|IPADDR|NETWORK|NETMASK|USERCTL)/d' /etc/sysconfig/network-scripts/ifcfg-e*
-rm -v -f /etc/sysconfig/network-scripts/ifcfg-e*
+    cat >/etc/sysconfig/network-scripts/ifcfg-eth0 <<-EOF
+	DEVICE=eth0
+	NAME=eth0
+	ONBOOT=yes
+	IPV6INIT=yes
+	BOOTPROTO=dhcp
+	EOF
 
-cat >/etc/sysconfig/network-scripts/ifcfg-eth0 <<EOF
-DEVICE="eth0"
-NAME="eth0"
-ONBOOT="yes"
-NETBOOT="yes"
-IPV6INIT="no"
-BOOTPROTO="dhcp"
-TYPE="Ethernet"
-PROXY_METHOD="none"
-BROWSER_ONLY="no"
-DEFROUTE="yes"
-IPV4_FAILURE_FATAL="no"
-#IPV6_AUTOCONF="yes"
-#IPV6_DEFROUTE="yes"
-#IPV6_FAILURE_FATAL="no"
-NM_CONTROLLED="no"
-EOF
+    echo 'RUN_FIRSTBOOT=NO' >${ROOTFS}/etc/sysconfig/firstboot
 
-echo 'RUN_FIRSTBOOT=NO' >/etc/sysconfig/firstboot
+    rm -f ${ROOTFS}/etc/udev/rules.d/70-persistent-net.rules
+    ln -sfn /dev/null ${ROOTFS}/etc/udev/rules.d/80-net-name-slot.rules
 
-rm -f /etc/udev/rules.d/70-persistent-net.rules
-ln -sfn /dev/null /etc/udev/rules.d/80-net-name-slot.rules
+    if [ $ELVERSION = 7 ]; then
+        sed -i 's/^GRUB_TIMEOUT=.*$/GRUB_TIMEOUT=0/g' ${ROOTFS}/etc/default/grub
+        if ! grep -q 'net.ifnames=0' ${ROOTFS}/etc/default/grub; then
+            sed -i 's/rhgb quiet/net.ifnames=0 biosdevname=0/g' ${ROOTFS}/etc/default/grub
+        fi
+        sed -i 's/rhgb quiet//g' ${ROOTFS}/etc/default/grub
 
-if [ $ELVERSION = 7 ]; then
-    sed -i 's/^GRUB_TIMEOUT=.*$/GRUB_TIMEOUT=0/g' /etc/default/grub
-    if ! grep -q 'net.ifnames=0' /etc/default/grub; then
-        sed -i 's/rhgb quiet/net.ifnames=0 biosdevname=0/g' /etc/default/grub
+        grub2-mkconfig -o ${ROOTFS}/boot/grub2/grub.cfg
+        if [ -d ${ROOTFS}/boot/efi/EFI/redhat ]; then
+            grub2-mkconfig -o ${ROOTFS}/boot/efi/EFI/redhat/grub.cfg
+        fi
+        dracut --no-hostonly --force
     fi
-    sed -i 's/rhgb quiet//g' /etc/default/grub
-
-    grub2-mkconfig -o /boot/grub2/grub.cfg
-    if [ -d /boot/efi/EFI/redhat ]; then
-        grub2-mkconfig -o /boot/efi/EFI/redhat/grub.cfg
-    fi
-    dracut --no-hostonly --force
 fi
-
 
 # Remove all registration info
 if  [[ $RELEASE =~ ^redhat- ]]; then
@@ -217,37 +227,26 @@ if  [[ $RELEASE =~ ^redhat- ]]; then
     subscription-manager clean || true
 fi
 
-: >/etc/machine-id
-rm -fv /etc/sysconfig/rhn/systemid
-rm -fv /root/.bash_history /home/*/.bash_history
+truncate -s 0 ${ROOTFS}/etc/machine-id
+rm -fv ${ROOTFS}/etc/sysconfig/rhn/systemid
+rm -fv ${ROOTFS}/root/.bash_history ${ROOTFS}/home/*/.bash_history
+history -c
 
 yum clean all --enablerepo='*'
-rm -rf /var/cache/yum/*
+rm -rf ${ROOTFS}/var/cache/yum/*
 
 cat >/etc/hosts <<EOF
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
 EOF
-rm -f /etc/hostname
-if command -v hostnamectl >/dev/null; then
-    hostnamectl set-hostname 'localhost.localdomain'
-else
-    hostname 'localhost.localdomain'
-fi
-sed -i '/HOSTNAME=/d' /etc/sysconfig/network
 
-export HISTFILESIZE=0
-export HISTSIZE=0
-
-waagent=$(command -v waagent)
-if [ -n "$waagent" ]; then
-    svc_cmd atd start
-    cd /
-    echo "$waagent -force -deprovision+user > /tmp/depro.out 2> /tmp/depro.err && poweroff" | at now + 1 minute
-    if [ $? -eq 0 ]; then
-        echo >&2 "Deprovisioning in 1min. Please logout"
-        exit 0
+if ((DEPROVISION_NETWORK)); then
+    rm -f ${ROOTFS}/etc/hostname
+    if command -v hostnamectl >/dev/null; then
+        hostnamectl set-hostname 'localhost.localdomain'
+    else
+        hostname 'localhost.localdomain'
     fi
-    $waagent -force -deprovision+user
 fi
+
 exit 0
