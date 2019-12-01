@@ -64,17 +64,15 @@ class JDQClient(object):
         resp = self._cmd(uri = '/jenkins_job_parameters', params=params)
         return sorted(resp.get('parameter_names', []))
 
-    def host_names(self, *, job_name):
+    def host_names(self):
         """
-        Returns list of all known job names.
+        Returns list of all known host names.
         """
-        # XXXrs - WORKING HERE - to do this right, would limit to only
-        #         hosts associated with the job during the time period,
-        #         but I don't know if that's available when populating
-        #         the variables :/
-        params = {'job_name': job_name}
-        resp = self._cmd(uri = '/jenkins_job_parameters', params=params)
-        return sorted(resp.get('parameter_names', []))
+        resp = self._cmd(uri = '/jenkins_hosts')
+        names = []
+        for item in resp.get('hosts'):
+            names.append(item.get('host_name'))
+        return sorted(names)
 
     def upstream(self, *, job_name, bnum):
         params = {'job_name': job_name, 'build_number': bnum}

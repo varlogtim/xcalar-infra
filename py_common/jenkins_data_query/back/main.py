@@ -65,6 +65,9 @@ def jenkins_jobs():
         if not job_name.startswith('job_') or job_name.endswith('_meta'):
             continue
         job_name=job_name[4:]
+        # XXXrs - shouldn't be in DB!
+        if not job_name or job_name == "None":
+            continue
         jobs.append({'job_name': job_name,
                      'job_url': "http://{}/job/{}".format(jenkins_host, job_name)})
     return make_response(jsonify({'jobs': jobs}))
@@ -77,6 +80,9 @@ def jenkins_hosts():
         if not host_name.startswith('host_'):
             continue
         host_name=host_name[5:]
+        # XXXrs - shouldn't be in DB.
+        if not len(host_name) or host_name == "None":
+            continue
         hosts.append({'host_name': host_name,
                       'host_url': "http://{}/computer/{}".format(jenkins_host, host_name)})
     return make_response(jsonify({'hosts': hosts}))

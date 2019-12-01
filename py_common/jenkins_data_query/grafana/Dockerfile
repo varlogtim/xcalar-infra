@@ -3,9 +3,11 @@ FROM tiangolo/uwsgi-nginx-flask:python3.6
 MAINTAINER Robert Stephens <rstephens@xcalar.com>
 
 # Environment configuration override as needed...
-ENV LOG_LEVEL="DEBUG"
-ENV JDQ_SERVICE_HOST="jdq-back.service.consul"
-ENV JDQ_SERVICE_PORT="9999"
+ENV LOG_LEVEL="INFO"
+#ENV JDQ_SERVICE_HOST="jdq-back.service.consul"
+ENV JDQ_SERVICE_HOST="cvraman3.int.xcalar.com"
+#ENV JDQ_SERVICE_PORT="9999"
+ENV JDQ_SERVICE_PORT="4000"
 
 # Context is set to xcalar-infra/ by dbuild
 

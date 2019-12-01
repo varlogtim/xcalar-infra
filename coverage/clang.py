@@ -333,20 +333,20 @@ class ClangCoverageDir(object):
 
         cls._merge_profdata(profdata_files=profdata_files,
                             profdata_path=profdata_path,
-                            force=force)
+                            force=True) # Always re-create output files
         # coverage.json
         if create_json:
             cls._create_json(out_dir=out_dir,
                              bin_path=bin_path,
                              profdata_path=profdata_path,
-                             force=force)
+                             force=True) # Always re-create output files
 
         # HTML
         if create_html:
             cls._create_html(out_dir=out_dir,
                              bin_path=bin_path,
                              profdata_path=profdata_path,
-                             force=force)
+                             force=True) # Always re-create output files
 
 
 class ClangCoverageAggregator(JenkinsAggregatorBase):
