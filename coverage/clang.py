@@ -23,6 +23,9 @@ from py_common.env_configuration import EnvConfiguration
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.mongo import MongoDB
 
+class ClangExecutableNotFound(Exception):
+    pass
+
 class ClangCoverageFilenameCollision(Exception):
     pass
 
@@ -93,43 +96,86 @@ class ClangCoverageFile(object):
                 summaries[filename] = finfo.get('summary', None)
         return summaries
 
+
+class ClangCoverageTools(object):
+
+    # Containers may need to pass in explicit paths
+    ENV_PARAMS = {"CLANG_LLVM_COV_PATH": {},
+                  "CLANG_LLVM_PROFDATA_PATH": {}}
+
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        cfg = EnvConfiguration(ClangCoverageTools.ENV_PARAMS)
+
+        # If explicit paths are passed, use those.
+        self.llvm_cov_path = cfg.get("CLANG_LLVM_COV_PATH")
+        self.llvm_profdata_path = cfg.get("CLANG_LLVM_PROFDATA_PATH")
+
+        if self.llvm_cov_path is None or self.llvm_profdata_path is None:
+
+            # If no explicit paths are given, find the "clang" binary.
+
+            try:
+                cargs = ["which", "clang"]
+                cp = subprocess.run(cargs, stdout=subprocess.PIPE)
+                clang_bin_path = cp.stdout.decode('utf-8').strip()
+                if not clang_bin_path:
+                    raise ClangExecutableNotFound("no clang path found")
+                if not os.path.exists(clang_bin_path):
+                    raise ClangExecutableNotFound("clang path {} does not exist"
+                                                  .format(clang_bin_path))
+            except Exception as e:
+                raise
+
+            # Assumption is that the llvm tools co-reside with the clang binary.
+
+            self.clang_bin_dir = os.path.dirname(clang_bin_path)
+            self.llvm_cov_path = os.path.join(clang_bin_dir, "llvm-cov")
+            self.llvm_profdata_path = os.path.join(clang_bin_dir, "llvm-profdata")
+
+        if not os.path.exists(self.llvm_cov_path):
+            raise ClangExecutableNotFound("llvm-cov path {} does not exist"
+                                          .format(self.llvm_cov_path))
+        if not os.path.exists(self.llvm_profdata_path):
+            raise ClangExecutableNotFound("llvm-profdata path {} does not exist"
+                                          .format(self.llvm_profdata_path))
+
+
 class ClangCoverageDir(object):
 
-    local_clang_dir = "/usr/local/bin/clang"
-    clang_bin_default = "/opt/clang5/bin"
+    ENV_PARAMS = {"CLANG_BIN_PATH": {"default":"/usr/local/bin/clang"},
+                  "ARTIFACTS_RAWPROF_DIR_NAME": {"default": "rawprof"},
+                  "ARTIFACTS_BIN_DIR_NAME": {"default": "bin"}}
 
-    if os.path.exists(local_clang_dir):
-        if os.path.islink(local_clang_dir):
-            clang_bin_default = os.readlink(local_clang_dir)
-        else:
-            clang_bin_default = local_clang_dir
+    def __init__(self, *, coverage_dir, bin_name="usrnode",
+                                        profdata_file_name="usrnode.profdata",
+                                        json_file_name="coverage.json"):
 
-    print("clang_bin_default: {}".format(clang_bin_default))
-    ENV_PARAMS = {"CLANG_BIN_DIR": {"default": clang_bin_default},
-                  "CLANG_RAWPROF_DIR_NAME": {"default": "rawprof"},
-                  "CLANG_USER_BIN_DIR_NAME": {"default": "bin"}}
 
-    CFG = EnvConfiguration(ENV_PARAMS)
-    CLANG_BIN_DIR = CFG.get("CLANG_BIN_DIR")
+        cfg = EnvConfiguration(ClangCoverageDir.ENV_PARAMS)
 
-    def __init__(self, *, coverage_dir, bin_name="usrnode", profdata_file_name="usrnode.profdata"):
         self.logger = logging.getLogger(__name__)
         self.coverage_dir = coverage_dir
         self.bin_name = bin_name
         self.profdata_file_name = profdata_file_name
+        self.json_file_name = json_file_name
+        self.rawprof_dir_name = cfg.get("ARTIFACTS_RAWPROF_DIR_NAME")
+        self.bin_dir_name = cfg.get("ARTIFACTS_BIN_DIR_NAME")
+        self.clang_bin_path = cfg.get("CLANG_BIN_PATH")
 
     def bin_path(self):
-        return os.path.join(self.coverage_dir,
-                            ClangCoverageDir.CFG.get("CLANG_USER_BIN_DIR_NAME"),
-                            self.bin_name)
+        return os.path.join(self.coverage_dir, self.bin_dir_name, self.bin_name)
 
     def profdata_path(self):
         return os.path.join(self.coverage_dir, self.profdata_file_name)
 
-    def _create_profdata(self, *, work_dir, force):
+    def json_path(self):
+        return os.path.join(self.coverage_dir, self.json_file_name)
+
+    def _create_profdata(self, *, clang_tools, work_dir, force):
         """
         work_dir is expected to have a "raw profile data" directory
-        (named by CLANG_RAWPROF_DIR_NAME).
+        (named by ARTIFACTS_RAWPROF_DIR_NAME).
 
         Process the raw data and leave a profdata index file
         in the working directory (e.g. usrnode.profdata)
@@ -141,7 +187,7 @@ class ClangCoverageDir(object):
             self.logger.info("{} exists and not force, skipping...".format(profdata_path))
             return [profdata_path]
 
-        rawprof_dir = os.path.join(work_dir, ClangCoverageDir.CFG.get("CLANG_RAWPROF_DIR_NAME"))
+        rawprof_dir = os.path.join(work_dir, self.rawprof_dir_name)
         self.logger.debug("rawprof_dir: {}".format(rawprof_dir))
         if not os.path.exists(rawprof_dir):
             self.logger.debug("{} doesn't exist".format(rawprof_dir))
@@ -149,7 +195,9 @@ class ClangCoverageDir(object):
             for name in os.listdir(work_dir):
                 path = os.path.join(work_dir, name)
                 if os.path.isdir(path):
-                    file_list.extend(self._create_profdata(work_dir=path, force=force))
+                    file_list.extend(self._create_profdata(clang_tools=clang_tools,
+                                                           work_dir=path,
+                                                           force=force))
             return file_list
 
         self.logger.debug("{} exists".format(rawprof_dir))
@@ -178,7 +226,7 @@ class ClangCoverageDir(object):
             for path in most_files:
                 f.write("{}\n".format(path))
 
-        cargs = [os.path.join(ClangCoverageDir.CLANG_BIN_DIR, "llvm-profdata"), "merge"]
+        cargs = [clang_tools.llvm_profdata_path, "merge"]
         cargs.extend(["-f", merge_files_path])
         cargs.extend(["-o", profdata_path])
         self.logger.debug("run: {}".format(cargs))
@@ -191,7 +239,7 @@ class ClangCoverageDir(object):
         return [profdata_path]
 
     @classmethod
-    def _create_json(cls, *, out_dir, bin_path, profdata_path, force):
+    def _create_json(cls, *, clang_tools, out_dir, bin_path, profdata_path, force):
         logger = logging.getLogger(__name__)
         logger.debug("start")
 
@@ -200,7 +248,7 @@ class ClangCoverageDir(object):
             logger.info("{} exists and not force, skipping...".format(json_file_path))
             return
 
-        cargs = [os.path.join(ClangCoverageDir.CLANG_BIN_DIR, "llvm-cov"), "export", bin_path]
+        cargs = [clang_tools.llvm_cov_path, "export", bin_path]
         cargs.extend(["-instr-profile", profdata_path])
         cargs.extend(["-format", "text"])
         logger.debug("run: {}".format(cargs))
@@ -211,7 +259,7 @@ class ClangCoverageDir(object):
                                 .format(cp.stderr.decode('utf-8')))
 
     @classmethod
-    def _create_html(cls, *, out_dir, bin_path, profdata_path, force):
+    def _create_html(cls, *, clang_tools, out_dir, bin_path, profdata_path, force):
         logger = logging.getLogger(__name__)
         logger.debug("start")
 
@@ -220,7 +268,7 @@ class ClangCoverageDir(object):
             logger.info("{} exists and not force, skipping...".format(html_path))
             return
 
-        cargs = [os.path.join(ClangCoverageDir.CLANG_BIN_DIR, "llvm-cov"), "show", bin_path]
+        cargs = [clang_tools.llvm_cov_path, "show", bin_path]
         cargs.extend(["-instr-profile", profdata_path])
         cargs.extend(["-format", "html"])
         cargs.extend(["-output-dir", out_dir])
@@ -231,7 +279,7 @@ class ClangCoverageDir(object):
             raise Exception(err)
 
     @classmethod
-    def _merge_profdata(cls, *, profdata_files, profdata_path, force):
+    def _merge_profdata(cls, *, clang_tools, profdata_files, profdata_path, force):
         """
         Merge profdata files
         """
@@ -241,7 +289,7 @@ class ClangCoverageDir(object):
             logger.info("{} exists and not force, skipping...".format(profdata_path))
             return
 
-        cargs = [os.path.join(ClangCoverageDir.CLANG_BIN_DIR, "llvm-profdata"), "merge"]
+        cargs = [clang_tools.llvm_profdata_path, "merge"]
         for path in profdata_files:
             cargs.append(path)
         cargs.extend(["-o", profdata_path])
@@ -257,11 +305,15 @@ class ClangCoverageDir(object):
         """
         Process coverage data in our directory.
         """
+        clang_tools = ClangCoverageTools()
+
         bin_path = self.bin_path()
         if not os.path.exists(bin_path):
             raise ClangCoverageNoBinary("{} does not exist".format(bin_path))
 
-        profdata_files = self._create_profdata(work_dir=self.coverage_dir, force=force)
+        profdata_files = self._create_profdata(clang_tools=clang_tools,
+                                               work_dir=self.coverage_dir,
+                                               force=force)
         self.logger.debug("profdata_files: {}".format(profdata_files))
         if not profdata_files:
             raise ClangCoverageNoData("No valid rawprof files found")
@@ -270,7 +322,8 @@ class ClangCoverageDir(object):
 
         if len(profdata_files) > 1:
             # Merge all sub-profdata...
-            ClangCoverageDir._merge_profdata(profdata_files=profdata_files,
+            ClangCoverageDir._merge_profdata(clang_tools=clang_tools,
+                                             profdata_files=profdata_files,
                                              profdata_path=profdata_path,
                                              force=force)
         else:
@@ -279,14 +332,16 @@ class ClangCoverageDir(object):
 
         # coverage.json
         if create_json:
-            self._create_json(out_dir=self.coverage_dir,
+            self._create_json(clang_tools=clang_tools,
+                              out_dir=self.coverage_dir,
                               bin_path=bin_path,
                               profdata_path=profdata_path,
                               force=force)
 
         # HTML
         if create_html:
-            self._create_html(out_dir=self.coverage_dir,
+            self._create_html(clang_tools=clang_tools,
+                              out_dir=self.coverage_dir,
                               bin_path=bin_path,
                               profdata_path=profdata_path,
                               force=force)
@@ -304,6 +359,7 @@ class ClangCoverageDir(object):
         output directory.
         """
         logger = logging.getLogger(__name__)
+        clang_tools = ClangCoverageTools()
 
         if len(dirs) < 1:
             raise ValueError("dirs list must contain at least one path")
@@ -331,23 +387,62 @@ class ClangCoverageDir(object):
 
         profdata_path = os.path.join(out_dir, profdata_file_name)
 
-        cls._merge_profdata(profdata_files=profdata_files,
+        cls._merge_profdata(clang_tools=clang_tools,
+                            profdata_files=profdata_files,
                             profdata_path=profdata_path,
                             force=True) # Always re-create output files
         # coverage.json
         if create_json:
-            cls._create_json(out_dir=out_dir,
+            cls._create_json(clang_tools=clang_tools,
+                             out_dir=out_dir,
                              bin_path=bin_path,
                              profdata_path=profdata_path,
                              force=True) # Always re-create output files
 
         # HTML
         if create_html:
-            cls._create_html(out_dir=out_dir,
+            cls._create_html(clang_tools=clang_tools,
+                             out_dir=out_dir,
                              bin_path=bin_path,
                              profdata_path=profdata_path,
                              force=True) # Always re-create output files
 
+    def _do_diff(self, *, new, base):
+        self.logger.debug("BASE: {}".format(base))
+        self.logger.debug("THIS: {}".format(new))
+        diff = {}
+        if new['count'] != base['count']:
+            raise Exception("count mismatch")
+        diff['count'] = new['count']
+        diff['covered'] = new['covered'] - base['covered']
+        if diff['count'] == 0:
+            diff['percent'] = 0
+        else:
+            diff['percent'] = (diff['covered']*100)/diff['count']
+        self.logger.debug("DIFF: {}".format(diff))
+        return diff
+
+
+    def diff(self, *, base_dir):
+        summaries_base = ClangCoverageFile(path=base_dir.json_path()).file_summaries()
+        summaries_new = ClangCoverageFile(path=self.json_path()).file_summaries()
+        only_base = {}
+        only_new = {}
+        diffs = {}
+        # This minus base
+        for key in summaries_base.keys():
+            if key not in summaries_new:
+                only_base[key] = base[key]
+        for key in summaries_new.keys():
+            if key not in summaries_base:
+                only_new[key] = new[key]
+            diffs[key] = {}
+            for section in ['lines', 'functions', 'instantiations', 'regions']:
+                diffs[key][section] = self._do_diff(new = summaries_new[key][section],
+                                                    base = summaries_base[key][section])
+        return {'diffs': diffs,
+                'only_base': only_base,
+                'only_new': only_new}
 
 class ClangCoverageAggregator(JenkinsAggregatorBase):
 
@@ -385,19 +480,4 @@ class ClangCoverageAggregator(JenkinsAggregatorBase):
 
 
 if __name__ == '__main__':
-    cfg = EnvConfiguration({"LOG_LEVEL": {"default": logging.INFO}})
-    logging.basicConfig(level=cfg.get("LOG_LEVEL"),
-                        format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
-                        handlers=[logging.StreamHandler()])
-    logger = logging.getLogger(__name__)
-
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dir", help="coverage directory to process",
-                        dest='coverage_dirs', action='append', required=True)
-    parser.add_argument("--out", help="output directory to store merged results",
-                        required=True)
-    parser.add_argument("--force", help="force re-creation of all files", action='store_true')
-    args = parser.parse_args()
-
-    ClangCoverageDir.merge(dirs=args.coverage_dirs, out_dir=args.out, force=args.force)
+    print("Compile check A-OK!")
