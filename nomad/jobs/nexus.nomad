@@ -62,6 +62,10 @@ job "nexus" {
         }
       }
 
+      env {
+        INSTALL4J_ADD_VM_PARAMS = "-Xms2g -Xmx4g -XX:MaxDirectMemorySize=2g"
+      }
+
       template {
         destination = "secret/secret.env"
 
@@ -73,7 +77,7 @@ EOD
       }
 
       resources {
-        memory = 4000
+        memory = 8000
         cpu    = 4000
 
         network {
