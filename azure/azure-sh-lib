@@ -491,6 +491,37 @@ az_sp_list() {
     az ad sp list -ojson --query '[].{Id: objectId, SPN: servicePrincipalNames[0]}' -otable
 }
 
+az_role_assign_user() {
+    local group="$1"
+    local email="$2"
+    local role="$3"
+    local id
+
+    if id=$(az ad user show --id "$email" --query objectId -otsv); then
+        if az role assignment create --role "$role" --assignee-object-id $id --assignee-principal-type User -g $group; then
+            return 0
+        fi
+    fi
+    say "ERROR: Failed to assign '$role' to '$email' for '$group'"
+    return 1
+}
+
+az_role_assign_group() {
+    local group="$1"
+    local name="$2"
+    local role="$3"
+    local id
+
+    if id=$(az ad group show --group "$name" --query objectId -otsv); then
+        if az role assignment create --role "$role" --assignee-object-id $id --assignee-principal-type Group -g $group; then
+            return 0
+        fi
+    fi
+    say "ERROR: Failed to assign '$role' to '$group' for '$group'"
+    return 1
+}
+
+
 az_deploy_usage() {
 
     local -a params=($(jq -r '.parameters|keys|join("\n")' < $TEMPLATE | tr '\t' '\n')) str=()
@@ -511,7 +542,8 @@ az_deploy() {
     local uid=$((RANDOM % 511)) ii cmd location=westus2
     local now=$(date +%Y%m%d%H%M%S)
     local -a extra_params=()
-    local email=$(git config user.email) retry ip_address
+    local email="${BUILD_USER_EMAIL:-$(git config user.email)}"
+    local retry ip_address
     local location=${LOCATION}
     local name group count=1 size=Standard_D8_v3 template_arg storageAccount_arg
     local template=$AZ_DEFAULT_TEMPLATE
@@ -654,7 +686,7 @@ az_deploy() {
         fi
         name="${group%-rg}"
     fi
-    test -n "$name" || name="xdp-${USER}-${uid}"
+    test -n "$name" || name="xdp-${BUILD_USER_ID-$USER}-${uid}"
     test -n "$dnslabel" || dnslabel="${name}"
 
     if [ "$(az group exists -g "$group" -otsv)" = false ]; then
@@ -729,6 +761,10 @@ az_deploy() {
     az_rg_scheduled_shutdown -g $group --time 2259 --timezone "$timezone"
 
     dns=${dnslabel}.${location}.cloudapp.azure.com
+
+    if ! az_role_assign_user $group $email 'Contributor'; then
+        say "Failed to assign permissions to $email"
+    fi
 
     say "Finished. Browse your deployment here: https://${dns}"
     say
