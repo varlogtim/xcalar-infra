@@ -1,9 +1,13 @@
 #!/bin/bash
 #
+# shellcheck disable=SC2086,SC1090,SC2162
+#
 # Handy Azure aliases/shortcuts. Source this file in your ~/.bash_aliases
 # ## ~/.bash_aliases
 # export XLRINFRADIR=$HOME/xcalar-infra
-# . $XLRINFRADIR/azure/azure-sh-lib
+# export PATH=$XLRINFRADIR/bin:$PATH
+# source azure-sh-lib
+#
 
 source $XLRINFRADIR/bin/infra-sh-lib
 
@@ -552,6 +556,7 @@ az_deploy() {
     local licenseParamFile=$LICENSEDEV
     local mode=Incremental
     local osDiskSize=127
+    local timezone='Pacific Standard Time' time=2300
     while [ $# -gt 0 ]; do
         cmd="$1"
         case "$cmd" in
@@ -561,6 +566,10 @@ az_deploy() {
                 ;;
             --timezone=*)
                 timezone="${1##*=}"
+                shift 1
+                ;;
+            --time=*)
+                time="${1##*=}"
                 shift 1
                 ;;
             --email=*)
@@ -631,6 +640,10 @@ az_deploy() {
                 timezone="${2}"
                 shift 2
                 ;;
+            --time)
+                time="$2"
+                shift 2
+                ;;
             --email)
                 email="$2"
                 shift 2
@@ -686,7 +699,7 @@ az_deploy() {
         fi
         name="${group%-rg}"
     fi
-    test -n "$name" || name="xdp-${BUILD_USER_ID-$USER}-${uid}"
+    test -n "$name" || name="xdp-${BUILD_USER_ID:-$USER}-${uid}"
     test -n "$dnslabel" || dnslabel="${name}"
 
     if [ "$(az group exists -g "$group" -otsv)" = false ]; then
@@ -758,7 +771,7 @@ az_deploy() {
         say "Failed to deploy!"
         return 1
     fi
-    az_rg_scheduled_shutdown -g $group --time 2259 --timezone "$timezone"
+    az_rg_scheduled_shutdown -g "$group" --time "$time" --timezone "$timezone"
 
     dns=${dnslabel}.${location}.cloudapp.azure.com
 
@@ -820,7 +833,13 @@ az_timezone_str() {
     echo $timezone
 }
 
-az_argparse() {
+# Call this function with the resourceGroup name and optionally
+# a time in 24h (default 2200 = 10pm PST). This will deploy
+# shutdown rules to all vms in the resourcegroups.
+az_rg_scheduled_shutdown() {
+    local time="2300"
+    local timezone="Pacific Standard Time"
+    local enabled=true
     while [ $# -gt 0 ]; do
         local cmd="$1"
         case "$cmd" in
@@ -837,17 +856,6 @@ az_argparse() {
         say "Must specify -g|--group"
         return 1
     fi
-    return 0
-}
-
-# Call this function with the resourceGroup name and optionally
-# a time in 24h (default 2200 = 10pm PST). This will deploy
-# shutdown rules to all vms in the resourcegroups.
-az_rg_scheduled_shutdown() {
-    if ! az_argparse "$@"; then
-        # More arguments left
-        true
-    fi
     local -a vms
     if ! vms=($(az vm list -g "$group" --query '[].id' -otsv)); then
         return 1
@@ -856,15 +864,13 @@ az_rg_scheduled_shutdown() {
     local count="${#vms[@]}"
     local vm0="${vms[0]}"
     vm0="${vm0##*/}"
-    time="${time:-2300}"
-    time="${time//:/}"
     az group deployment create --handle-extended-json-format \
         -n scheduledShutdown-${group}-${now} \
         -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json \
         --parameters \
-        enabled=${enabled:-true} \
+        enabled=${enabled} \
         vmName="${vm0%[0-9]*}"\
-        time="${time}" timeZoneId="${timezone:-Pacific Standard Time}" \
+        time="${time//:/}" timeZoneId="${timezone}" \
         scaleNumber=$count -ojson --no-wait
 }
 

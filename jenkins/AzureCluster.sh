@@ -44,9 +44,10 @@ ADMIN_USERNAME=${ADMIN_USERNAME:-xdpadmin}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-Welcome1}
 
 cd $XLRINFRADIR/azure
-
+TIME="${TIME//:/}"
 if ! az_deploy -g $GROUP -l $LOCATION -i "$INSTALLER_URL" --count $NUM_NODES \
     --size $INSTANCE_TYPE --name "$APP" \
+    --timezone "${TIMEZONE:-Pacific Standard Time}" --time "${TIME:-2300}" \
     --parameters \
     adminEmail="${BUILD_USER_EMAIL:-nobody@xcalar.com}" \
     appUsername="$ADMIN_USERNAME" \
