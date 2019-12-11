@@ -5,12 +5,11 @@
 # Handy Azure aliases/shortcuts. Source this file in your ~/.bash_aliases
 # ## ~/.bash_aliases
 # export XLRINFRADIR=$HOME/xcalar-infra
-# export PATH=$XLRINFRADIR/bin:$PATH
+# export PATH=$PATH:$XLRINFRADIR/bin
 # source azure-sh-lib
 #
 
 source $XLRINFRADIR/bin/infra-sh-lib
-
 
 az_setup() {
     AZTMP=${AZTMP:-${TMPDIR:-/tmp}}/aztmp-$(id -u)
@@ -34,8 +33,11 @@ az_setup() {
 
 
 az_login() {
+    (
+    set +x
     az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID && \
     az account set --subscription $AZURE_SUBSCRIPTION_ID
+    )
 }
 
 az_mktemp() {
@@ -65,19 +67,19 @@ az_rg_create() {
 # NAME=trial-rmadugula-01-vm0
 # OFFER=CentOS
 az_metadata_instance() {
-    az_meta "http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json" | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'
+    az_meta "http://169.254.169.254/metadata/instance?api-version=2019-06-04&format=json" | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'
 }
 
 # Returns any scheduled events in this format:
 ## { "DocumentIncarnation": 0, "Events": [] }
 az_metadata_event() {
-    az_meta "http://169.254.169.254/metadata/scheduledevents?api-version=2018-04-02&format=json" | jq -r . #| jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'; echo "${PIPESTATUS[0]}";
+    az_meta "http://169.254.169.254/metadata/scheduledevents?api-version=2019-06-04&format=json" | jq -r . #| jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'; echo "${PIPESTATUS[0]}";
 }
 
 # Render tags as:
 #
 az_metadata_tags_nodeps() {
-    az_meta 'http://169.254.169.254/metadata/instance/compute/tags?api-version=2018-04-02&format=text' | tr ';' '\n' | sed -r 's/^(.*):(.*)$/\1="\2"/g'
+    az_meta 'http://169.254.169.254/metadata/instance/compute/tags?api-version=2019-06-04&format=text' | tr ';' '\n' | sed -r 's/^(.*):(.*)$/\1="\2"/g'
 }
 
 az_metadata_env() {
@@ -152,7 +154,7 @@ az_rg_vms_do() {
     fi
     local pids=() id
     for id in "${ids[@]}"; do
-        say az vm $action "$@" --ids "$id"
+        say "az vm $action $* --ids $id"
         az vm $action "$@" --ids "$id" < /dev/null &
         pids+=($!)
     done
@@ -201,6 +203,10 @@ az_rg_deallocate() {
 
 az_rg_start() {
     az_rg_vms_do start "$@"
+}
+
+az_rg_restart() {
+    az_rg_vms_do restart "$@"
 }
 
 # Pass an Azure publicIPAddress resource like

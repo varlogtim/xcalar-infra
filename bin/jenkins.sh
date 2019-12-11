@@ -13,9 +13,6 @@ export CPPFLAGS=-I/usr/local/opt/openssl/include
 cd $XLRINFRADIR || exit 1
 
 #rm -rf .venv
-test -e .venv || /opt/xcalar/bin/virtualenv .venv
-.venv/bin/pip install -q -r frozen.txt
-source .venv/bin/activate
 source $XLRINFRADIR/bin/infra-sh-lib
 source $XLRINFRADIR/azure/azure-sh-lib
 source $XLRINFRADIR/aws/aws-sh-lib
@@ -30,9 +27,10 @@ if [ -n "$XLRDIR" ]; then
         exit 1
     fi
     setup_proxy
+else
+    make
+    source .venv/bin/activate
 fi
-
-source $XLRINFRADIR/bin/infra-sh-lib
 
 # First look in local (Xcalar) repo for a script and fall back to the one in xcalar-infra
 for SCRIPT in "${XLRINFRADIR}/jenkins/${JOB_NAME}.sh"; do
