@@ -42,7 +42,7 @@
             "value": "new"
         },
         "vmSize": {
-            "value": "Standard_E8s_v3"
+            "value": "Standard_E8_v3"
         },
         "storageAccountNewOrExisting": {
             "value": "existing"
@@ -86,7 +86,7 @@
           "value" : false
         },
         "osDiskSize": {
-          "value": 511
+          "value": 1023
         },
         "swapDiskSize": {
           "value": 255
