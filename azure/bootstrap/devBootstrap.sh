@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# shellcheck disable=SC2006,SC2155,SC2034,SC2164
+# shellcheck disable=SC2006,SC2155,SC2034,SC2164,SC1091
 
 LOGFILE=startup.log
 touch $LOGFILE
@@ -241,10 +241,12 @@ setup_instancestore () {
         log "ERROR: Disk $1 isn't a block device"
         return 1
     fi
-    yum install -y --enablerepo='xcalar-deps-common' ephemeral-disk
+    # Fix version of ephemeral-disk we install. Really, just a workaround
+    # to something caching the package, but we really want to pin this by branch/build anyway.
+    yum install -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-21.noarch.rpm
 
-    # Ephemeral disks on Azure instances don't have enough space for 2xMEM swap
-    sed -i 's/^LV_SWAP_SIZE=.*$/LV_SWAP_SIZE=MEMSIZE/g' /etc/sysconfig/ephemeral-disk
+    sed -i '/LV_SWAP_SIZE/d' /etc/sysconfig/ephemeral-disk
+    echo "LV_SWAP_SIZE=MEMSIZE2X" >> /etc/sysconfig/ephemeral-disk
 
     sed -i 's/^ResourceDisk.Format=y/ResourceDisk.Format=n/g' /etc/waagent.conf
     DISK="$1"
@@ -757,6 +759,7 @@ chown -R xcalar:xcalar "$XCE_HOME"
 
 # Populate the local host keys with those of the members so we can SSH into them without
 # the hostkey check warning
+# shellcheck disable=SC2162
 cat ${XCE_HOME}/members/* | while read HOSTENTRY; do
     echo "$HOSTENTRY" | tee -a /etc/hosts >/dev/null
     ssh-keyscan $HOSTENTRY
