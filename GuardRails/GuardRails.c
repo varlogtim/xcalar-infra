@@ -792,6 +792,8 @@ onExitHelper(bool useLocale) {
     }
 
     for (size_t slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
+        int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
+        GR_ASSERT_ALWAYS(ret == 0);
         totalUserRequestedBytes += memSlots[slotNum].totalUserRequestedBytes;
         totalUserFreedBytes += memSlots[slotNum].totalUserFreedBytes;
         printf("Number mem pools used: %lu\n", currMemPool+1);
@@ -831,6 +833,8 @@ onExitHelper(bool useLocale) {
                     binAllocedBytes - binFreedBytes);
             totalRequestedPow2Bytes += binAllocedBytes;
         }
+        ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
+        GR_ASSERT_ALWAYS(ret == 0);
     }
 
     if (outfd != -1) {
