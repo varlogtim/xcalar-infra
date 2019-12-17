@@ -12,6 +12,7 @@ variables:
   home: '{{env `HOME`}}'
   installer_build_number: '1'
   installer_url: '{{env `INSTALLER_URL`}}'
+  bootstrap: '{{env `XLRINFRADIR`}}/aws/cfn/{{env `PROJECT`}}/scripts/user-data.sh'
   installer_version: '1.0'
   license: '{{env `LICENSE`}}'
   product_desc: Xcalar Data Platform
@@ -21,13 +22,16 @@ variables:
   ssh_username: ec2-user
   today: '{{isotime "20060102"}}'
   uid: '1000'
+  release: ''
+  topsrc: '{{env `XLRINFRADIR`}}'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-amzn2
     access_key: '{{user `aws_access_key`}}'
     secret_key: '{{user `aws_secret_key`}}'
     ssh_keypair_name: 'xcalar-{{user `region`}}'
-    ssh_private_key_file: '{{user `home`}}/.ssh/xcalar-{{user `region`}}.pem'
+    ssh_keypair_name: 'packer'
+    ssh_private_key_file: '{{template_dir}}/../ssh/id_packer.pem'
     region: '{{user `region`}}'
     ami_regions: '{{user `destination_regions`}}'
     ami_users: '{{user `shared_with`}}'
@@ -80,8 +84,8 @@ builders:
     name: amazon-ebs-amzn1
     access_key: '{{user `aws_access_key`}}'
     secret_key: '{{user `aws_secret_key`}}'
-    ssh_keypair_name: 'xcalar-{{user `region`}}'
-    ssh_private_key_file: '{{user `home`}}/.ssh/xcalar-{{user `region`}}.pem'
+    ssh_keypair_name: 'packer'
+    ssh_private_key_file: '{{template_dir}}/../ssh/id_packer.pem'
     region: '{{user `region`}}'
     ami_regions: '{{user `destination_regions`}}'
     ami_users: '{{user `shared_with`}}'
@@ -134,6 +138,7 @@ provisioners:
   - type: shell
     environment_vars:
       - OSID={{split build_name "-" 2}}
+      - CLOUD=aws
       - INSTALLER_URL={{user `installer_url`}}
       - LICENSE={{user `license`}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
@@ -143,17 +148,39 @@ provisioners:
   - type: file
     source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
     destination: /tmp/genDefaultAdmin.sh
+  - type: file
+    source: '{{ user `bootstrap` }}'
+    destination: /tmp/bootstrap.sh
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     inline:
-      - chmod +x /tmp/genDefaultAdmin.sh
-      - chown root:root /tmp/genDefaultAdmin.sh
+      - chmod +x /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh
+      - chown root:root /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh
+      - yum remove -y python26 || true
+      - ln -sfn /usr/bin/python2.7 /usr/bin/python2
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
+      - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
   - type: shell
     environment_vars:
       - OSID={{split build_name "-" 2}}
+      - CLOUD=aws
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
       - '{{ template_dir }}/../scripts/finish.sh'
 post-processors:
   - type: manifest
+    custom_data:
+      build_id: '{{user `build_id`}}'
+      build_number: '{{user `build_number`}}'
+      destination_regions: '{{user `destination_regions`}}'
+      installer_build_number: '{{user `installer_build_number`}}'
+      installer_url: '{{user `installer_url`}}'
+      bootstrap: '{{user `bootstrap`}}'
+      installer_version: '{{user `installer_version`}}'
+      license: '{{user `license`}}'
+      product: '{{user `product`}}'
+      release: '{{user `release`}}'
+      region: '{{user `region`}}'
+      shared_with: '{{user `shared_with`}}'
+      today: '{{user `today`}}'
+

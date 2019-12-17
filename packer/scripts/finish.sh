@@ -31,6 +31,8 @@ history -c
 export HISTSIZE=0
 export HISTFILESIZE=0
 
+rm -rf /tmp/* #/var/tmp/*
+
 if test -e /usr/sbin/waagent; then
 	echo >&2 "Running Azure deprovisioner ..."
 	/usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync

@@ -99,24 +99,35 @@ xcalar_latest() {
     AMZN1HVM_US_WEST_2=$(ec2_find_ami --filters "Name=tag:Version,Values=${VERSION}" 'Name=name,Values=xdp-*' --owner self --region us-west-2)
     echo "ami_us_east_1: $AMZN1HVM_US_EAST_1" > $TEMPLATEDIR/vars/amis.yaml
     echo "ami_us_west_2: $AMZN1HVM_US_WEST_2" >> $TEMPLATEDIR/vars/amis.yaml
+    case "$AWS_DEFAULT_REGION" in
+        us-west-2)
+            IMAGE_ID=$AMZN1HVM_US_WEST_2
+            ami_id=$IMAGE_ID
+            ;;
+        us-east-1)
+            IMAGE_ID=$AMZN1HVM_US_EAST_1
+            ami_id=$IMAGE_ID
+            ;;
+    esac
 }
 
 jq_get_userata_from_lc() {
-    jq -r '.Resources.LaunchConfiguration.Properties.UserData."Fn::Base64"."Fn::Sub"[0]'
+    jq -r '.Resources.LaunchConfiguration.Properties.UserData."Fn::Base64"."Fn::Sub"'
 }
 
 jq_get_userata_from_lt() {
-    jq -r '.Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64"."Fn::Sub"[0]'
+    jq -r '.Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64"."Fn::Sub"'
 }
 
 jq_put_userata_in_lc() {
     # STDIN = template $1 = Resource path to UserData $2 = shell script to inject
     # Eg, jq_put_userata_in_lc ClusterLC.Properties.UserData deploy.sh < xdp-standard.json
-    jq -r ".Resources.ClusterLC.Properties.UserData.\"Fn::Base64\".\"Fn::Sub\"[0] = $(cat "$@" | jq -R -s .)"
+    jq -r ".Resources.ClusterLC.Properties.UserData.\"Fn::Base64\".\"Fn::Sub\" = $(cat "$@" | jq -R -s .)"
 }
 
 jq_put_userata_in_lt() {
-    jq -r ".Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData.\"Fn::Base64\".\"Fn::Sub\"[0] = $(cat "$@" | jq -R -s .)"
+    #jq -r ".Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData.\"Fn::Base64\".\"Fn::Sub\" = $(cat "$@" | jq -R -s .)"
+    jq -r 'del(.Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64"."Fn::Sub"), .Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64" = "'$(cat "$1" | jq -R -s .)'"'
 }
 
 # Turn [ { "ParameterKey": "Foo", "ParameterValue":"Bar"}, .. ]
@@ -163,6 +174,10 @@ dc2_parse_common() {
             ;;
         --cloud)
             CLOUD="$1"
+            echo 2
+            ;;
+        --osid)
+            OSID="$1"
             echo 2
             ;;
         --version | -V)
@@ -294,6 +309,10 @@ dc2_upload() {
                 J2DEFS+=("-D" "$1")
                 shift
                 ;;
+            --manifest)
+                MANIFEST="$1"
+                shift
+                ;;
             --) break ;;
             *)
                 say "ERROR: Unknown argument $cmd"
@@ -337,7 +356,7 @@ dc2_upload() {
     mkdir -p "$TMPDIR"/vars
     rm -fv "$TMPDIR"/vars/*
 
-    cat > "$PROJDIR"/vars/deploy.yaml <<- EOF
+    cat > "$TMPDIR"/vars/deploy.yaml <<- EOF
 	VERSION: $VERSION
 	PROJECT: $PROJECT
 	RELEASE: $RELEASE
@@ -351,17 +370,21 @@ dc2_upload() {
 
     local -a urls=() quick_urls=()
     test -n "${URL_FILE:-}" && rm -f "${URL_FILE}" || true
+    if [ -n "${MANIFEST:-}" ]; then
+        packer_manifest_all $MANIFEST > $TMPDIR/vars/images.yaml
+    fi
     local ami_id
     if [ -n "${IMAGE_ID:-}" ]; then
         ami_id="$IMAGE_ID"
+        eval ami_${AWS_DEFAULT_REGION//-/_}=$IMAGE_ID
     else
-        ami_id=$(cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | cfn-flip | jq -r '.ami_us_west_2')
+        ami_id=$(cat "$TMPDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | cfn-flip | jq -r '.ami_'"${AWS_DEFAULT_REGION//-/_}")
         debug "Found AMI: $ami_id"
         if [ "$ami_id" = null ] || test -z "$ami_id" ; then
             xcalar_latest
             ami_id=$(aws ec2 describe-images --owners self --filters \
                 Name=tag:Version,Values=${VERSION} \
-                Name=tag:BaseOS,Values="*${osid}*" \
+                Name=tag:BaseOS,Values="*${OSID}*" \
                 Name=name,Values='xdp-*' | aws_format_images | head -1 | awk '{print $2}')
             if [ $? -ne 0 ]; then
                 die "Failed to find valid AMI"
@@ -369,7 +392,7 @@ dc2_upload() {
             debug "Found New AMI: $ami_id"
         fi
     fi
-    aws ec2 describe-images --region us-west-2 --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TEMPLATEDIR"/vars/image.yaml
+    aws ec2 describe-images --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TMPDIR"/vars/image.yaml
     for J2TEMPLATE in "$PROJDIR"/*.j2; do
         if [[ $J2TEMPLATE =~ quickcreate ]]; then
             continue
@@ -381,12 +404,21 @@ dc2_upload() {
                 *) TEMPLATEOUT=${TEMPLATE}-${flavor} ;;
             esac
             templateUrl="${BASE_URL}/${TEMPLATEOUT}.json"
-            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml "$TEMPLATEDIR"/flavor/${flavor}.yaml > $TMPDIR/allvars.yaml
+            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml "$TEMPLATEDIR"/flavor/${flavor}.yaml "$TMPDIR"/vars/*.yaml > $TMPDIR/allvars.yaml
 
             local templateJson=${GENDIR}/${TEMPLATEOUT}.json
             # shellcheck disable=SC2002
-            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" | tee ${TMPDIR}/${TEMPLATEOUT}.yaml | cfn-flip > "$templateJson"; then
+            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "bootstrapUrl=$bootstrapUrl" -D "ami_""${AWS_DEFAULT_REGION//-/_}""=$ami_id" -D "region=${AWS_DEFAULT_REGION}" -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" \
+                | tee ${TMPDIR}/${TEMPLATEOUT}.yaml \
+                | cfn-flip > "$templateJson"; then
+                #| jq_put_userata_in_lt $PROJDIR/scripts/user-data.sh > "$templateJson"; then
                 die "Failed to apply jinja template $templateJson"
+            fi
+            if test -x $TEMPLATEDIR/verify.sh; then
+                echo >&2 "Running verify script"
+                if ! $TEMPLATEDIR/verify.sh --template "$templateJson" --bootstrap-url "$bootstrapUrl" --ami-id "$ami_id" --region "$AWS_DEFAULT_REGION"; then
+                    die "Failed to verify $templateJson"
+                fi
             fi
             local templateMd5
             if ! templateMd5=$(md5sum "${templateJson}" | awk '{print $1}') || [ -z "$templateMd5" ]; then

@@ -115,6 +115,9 @@ die() {
     exit ${2:-1}
 }
 
+mkdir -p "$VAULTCACHE_BASE"
+log "Env: $(print_clean_env)"
+log "Args: $*"
 if [[ $OSTYPE =~ darwin ]]; then
     please_install() {
         say
@@ -315,7 +318,7 @@ vault_sanity() {
     fi
     if [ ${aws_version[1]} -lt 15 ]; then
         echo "not ok    2  - awscli 15.40 or higher"
-        echo "ok    2  - awscli 15.40 or higher"
+        die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
     elif [ ${aws_version[1]} -eq 15 ] && [ ${aws_version[2]} -lt 40 ]; then
         echo "not ok    2  - awscli 15.40 or higher"
         die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."

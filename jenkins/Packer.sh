@@ -2,13 +2,16 @@
 #
 # shellcheck disable=SC1091,SC2086
 
-set -ex
+set -e
 
 export XLRINFRADIR=${XLRINFRADIR:-$PWD}
-export PATH=$XLRINFRADIR/bin:/opt/xcalar/bin:$HOME/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin:$PATH
+export PATH=$XLRINFRADIR/bin:/opt/xcalar/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin:$HOME/.local/bin:$HOME/bin
 export OUTDIR=${OUTDIR:-$PWD/output}
 MANIFEST=$OUTDIR/packer-manifest.json
 export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+export PROJECT=${PROJECT:-xdp-awsmp}
+
+git clean -fxd aws packer azure
 
 . infra-sh-lib
 . aws-sh-lib
@@ -17,10 +20,9 @@ if [ -n "$JENKINS_URL" ]; then
     if test -e .venv/bin/python2; then
         REBUILD_VENV=true
     fi
-
-    if [ -n "$REBUILD_VENV" ]; then
-        rm -rf .venv
-    fi
+fi
+if [ -n "$REBUILD_VENV" ]; then
+    rm -rf .venv
 fi
 
 if ! make venv; then
@@ -28,19 +30,9 @@ if ! make venv; then
     make venv
 fi
 
-source .venv/bin/activate
-python -m pip install -U pip
-
-python -m pip install -U cfn-flip
-python -m pip install -U awscli
+source .venv/bin/activate || die "Failed to activate venv"
 
 test -d "$OUTDIR" || mkdir -p "$OUTDIR"
-
-do_parse_yaml() {
-    local yaml="${1:-$OUTDIR/amis.yaml}"
-    AMI_US_EAST_1=$(awk '/us-east-1: /{print $2}' $yaml)
-    AMI_US_WEST_2=$(awk '/us-west-2: /{print $2}' $yaml)
-}
 
 do_packer() {
     case "$BUILDER" in
@@ -59,12 +51,26 @@ do_packer() {
         if ! [ -r "$INSTALLER" ]; then
             die "Unable to find installer INSTALLER=$INSTALLER"
         fi
-
         CLOUD_STORE=${CLOUD_STORE:-s3}
         if ! INSTALLER_URL="$(installer-url.sh -d $CLOUD_STORE $INSTALLER)"; then
             die "Failed to upload $INSTALLER to $CLOUD_STORE"
         fi
     fi
+    if [ -z "$LICENSE" ]; then
+        if [ -z "$LICENSE_FILE" ]; then
+            if build_is_rc "$INSTALLER"; then
+                LICENSE_FILE="$(cat $XLRINFRADIR/aws/cfn/${PROJECT}/license-rc.txt)"
+            else
+                LICENSE_FILE="$(cat $XLRINFRADIR/aws/cfn/${PROJECT}/license.txt)"
+            fi
+        fi
+        if test -e "$LICENSE_FILE"; then
+            LICENSE="$(cat $LICENSE_FILE)"
+        else
+            say "License file $LICENSE_FILE not found"
+        fi
+    fi
+
 
     cd $XLRINFRADIR/packer/aws
     #export INSTALLER_URL=$(installer-url.sh -d s3 $INSTALLER)
@@ -72,6 +78,7 @@ do_packer() {
 
     INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
     VERSION=${INSTALLER_VERSION_BUILD[0]}
+    RC=${INSTALLER_VERSION_BUILD[2]}
 
     unset INSTALLER
     export INSTALLER_URL
@@ -88,44 +95,35 @@ do_packer() {
     done
 }
 
-get_ami_from_manifest() {
-    local builder="$1"
-    local package=${2:-packer-manifest.json}
-    local region="${3:-$AWS_DEFAULT_REGION}"
-    local uuid="$4"
-    if [ -z "$uuid" ]; then
-        if ! uuid=$(jq -r ".last_run_uuid" < $package); then
-            return 1
-        fi
-    fi
-    local ami_id
-    if ! ami_id=$(jq -r '.builds[]|select(.name == "'$builder'")|select(.packer_run_uuid == "'$uuid'") .artifact_id' < $package | grep $region); then
-        return 1
-    fi
-    echo "${ami_id#$region:}"
-}
+#get_ami_from_manifest() {
+#    local builder="$1"
+#    local package=${2:-packer-manifest.json}
+#    local region="${3:-$AWS_DEFAULT_REGION}"
+#    local uuid="$4"
+#    if [ -z "$uuid" ]; then
+#        if ! uuid=$(jq -r ".last_run_uuid" < $package); then
+#            return 1
+#        fi
+#    fi
+#    local ami_id
+#    if ! ami_id=$(jq -r '.builds[]|select(.name == "'$builder'")|select(.packer_run_uuid == "'$uuid'") .artifact_id' < $package | grep $region); then
+#        return 1
+#    fi
+#    echo "${ami_id#$region:}"
+#}
 
 do_upload_template() {
+    (
     cd $XLRINFRADIR/aws/cfn
-    do_parse_yaml
-    cat > vars/amis.yaml <<-EOF
-	ami_us_east_1: ${AMI_US_EAST_1}
-	ami_us_west_2: ${AMI_US_WEST_2}
-	EOF
-	#case "$AWS_DEFAULT_REGION" in
-    #    us-west-2) image_id=${AMI_US_WEST_2};;
-    #    us-east-1)  image_id=${AMI_US_EAST_1};;
-    #    *) die "Unsupported region";;
-    #esac
-
     local builder osid image_id
+    packer_manifest_all $MANIFEST > $OUTDIR/amis.yaml
     for builder in ${BUILDER//,/ }; do
         osid="${builder##*-}"
-        if image_id="$(get_ami_from_manifest ${builder} $OUTDIR/packer-manifest.json)"; then
-            echo "ami_${AWS_DEFAULT_REGION//-/_}: $image_id" > vars/amis.yaml
-            dc2 upload --project ${PROJECT:-xdp-awsmp} --image-id ${image_id} --version ${VERSION} --release ${RELEASE:-$BUILD_NUMBER}-${osid} --url-file $OUTDIR/template-${builder}.url
-        fi
+        #if image_id="$(packer_ami_from_manifest ${builder} $MANIFEST)"; then
+        dc2 upload --project ${PROJECT} --manifest $MANIFEST --version ${VERSION} --release ${BUILD_NUMBER}${RELEASE:+.$RELEASE}-${osid} --url-file $OUTDIR/template-${builder}.url
+        #fi
     done
+    )
 }
 
 if [ "${DO_PACKER:-true}" == true ]; then

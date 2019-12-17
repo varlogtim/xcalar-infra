@@ -30,3 +30,4 @@ testinfra
 troposphere
 warrant
 yamllint
+cloudformation-cli

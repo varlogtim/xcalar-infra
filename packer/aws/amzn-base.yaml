@@ -15,6 +15,7 @@ variables:
   ssh_username: ec2-user
   today: '{{isotime "20060102"}}'
   uid: '1000'
+  manifest: '{{template_dir}}/amzn-base-manifest.json'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-amzn1
@@ -165,3 +166,22 @@ provisioners:
     pause_before: "1m"
     scripts:
       - '{{ template_dir }}/../scripts/finish.sh'
+post-processors:
+  - type: manifest
+    output: '{{user `manifest`}}'
+    strip_path: true
+    custom_data:
+      build_id: '{{user `build_id`}}'
+      build_number: '{{user `build_number`}}'
+      destination_regions: '{{user `destination_regions`}}'
+      installer_build_number: '{{user `installer_build_number`}}'
+      installer_url: '{{user `installer_url`}}'
+      bootstrap: '{{user `bootstrap`}}'
+      installer_version: '{{user `installer_version`}}'
+      license: '{{user `license`}}'
+      product: '{{user `product`}}'
+      release: '{{user `release`}}'
+      region: '{{user `region`}}'
+      shared_with: '{{user `shared_with`}}'
+      today: '{{user `today`}}'
+

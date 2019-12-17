@@ -377,10 +377,6 @@ main() {
     sed -i "/^${LOCAL_IPV4}/d; /${LOCAL_HOSTNAME}/d;" /etc/hosts
     echo "$LOCAL_IPV4	$LOCAL_HOSTNAME     $(hostname -s) #cloud-init" | tee -a /etc/hosts
 
-    JAVA_HOME="$(readlink -f $(command -v java))"
-    export JAVA_HOME="${JAVA_HOME%/bin/java}"
-    echo "export JAVA_HOME=$JAVA_HOME" > /etc/profile.d/java.sh
-
     export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin:/opt/xcalar/bin
     echo "export PATH=$PATH" > /etc/profile.d/path.sh
 
