@@ -93,7 +93,7 @@ onExit() {
         echo "Build artifacts copied to ${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
     fi
 
-    (xclean; kill $(jobs -p))
+    (xclean; kill $(jobs -p) || true)
     exit $retval
 }
 
