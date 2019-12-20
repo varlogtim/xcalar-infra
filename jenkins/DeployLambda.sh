@@ -27,7 +27,7 @@ fi
 
 (cd "$SAM_SAAS_DIR" &&
 sam build &&
-sam package --output-template packaged.yaml --s3-bucket ${S3_BUCKET} &&
+sam package --output-template-file packaged.yaml --s3-bucket ${S3_BUCKET} &&
 sam deploy --template-file packaged.yaml \
            --capabilities CAPABILITY_IAM \
            --stack-name ${STACK_NAME} \
