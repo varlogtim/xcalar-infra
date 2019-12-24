@@ -433,6 +433,7 @@ if [ "`xc2 --version`" == "xc2, version 1.4.1" ]; then
     launcher.sh 1 daemon
 else
     useXc2="true"
+    export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/data/test.cfg}"
     xc2 cluster start --num-nodes 1
 fi
 
