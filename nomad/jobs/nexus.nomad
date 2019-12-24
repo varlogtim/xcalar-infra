@@ -63,7 +63,7 @@ job "nexus" {
       }
 
       env {
-        INSTALL4J_ADD_VM_PARAMS = "-Xms2g -Xmx4g -XX:MaxDirectMemorySize=2g"
+        INSTALL4J_ADD_VM_PARAMS = "-Xms2000m -Xmx2000m -XX:MaxDirectMemorySize=3g -Djava.util.prefs.userRoot=/nexus-data/javaprefs"
       }
 
       template {

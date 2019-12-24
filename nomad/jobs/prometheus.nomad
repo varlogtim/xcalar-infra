@@ -520,6 +520,15 @@ scrape_configs:
     static_configs:
       - targets:
           - '{{ env "NOMAD_IP_pushgateway_ui" }}:9091'
+  - job_name: jenkins-exporter
+    metrics_path: /prometheus
+    params:
+      format:
+        - prometheus
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services: ["jenkins-exporter"]
   - job_name: loki
     metrics_path: /metrics
     params:

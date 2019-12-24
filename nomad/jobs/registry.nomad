@@ -20,11 +20,11 @@ job "registryv2" {
   }
 
   group "registry" {
-    count = 1
-
     constraint {
       distinct_hosts = true
     }
+
+    count = 1
 
     restart {
       attempts = 5

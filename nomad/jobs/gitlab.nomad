@@ -6,7 +6,7 @@ job "gitlab" {
   update {
     max_parallel      = 1
     min_healthy_time  = "10s"
-    healthy_deadline  = "3m"
+    healthy_deadline  = "20m"
     progress_deadline = "10m"
     auto_revert       = false
     canary            = 0
@@ -16,7 +16,7 @@ job "gitlab" {
     max_parallel     = 1
     health_check     = "checks"
     min_healthy_time = "10s"
-    healthy_deadline = "5m"
+    healthy_deadline = "10m"
   }
 
   group "gitlab" {
@@ -98,8 +98,6 @@ EOD
           "urlprefix-gitlab.service.consul:443/",
           "urlprefix-gitlab.int.xcalar.com:443/",
         ]
-
-        #"urlprefix-nexus.int.xcalar.com:443/",
 
         check {
           type = "tcp"
