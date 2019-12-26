@@ -24,6 +24,7 @@ if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
+from py_common.mongodb_proxy import MongoProxy
 
 # Defaults
 mongo_db_user = 'root'
@@ -41,7 +42,8 @@ class MongoDB(object):
                   'MONGO_DB_USER': {'required': True,
                                     'default': mongo_db_user},
                   'MONGO_DB_PASS': {'required': True,
-                                    'default': mongo_db_pass} }
+                                    'default': mongo_db_pass},
+                  'MONGO_DB_USE_PROXY': {'default': False}}
 
     def __init__(self, *, db_name):
         self.logger = logging.getLogger(__name__)
@@ -52,6 +54,8 @@ class MongoDB(object):
                            self.cfg.get('MONGO_DB_HOST'),
                            self.cfg.get('MONGO_DB_PORT'))
         self.client = MongoClient(self.url, connect=False)
+        if self.cfg.get('MONGO_DB_USE_PROXY'):
+            self.client = MongoProxy(self.client)
         # Quick connectivity check...
         # The ismaster command is cheap and does not require auth.
         self.client.admin.command('ismaster')
@@ -288,6 +292,15 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
 
     mongo = MongoDB(db_name='unit_test_db')
+    coll = mongo.collection(name='test-collection')
+    coll.remove({'_id': '123'})
+    coll.insert({'_id': '123'})
+    while True:
+        doc = coll.find_one_and_update({'_id': '123'}, {'$inc': {'counter': 1}}, return_document = ReturnDocument.AFTER)
+        print(doc)
+        time.sleep(1)
+
+    """
     kal1 = MongoDBKeepAliveLock(db=mongo, name="some-test-lock")
     kal2 = MongoDBKeepAliveLock(db=mongo, name="some-test-lock")
     print("lock 1...")
@@ -314,6 +327,7 @@ if __name__ == '__main__':
     print("unlock 2...")
     kal2.unlock()
     print("DONE!")
+    """
 
     """
     coll = mongo.collection(name='test-collection')
