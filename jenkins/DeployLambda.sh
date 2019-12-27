@@ -11,7 +11,7 @@ if ! aws s3 ls ${S3_BUCKET}; then
 fi
 
 if ! aws dynamodb describe-table --table-name ${USER_TABLE_NAME}; then
-    aws dynamodb create-table --table-name ${USER_TABLE_NAME}
+    aws dynamodb create-table --table-name ${USER_TABLE_NAME} \
         --attribute-definitions AttributeName=user_name,AttributeType=S \
         --key-schema AttributeName=user_name,KeyType=HASH \
         --billing-mode PAY_PER_REQUEST
