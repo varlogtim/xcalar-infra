@@ -42,7 +42,7 @@ job "mongo" {
       }
 
       resources {
-        cpu    = 500 # Mhz
+        cpu    = 1500 # Mhz
         memory = 2048 # MB
 
         network {

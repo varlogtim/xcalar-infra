@@ -36,8 +36,8 @@ job "coverage-grafana-datasource" {
       }
 
       resources {
-        cpu    = 500 # 500MHz
-        memory = 200 # 200MB
+        cpu    = 1000 # MHz
+        memory = 1024 # MB
         network {
           port "http" {}
         }
