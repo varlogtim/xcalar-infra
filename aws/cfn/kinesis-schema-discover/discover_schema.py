@@ -9,14 +9,14 @@ DEFAULT = 's3://xcfield/instantdatamart/csv/forecast_canonical.csv'
 
 
 # Get the RoleARN form a CloudFormation stack
-def cfn_getstackRoleArn(stack_name, role_name):
+def stack_role_arn(stack_name, role_name):
     cfn = boto3.client('cloudformation')
     iam = boto3.client('iam')
-    roleRes = cfn.describe_stack_resource(
+    role_res = cfn.describe_stack_resource(
         StackName=stack_name,
         LogicalResourceId=role_name)['StackResourceDetail']
-    roleArn = iam.get_role(RoleName=roleRes['PhysicalResourceId'])['Role']
-    return roleArn['Arn']
+    role_arn = iam.get_role(RoleName=role_res['PhysicalResourceId'])['Role']
+    return role_arn['Arn']
 
 
 class DiscoverSchema():
@@ -45,7 +45,7 @@ if 'AWS_EXECUTION_ENV' in os.environ:
     KINESIS_ROLE_ARN = os.environ['KINESIS_ROLE_ARN']
     KINESIS_CLIENT = boto3.client('kinesisanalyticsv2')
 else:
-    KINESIS_ROLE_ARN = cfn_getstackRoleArn('DiscoverSchemaStack',
+    KINESIS_ROLE_ARN = stack_role_arn('DiscoverSchemaStack',
                                            'KinesisServiceRole')
     KINESIS_CLIENT = None
 
