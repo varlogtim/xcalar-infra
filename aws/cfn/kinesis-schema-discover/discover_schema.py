@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import boto3
+import botocore.exceptions
 
 #DEFAULT = 's3://xcfield/instantdatamart/json/drugbank_arr/DB05352.json'
 DEFAULT = 's3://xcfield/instantdatamart/csv/forecast_canonical.csv'
@@ -45,7 +46,9 @@ if 'AWS_EXECUTION_ENV' in os.environ:
     KINESIS_ROLE_ARN = os.environ['KINESIS_ROLE_ARN']
     KINESIS_CLIENT = boto3.client('kinesisanalyticsv2')
 else:
-    KINESIS_ROLE_ARN = stack_role_arn('DiscoverSchemaStack',
+    KINESIS_ROLE_ARN = os.getenv('KINESIS_ROLE_ARN', None)
+    if not KINESIS_ROLE_ARN:
+        KINESIS_ROLE_ARN = stack_role_arn('DiscoverSchemaStack',
                                            'KinesisServiceRole')
     KINESIS_CLIENT = None
 
@@ -54,7 +57,15 @@ if __name__ == '__main__':
         s3uri = sys.argv[1]
     else:
         s3uri = os.getenv('DEFAULT', DEFAULT)
+    if s3uri.index('s3://') != 0:
+        sys.stderr.write("s3uri parameter must start with a s3://")
+        sys.exit(1)
 
-    ds = DiscoverSchema(KINESIS_ROLE_ARN, KINESIS_CLIENT)
-    schema = ds.discover(s3uri)
+    try:
+        ds = DiscoverSchema(KINESIS_ROLE_ARN, KINESIS_CLIENT)
+        schema = ds.discover(s3uri)
+    except botocore.exceptions.ClientError as e:
+        raise e
+    except Exception as e:
+        raise e
     print(json.dumps(schema['InputSchema']))

@@ -1,2 +1,9 @@
-boto3
 awscli
+boto3
+pip
+setuptools
+wheel
+cfn-flip
+cfn-lint
+aws-sam-cli
+pylint
