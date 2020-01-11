@@ -5,39 +5,45 @@ REQUIREMENTS = requirements.txt
 CONSTRAINTS = constraints.txt
 PYTHON = .venv/bin/python
 AWS = .venv/bin/aws
+SAM = .venv/bin/sam
 PYLINT = .venv/bin/pylint
 
+# Lambda vars
+AWS_DEFAULT_REGION ?= us-west-2
 STACK_NAME = DiscoverSchemaStack
-KINESIS_ROLE_ARN =
+CFNROLE = kinesis-service-role.yaml
+SAM_TEMPLATE = template.yaml
+CFN_TEMPLATE = output.yaml
+S3_LAMBDA_BUCKET = sharedinf-lambdabucket-559166403383-us-west-2
+
+# Local conversion
 TMP := $(shell mktemp -u s3://xcfield/tmp/discover-XXXXXX)
-AWS_DEFAUALT_REGION ?= us-west-2
+CSV1 = s3://xcfield/instantdatamart/csv/GlobalLandTemperaturesByCity.csv
+JSON1 = s3://xcfield/instantdatamart/json/geneinfo_arr/xbq-arr
+SAMPLEDATA = data.csv policy.json
+SCHEMAS = $(patsubst %,%.schema.json,$(SAMPLEDATA))
 
-CSVS = data.csv
-SCHEMAS = $(patsubst %.csv,%.schema.json,$(CSVS))
-
-export AWS_DEFAUALT_REGION
+export AWS_DEFAULT_REGION
 
 all: $(SCHEMAS)
 
-run: .venv-update
-	$(PYTHON) discover_schema.py
+run: venv
+	$(PYTHON) app.py $(CSV1) | jq -r .
+	$(PYTHON) app.py $(JSON1) | jq -r .
 
+	@echo "Discovering schema on $(TMP) ..."
 .venv-update: $(REQUIREMENTS) $(CONSTRAINTS)
 	[ -e $(PYTHON) ] || /opt/xcalar/bin/python3.6 -m venv --clear --prompt $$(basename `pwd`) $(VIRTUAL_ENV)
 	$(PYTHON) -m pip install -r $(REQUIREMENTS) -c $(CONSTRAINTS)
 	touch $@
 
-%.schema.json: %.csv .venv-update
-	$(AWS) s3 cp $< $(TMP)
-	$(PYTHON) ./discover_schema.py $(TMP) | jq -r . > `basename $(TMP)`
+%.schema.json: % .venv-update
+	@$(AWS) s3 cp $< $(TMP)
+	@echo "Discovering schema for $< ..."
+	@$(PYTHON) app.py $(TMP) | jq -r . > `basename $(TMP)`
+	@echo "Saved schema $@ ..."
 	@mv `basename $(TMP)` $@
 	@-$(AWS) s3 --quiet rm $(TMP)
-
-update-stack:
-	$(AWS) cloudformation update-stack --stack-name $(STACK_NAME) --template-body file://kinesis-service-role.yaml --capabilities CAPABILITY_IAM
-
-create-stack:
-	$(AWS) cloudformation create-stack --stack-name $(STACK_NAME) --template-body file://kinesis-service-role.yaml --capabilities CAPABILITY_IAM
 
 clean:
 	rm -f $(SCHEMAS)
@@ -48,4 +54,8 @@ very-clean: clean
 venv: .venv-update
 
 check:
-	$(PYLINT) ./discover_schema.py
+	$(PYLINT) app.py
+
+sam: venv
+	$(SAM) package --template-file $(SAM_TEMPLATE) --output-template-file $(CFN_TEMPLATE) --s3-bucket $(S3_LAMBDA_BUCKET)
+	$(SAM) deploy --template-file $(CFN_TEMPLATE) --stack-name $(STACK_NAME) --capabilities CAPABILITY_IAM

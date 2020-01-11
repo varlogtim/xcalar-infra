@@ -26,3 +26,11 @@ have built and activated the virtual environment.
     $ ./discover_schema.py s3://xcfield/foo/bar/baz.csv
 
 The output is written to stdout.
+
+
+## Lambda
+
+To deploy the function to Lambda, make modifications to discover_schema/app.py and
+run
+
+    $ make sam
