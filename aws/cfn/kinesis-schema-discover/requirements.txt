@@ -1,9 +1,12 @@
 awscli
+aws-sam-cli
 boto3
-pip
-setuptools
-wheel
 cfn-flip
 cfn-lint
-aws-sam-cli
+ipython
+pip
 pylint
+pytest
+setuptools
+wheel
+yapf

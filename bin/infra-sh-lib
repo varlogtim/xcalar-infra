@@ -34,7 +34,7 @@ debug() {
 
 traceon() {
     set -x
-    export PS4='# ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
+    export PS4='# $(date +%FT%T%z) ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
 }
 
 warn() {
@@ -72,7 +72,7 @@ error() {
 }
 
 resource() {
-    . $XLRINFRADIR/.env
+    . $XLRINFRADIR/.envload
 }
 
 please_use_puppet() {
@@ -179,18 +179,20 @@ safe_curl() {
 }
 
 check_url() {
-    local http_code=
-    if http_code="$(curl -fsL -H 'Range: bytes=0-1' -w '%{http_code}\n' -o /dev/null "$1")"; then
-        if [[ $http_code =~ ^20 ]]; then
+    local code
+    if code=$(curl "$@" -L -s -r 0-255 -o /dev/null -w '%{http_code}\n'); then
+        if [[ "$code" =~ ^20 ]]; then
             return 0
         fi
+        return 1
     fi
-    return 1
+    return 2
 }
 
 pyvenv3() {
     local venv="${1:-.venv}"
     local prompt="${2:-$(basename $(realpath $venv))}"
+    local py
     if ! py=$(PATH=/opt/xcalar/bin:/usr/local/bin:/usr/bin:/bin /bin/bash -c "command -v python3"); then
         say "Unable to find python3"
         return 1
@@ -200,7 +202,7 @@ pyvenv3() {
         || return 1
     source "$venv"/bin/activate
     hash -r
-    pip install -U pip setuptools wheel
+    "$venv"/bin/python -m pip install -U pip setuptools wheel
 }
 
 s3_exists() {
@@ -308,7 +310,12 @@ with_lock() {
 }
 
 tmpdir_with_cleanup() {
-    export TMPDIR="$(mktemp -d -t "${1:-${BASH_SOURCE[0]}}.XXXXXX")"
+    local tmpdir
+    if ! tmpdir="$(mktemp -d -t "${1:-${BASH_SOURCE[0]}}.XXXXXX")"; then
+        return 1
+    fi
+    export TMPDIR="$tmpdir"
+    # shellcheck disable=SC2064
     trap "rm -rf $TMPDIR" EXIT
 }
 
@@ -417,6 +424,92 @@ download_packer() {
     fi
     echo "Packer version $($PACKER version)"
     return 0
+}
+
+packer_query_manifest() {
+    local builder="$1"
+    local manifest=${2:-packer-manifest.json}
+    local uuid="$3"
+    if [ -z "$uuid" ]; then
+        if ! uuid=$(jq -r ".last_run_uuid" < $manifest); then
+            return 1
+        fi
+    fi
+    jq -r '.builds[]|select(.name == "'$builder'")|select(.packer_run_uuid == "'$uuid'") .artifact_id' < $manifest
+}
+
+packer_ami_from_manifest() {
+    local builder="$1"
+    local manifest=${2:-packer-manifest.json}
+    local region="${3:-$AWS_DEFAULT_REGION}"
+    local uuid="$4"
+    local ami_id
+    if ami_id=$(packer_query_manifest "$builder" "$manifest" "$uuid" | grep "$region" | tr ',' '\n' | grep "$region"); then
+        echo "${ami_id#$region:}"
+        return 0
+    fi
+    return 1
+}
+
+# Returns this format (for a given run):
+#
+# amazon-ebs-amzn2	us-west-2:ami-004b056a4d647b2cf
+# amazon-ebs-amzn1	us-west-2:ami-0d3b49b78e43bc5b9
+# amazon-ebs-amzn1	us-east-1:ami-043c49b58e63bc598
+packer_manifest_all() {
+    local manifest="${1:-packer-manifest.json}"
+    local uuid="${2:-}"
+
+    if [ -z "${uuid:-}" ]; then
+        if ! uuid=$(jq -r ".last_run_uuid" < $manifest); then
+            return 1
+        fi
+    fi
+    declare -A names=([amazon-ebs-amzn1]='AMZN1HVM' [amazon-ebs-amzn2]='AMZN2HVM')
+    local name artifact_id region
+    local tmpdir=$(mktemp -d -t packer.XXXXXX)
+    while read name artifact_id; do
+        local region_split
+        for region_split in ${artifact_id//,/ }; do
+            region="${region_split%:*}"
+            local ami_id="${region_split#*:}"
+            echo "$region" >> $tmpdir/regions
+            echo "${names[$name]}: $ami_id" >> "$tmpdir/$region"
+            local concat_ami_id="ami_${region//-/_}_${names[$name]%HVM}"
+            echo "${concat_ami_id,,}: ${ami_id}" >> $tmpdir/allamis.yaml
+            echo "ami_${region//-/_}: ${ami_id}" >> $tmpdir/allamis.yaml
+            echo "ami_id: ${ami_id}" >> $tmpdir/allamis.yaml
+        done
+    done < <(jq -r '.builds[]|select(.packer_run_uuid == "'$uuid'")|[.name,.artifact_id]|@tsv' < $manifest)
+    echo "images:"
+    for region in $(sort $tmpdir/regions | uniq); do
+        echo "  $region:"
+        sed 's/^/    /' $tmpdir/$region
+    done
+    cat $tmpdir/allamis.yaml
+    rm -rf $tmpdir
+}
+
+# Reformats packer_manifest_all to be more CloudFormation/yaml friendly:
+#
+# us-east-1:
+#  amazon-ebs-amzn1: ami-111149b78e43bc5b9
+#  amazon-ebs-amzn2: ami-2222056a4d647b2cf
+# us-west-2:
+#  amazon-ebs-amzn1: ami-0d3b49b78e43bc5b9
+#  amazon-ebs-amzn2: ami-004b056a4d647b2cf
+packer_manifest_to_yaml() {
+    local tmp region builder builders
+    tmp=$(mktemp -t packer.XXXXXX)
+    cat - > $tmp
+    builders=($(awk '{print $1}' $tmp | sort | uniq))
+    for region in us-east-1 us-west-2; do
+        grep -q "$region:" $tmp || continue
+        echo "$region:"
+        for builder in "${builders[@]}"; do
+            grep $region $tmp | awk "/^$builder/{print \$2}" | sed 's/'$region':/  '$builder': /'
+        done
+    done
 }
 
 filename_from_url() {

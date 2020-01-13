@@ -41,32 +41,39 @@
 # }
 
 FILE=""
-VAULTCACHE_BASE="$HOME/.aws/cache"
+PROG="$(basename $0 .sh)"
+VAULTCACHE_BASE="$HOME/.cache/$PROG"
+LOG="$VAULTCACHE_BASE/log.txt"
 TTL=4h
-ACCOUNT="${ACCOUNT:-$(cat ${VAULTCACHE_BASE}/account 2>/dev/null || echo xcalar)}"
+ACCOUNT="${ACCOUNT:-$(cat ${VAULTCACHE_BASE}/account 2>/dev/null || echo aws-xcalar)}"
 TYPE="sts"
 ROLE="${ROLE:-$(cat ${VAULTCACHE_BASE}/role 2>/dev/null || echo poweruser)}"
 PROFILE="${PROFILE:-$(cat ${VAULTCACHE_BASE}/profile 2>/dev/null || echo vault)}"
-CLEAR=false
+CLEAN=false
 EXPORT_ENV=false
 EXPORT_PROFILE=false
 INSTALL=false
+VAULT_WIKI='https://xcalar.atlassian.net/wiki/spaces/EN/pages/8749395/Vault'
+BREW_WIKI='https://xcalar.atlassian.net/wiki/spaces/EN/pages/8749196/Homebrew'
 UNMET_DEPS=()
 AWS_SHARED_CREDENTIALS_FILE="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+AWS_CONFIG_FILE="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+AWS_PROFILE_SAVE="${AWS_PROFILE}"
+#unset AWS_PROFILE
 
 usage() {
     cat <<EOF >&2
 
      $(basename $0) [--account ACCOUNT] [--role ROLE]
-        [--install] [--profile PROFILE] [--ttl NUM] [--clear]
+        [--install] [--profile PROFILE] [--ttl NUM] [--clean]
 
     --account  ACCOUNT   AWS Account to use (default $ACCOUNT (xcalar, xcalar-poc, test, prod)
     --role     ROLE      AWS Role (default: $ROLE)
-    --install            Install into ~/.aws/credentials to have awscli automatically retrieve keys
+    --install            Install into ~/.aws/config to have awscli automatically retrieve keys
     --ttl      TTL       TTL for token, min is 15m, max is 12h (default: $TTL)
-    --profile  PROFILE   AWS CLI Profile to populate from ~/.aws/credentials (default: $PROFILE)
+    --profile  PROFILE   AWS CLI Profile to populate from ~/.aws/config (default: $PROFILE)
 
-    -c|--clear           Clear all existing token (if any)
+    -c|--clean           Clean all existing cached vault data (if any)
 
     Advanced options ...
       [--check] [--path PATH] [-e|--export-env] [--export-profile]
@@ -77,31 +84,45 @@ usage() {
     -f|--file    FILE|-  Read existing credentials from FILE or - (stdin)
     -e|--export-env      Show AWS environment variables that you can use for auth
     --export-profile     Print credentials in AWS format credential format
+    --unset-profile      Print settings to reset local shell env
 EOF
     say "$*"
     exit 2
 }
 
+log() {
+    echo "[$(date +%FT%T%z) $USER@$HOSTNAME $PROG $$] $*" >> $LOG
+}
+
 say() {
+    log "say: $1"
     echo >&2 "$1"
 }
 
 die() {
     if [ -z "$1" ]; then
+        log "Unspecified error"
         exit 1
     fi
-    say "ERROR: $1"
+
+    log "ERROR: $1"
+    log "die: $*"
     say
     say "For more information and detailed instructions see the Vault Wiki:"
-    say "http://wiki.int.xcalar.com/mediawiki/index.php/Vault"
-    say
+    say ""
+    say "$VAULT_WIKI"
+    say ""
     exit ${2:-1}
 }
 
+mkdir -p "$VAULTCACHE_BASE"
+log "Env: $(print_clean_env)"
+log "Args: $*"
 if [[ $OSTYPE =~ darwin ]]; then
     please_install() {
         say
         say "You need '$1'. The easiest way to install '$1' is via 'brew'"
+        log "Checking brew"
         if ! command -v brew >/dev/null && [ "$brew_warn" != true ]; then
             brew_warn=true
             say "Alas, you need to install 'brew', a package manager for OSX"
@@ -109,7 +130,7 @@ if [[ $OSTYPE =~ darwin ]]; then
             echo >&2 '  /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"'
             say
             say "For more information and detailed instructions on Brew see:"
-            say "http://wiki.int.xcalar.com/mediawiki/index.php/Homebrew"
+            say "$BREW_WIKI"
             say
             say "Once you have it, run:"
 
@@ -122,7 +143,11 @@ if [[ $OSTYPE =~ darwin ]]; then
         say " brew install ${2:-$1}"
     }
     date() {
-        gdate "$@"
+        if command -v gdate >/dev/null; then
+            gdate "$@"
+        else
+            date "$@"
+        fi
     }
     stat() {
         gstat "$@"
@@ -137,9 +162,9 @@ else
     please_install() {
         say
         if command -v apt-get >/dev/null; then
-            say "You need to install $1. Try 'apt-get install ${2:-$1}'"
+            say "You need to install $1. Try 'sudo apt-get update && sudo apt-get install -y ${2:-$1}'"
         else
-            say "You need to install $1. Try 'yum install --enablerepo=\"xcalar-*\" ${2:-$1}'"
+            say "You need to install $1. Try 'sudo yum install -y --enablerepo=\"xcalar-*\" ${2:-$1}'"
         fi
     }
 fi
@@ -147,22 +172,44 @@ fi
 please_have() {
     if ! command -v "$1" >/dev/null; then
         please_install "$@"
-        UNMET_DEPS+=($1)
+        UNMET_DEPS+=("$1")
         return 1
     fi
 }
 
+print_clean_env() {
+    env | sed '/^BASH_FUNC/,/^}/d' | grep -Ev '(COLOR|_fzf|SECRET|PASS)' | sort
+}
+
 cvault() {
-    if [ -z "$VAULT_TOKEN" ]; then
-        if test -e "$HOME/.vault-token"; then
-            export VAULT_TOKEN="$(cat ~/.vault-token)"
-        else
+    (
+    set +x
+    local vault_token=${VAULT_TOKEN}
+    if [ -z "$vault_token" ]; then
+        if ! vault_token=$(vault print token); then
+            die "Failed getting your vault token"
+        fi
+        if [ -z "$vault_token" ]; then
             die "Failed to find VAULT_TOKEN environment or ~/.vault-token file. Are you logged in?"
         fi
     fi
     local uri="$1"
     shift
-    curl -sS -H "X-Vault-Token: $VAULT_TOKEN" "${VAULT_ADDR}/v1/${uri}" "$@"
+    local vthash=$(sha256sum <<< "${vault_token}" | awk '{print $1}')
+    log curl -sL -H "X-Vault-Request: true" -H "X-Vault-Token: [vthash: ${vthash}]" "${VAULT_ADDR}/v1/${uri}" "$@"
+    curl -sL -H "X-Vault-Request: true" -H "X-Vault-Token: $vault_token" "${VAULT_ADDR}/v1/${uri}" "$@"
+    ) || die "Failed when calling cvault $*"
+}
+
+vault_status() {
+    local status
+    if status="$(
+        set -o pipefail
+        cvault status | jq -r .sealed
+    )" && [ "$status" = false ]; then
+        return 0
+    fi
+    return 1
 }
 
 vault_status() {
@@ -185,23 +232,34 @@ aws_configure() {
     aws configure set $1 $2
 }
 
+has_space() {
+    [[ $1 =~ [[:space:]] ]]
+}
+
 vault_install_credential_helper() {
     vault_sanity
-    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-west-2}"
     aws_configure default.region $AWS_DEFAULT_REGION
     aws_configure default.s3.signature_version s3v4
-    aws_configure default.s3.addressing_style path
+    aws_configure default.s3.addressing_style auto
 
     local dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
     local filen="$(basename "${BASH_SOURCE[0]}")"
 
     touch ${AWS_SHARED_CREDENTIALS_FILE}
     sed -i.bak '/^\['$PROFILE'\]/,/^$/d' ${AWS_SHARED_CREDENTIALS_FILE}
-    cat >>${AWS_SHARED_CREDENTIALS_FILE} <<EOF
-[$PROFILE]
-credential_process = "${dir}/${filen}" --path $AWSPATH
+    sed -i.bak '/^\[profile '$PROFILE'\]/,/^$/d' ${AWS_CONFIG_FILE}
+
+    local q=''
+    if has_space "${dir}/${filen}"; then
+        q='"'
+    fi
+    cat >>${AWS_CONFIG_FILE} <<EOF
+[profile $PROFILE]
+credential_process = ${q}${dir}/${filen}${q} --path $AWSPATH
 
 EOF
+    unset AWS_PROFILE
     unset AWS_SECRET_ACCESS_KEY
     unset AWS_SESSION_TOKEN
     unset AWS_ACCESS_KEY_ID
@@ -217,8 +275,11 @@ EOF
     else
         say "   aws --profile $PROFILE <cmd>"
         say ""
-        say "To avoid having to add '--profile $PROFILE' to every awscli command, add the following to your ~/.bashrc"
+        say "To avoid having to add '--profile $PROFILE' to every awscli command, run the following in your shell:"
         say "   export AWS_PROFILE=$PROFILE"
+        say ""
+        say "To persist this setting to new shells, also add that line to your ~/.bashrc"
+        say ""
     fi
     echo "$ACCOUNT" >"${VAULTCACHE_BASE}/account"
     echo "$ROLE" >"${VAULTCACHE_BASE}/role"
@@ -227,18 +288,22 @@ EOF
 
 vault_sanity() {
     say "Sanity checking your vault installation ..."
-    local progs="jq vault curl" prog
+    local progs="jq vault curl" prog any_missing=0
     for prog in $progs; do
-        please_have $prog
+        if ! please_have $prog; then
+            :
+        fi
     done
     if [[ $OSTYPE =~ darwin ]]; then
         progs="gsed gdate greadlink gstat"
         for prog in $progs; do
-            please_have $prog "coreutils"
+            if ! please_have $prog "coreutils"; then
+                break
+            fi
         done
     fi
     echo "1..6"
-    if [ ${#UNMET_DEPS[@]} -gt 0 ]; then
+    if [ "${#UNMET_DEPS[@]}" -gt 0 ]; then
         echo "not ok    1  - missing dependencies ${UNMET_DEPS[*]}"
         die "You have unmet dependencies: ${UNMET_DEPS[*]}"
     fi
@@ -295,25 +360,38 @@ iso2unix() {
 }
 
 unix2iso() {
-    date -u -d "$1" +%FT%T.000Z
+    date -u -d @$1 +%FT%T.000Z
+}
+
+json_value() {
+    local key="$1" value
+    shift
+    if ! value=$(jq -r "$key" "$@"); then
+        return 1
+    fi
+    if [ "$value" = null ]; then
+        return 1
+    fi
+    echo "$value"
 }
 
 expiration_ts() {
     local file_time=$(stat -c %Y "$1")
     local expiration=$((file_time + $2))
-    unix2iso @$expiration
+    unix2iso $expiration
 }
 
 expiration_json() {
-    jq -r .expiration "$@"
+    json_value .expiration "$@" 2>/dev/null
+}
+
+lease_duration_json() {
+    json_value .lease_duration "$@" 2>/dev/null
 }
 
 vault_update_expiration() {
     local lease_duration expiration
-    if ! lease_duration=$(jq -r .lease_duration "$1"); then
-        return 1
-    fi
-    if [ -z "$lease_duration" ]; then
+    if ! lease_duration=$(lease_duration_json "$1"); then
         return 1
     fi
     if ! expiration=$(date -d "$lease_duration seconds" +%s); then
@@ -324,7 +402,7 @@ vault_update_expiration() {
 
 vault2aws() {
     local ttl expiration
-    if ! ttl="$(jq -r .lease_duration "$1")"; then
+    if ! ttl="$(lease_duration_json "$1")"; then
         say "Failed to get lease_duration from $1"
         ttl=''
     fi
@@ -337,15 +415,16 @@ vault2aws() {
             SessionToken: .data.security_token
         }' $1
     else
-        expiration=$(expiration_json "$1")
-        jq -r '
-        {
-            Version: 1,
-            AccessKeyId: .data.access_key,
-            SecretAccessKey: .data.secret_key,
-            SessionToken: .data.security_token,
-            Expiration: "'$(unix2iso @$expiration)'"
-        }' $1
+        if expiration=$(expiration_json "$1"); then
+            jq -r '
+            {
+                Version: 1,
+                AccessKeyId: .data.access_key,
+                SecretAccessKey: .data.secret_key,
+                SessionToken: .data.security_token,
+                Expiration: "'$(unix2iso $expiration)'"
+            }' $1
+        fi
     fi
 }
 
@@ -374,6 +453,7 @@ vault_render_file() {
 }
 
 main() {
+    mkdir -p "${VAULTCACHE_BASE}"
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -397,7 +477,7 @@ main() {
                 TYPE="$1"
                 shift
                 ;;
-            -c | --clear) CLEAR=true ;;
+            -c | --clean) CLEAN=true ;;
             -f | --file)
                 FILE="$1"
                 shift
@@ -408,6 +488,9 @@ main() {
                 ;;
             -e | --export-env) EXPORT_ENV=true ;;
             --export-profile) EXPORT_PROFILE=true ;;
+            --unset-profile)
+                echo 'unset AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID AWS_SESSION_TOKEN'
+                ;;
             --profile)
                 PROFILE="$1"
                 shift
@@ -420,12 +503,23 @@ main() {
             *) usage "Unknown argument $cmd" ;;
         esac
     done
+    if $CLEAN; then
+        : "${VAULTCACHE_BASE?VAULTCACHE_BASE must be set}"
+        say "Clearing cached vault data in $VAULTCACHE_BASE .."
+        rm -r -- "${VAULTCACHE_BASE}/*"
+        exit $?
+    fi
     ACCOUNT="${ACCOUNT#aws-}"
     ACCOUNT="aws-${ACCOUNT}"
     if [ -n "$FILE" ]; then
         vault_render_file "$FILE"
         exit $?
     fi
+    if ! vault_status; then
+        vault_status
+        die "Failed to get vault status"
+    fi
+
     test -e "$(dirname ${AWS_SHARED_CREDENTIALS_FILE})" || mkdir -m 0700 "$(dirname ${AWS_SHARED_CREDENTIALS_FILE})"
     if [ -z "$AWSPATH" ]; then
         AWSPATH="$ACCOUNT/$TYPE/$ROLE"
@@ -435,11 +529,6 @@ main() {
         exit $?
     fi
     VAULTCACHE="${VAULTCACHE_BASE}/${AWSPATH}.json"
-    if $CLEAR; then
-        say "Clearing cached credentials for $AWSPATH .."
-        rm -f -- "$VAULTCACHE"
-        exit $?
-    fi
     mkdir -m 0700 -p "$(dirname $VAULTCACHE)"
     export TMPDIR="$HOME/.aws/tmp"
     mkdir -m 0700 -p "$TMPDIR"
@@ -447,10 +536,11 @@ main() {
     trap "rm -f $TMP" EXIT
     if [ -s "$VAULTCACHE" ]; then
         NOW=$(date +%s)
-        EXPIRATION=$(expiration_json "$VAULTCACHE")
-        if [[ $EXPIRATION == 0 ]] || [[ $((EXPIRATION - NOW)) -gt 300 ]]; then
-            vault_render_file "$VAULTCACHE"
-            exit $?
+        if EXPIRATION=$(expiration_json "$VAULTCACHE" 2>/dev/null); then
+            if [[ $EXPIRATION == 0 ]] || [[ $((EXPIRATION - NOW)) -gt 300 ]]; then
+                vault_render_file "$VAULTCACHE"
+                exit $?
+            fi
         fi
     fi
     rm -f -- "$VAULTCACHE"
@@ -466,10 +556,28 @@ main() {
         echo >&2 "VAULT_ADDR=$VAULT_ADDR"
         exit 1
     fi
-
-    if vault_update_expiration "$TMP" > "${TMP}.2"; then
-        mv "${TMP}.2" "$TMP"
+    local errors
+    errors=$(jq -r .errors[] < "$TMP" 2>/dev/null || true)
+    if [ -n "$errors" ]; then
+        echo >&2 "*********"
+        echo >&2 "ERROR: $(basename $0) encountered this error:"
+        echo >&2
+        echo >&2 " --> " "$errors"
+        if [[ "$errors" =~ 'no handler for route' ]]; then
+            echo >&2
+            echo >&2 "      Are you sure '${AWSPATH%%/*}' is a valid AWS alias for an account?"
+        fi
+        echo >&2
+        echo >&2 "*********"
+        die
     fi
+
+    if ! vault_update_expiration "$TMP" > "${TMP}.2"; then
+        cat "$TMP" >&2
+        rm -f "${TMP}.2"
+        die "Failed to parse expiration of in $TMP"
+    fi
+    mv -f "${TMP}.2" "$TMP"
 
 #    LEASE_DURATION=$(jq -r .lease_duration "$TMP")
 #    if [ $? -eq 0 ] && [ -n "$LEASE_DURATION" ]; then
@@ -479,7 +587,10 @@ main() {
 #        mv "${TMP}.2" "$TMP"
 #    fi
 
-    vault_render_file "$TMP"
+    if ! vault_render_file "$TMP"; then
+        cat "$TMP" >&2
+        die "Failed to render $TMP"
+    fi
     mv "$TMP" "$VAULTCACHE"
 }
 

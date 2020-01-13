@@ -23,14 +23,22 @@ have built and activated the virtual environment.
 
     $ make venv
     $ source .venv/bin/activate
-    $ ./discover_schema.py s3://xcfield/foo/bar/baz.csv
+    $ python app.py s3://xcfield/foo/bar/baz.csv
 
 The output is written to stdout.
 
+## Clients
+
+Some sample clients are included in bash and python
+
+    $ source .venv/bin/activate
+    $ python client/client.py
 
 ## Lambda
 
-To deploy the function to Lambda, make modifications to discover_schema/app.py and
-run
+To deploy the function to Lambda, make modifications to discover_schema/lambda.py and
+run. Please set `STACK_NAME` to something unique! The default is `DiscoverSchemaStack`.
+If you don't set it, your changes will overwrite the current stack.
 
+    $ export STACK_NAME=DiscoverSchemaStack-abakshi
     $ make sam

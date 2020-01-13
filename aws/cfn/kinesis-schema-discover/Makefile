@@ -1,4 +1,4 @@
-SHELL = /bin/bash
+SHELL := /bin/bash
 
 VIRTUAL_ENV = .venv
 REQUIREMENTS = requirements.txt
@@ -10,20 +10,20 @@ PYLINT = .venv/bin/pylint
 
 # Lambda vars
 AWS_DEFAULT_REGION ?= us-west-2
-STACK_NAME = DiscoverSchemaStack
+STACK_NAME ?= DiscoverSchemaStack
 CFNROLE = kinesis-service-role.yaml
 SAM_TEMPLATE = template.yaml
-CFN_TEMPLATE = output.yaml
+CFN_TEMPLATE = build/output.yaml
 S3_LAMBDA_BUCKET = sharedinf-lambdabucket-559166403383-us-west-2
 
 # Local conversion
 TMP := $(shell mktemp -u s3://xcfield/tmp/discover-XXXXXX)
 CSV1 = s3://xcfield/instantdatamart/csv/GlobalLandTemperaturesByCity.csv
 JSON1 = s3://xcfield/instantdatamart/json/geneinfo_arr/xbq-arr
-SAMPLEDATA = data.csv policy.json
+SAMPLEDATA = data/data.csv
 SCHEMAS = $(patsubst %,%.schema.json,$(SAMPLEDATA))
 
-export AWS_DEFAULT_REGION
+export AWS_DEFAULT_REGION STACK_NAME
 
 all: $(SCHEMAS)
 
@@ -34,6 +34,7 @@ run: venv
 	@echo "Discovering schema on $(TMP) ..."
 .venv-update: $(REQUIREMENTS) $(CONSTRAINTS)
 	[ -e $(PYTHON) ] || /opt/xcalar/bin/python3.6 -m venv --clear --prompt $$(basename `pwd`) $(VIRTUAL_ENV)
+	$(PYTHON) -m pip install -U pip setuptools wheel -c $(CONSTRAINTS)
 	$(PYTHON) -m pip install -r $(REQUIREMENTS) -c $(CONSTRAINTS)
 	touch $@
 

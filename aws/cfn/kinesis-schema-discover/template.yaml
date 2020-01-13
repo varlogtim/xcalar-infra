@@ -25,7 +25,6 @@ Resources:
       Path: '/'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-        - 'arn:aws:iam::aws:policy/AmazonKinesisFullAccess'
         - 'arn:aws:iam::aws:policy/AmazonKinesisAnalyticsFullAccess'
       Policies:
         - PolicyName: AllowPassRole
@@ -48,13 +47,14 @@ Resources:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       CodeUri: discover/
-      Handler: app.lambda_handler
-      Timeout: 30
+      Handler: lambda.lambda_handler
+      Timeout: 300
       Runtime: python3.6
       Role: !GetAtt 'KinesisServiceRole.Arn'
       Environment:
         Variables:
           KINESIS_ROLE_ARN: !GetAtt 'KinesisServiceRole.Arn'
+          STACK_NAME: !Ref 'AWS::StackName'
       Events:
         DiscoverSchema:
           Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
