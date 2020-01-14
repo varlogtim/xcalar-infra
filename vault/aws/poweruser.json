@@ -2,19 +2,6 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Effect": "Deny",
-      "Action": "*",
-      "Resource": "*",
-      "Condition": {
-        "StringNotEquals": {
-          "aws:RequestedRegion": [
-            "us-west-2",
-            "us-east-1"
-          ]
-        }
-      }
-    },
-    {
       "Effect": "Allow",
       "Action": [
         "ec2:*",
@@ -24,12 +11,11 @@
         "elasticfilesystem:*",
         "lambda:*",
         "dynamodb:*",
-        "rds:*",
         "route53:*",
         "sns:*",
         "sqs:*",
-        "resource-group:*",
-        "ses:*"
+        "ses:*",
+        "kinesisanalytics:*"
       ],
       "Resource": "*"
     },
@@ -55,7 +41,7 @@
         "kms:DescribeKey"
       ],
       "Resource": [
-        "arn:aws:kms:*:*:key/*"
+        "arn:aws:kms:*:559166403383:key/*"
       ]
     },
     {

@@ -77,7 +77,7 @@ EOD
       }
 
       resources {
-        memory = 8000
+        memory = 3300
         cpu    = 4000
 
         network {

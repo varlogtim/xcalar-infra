@@ -1,5 +1,5 @@
 job "fabio" {
-  datacenters = ["xcalar-sjc"]
+  datacenters = ["[[.dc]]"]
   type        = "system"
 
   update {

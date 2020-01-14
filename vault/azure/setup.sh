@@ -9,13 +9,13 @@ set -eu
 # The SP gives Owner permission to the subscription and 2 very powerful Read/Write caps to AAD, since
 # it needs to be able to generate SPs on the fly
 eval $(vault kv get -field=data -format=yaml secret/azure/VaultSecrets | sed 's/: /=/g')
-
+subscription=$(az account show -ojson --query id -otsv)
 
 vault write azure/config \
     subscription_id=$subscription \
     tenant_id=$tenant  \
     client_id=$appId \
-    client_secret=$password
+    client_secret="$password"
 
 # With the SP account above we define a role in the given subscription to have 'Contributor'
 # access to all resourceGroups. Basically "root" for all intents and purposes.
