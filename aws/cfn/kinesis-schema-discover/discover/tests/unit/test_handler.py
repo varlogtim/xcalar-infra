@@ -1,8 +1,21 @@
 import json
 import sys
+import os
 import pytest
-from discover import app
+from discover import aws_helper
 
+def stackenv(stack_name):
+    stack = aws_helper.CloudFormationStack(stack_name)
+    role_arn = stack.get_output('KinesisServiceRoleARN')
+    os.environ['KINESIS_ROLE_ARN'] = role_arn
+
+stackenv(os.getenv('STACK_NAME','DiscoverSchemaStack'))
+
+from discover import lambdafn
+
+@pytest.fixture()
+def mocker():
+    return {}
 
 @pytest.fixture()
 def apigw_event():
@@ -33,7 +46,7 @@ def apigw_event():
             },
             "stage": "prod",
         },
-        "queryStringParameters": {"foo": "bar"},
+        "queryStringParameters":  {"bucket": "xcfield", "key": "instantdatamart/tests/readings_200lines.csv", "format": "schema"},
         "headers": {
             "Via": "1.1 08f323deadbeefa7af34d5feb414ce27.cloudfront.net (CloudFront)",
             "Accept-Language": "en-US,en;q=0.8",
@@ -62,11 +75,9 @@ def apigw_event():
 
 
 def test_lambda_handler(apigw_event, mocker):
-
-    ret = app.lambda_handler(apigw_event, "")
+    ret = lambdafn.lambda_handler(apigw_event, "")
     data = json.loads(ret["body"])
 
     assert ret["statusCode"] == 200
-    assert "message" in ret["body"]
-    assert data["message"] == "hello world"
+    assert "RecordFormat" in ret["body"]
     # assert "location" in data.dict_keys()

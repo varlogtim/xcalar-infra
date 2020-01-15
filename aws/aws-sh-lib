@@ -309,7 +309,7 @@ aws_s3_du() {
         echo >&2 "ERROR: aws_s3_du: $1: Unable to determine bucket size"
         return 1
     fi
-    bytes_to_human $size
+    echo $size
 }
 
 aws_inventory() {

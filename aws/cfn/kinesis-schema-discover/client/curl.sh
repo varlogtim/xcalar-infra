@@ -1,6 +1,11 @@
 #!/bin/bash
 
-API_ENDPOINT="${API_ENDPOINT:-https://qwps8i2l2g.execute-api.us-west-2.amazonaws.com/Prod/discover/}"
+
+# Get the API endpoint for the given STACK_NAME
+if [ -z "$API_ENDPOINT" ]; then
+    API_ENDPOINT="$(aws cloudformation describe-stacks --stack-name "${STACK_NAME?Must specify STACK_NAME}" --query 'Stacks[].Outputs[][OutputKey,OutputValue]' --output text \
+        | awk '/DiscoverSchemaApi/{print $2}')"
+fi
 
 discover() {
     curl -Ls "${API_ENDPOINT}?bucket=$1&key=$(urlencode "$2")"
@@ -40,6 +45,17 @@ self_check() {
 
 self_check
 
+[ $# -gt 0 ] || set -- s3://xcfield/instantdatamart/tests/readings_200lines.csv
+
+TMP=$(mktemp -t discover.XXXXXX)
 for arg in "$@"; do
-    discover $(bucket_and_key "$arg")
+    discover $(bucket_and_key "$arg") | tee $TMP
+    echo
+    typ="$(jq -r .RecordFormat.RecordFormatType $TMP)"
+    if [ "$typ"  = CSV ] || [ "$typ" = JSON ]; then
+        echo "Passed check for $typ type"
+    else
+        echo "Error invalid type returned $typ"
+    fi
 done
+rm $TMP

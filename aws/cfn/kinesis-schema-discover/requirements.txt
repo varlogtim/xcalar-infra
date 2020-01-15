@@ -4,6 +4,7 @@ boto3
 cfn-flip
 cfn-lint
 ipython
+jinja2-cli
 pip
 pylint
 pytest

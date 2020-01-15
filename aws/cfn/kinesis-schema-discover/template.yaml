@@ -1,14 +1,68 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
+Transform: 'AWS::Serverless-2016-10-31'
 Description: >
   kinesis-discover-schema
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    Timeout: 3
+    Timeout: 180
+    Handler: index.handler
+    Environment:
+      Variables:
+        TABLE_NAME: data-table
+Parameters:
+  ExistingBucket:
+    Type: String
+    Description: Bucket you wish to scan for data
+    Default: 'xcfield'
 
 Resources:
+  S3AllowFullReadPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: S3ReadAccess
+      Roles:
+        - !Ref LambdaServiceRole
+        - !Ref KinesisServiceRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:List*
+              - s3:Get*
+            Resource:
+              - !Sub 'arn:aws:s3:::${ExistingBucket}'
+              - !Sub 'arn:aws:s3:::${ExistingBucket}/*'
+
+  LambdaServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonKinesisAnalyticsFullAccess'
+      Policies:
+        - PolicyName: AllowPassRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:List*
+                  - iam:Get*
+                  - iam:PassRole
+                Resource: !GetAtt 'KinesisServiceRole.Arn'
   KinesisServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -19,40 +73,20 @@ Resources:
             Principal:
               Service:
                 - 'kinesisanalytics.amazonaws.com'
-                - 'lambda.amazonaws.com'
             Action:
               - 'sts:AssumeRole'
       Path: '/'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-        - 'arn:aws:iam::aws:policy/AmazonKinesisAnalyticsFullAccess'
-      Policies:
-        - PolicyName: AllowPassRole
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                - iam:List*
-                - iam:Get*
-                - iam:PassRole
-                - iam:AssumeRole
-                - iam:AddRoleToInstanceProfile
-                - iam:AttachRolePolicy
-                - sts:GetFederationToken
-                - sts:GetSessionToken
-                - sts:DecodeAuthorizationMessage
-                Resource: '*'
   DiscoverSchemaLambda:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       CodeUri: discover/
-      Handler: lambda.lambda_handler
+      Handler: lambdafn.lambda_handler
       Timeout: 300
       Runtime: python3.6
-      Role: !GetAtt 'KinesisServiceRole.Arn'
+      Role: !GetAtt 'LambdaServiceRole.Arn'
       Environment:
         Variables:
+          BUCKET_NAME: !Ref 'ExistingBucket'
           KINESIS_ROLE_ARN: !GetAtt 'KinesisServiceRole.Arn'
           STACK_NAME: !Ref 'AWS::StackName'
       Events:
@@ -63,9 +97,6 @@ Resources:
             Method: get
 
 Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
   DiscoverSchemaApi:
     Description: "API Gateway endpoint URL for Prod stage for DiscoverSchema function"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/discover/"
@@ -74,4 +105,4 @@ Outputs:
     Value: !GetAtt 'KinesisServiceRole.Arn'
   DiscoverSchemaLambda:
     Description: "Discover Scheme Lambda Function ARN"
-    Value: !GetAtt DiscoverSchemaLambda.Arn
+    Value: !GetAtt 'DiscoverSchemaLambda.Arn'
