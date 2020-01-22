@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "_artifactsLocation": {
-      "value": "https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v9/"
+      "value": "https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v11/"
     },
     "installerUrl": {
       "value": "https://xcrepo.blob.core.windows.net/builds/prod/xcalar-2.0.3-3458-installer-el7"

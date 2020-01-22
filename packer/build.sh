@@ -20,6 +20,7 @@ packer_do() {
         -var "build_number=$BUILD_NUMBER" \
         -var "installer_url=$INSTALLER_URL" \
         ${RELEASE+-var "release=$RELEASE"} \
+        ${INSTALLER_RC+-var "rc=$INSTALLER_RC"} \
         ${REGIONS+-var "destination_regions=$REGIONS"} \
         ${SHARED_WITH+-var "shared_with=$SHARED_WITH"} \
         ${BUILD_URL+-var "build_url=$BUILD_URL"} \
@@ -134,6 +135,8 @@ main() {
     INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
     INSTALLER_VERSION="${INSTALLER_VERSION_BUILD[0]}"
     INSTALLER_BUILD_NUMBER="${INSTALLER_VERSION_BUILD[1]}"
+    INSTALLER_RC="${INSTALLER_VERSION_BUILD[2]}"
+
 
     set +e
     if ! packer_do validate ${*/-color=*/} "$JSON_TEMPLATE" || ! packer_do build "$@" "$JSON_TEMPLATE"; then

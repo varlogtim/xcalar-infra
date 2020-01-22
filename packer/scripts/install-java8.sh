@@ -15,7 +15,7 @@ install_java8() {
 
     cat > /etc/profile.d/zjava.sh <<EOF
 export JAVA_HOME=$JAVA_HOME
-export PATH="\$JAVA_HOME/bin:\$PATH"
+export PATH="\$PATH:\$JAVA_HOME/bin"
 EOF
 }
 

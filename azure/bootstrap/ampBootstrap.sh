@@ -438,7 +438,7 @@ az_format_expiry () {
 #            resource-types -> (s)ervice, (c)ontainer, (o)bject
 #            permissions -> (a)dd, (c)create, ..
 az_storage_sas () {
-    az storage account generate-sas --services bfqt --resource-types sco --permissions acdlpruw --expiry $(az_format_expiry "$1") --output tsv
+    az storage account generate-sas --services bfqt --resource-types sco --permissions racwdl --expiry $(az_format_expiry "$1") --output tsv
 }
 
 az_storage_share_create () {

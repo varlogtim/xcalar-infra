@@ -18,23 +18,18 @@ env_load()  {
             (cd $XLRINFRADIR && make -s venv)
             . $XLRINFRADIR/.venv/bin/activate
         fi
-        #if [ "$VIRTUAL_ENV" != "$XLRINFRADIR/.venv" ] && ! test -d "$XLRINFRADIR/.venv"; then
-        #    ln -sfn "$VIRTUAL_ENV" "$XLRINFRADIR/.venv"
-        #fi
-        #local python_version="$(python --version 2>&1 | head -1 | cut -d' ' -f 2)"
-        #local python_virtenv="${XLRINFRADIR}/.direnv/python-${python_version}"
-        #echo >&2 "Activating Python in ${python_virtenv} ... "
-        #. "${python_virtenv}/bin/activate"
-
         local script_names ii
         export PATH="$XLRINFRADIR/bin:$XLRINFRADIR/azure:$XLRINFRADIR/aws:$XLRINFRADIR/gce:$PATH"
         script_names="infra-sh-lib azure-sh-lib aws-sh-lib gce-sh-lib"
         for ii in $script_names; do
-            echo >&2 "Sourcing ... ${ii}"
-            . "${ii}"
+            echo >&2 "Sourcing ${ii} ..."
+            if ! source "${ii}"; then
+                echo >&2 " -> Failed to source ${ii}"
+                return 1
+            fi
         done
     else
-        echo >&2 "Failed to cd to $(dirname "${BASH_SOURCE[0]}") !!"
+        echo >&2 "Failed to cd to $(dirname "${BASH_SOURCE[0]}")!"
         set +x
         return 1
     fi

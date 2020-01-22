@@ -17,7 +17,6 @@ USER_INSTALL=""
 INSTALL=0
 BUNDLE=0
 DEBUG=${DEBUG:-0}
-TMPENV=
 
 say() {
     echo >&2 "$@"
@@ -98,7 +97,8 @@ main() {
     rm -rf $TMPDIR/venv
 
     req='requirements.txt'
-    const='constraints.txt'
+    con='constraints.txt'
+    output='pip-bundler.tar.gz'
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -107,14 +107,13 @@ main() {
             bundle) BUNDLE=1 ;;
             -h | --help) usage; exit 0;;
             -r | --requirements) req="$1"; shift ;;
-            -c | --constraints) const="$1"; shift;;
+            -c | --constraints) con="$1"; shift;;
             -i | --install) install_links="$1"; shift;;
             -o | --output) output="$1"; shift ;;
             --) break;;
-            *)
-                usage >&2
-                die 2 "Unknown command: $cmd"
-                ;;
+            *) usage >&2
+               die 2 "Unknown command: $cmd"
+               ;;
         esac
     done
 
@@ -128,19 +127,20 @@ main() {
         else
             USER_INSTALL='--user'
         fi
-        do_install $USER_INSTALL -U pip -c ${const}
-        do_install $USER_INSTALL -r ${req} -c ${const} virtualenv
+        do_install $USER_INSTALL -U pip -c ${con}
+        do_install $USER_INSTALL -r ${req} -c ${con} virtualenv
     elif ((BUNDLE)); then
         PACKAGES=$TMPDIR/packages
         WHEELS=$TMPDIR/wheels
         mkdir -p "$PACKAGES" "$WHEELS"
         info "Building packages from $req ..."
-        sort $req > $TMPDIR/requirements.txt
-        if [ -e "$const" ]; then cp $const $TMPDIR/constraints.txt; fi
+        #----
         cp ${BASH_SOURCE[0]} $TMPDIR/install.sh
-        do_bundle -r $TMPDIR/requirements.txt -c ${TMPDIR}/constraints.txt virtualenv
+        sort $req > $TMPDIR/requirements.txt
+        if [ -e "$con" ]; then cp $con $TMPDIR/constraints.txt; fi
+        do_bundle -r $TMPDIR/requirements.txt -c ${TMPDIR}/constraints.txt
         echo >&2 "Creating $output ..."
-        tar caf "${output:-pip-bundler.tar.gz}" --owner=root --group=root -C "${TMPDIR}" install.sh requirements.txt constraints.txt wheels
+        tar caf "$output" --owner=root --group=root -C "${TMPDIR}" install.sh requirements.txt constraints.txt wheels
     fi
 }
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# shellcheck disable=SC2086,SC1090,SC2162
+# shellcheck disable=SC2086,SC1090,SC2162,SC2155
 #
 # Handy Azure aliases/shortcuts. Source this file in your ~/.bash_aliases
 # ## ~/.bash_aliases
@@ -18,7 +18,8 @@ az_setup() {
     AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
     TODAY=$(date +%Y%m%d)
     TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
-    TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/v9/mainTemplate.json
+    TEMPLATE_VERSION=${TEMPLATE_VERSION:-v11}
+    TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/${TEMPLATE_VERSION}/mainTemplate.json
     DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
     LICENSEDEV=$XLRINFRADIR/azure/xdp-standard/licenseDev.json
     LICENSERC=$XLRINFRADIR/azure/xdp-standard/licenseRC.json
@@ -245,6 +246,14 @@ az_rg_dns_or_ip() {
     return 1
 }
 
+_ssh() {
+    ssh -oStrictHostKeyChecking=no -oLogLevel=ERROR -oUserKnownHostsFile=/dev/null -oIdentityFile=$HOME/.ssh/id_rsa "$@"
+}
+
+_scp() {
+    scp -oStrictHostKeyChecking=no -oLogLevel=ERROR -oUserKnownHostsFile=/dev/null -oIdentityFile=$HOME/.ssh/id_rsa "$@"
+}
+
 az_ssh() {
     local host="$1"
     shift
@@ -313,7 +322,7 @@ az_vm_details_update() {
 }
 
 az_vm_details() {
-    az_vms | jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps]|@sh' | column -t #jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps ]|@tsv' | column -t
+    az_vms "$@" | jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps]|@sh' | column -t #jq -r '.[]|[.resourceGroup,.name,.hardwareProfile.vmSize,.powerState,.publicIps ]|@tsv' | column -t
 }
 
 az_provider_api_versions() {
@@ -548,6 +557,23 @@ EOF
     return 0
 }
 
+az_ad_contributor() {
+    local group="$1"
+    local email="$2"
+    local role="${3:-Contributor}"
+    local role_id user_id sub_id scope
+    role_id=$(az role definition list -n "$role" -otsv --query '[].id') && \
+    sub_id=$(az account show --query id -otsv) && \
+    user_id=$(az ad user show --id $email --query objectId -otsv)
+    if [ $? -ne 0 ] || [ -z "$user_id" ] || [ -z "$group" ]; then
+        say "Failed to find user_id for email=$email"
+        return 1
+    fi
+    scope="/subscriptions/${sub_id}/resourceGroups/${group}"
+
+    az role assignment create --role $role_id --assignee-principal-type User --assignee-object-id "$user_id" --scope "$scope"
+}
+
 az_deploy() {
     local uid=$((RANDOM % 511)) ii cmd location=westus2
     local now=$(date +%Y%m%d%H%M%S)
@@ -563,6 +589,8 @@ az_deploy() {
     local mode=Incremental
     local osDiskSize=127
     local timezone='Pacific Standard Time' time=2300
+    local role='Virtual Machine Contributor'
+    local _artifactsLocation="${TEMPLATE_URL%/*}/"
     while [ $# -gt 0 ]; do
         cmd="$1"
         case "$cmd" in
@@ -592,6 +620,10 @@ az_deploy() {
                 ;;
             --template-file=*)
                 template="${1##*=}"
+                shift 1
+                ;;
+            --artifacts-location=*)
+                _artifactsLocation="${1##*=}"
                 shift 1
                 ;;
             --template-uri=*)
@@ -626,6 +658,10 @@ az_deploy() {
                 installer="${1##*=}"
                 shift 1
                 ;;
+            --artifacts-location)
+                _artifactsLocation="$2"
+                shift 2
+                ;;
             -l | --location)
                 location="$2"
                 shift 2
@@ -636,6 +672,10 @@ az_deploy() {
                 ;;
             -n | --name)
                 name="$2"
+                shift 2
+                ;;
+            --role)
+                role="$2"
                 shift 2
                 ;;
             --mode)
@@ -712,7 +752,7 @@ az_deploy() {
         say "Must specify resource group with -g <resource group>"
         say "Please create a resource group first, for example:"
         say ""
-        say " az group create -g ${name}-rg -l $location"
+        say " az group create -g ${name}-rg -l ${location:-westus2}"
         say ""
         return 1
     fi
@@ -750,12 +790,12 @@ az_deploy() {
     fi
     local TMP="$(az_mktemp)"
     local OUTPUT=${XLRINFRADIR}/output
-    rm -rf $OUTPUT/*
+    rm -rf "${OUTPUT:?}"/*
     mkdir -p $OUTPUT
     az group deployment validate -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
-        vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" > /dev/null
+        _artifactsLocation="${_artifactsLocation}" vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" > /dev/null
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
         cat "$TMP" >&2
@@ -770,19 +810,22 @@ az_deploy() {
 
     az group deployment create --mode $mode --name deploy-${now} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
-        "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
+        _artifactsLocation="${_artifactsLocation}" "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
         say "Failed to deploy!"
         return 1
     fi
-    az_rg_scheduled_shutdown -g "$group" --time "$time" --timezone "$timezone"
+    az_rg_scheduled_shutdown -g "$group" --time "${time//:/}" --timezone "$timezone"
+    if ! az_ad_contributor $group $email "$role"; then
+        say "Unable to grant '$role' to $email"
+    fi
 
     dns=${dnslabel}.${location}.cloudapp.azure.com
 
-    if ! az_role_assign_user $group $email 'Contributor'; then
-        say "Failed to assign permissions to $email"
+    if ! az_role_assign_user $group $email "$role" 2>/dev/null; then
+        say "WARN: Couldn't assign role '$role' to $email"
     fi
 
     say "Finished. Browse your deployment here: https://${dns}"
@@ -852,10 +895,12 @@ az_rg_scheduled_shutdown() {
             -g|--group) group="$2"; shift 2;;
             --timezone) timezone="$(az_timezone_str "$2")"; shift 2;;
             --time) time="$2"; shift 2;;
-            --enable) enabled=$2; shift 2;;
-            --) shift; return 0;;
+            --disable) enabled=false; shift 1;;
+            --enable) enabled=true; shift 1;;
+            --enabled) enabled="$2"; shift 2;;
+            --) shift; break;;
             -*) return 1;;
-            *) return 1;;
+            *) break;;
         esac
     done
     if test -z "$group"; then
@@ -877,8 +922,8 @@ az_rg_scheduled_shutdown() {
         --parameters \
         enabled=${enabled} \
         vmName="${vm0%[0-9]*}"\
-        time="${time//:/}" timeZoneId="${timezone}" \
-        scaleNumber=$count -ojson $NO_WAIT
+        time="${time//:/}" timeZoneId="${timezone:-Pacific Standard Time}" \
+        scaleNumber=$count "$@" -ojson $NO_WAIT
 }
 
 az_disk_info() {
@@ -900,27 +945,76 @@ az_privdns_dns_list() {
 # $1 azure.xcalar.io
 az_privdns_hosts_list() {
     local dnsname="${1:-azure.xcalar.io}"
-    local shortdns="${1%%\.*}"
+    local shortdns="${dnsname%%.*}"
     local subnet="${2-10.11}"
     az vm list-ip-addresses -o table | grep "${subnet//./\\.}" |  tr -s ' ' \
         | awk  '{printf "%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1 }'
 }
 
-## Pass in IP/HOSTS in stdout
-az_privdns_update_hosts() {
-    if [ -z "$1" ]; then
-        say "Missing argument for ssh"
-        return 1
-    fi
-    [[ $# -gt 0 ]] || return 1
-    ssh "$@" /bin/bash -c 'cat - > htmp && test -s htmp && sudo mv htmp /etc/azure-fqdn.hosts.test && sudo service dnsmasq restart'
+az_vmss_hosts_list() {
+    local dnsname="${1:-azure.xcalar.io}"
+    local shortdns="${dnsname%%.*}"
+    local subnet="${2-10.11}"
+    local group vmss vmip vmid
+    while read group vmss; do
+        while read vmip vmid; do
+            local instance_id=$(basename $vmid)
+            local vmssname=$(basename "${vmid%/virtualMachines/*}")
+            local vmname=$(printf "${vmssname}%06d" $instance_id)
+            local vmname_short=$(printf "${vmssname}-%s" $instance_id)
+            echo -e "$vmip\t\t${vmname}.${dnsname}\t${vmname}.${shortdns}\t${vmname_short}.${shortdns}"
+        done < <(az vmss nic list -g $group --vmss-name $vmss -ojson | jq -r '.[]|[.ipConfigurations[0].privateIpAddress,.virtualMachine.id]|@tsv')
+    done < <(az vmss list -ojson | jq -r '.[]|[.resourceGroup,.name]|@tsv')
 }
 
 az_privdns_update_ssh_hosts() {
-    local dnsname="${1:-azure.xcalar.io}"
-    local subnet="${2:-10.11}"
-    local sshhost="${3:-root@enigma}"
-    az_privdns_hosts_list "$1" "$2" | az_privdns_update_hosts $sshhost
+    local dnsname=azure.xcalar.io
+    local subnet='10.11'
+    local default_ssh_hosts=('jenkins@dns-secondary.int.xcalar.com' 'jenkins@enigma.int.xcalar.com')
+    while [ $# -gt 0 ]; do
+        local cmd="$1"
+        case "$cmd" in
+            -h|--help)
+                echo >&2 "az_privdns_hosts_list [--dnsname DNS (default: $dnsname)] [--subnet NETWORK (default: $subnet) [--] user@host1 ..."
+                return 0
+                ;;
+            --dnsname)
+                dnsname="$2"
+                shift 2
+                ;;
+            --subnet)
+                subnet="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                echo >&2 "ERROR: Unknown commandline: $cmd"
+                az_privdns_update_ssh_hosts --help
+                return 1
+                ;;
+            *) break;;
+        esac
+    done
+    [ $# -eq 0 ] && set -- "${default_ssh_hosts[@]}"
+
+    local ii tmp
+    tmp=$(mktemp /tmp/azprivdns.XXXXXX) || return 1
+    chmod 0644 $tmp
+
+    (
+    az_privdns_hosts_list "$dnsname" "$subnet"
+    az_vmss_hosts_list "$dnsname" "$subnet"
+    ) > $tmp || return 1
+    say "Azure DNS has $(wc -l $tmp) entries."
+    for ii in "$@"; do
+        _scp $tmp ${ii}:/tmp/htmp-$$ \
+        && _ssh $ii "if ! diff -q /tmp/htmp-$$ /etc/azure-fqdn.hosts >/dev/null; then sudo mv -v /tmp/htmp-$$ /etc/azure-fqdn.hosts && echo \"Restarting dnsmasq on $ii\" && sudo killall -HUP dnsmasq; else echo \"No change\"; fi" \
+        || return 1
+    done
+    mv -f $tmp /tmp/azure-fqdn-$(id -u).hosts
 }
 
 az_setup

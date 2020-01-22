@@ -517,7 +517,14 @@ filename_from_url() {
 }
 
 version_build_from_filename() {
-    grep -Eow '[0-9\.-]+' <<< "$1" | tr - ' '
+    local vbf rc
+    vbf="$(grep -Eow '([0-9\.]+)-([0-9a-z]+)' <<< "$1" | tr '-' ' ' | sed 's/[a-z]//g')"
+    rc=$(grep -Eow '(RC[0-9]+)' <<< "$1")
+    if [ -n "$vbf" ]; then
+        echo $vbf $rc
+        return 0
+    fi
+    return 1
 }
 
 build_type_from_installer_path() {
@@ -526,6 +533,13 @@ build_type_from_installer_path() {
         */debug/*) echo "debug";;
         *) echo "unknown";;
     esac
+}
+
+build_is_rc() {
+    if [[ "$1" =~ /ReleaseCandidates/ ]]; then
+        return 0
+    fi
+    return 1
 }
 
 dimages_list() {

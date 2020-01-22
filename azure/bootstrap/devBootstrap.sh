@@ -19,6 +19,11 @@ genDefaultAdmin() {
 EOF
 }
 
+xcalar_version() {
+    rpm -q xcalar --qf '%{VERSION}' | sed 's/\./ /g'
+}
+
+
 
 # API Services
 INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/installer"
@@ -66,7 +71,6 @@ while getopts "a:b:c:d:e:f:g:i:j:n:l:u:r:p:s:t:v:w:x:y:z:" optarg; do
         x) ADMIN_PASSWORD="$OPTARG";;
         y) export AZURE_STORAGE_ACCOUNT="$OPTARG";;
         z) export AZURE_STORAGE_ACCESS_KEY="$OPTARG"; export AZURE_STORAGE_KEY="$OPTARG";;
-        --) break;;
         *) echo >&2 "Unknown option $optarg $OPTARG";; # exit 2;;
     esac
 done
@@ -163,7 +167,7 @@ EOF
 mount_device () {
     test $# -ge 2 || return 1
     test -n "$1" && test -n "$2" || return 1
-    local PART= MOUNT="$1" PARTIN="$2" DEV="${2%[1-9]}" LABEL="$3" FSTYPE="${4:-ext4}"
+    local PART='' MOUNT="$1" PARTIN="$2" DEV="${2%[1-9]}" LABEL="$3" FSTYPE="${4:-ext4}"
     if PART="$(set -o pipefail; findmnt -n $MOUNT | awk '{print $2}')"; then
         local OLDMOUNT="$(findmnt -n $MOUNT | awk '{print $1}')"
         if [ "$PART" != "$PARTIN" ] || [ -z "$OLDMOUNT" ]; then
@@ -527,7 +531,7 @@ az_format_expiry () {
 #            resource-types -> (s)ervice, (c)ontainer, (o)bject
 #            permissions -> (a)dd, (c)create, ..
 az_storage_sas () {
-    az storage account generate-sas --services bfqt --resource-types sco --permissions acdlpruw --expiry $(az_format_expiry "$1") --output tsv
+    az storage account generate-sas --services bfqt --resource-types sco --permissions racwdl --expiry $(az_format_expiry "$1") --output tsv
 }
 
 az_storage_share_create () {
@@ -645,7 +649,11 @@ else
 fi
 
 # Custom SerDes path on local storage
-XCE_XDBSERDESPATH="${INSTANCESTORE}/serdes"
+if [ -n "$INSTANCESTORE" ]; then
+    XCE_XDBSERDESPATH="${INSTANCESTORE}/serdes"
+    mkdir -m 0755 -p $XCE_XDBSERDESPATH
+    chown xcalar:xcalar $XCE_XDBSERDESPATH
+fi
 # Generate /etc/xcalar/default.cfg
 (
 if [ $COUNT -eq 1 ]; then
@@ -660,9 +668,20 @@ echo Constants.XcalarRootCompletePath=$XCE_HOME
 # Enable ASUP on Cloud deployments
 echo Constants.SendSupportBundle=true
 
-mkdir -m 0700 -p $XCE_XDBSERDESPATH && \
-chown xcalar:xcalar $XCE_XDBSERDESPATH && \
-echo Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH
+# echo "Constants.Cgroups=$CGROUPS_ENABLED"
+
+if [ -n "$XCE_XDBSERDESPATH" ]; then
+    # 2.0.4 specific fix
+    version=($(xcalar_version))
+    if [ ${version[0]} -eq 2 ] && [ ${version[1]} -lt 2 ] && [ ${version[2]} -ge 4 ]; then
+        echo Constants.BufCacheNonTmpFs=true
+        echo Constants.BufferCachePath=$XCE_XDBSERDESPATH
+    fi
+    echo Constants.XdbSerDesMode=2
+    echo Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH
+    echo Constants.XdbSerDesMaxDiskMB=0
+    echo Constants.EnforceVALimit=false
+fi
 ) | tee "$XCE_CONFIG"
 
 if [ -n "$LICENSE" ]; then

@@ -21,30 +21,6 @@ DRYRUN=false
 TESTING=${TESTING:-false}
 FORCE=false
 
-if [ "$(uname -s)" = Darwin ]; then
-    readlink_f() {
-        (
-            target="$1"
-
-            cd "$(dirname "$target")"
-            target="$(basename "$target")"
-
-            # Iterate down a (possible) chain of symlinks
-            while [ -L "$target" ]; do
-                target="$(readlink "$target")"
-                cd "$(dirname "$target")"
-                target="$(basename "$target")"
-            done
-
-            echo "$(pwd -P)/$target"
-        )
-    }
-else
-    readlink_f() {
-        readlink -f "$1"
-    }
-fi
-
 say() {
     echo >&2 "$*"
 }
@@ -262,7 +238,7 @@ if $TESTING || test -f "$INSTALLER"; then
         done
         if $FORCE || ! gsutil ls "$DEST_URL" > /dev/null 2>&1; then
             say "Uploading $INSTALLER to $DEST_URL"
-            until gsutil -m -o GSUtil:parallel_composite_upload_threshold=100M -q \
+            until gsutil -m -o GSUtil:parallel_composite_upload_threshold=100M \
                 cp -c "$INSTALLER" "$DEST_URL" >&2; do
                 sleep 1
             done
