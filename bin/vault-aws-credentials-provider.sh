@@ -59,7 +59,8 @@ UNMET_DEPS=()
 AWS_SHARED_CREDENTIALS_FILE="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
 AWS_CONFIG_FILE="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
 AWS_PROFILE_SAVE="${AWS_PROFILE}"
-#unset AWS_PROFILE
+VAULT_AWS_ACCOUNTS=(aws-xcalar aws-xcalar-trials aws-xcalar-poc aws-test aws-prod aws-pegasus)
+unset AWS_PROFILE
 
 usage() {
     cat <<EOF >&2
@@ -67,9 +68,9 @@ usage() {
      $(basename $0) [--account ACCOUNT] [--role ROLE]
         [--install] [--profile PROFILE] [--ttl NUM] [--clean]
 
-    --account  ACCOUNT   AWS Account to use (default $ACCOUNT (xcalar, xcalar-poc, test, prod)
+    --account  ACCOUNT   AWS Account to use (default $ACCOUNT (valid: ${VAULT_AWS_ACCOUNTS[*]}))
     --role     ROLE      AWS Role (default: $ROLE)
-    --install            Install into ~/.aws/config to have awscli automatically retrieve keys
+    --install            Install into ~/.aws/credentials to have awscli automatically retrieve keys
     --ttl      TTL       TTL for token, min is 15m, max is 12h (default: $TTL)
     --profile  PROFILE   AWS CLI Profile to populate from ~/.aws/config (default: $PROFILE)
 
@@ -80,11 +81,11 @@ usage() {
         [-f|--file FILE|-]
 
     --check              Sanity check your installation
-    --path     PATH      Complete vault path to use (default: $ACCOUNT/$TYPE/$ROLE)
+    --path     PATH      Complete vault path to use (default: \$ACCOUNT/\$TYPE/\$ROLE = $ACCOUNT/$TYPE/$ROLE)
     -f|--file    FILE|-  Read existing credentials from FILE or - (stdin)
-    -e|--export-env      Show AWS environment variables that you can use for auth
-    --export-profile     Print credentials in AWS format credential format
-    --unset-profile      Print settings to reset local shell env
+    -e|--export-env      Print eval'able AWS environment variables that you can use for auth (eval, or add to ~/.bashrc)
+    --export-profile     Print credentials in AWS credential format (you can add them to ~/.aws/credentials)
+    --unset-profile      Print eval'able settings to reset local shell env
 EOF
     say "$*"
     exit 2
@@ -115,9 +116,6 @@ die() {
     exit ${2:-1}
 }
 
-mkdir -p "$VAULTCACHE_BASE"
-log "Env: $(print_clean_env)"
-log "Args: $*"
 if [[ $OSTYPE =~ darwin ]]; then
     please_install() {
         say
@@ -178,20 +176,18 @@ please_have() {
 }
 
 print_clean_env() {
-    env | sed '/^BASH_FUNC/,/^}/d' | grep -Ev '(COLOR|_fzf|SECRET|PASS)' | sort
+    env | sed '/^BASH_FUNC/,/^}/d' | grep -Ev '(COLOR|_fzf|SECRET|PASS|CRED)' | sort
 }
 
 cvault() {
     (
     set +x
-    local vault_token=${VAULT_TOKEN}
+    local vault_token
+    if ! vault_token=$(vault print token); then
+        die "Failed to retrieve your local vault token. Are you logged in? vault auth -method=ldap username=jsmith"
+    fi
     if [ -z "$vault_token" ]; then
-        if ! vault_token=$(vault print token); then
-            die "Failed getting your vault token"
-        fi
-        if [ -z "$vault_token" ]; then
-            die "Failed to find VAULT_TOKEN environment or ~/.vault-token file. Are you logged in?"
-        fi
+        die "Failed to find VAULT_TOKEN environment or ~/.vault-token file. Are you logged in?"
     fi
     local uri="$1"
     shift
@@ -201,18 +197,7 @@ cvault() {
     ) || die "Failed when calling cvault $*"
 }
 
-vault_status() {
-    local status
-    if status="$(
-        set -o pipefail
-        cvault status | jq -r .sealed
-    )" && [ "$status" = false ]; then
-        return 0
-    fi
-    return 1
-}
-
-vault_status() {
+vault_health() {
     local status
     if status="$(
         set -o pipefail
@@ -254,8 +239,8 @@ vault_install_credential_helper() {
     if has_space "${dir}/${filen}"; then
         q='"'
     fi
-    cat >>${AWS_CONFIG_FILE} <<EOF
-[profile $PROFILE]
+    cat >>${AWS_SHARED_CREDENTIALS_FILE} <<EOF
+[$PROFILE]
 credential_process = ${q}${dir}/${filen}${q} --path $AWSPATH
 
 EOF
@@ -264,7 +249,7 @@ EOF
     unset AWS_SESSION_TOKEN
     unset AWS_ACCESS_KEY_ID
     if ! aws --profile "$PROFILE" sts get-caller-identity --output json; then
-        die "Failed to get your identity from AWS :("
+        die "Failed to get your identity from AWS for profile $PROFILE"
     fi
 
     say "SUCCESS"
@@ -348,11 +333,11 @@ vault_sanity() {
         die "Failed to look you up. Are you logged into vault? Try 'vault login -method=ldap username=jdoe'. Your username is your LDAP username (usually the part before @xcalar.com in your email)"
     fi
     echo "ok    5  - verified your token with vault (display_name: $display_name)"
-    if ! vault_status; then
-        echo "not ok    6  - checked vault status"
-        die "Failed to get 'vault status', or vault is sealed"
+    if ! vault_health; then
+        echo "not ok    6  - checked vault health"
+        die "Failed to get 'vault health', or vault is sealed"
     fi
-    echo "ok    6  - checked vault status"
+    echo "ok    6  - checked vault health"
 }
 
 iso2unix() {
@@ -429,16 +414,19 @@ vault2aws() {
 }
 
 vault_render_file() {
-    local file="$1" tmp
+    local file="$1" tmp=''
     if [ -z "$file" ] || [ "$file" = - ]; then
-        tmp=$(mktemp ${TMPDIR}/vaultXXXXXX.json)
+        tmp=$(mktemp -t vaultXXXXXX.json)
+        chmod 0600 $tmp
         cat - >"$tmp"
         file="$tmp"
     fi
     if $EXPORT_ENV; then
-        echo "export AWS_ACCESS_KEY_ID=\"$(jq -r .data.access_key $file)\""
-        echo "export AWS_SECRET_ACCESS_KEY=\"$(jq -r .data.secret_key $file)\""
-        echo "export AWS_SESSION_TOKEN=\"$(jq -r .data.security_token $file)\""
+        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
+        echo "AWS_ACCESS_KEY_ID=\"$(jq -r .data.access_key $file)\""
+        echo "AWS_SECRET_ACCESS_KEY=\"$(jq -r .data.secret_key $file)\""
+        echo "AWS_SESSION_TOKEN=\"$(jq -r .data.security_token $file)\""
+        echo "export AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN"
     elif $EXPORT_PROFILE; then
         echo "[$PROFILE]"
         echo "aws_access_key_id = $(jq -r .data.access_key $file)"
@@ -517,8 +505,7 @@ main() {
         vault_render_file "$FILE"
         exit $?
     fi
-    if ! vault_status; then
-        vault_status
+    if ! vault_health; then
         die "Failed to get vault status"
     fi
 
@@ -526,6 +513,7 @@ main() {
     if [ -z "$AWSPATH" ]; then
         AWSPATH="$ACCOUNT/$TYPE/$ROLE"
     fi
+    AWSPATH="aws-${AWSPATH#aws-}"
     if $INSTALL; then
         vault_install_credential_helper
         exit $?
