@@ -59,9 +59,9 @@ do_packer() {
     if [ -z "$LICENSE" ]; then
         if [ -z "$LICENSE_FILE" ]; then
             if build_is_rc "$INSTALLER"; then
-                LICENSE_FILE="$(cat $XLRINFRADIR/aws/cfn/${PROJECT}/license-rc.txt)"
+                LICENSE_FILE="$XLRINFRADIR/aws/cfn/${PROJECT}/license-rc.txt"
             else
-                LICENSE_FILE="$(cat $XLRINFRADIR/aws/cfn/${PROJECT}/license.txt)"
+                LICENSE_FILE="$XLRINFRADIR/aws/cfn/${PROJECT}/license.txt"
             fi
         fi
         if test -e "$LICENSE_FILE"; then
