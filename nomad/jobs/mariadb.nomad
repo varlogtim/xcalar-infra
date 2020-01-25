@@ -59,7 +59,9 @@ job "mariadb" {
         memory = 256
 
         network {
-          port "db" {}
+          port "db" {
+            static = "3306"
+          }
         }
       }
 
