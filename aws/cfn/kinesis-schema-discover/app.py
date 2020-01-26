@@ -49,21 +49,18 @@ if __name__ == '__main__':
             event = { 'bucket': bucket, 'key': key }
             lambda_handler(event, {})
             discovered = ds.discover(bucket, key)
-            #print(discovered.data)
-            #print(discovered.schema)
-            #json.dumps(discovered.data['ParsedInputRecords'])
     except ClientError as e:
         logging.error(e)
         raise e
     except Exception as e:
         raise e
-    #print(json.dumps(discovered.schema))
-    print("Schema:")
-    print(json.dumps(discovered.schema))
-    print()
-    print("Data:")
+    output = {}
+    output["Schema"] = discovered.schema
     numr = len(discovered.data)
     idx=0
-    for idx in range(min(3,numr-1)):
-        line = discovered.data[idx]
-        print("{}: {}".format(idx,json.dumps(line)))
+    output["Data"] = []
+    for idx in range(min(3,numr)):
+        line_json = {}
+        line_json[str(idx)] = line = discovered.data[idx]
+        output["Data"].append(line_json)
+    print(json.dumps(output))

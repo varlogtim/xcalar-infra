@@ -13,6 +13,7 @@ class Manifest:
         self.LOG_BUCKET = 'xclogs'
         self.client = boto3.client('s3')
         self.resource = boto3.resource('s3')
+        self.HEADER = "bucket_name,key_name,version_ID,is_latest,unknown_flag,size_in_bytes,last_modified_date,etag,storage_class,intelligent_tiering_access_tier,multipart_upload_flag,delete_marker,replication_status,encryption_status,object_lock_retain_until_date,object_lock_mode,object_lock_legal_hold_status"
 
     def _gz_extract(self, in_stream):
         dec = zlib.decompressobj(32 + zlib.MAX_WBITS)  # offset 32 to skip the header
@@ -37,6 +38,7 @@ class Manifest:
         response = self.client.list_objects_v2(Bucket=self.LOG_BUCKET, Prefix=self._prefix())
         item = sorted(response['Contents'], key=lambda item: item['LastModified'])[-1]
         data = json.loads(self._get(self.LOG_BUCKET, item['Key']).decode("utf-8"))
+        yield self.HEADER
         for ff in data["files"]:
             dgz = self._get(self.LOG_BUCKET, ff['key'])
             stream = io.BytesIO(dgz)

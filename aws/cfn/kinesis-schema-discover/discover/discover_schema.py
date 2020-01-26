@@ -2,6 +2,7 @@
 import boto3
 import time
 from botocore.exceptions import ClientError
+from schema_checksum import SchemaChecksum
 
 
 class DiscoverSchemaResult():
@@ -10,6 +11,10 @@ class DiscoverSchemaResult():
         self.key = key
         self.data = data['ParsedInputRecords']
         data['InputSchema']['elapsedTime'] = elapsed_time
+        checksum = SchemaChecksum()
+        strict_order = data['InputSchema']['RecordFormat']['RecordFormatType'] != "JSON"
+        data['InputSchema']['checksum'] = \
+            checksum.compute_checksum(data['InputSchema']['RecordColumns'], strict_order)
         self.schema = data['InputSchema']
 
 class DiscoverSchema():
