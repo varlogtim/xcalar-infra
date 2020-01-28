@@ -26,6 +26,8 @@ SELECT = select.csv select.json
 
 export AWS_DEFAULT_REGION #STACK_NAME
 
+default: venv
+
 all: $(SCHEMAS)
 
 run: venv

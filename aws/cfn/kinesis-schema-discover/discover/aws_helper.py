@@ -1,13 +1,15 @@
-import boto3
+import os
 import logging
+
+import boto3
 from botocore.exceptions import ClientError
 
 
 class CloudFormationStack():
-    def __init__(self, stack_name):
-        self.stack_name = stack_name
+    def __init__(self, stack_name=None):
+        self.stack_name = stack_name if stack_name else os.environ['STACK_NAME']
         self.client = boto3.client('cloudformation')
-        self.stack = self.client.describe_stacks(StackName=stack_name)['Stacks'][0]
+        self.stack = self.client.describe_stacks(StackName=self.stack_name)['Stacks'][0]
         self.outputs = {}
         for output in self.stack['Outputs']:
             self.outputs[output['OutputKey']] = output['OutputValue']

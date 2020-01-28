@@ -422,11 +422,11 @@ vault_render_file() {
         file="$tmp"
     fi
     if $EXPORT_ENV; then
-        echo "AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
-        echo "AWS_ACCESS_KEY_ID=\"$(jq -r .data.access_key $file)\""
-        echo "AWS_SECRET_ACCESS_KEY=\"$(jq -r .data.secret_key $file)\""
-        echo "AWS_SESSION_TOKEN=\"$(jq -r .data.security_token $file)\""
-        echo "export AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN"
+        echo " AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}"
+        echo " AWS_ACCESS_KEY_ID=\"$(jq -r .data.access_key $file)\""
+        echo " AWS_SECRET_ACCESS_KEY=\"$(jq -r .data.secret_key $file)\""
+        echo " AWS_SESSION_TOKEN=\"$(jq -r .data.security_token $file)\""
+        echo " export AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN"
     elif $EXPORT_PROFILE; then
         echo "[$PROFILE]"
         echo "aws_access_key_id = $(jq -r .data.access_key $file)"

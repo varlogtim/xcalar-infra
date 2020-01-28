@@ -5,9 +5,7 @@ cfn-flip
 cfn-lint
 ipython
 jinja2-cli
-pip
 pylint
 pytest
-setuptools
-wheel
+sentry-sdk==0.14.1
 yapf
