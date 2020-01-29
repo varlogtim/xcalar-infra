@@ -440,16 +440,19 @@ fi
 
 echo "Starting Caddy"
 pkill caddy || true
-TmpCaddy=`mktemp Caddy.conf.XXXXX`
-TmpCaddyLogs=`mktemp CaddyLogs.XXXXX.log`
+TmpCaddyDir=`mktemp -d -t Caddy.XXXXXX`
+TmpCaddy=$TmpCaddyDir/Caddyfile
+TmpCaddyLogs=$TmpCaddyDir/CaddyLogs.log
 cp $XLRDIR/conf/Caddyfile "$TmpCaddy"
 sed -i -e 's!/var/www/xcalar-gui!'$XLRGUIDIR'/'$GUI_FOLDER'!g' "$TmpCaddy"
 # strip out the jwt settings for testing (for now) to allow unauthenticated access
 sed -i -e '/jwt {/,/}/d' "$TmpCaddy"
+sed -i 's@{\$XCE_LOGDIR}@'${TmpCaddyDir}'@' "$TmpCaddy"
+sed -i 's/log .*$/log stdout/; s/errors .*$/errors stderr/' "$TmpCaddy"
 echo "Caddy logs at $TmpCaddyLogs"
-caddy -conf "$TmpCaddy" >"$TmpCaddyLogs" 2>&1 &
+(cd $TmpCaddyDir && caddy -pidfile caddy.pid >"$TmpCaddyLogs" 2>&1) &
 caddyPid=$!
-echo "Caddy pid $caddyPid"
+echo "Caddy pid $caddyPid running in $TmpCaddyDir"
 sleep 5
 
 if [ $JOB_NAME = "XDEndToEndTest" ]; then
@@ -501,9 +504,12 @@ fi
 
 
 sudo unlink /var/www/xcalar-gui || true
-kill $caddyPid || true
+kill -TERM $caddyPid || true
 if [ "$useXc2" == "true" ]; then
     xc2 cluster stop
+fi
+if [ $exitCode -eq 0 ]; then
+    rm -rf $TmpCaddyDir
 fi
 
 exit $exitCode
