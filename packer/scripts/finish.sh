@@ -25,13 +25,13 @@ rm -rfv /var/lib/cloud/instances/*
 : >/var/log/wtmp
 : >/var/log/btmp
 
-date > /etc/packer_build_time
+date -u +%FT%T%z > /etc/packer_build_time
 
 history -c
 export HISTSIZE=0
 export HISTFILESIZE=0
 
-rm -rf /tmp/* #/var/tmp/*
+rm -rfv /tmp/*
 
 if test -e /usr/sbin/waagent; then
 	echo >&2 "Running Azure deprovisioner ..."

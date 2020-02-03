@@ -23,6 +23,6 @@ PyYAML==5.1.2
 requests==2.22.0
 sentry-sdk==0.14.1
 testinfra
-troposphere
+troposphere[policy]
 warrant
 yamllint

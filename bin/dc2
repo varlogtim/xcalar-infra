@@ -127,7 +127,7 @@ jq_put_userata_in_lc() {
 
 jq_put_userata_in_lt() {
     #jq -r ".Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData.\"Fn::Base64\".\"Fn::Sub\" = $(cat "$@" | jq -R -s .)"
-    jq -r 'del(.Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64"."Fn::Sub"), .Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64" = "'$(cat "$1" | jq -R -s .)'"'
+    jq -r 'del(.Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64"."Fn::Sub"), .Resources.LaunchTemplate.Properties.LaunchTemplateData.UserData."Fn::Base64" = "'$(jq -R -s . < "$1")'"'
 }
 
 # Turn [ { "ParameterKey": "Foo", "ParameterValue":"Bar"}, .. ]
@@ -162,7 +162,8 @@ dc2_parse_common() {
     local cmd="$1"
     shift
     case "$cmd" in
-        --debug | -d) DEBUG=1 ;;
+        --debug | -d) DEBUG=1; KEEP=1;;
+        --publishing) PUBLISHING=true;;
         --project | -p)
             PROJECT="$1"
             #PROJDIR="$(cd $PROJECT && pwd || { cd $TEMPLATEDIR && pwd} )"
@@ -322,6 +323,9 @@ dc2_upload() {
         esac
     done
 
+    J2DEFS+=(-D "DEBUG=${DEBUG}")
+    J2DEFS+=(-D "PUBLISHING=${PUBLISHING^}")
+
     test -n "${PROJECT:-}" || die "Need to set --project"
     test -n "${VERSION:-}" || VERSION=$(cat $PORJECT/VERSION) || die "Need to set --version"
     PROJDIR="${TEMPLATEDIR}/${PROJECT}"
@@ -333,7 +337,7 @@ dc2_upload() {
     #cd "$GENDIR" || die "Failed to cd to $GENDIR"
     for ii in "$PROJDIR"/scripts/*; do
         if [[ $ii =~ .j2$ ]]; then
-            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "$ii" > $GENDIR/scripts/$(basename $ii .j2)
+            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "${J2DEFS[@]}" "$ii" > $GENDIR/scripts/$(basename $ii .j2)
         else
             cp $ii $GENDIR/scripts/
         fi
@@ -357,14 +361,16 @@ dc2_upload() {
     rm -fv "$TMPDIR"/vars/*
 
     cat > "$TMPDIR"/vars/deploy.yaml <<- EOF
-	VERSION: $VERSION
-	PROJECT: $PROJECT
-	RELEASE: $RELEASE
+	VERSION: '$VERSION'
+	PROJECT: '$PROJECT'
+	RELEASE: '$RELEASE'
 	baseUrl: '$BASE_URL'
 	bootstrapUrl: '$bootstrapUrl'
+	DEBUG: $DEBUG
+	PUBLISHING: ${PUBLISHING^}
 	EOF
     cat > "$TMPDIR"/vars/build.yaml <<- EOF
-	Date: $(date +%FT%T%z)
+	Date: '$(date +%FT%T%z)'
 	EOF
     # jq_from_text user_data < "$PROJDIR"/scripts/user-data.sh | cfn-flip >> "$PROJDIR"/vars/deploy.yaml
 
@@ -382,11 +388,10 @@ dc2_upload() {
         debug "Found AMI: $ami_id"
         if [ "$ami_id" = null ] || test -z "$ami_id" ; then
             xcalar_latest
-            ami_id=$(aws ec2 describe-images --owners self --filters \
+            if ! ami_id=$(aws ec2 describe-images --owners self --filters \
                 Name=tag:Version,Values=${VERSION} \
                 Name=tag:BaseOS,Values="*${OSID}*" \
-                Name=name,Values='xdp-*' | aws_format_images | head -1 | awk '{print $2}')
-            if [ $? -ne 0 ]; then
+                Name=name,Values='xdp-*' | aws_format_images | head -1 | awk '{print $2}'); then
                 die "Failed to find valid AMI"
             fi
             debug "Found New AMI: $ami_id"
@@ -408,7 +413,7 @@ dc2_upload() {
 
             local templateJson=${GENDIR}/${TEMPLATEOUT}.json
             # shellcheck disable=SC2002
-            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "bootstrapUrl=$bootstrapUrl" -D "ami_""${AWS_DEFAULT_REGION//-/_}""=$ami_id" -D "region=${AWS_DEFAULT_REGION}" -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" \
+            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "PUBLISHING=${PUBLISHING^}" -D "DEBUG=$DEBUG" -D "bootstrapUrl=$bootstrapUrl" -D "ami_""${AWS_DEFAULT_REGION//-/_}""=$ami_id" -D "region=${AWS_DEFAULT_REGION}" -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" \
                 | tee ${TMPDIR}/${TEMPLATEOUT}.yaml \
                 | cfn-flip > "$templateJson"; then
                 #| jq_put_userata_in_lt $PROJDIR/scripts/user-data.sh > "$templateJson"; then
@@ -434,7 +439,7 @@ dc2_upload() {
             if [ -n "${URL_FILE:-}" ]; then
                 echo "$templateUrl" >> "$URL_FILE"
             fi
-            quickUrl="$(aws_quickcreate "$templateUrl" myxcalar-${PROJECT}-${RELEASE})"
+            quickUrl="$(aws_quickcreate "$templateUrl" my-${PROJECT})"
             quick_urls+=("$quickUrl")
             urls+=("$templateUrl")
 
@@ -452,13 +457,11 @@ dc2_upload() {
         s3_sync --dryrun "${GENDIR}/" "s3://${BUCKET}/${TARGET}/" >&2
     else
         local -i would_delete
-        if would_delete=$(s3_sync --dryrun ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" | grep upload: | wc -l) \
+        if would_delete=$(s3_sync --dryrun ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" | grep -c "upload:") \
             && [ $would_delete -gt 10 ]; then
             warn "You would delete $would_delete objects from s3://${BUCKET}/${TARGET}/!!"
             die "Manually remove the destination first, aws s3 rm --recursive s3://${BUCKET}/${TARGET}/ if you're sure"
         fi
-        #s3_sync s3://${BUCKET}/cfn/ /srv/reposync/${BUCKET}/cfn/
-
         s3_sync ${GENDIR}/ "s3://${BUCKET}/${TARGET}/" >&2
     fi
 
@@ -486,9 +489,10 @@ dc2_cleanup() {
 }
 
 dc2_defaults() {
-    declare -g FIND_AMI=0 DRY=0 KEEP=0 DEBUG='' CLOUD=aws MODE=''
-    declare -g ENVIRONMENT=${ENVIRONMENT:-dev}
+    declare -g FIND_AMI=0 DRY=0 KEEP=0 DEBUG=${DEBUG:-0} CLOUD=aws MODE='create'
+    declare -g ENVIRONMENT=${ENVIRONMENT:-dev} PUBLISHING=${PUBLISHING:-false}
     declare -g TMPBASE="${TMPDIR:-/tmp}/$(basename $0 .sh)-$(id -u)" # EG /tmp/dc2-1000/
+    export DEBUG PUBLISHING ENVIRONMENT
 
     declare -g -a J2DEFS=()
     case "$CLOUD" in

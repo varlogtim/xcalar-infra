@@ -86,6 +86,15 @@ Parameters:
     Description: Use an existing S3 bucket to load data from, or leave blank to create one. When specifying an existing bucket use only the bucket name. For example, if your bucket is s3://mybucket, specify mybucket.
     Type: String
     Default: ''
+  SSLCert:
+    Description: Your website's SSL certificate (.crt file). Paste contents of file here.
+    Type: String
+    Default: ''
+  SSLKey:
+    Description: Your website's SSL private key (.key file). Paste contents of file here.
+    Type: String
+    NoEcho: true
+    Default: ''
 {%- if enableLicense %}
   LicenseKey:
     Description: XDP License Key
@@ -140,6 +149,8 @@ Metadata:
         Parameters:
           - RootSize
           - AssociatePublicIpAddress
+          - SSLCert
+          - SSLKey
 {%- if enableExistingShare %}
           - ExistingShare
 {%- endif %}
@@ -510,6 +521,23 @@ Resources:
             - reconfigure_app
         configure_cfn:
           files:
+{%- if DEBUG == 1 %}
+            /var/lib/cloud/scripts/vendor/bootstrap.sh:
+              source: {{ bootstrapUrl }}
+              mode: '000755'
+              owner: root
+              group: root
+{%- endif %}
+            /etc/xcalar/host.crt:
+              content: !Ref SSLCert
+              mode: '000644'
+              owner: root
+              group: root
+            /etc/xcalar/host.key:
+              content: !Ref SSLKey
+              mode: '000640'
+              owner: root
+              group: xcalar
             /etc/cfn/hooks.d/cfn-asg-reloader.conf:
               content: !Sub |
                 [cfn-asg-reloader-hook]
@@ -540,6 +568,12 @@ Resources:
               mode: '000400'
               owner: root
               group: root
+            /opt/xcalar/xcalar-gui/assets/js/env/cloudEnv.js:
+              content: |
+                const gDataMart = true;
+              mode: '000644'
+              owner: xcalar
+              group: xcalar
             /var/www/xcalar-gui/s3buckets.json:
               content: !Sub
                 - |-
@@ -570,7 +604,8 @@ Resources:
                   AWS_DEFAULT_REGION=${AWS::Region}
                   CLUSTER_NAME=${AWS::StackName}
                   BUCKET=${Bucket}
-                  USERBU
+                  SSLCRT="${SSLCert}"
+                  SSLKEY="${SSLKey}"
                   NFSHOST=${SharedRoot}
                   SUBNET=${Subnet}
                   NIC=${ClusterNIC}
@@ -679,6 +714,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ec2:DescribeInstances
+                  - autoscaling:DescribeAutoScalingGroups
                 Resource:
                   - '*'
               - Effect: Allow
@@ -690,7 +726,7 @@ Resources:
                 Action:
                   - ec2:CreateTags
                   - ec2:DeleteTags
-                Resource: '*'
+                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance*'
                 Condition:
                   StringEquals:
                     ec2:ResourceTag/aws:cloudformation:stack-name: !Ref 'AWS::StackName'
@@ -698,14 +734,19 @@ Resources:
                 Action:
                   - ec2:DescribeNetworkInterfaces
                   - ec2:AttachNetworkInterface
+                  - ec2:DetachNetworkInterface
                 Resource:
                   - '*'
               - Effect: Allow
                 Action:
                   - autoscaling:UpdateAutoScalingGroup
-                  - autoscaling:DescribeAutoScalingGroups
+                  - autoscaling:SetInstanceProtection
+                  - autoscaling:TerminateInstanceInAutoScalingGroup
                 Resource:
-                  - '*'
+                  - !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/*'
+                Condition:
+                  StringEquals:
+                    autoscaling:ResourceTag/aws:cloudformation:stack-name: !Ref 'AWS::StackName'
               - Effect: Allow
                 Action:
                   - elasticfilesystem:DescribeMountTargets
@@ -717,9 +758,10 @@ Resources:
                   - s3:ListBucket
                   - s3:ListBucketMultipartUploads
                   - s3:HeadBucket
-                Resource: !Sub
-                  - 'arn:aws:s3:::${Bucket}'
-                  - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                Resource:
+                  - !Sub
+                    - 'arn:aws:s3:::${Bucket}'
+                    - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
               - Effect: Allow
                 Action:
                   - s3:AbortMultipartUpload
@@ -727,9 +769,10 @@ Resources:
                   - s3:GetObject
                   - s3:ListMultipartUploadParts
                   - s3:PutObject
-                Resource: !Sub
-                  - 'arn:aws:s3:::${Bucket}/*'
-                  - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                Resource:
+                  - !Sub
+                    - 'arn:aws:s3:::${Bucket}/*'
+                    - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
   IamInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:

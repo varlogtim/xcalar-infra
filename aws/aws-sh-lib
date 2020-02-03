@@ -149,7 +149,7 @@ aws_delete_image() {
         shift
         no_wait=true
     fi
-    local image_id_and_snapshot= rc=
+    local image_id_and_snapshot rc
     image_id_and_snapshot=($(
         set -o pipefail
         aws ec2 describe-images --owners self --filters "Name=name,Values=$1" | jq -r '.Images[]|[.ImageId,.BlockDeviceMappings[0].Ebs.SnapshotId]|@tsv'
@@ -724,4 +724,17 @@ aws_ami_add_account() {
             fi
         done
     done
+}
+
+aws_asg_detach () {
+    local asg_name="$1"
+    shift
+    local -i count=$# min_size=''
+    if [ -z "$asg_name" ] || [ $count -eq 0 ]; then
+        echo "Specify autoscaling group name and instance ids to detach." 1>&2
+        return 1
+    fi
+    min_size=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query 'AutoScalingGroups[].MinSize' --output text) \
+    && aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --min-size $(( min_size - count )) \
+    && aws autoscaling detach-instances --auto-scaling-group-name $asg_name --should-decrement-desired-capacity --instance-ids "$@"
 }

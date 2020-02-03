@@ -130,15 +130,22 @@ ec2_attach_nic() {
     log "ENI Done"
 }
 
+fix_multiline_cert() {
+    sed -r 's/(BEGIN|END) PRIVATE KEY/\1PRIVATEKEY/g; s/(BEGIN|END) CERTIFICATE/\1CERTIFICATE/g; s/ /\n/g; s/(BEGIN|END)PRIVATEKEY/\1 PRIVATE KEY/g; s/(BEGIN|END)CERTIFICATE/\1 CERTIFICATE/g'
+}
+
 generate_ssl() {
   local name="${1:-some.site.net}"
   local public_ip="${2}"
-  local key="$(pwd)/${name}.key"
-  local crt="$(pwd)/${name}.crt"
+  local certname=${3:-$name}
+  local key="$(pwd)/${certname}.key"
+  local crt="$(pwd)/${certname}.crt"
 
   if test -e "${crt}" && test -e "${key}"; then
-      echo $crt $key
-      return 0
+      if verify_ssl "$crt" "$key"; then
+          echo $crt $key
+          return 0
+      fi
   fi
   cat <<EOF | openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes -keyout ${key} -out ${crt} -extensions san -subj "/C=US/ST=CA/L=San Jose/O=XcalarInc/OU=Self signed Root CA/CN=${name%%.*}" -config /dev/stdin
 [req]
@@ -148,6 +155,24 @@ subjectAltName=DNS.1:${name},DNS.2:localhost,IP.1:$(hostname -i),IP.2:127.0.0.1$
 EOF
     chmod 0640 $key
     echo $crt $key
+}
+
+verify_ssl() {
+    local crt="$1"
+    local key="$2"
+
+    local keyfpmd5=$(openssl rsa -modulus -noout -in $key | openssl md5 | cut -d' ' -f2)
+    local crtfpmd5=$(openssl x509 -modulus -noout -in $crt | openssl md5 | cut -d' ' -f2)
+
+    if [ "$keyfpmd5" != "$crtfpmd5" ]; then
+        echo >&2 "WARN: Mismatch fingerprints for $crt and $key"
+        return 1
+    fi
+    if [ $(openssl x509 -noout -text -in $crt | grep -c Subject) -eq 0 ]; then
+        echo >&2 "WARN: No subjects in $crt and $key"
+        return 1
+    fi
+    return 0
 }
 
 generate_caddy() {
@@ -172,7 +197,11 @@ main() {
     mkdir -p /var/tmp/xcalar-root
     chown xcalar:xcalar /var/tmp/xcalar-root
 
-    /etc/init.d/xcalar stop-supervisor || true
+    if ((SYSTEMD)); then
+        systemctl stop xcalar-services.target || true
+    else
+        /etc/init.d/xcalar stop-supervisor || true
+    fi
 
     # shellcheck disable=SC2046
     ENV_FILE=/var/lib/cloud/instance/ec2.env
@@ -223,6 +252,20 @@ main() {
                 ;;
             --cluster-size)
                 CLUSTER_SIZE="$1"
+                shift
+                ;;
+            --ssl-cert)
+                SSLCRT="$1"
+                echo "$1" > /etc/xcalar/host.crt
+                chown root:xcalar /etc/xcalar/host.crt
+                chmod 0644 /etc/xcalar/host.crt
+                shift
+                ;;
+            --ssl-key)
+                SSLKEY="$1"
+                echo "$1" > /etc/xcalar/host.key
+                chown root:xcalar /etc/xcalar/host.key
+                chmod 0640 /etc/xcalar/host.key
                 shift
                 ;;
             --node-id)
@@ -284,6 +327,13 @@ main() {
             exit 1
             ;;
     esac
+    if ((SYSTEMD)); then
+        if test -e /lib/systemd/system/xcalar-services.target; then
+            SYSTEMD_UNIT=xcalar-services.target
+        else
+            SYSTEMD_UNIT=xcalar.service
+        fi
+    fi
 
     INSTANCE_ID=$(curl -sSf http://169.254.169.254/latest/meta-data/instance-id)
     AVZONE=$(curl -sSf http://169.254.169.254/latest/meta-data/placement/availability-zone)
@@ -457,8 +507,22 @@ main() {
         ec2_attach_nic "$NIC" "$INSTANCE_ID"
         test -d $XLRROOT/config || mkdir -p $XLRROOT/config
         PUBLIC_DNS_AND_IP="$(aws ec2 describe-network-interfaces --network-interface-ids $NIC --query 'NetworkInterfaces[].Association.[PublicDnsName,PublicIp]' --output text)"
-        CRT_KEY=$(cd $XLRROOT/config && generate_ssl $PUBLIC_DNS_AND_IP)
-        generate_caddy /etc/xcalar/Caddyfile.orig $CRT_KEY > $XLRROOT/config/Caddyfile.$$ \
+        if test -s /etc/xcalar/host.crt && test -s /etc/xcalar/host.key; then
+            CRT_KEY=($XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.crt $XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.key)
+            fix_multiline_cert < /etc/xcalar/host.crt > "${CRT_KEY[0]}"
+            fix_multiline_cert < /etc/xcalar/host.key > "${CRT_KEY[1]}"
+            if ! verify_ssl "${CRT_KEY[@]}"; then
+                rm -f "${CRT_KEY[@]}"
+                CRT_KEY=($(cd $XLRROOT/config && generate_ssl $PUBLIC_DNS_AND_IP $AWS_CLOUDFORMATION_STACK_NAME))
+            fi
+        else
+            CRT_KEY=($(cd $XLRROOT/config && generate_ssl $PUBLIC_DNS_AND_IP $AWS_CLOUDFORMATION_STACK_NAME))
+        fi
+        chown root:xcalar "${CRT_KEY[@]}"
+        chmod 0644 "${CRT_KEY[0]}"
+        chmod 0640 "${CRT_KEY[1]}"
+
+        generate_caddy /etc/xcalar/Caddyfile.orig "${CRT_KEY[@]}" > $XLRROOT/config/Caddyfile.$$ \
         && mv $XLRROOT/config/Caddyfile.$$ $XLRROOT/config/Caddyfile
         /opt/xcalar/scripts/genDefaultAdmin.sh \
             --username "${ADMIN_USERNAME}" \
@@ -505,10 +569,20 @@ main() {
 
     /opt/xcalar/scripts/genConfig.sh ${XCE_TEMPLATE} - "${IPS[@]}" > $XCE_CONFIG
     log "Starting Xcalar"
-    /etc/init.d/xcalar start
+
+    if ((SYSTEMD)); then
+        systemctl start $SYSTEMD_UNIT
+    else
+        /etc/init.d/xcalar start
+    fi
     rc=$?
 
-    chkconfig xcalar on
+    if ((SYSTEMD)); then
+        systemctl enable $SYSTEMD_UNIT
+    else
+        chkconfig xcalar on
+    fi
+
 
     log "All done with user-data.sh (rc=$rc)"
     exit $rc

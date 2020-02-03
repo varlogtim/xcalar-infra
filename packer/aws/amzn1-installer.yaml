@@ -57,14 +57,14 @@ builders:
     run_tags:
       Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
     snapshot_tags:
-      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
+      BaseOS: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
     tags:
-      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
+      BaseOS: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'
@@ -111,14 +111,14 @@ builders:
     run_tags:
       Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
     snapshot_tags:
-      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
+      BaseOS: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
     tags:
-      BaseOS: '{{user `baseos`}}-{{split build_name "-" 2}}'
+      BaseOS: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'

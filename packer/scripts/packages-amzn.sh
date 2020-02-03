@@ -71,12 +71,16 @@ fix_networking() {
 	RES_OPTIONS="timeout:2 attempts:5"
 	DHCP_ARP_CHECK=no
 	EOF
-    sed 's/eth0/eth1/; s/^ONBOOT=.*/ONBOOT=no/' ifcfg-eth0 > ifcfg-eth1
+    #sed 's/eth0/eth1/; s/^ONBOOT=.*/ONBOOT=no/' ifcfg-eth0 > ifcfg-eth1
     )
 }
 
+install_sysdig() {
+    curl -s https://s3.amazonaws.com/download.draios.com/stable/install-sysdig | bash
+}
+
 install_osid
-fix_networking
+#fix_networking
 
 echo 'exclude=kernel-debug* *.i?86 *.i686' >> /etc/yum.conf
 yum upgrade -y
@@ -91,7 +95,7 @@ yum install -y --enablerepo='xcalar*' --enablerepo=epel \
 
 yum install -y --enablerepo='xcalar*' --enablerepo='epel' --disableplugin=priorities \
     ec2tools ephemeral-disk tmux ccache restic neovim lifecycled consul node_exporter \
-    freetds xcalar-node10 java-1.8.0-openjdk-headless
+    freetds xcalar-node10 java-1.8.0-openjdk-headless opthaproxy2
 
 yum remove -y python26 python-pip || true
 
@@ -128,12 +132,17 @@ case "$OSID" in
     amzn2)
         systemctl enable --now chronyd
         systemctl enable --now atd
+        #chkconfig network off || true
+        #systemctl mask network.service || true
         amazon-linux-extras install -y ansible2=2.8 kernel-ng vim
         yum install -y libcgroup-tools
+        #yum install -y NetworkManager
+        #systemctl enable --now NetworkManager.service
         ;;
 esac
 
 install_aws_deps
+install_sysdig
 fix_cloud_init
 
 mkdir -p /etc/ansible
@@ -148,6 +157,7 @@ for svc in xcalar puppet collectd consul node_exporter lifecycled; do
             chkconfig ${svc} off || true
         fi
     elif [ "$OSID" = amzn2 ]; then
+        systemctl set-default multi-user.target
         systemctl disable ${svc} || true
     fi
 done
