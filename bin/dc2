@@ -163,7 +163,7 @@ dc2_parse_common() {
     shift
     case "$cmd" in
         --debug | -d) DEBUG=1; KEEP=1;;
-        --publishing) PUBLISHING=true;;
+        --publishing) PUBLISHING=True;;
         --project | -p)
             PROJECT="$1"
             #PROJDIR="$(cd $PROJECT && pwd || { cd $TEMPLATEDIR && pwd} )"
@@ -358,7 +358,7 @@ dc2_upload() {
     bootstrapUrl="${BASE_URL}/scripts/user-data.sh"
 
     mkdir -p "$TMPDIR"/vars
-    rm -fv "$TMPDIR"/vars/*
+    rm -fv "$TMPDIR"/vars/* "$TMPDIR"/allvars.*
 
     cat > "$TMPDIR"/vars/deploy.yaml <<- EOF
 	VERSION: '$VERSION'
@@ -366,8 +366,8 @@ dc2_upload() {
 	RELEASE: '$RELEASE'
 	baseUrl: '$BASE_URL'
 	bootstrapUrl: '$bootstrapUrl'
-	DEBUG: $DEBUG
-	PUBLISHING: ${PUBLISHING^}
+	${PUBLISHING:+PUBLISHING: "${PUBLISHING^}"}
+	${DEBUG:+DEBUG: $DEBUG}
 	EOF
     cat > "$TMPDIR"/vars/build.yaml <<- EOF
 	Date: '$(date +%FT%T%z)'
@@ -490,7 +490,7 @@ dc2_cleanup() {
 
 dc2_defaults() {
     declare -g FIND_AMI=0 DRY=0 KEEP=0 DEBUG=${DEBUG:-0} CLOUD=aws MODE='create'
-    declare -g ENVIRONMENT=${ENVIRONMENT:-dev} PUBLISHING=${PUBLISHING:-false}
+    declare -g ENVIRONMENT=${ENVIRONMENT:-dev} PUBLISHING=${PUBLISHING:-False}
     declare -g TMPBASE="${TMPDIR:-/tmp}/$(basename $0 .sh)-$(id -u)" # EG /tmp/dc2-1000/
     export DEBUG PUBLISHING ENVIRONMENT
 

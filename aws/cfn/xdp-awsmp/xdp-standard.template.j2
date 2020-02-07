@@ -1,15 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Xcalar Data Platform. This template deploys a XDP Cluster to AWS
+Description: Xcalar Cloud. This template deploys a Xcalar Cloud Cluster ({{ VerId }})
 Parameters:
   InstanceType:
     Type: String
     Description: Xcalar node EC2 Instance type
     ConstraintDescription: Choose an instance type.
     Default: '{{ instance_default | default("r5d.xlarge") }}'
-    AllowedValues: {{ instance_types }}
-    {#  {% for instance_type in instance_types -%}
-    #  - {{ instance_type }}
-    #  {%- endfor %} #}
+    AllowedValues: {% if DEBUG is defined and DEBUG == 1 %}{{ instance_types }}{% else %}{{ ["r5d.xlarge","r5d.4xlarge","r5d.8xlarge"] }}{% endif %}
   KeyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
     Type: AWS::EC2::KeyPair::KeyName
@@ -47,29 +44,33 @@ Parameters:
     MinLength: 9
     MaxLength: 18
   AssociatePublicIpAddress:
-    Description: Associate a Public IP address with each instance
+    Description: Associate a Public IP address with the cluster
     Default: 'true'
     AllowedValues:
       - 'false'
       - 'true'
     Type: String
   AdminUsername:
-    Description: Desired username of the XDP Administrator
+    Description: Desired username of the Administrator
     Type: String
     MinLength: 5
     MaxLength: 128
   AdminPassword:
-    Description: Password for the XDP Administrator
+    Description: Password for the Administrator
     NoEcho: true
     Type: String
     MinLength: 5
     MaxLength: 128
   ClusterSize:
-    Description: Desired cluster size (number of instances)
-    MinValue: 0
-    MaxValue: 32
-    Default: 1
+    Description: Desired number of EC2 instances to launch in your cluster
     Type: Number
+    Default: 1
+    AllowedValues:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
   RootSize:
     Description: Size of Root Disk in GB
     MinValue: 64
@@ -95,6 +96,15 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ''
+  HostedZoneName:
+    Description: Route53 hosted-zone domain name in which to register your CNAME in. For example, if you wanted 'xcalar.example.com', you should enter 'example.com' here. Your account must already have a matching Route53 Hosted Zone.
+    Type: String
+    Default: ''
+  CNAME:
+    Description: Desired DNS name without domain name. For example, if you wanted 'xcalar.example.com', you'd put 'xcalar' here. Leave blank to skip assignment.
+    Type: String
+    Default: ''
+
 {%- if enableLicense %}
   LicenseKey:
     Description: XDP License Key
@@ -109,14 +119,16 @@ Metadata:
 {%- if ami.Build %}
     Build: '{{ ami.Build }}'
 {%- endif %}
+{%- if ami.ImageBuild %}
+    ImageBuild: '{{ ami.ImageBuild }}'
+{%- endif %}
 {%- if ami.Product %}
     Product: '{{ ami.Product }}'
 {%- endif %}
-
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: Xcalar Data Platform
+          default: Xcalar Cloud Configuration
         Parameters:
           - AdminUsername
           - AdminPassword
@@ -133,6 +145,7 @@ Metadata:
         Parameters:
           - InstanceType
           - ClusterSize
+          - RootSize
           - ExistingS3
       - Label:
           default: VPC/Network
@@ -145,10 +158,11 @@ Metadata:
           - Subnet
 {%- endif %}
       - Label:
-          default: Advanced Options
+          default: Advanced Network Options
         Parameters:
-          - RootSize
           - AssociatePublicIpAddress
+          - HostedZoneName
+          - CNAME
           - SSLCert
           - SSLKey
 {%- if enableExistingShare %}
@@ -160,23 +174,31 @@ Metadata:
         default: 'XCE License Key:'
 {%- endif %}
       AdminUsername:
-        default: 'XDP Administrator Username'
+        default: 'Administrator Username'
       AdminPassword:
-        default: 'XDP Administrator Password'
+        default: 'Administrator Password'
       InstanceType:
         default: 'EC2 Instance Type'
       ClusterSize:
-        default: 'Number of instances to launch'
+        default: 'EC2 Instance Count'
       KeyName:
         default: 'SSH Key Pair'
       AllowedCIDR:
         default: 'Allow Access from CIDR Range'
       ExistingS3:
-        default: 'Connect to an existing S3 Bucket'
+        default: 'Connect an existing S3 Bucket (Optional)'
       AssociatePublicIpAddress:
-        default: 'Associate with a public IP address'
+        default: 'Associate Public IP'
       RootSize:
-        default: 'Disk size'
+        default: 'Disk Size (GB)'
+      SSLCert:
+        default: 'SSL Certificate (Optional)'
+      SSLKey:
+        default: 'SSL Private Key (Optional)'
+      HostedZoneName:
+        default: 'Hosted Zone Domain Name (Optional)'
+      CNAME:
+        default: 'Name to register in the specified Hosted Zone (Optional)'
 {%- if createVpc %}
       VpcCidr:
         default: 'VPC CIDR Range'
@@ -186,6 +208,7 @@ Metadata:
 Conditions:
   CreateNewS3: !Equals [!Ref ExistingS3, '']
   NoInstances: !Equals [!Ref ClusterSize, 0]
+  CreateDNS: !Not [!Or [!Equals [!Ref HostedZoneName, ''], !Equals [!Ref CNAME, '']]]
 {%- if enableExistingShare %}
   CreateNewShare: !Equals [!Ref ExistingShare, '']
 {%- endif %}
@@ -263,12 +286,15 @@ Resources:
   S3Endpoint:
     Type: "AWS::EC2::VPCEndpoint"
     Properties:
-      PolicyDocument:
-        Statement:
-          - Action: "*"
-            Effect: Allow
-            Resource: "*"
-            Principal: "*"
+      PolicyDocument: '{
+          "Version":"2012-10-17",
+          "Statement":[{
+            "Effect":"Allow",
+            "Principal": "*",
+            "Action":["s3:*"],
+            "Resource":["arn:aws:s3:::*"]
+          }]
+        }'
       RouteTableIds:
         - !Ref RouteTablePublic
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
@@ -296,13 +322,37 @@ Resources:
 {%- endif %}
     Properties:
       AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: Purpose
+          Value: SourceData
+  WorkBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: Purpose
+          Value: TempData
   ClusterSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access between nodes, and HTTPS/SSH from the given CIDR.
       VpcId: !Ref 'VpcId'
       SecurityGroupEgress:
-        - IpProtocol: -1
+        - IpProtocol: '-1'
           CidrIp: 0.0.0.0/0
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -420,7 +470,6 @@ Resources:
     Properties:
       Strategy: cluster
   ClusterASG:
-    DependsOn: [EfsMountTarget]
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       PlacementGroup: !Ref 'PlacementGroup'
@@ -459,6 +508,11 @@ Resources:
           Value: '{{ ami.Build }}'
           PropagateAtLaunch: true
 {%- endif %}
+{%- if ami.ImageBuild %}
+        - Key: ImageBuild
+          Value: '{{ ami.ImageBuild }}'
+          PropagateAtLaunch: true
+{%- endif %}
 {%- if ami.Product %}
         - Key: Product
           Value: '{{ ami.Product }}'
@@ -491,6 +545,16 @@ Resources:
           Value: !Sub '${AWS::StackName}-ClusterEIP'
         - Key: StackName
           Value: !Ref 'AWS::StackName'
+  ClusterDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateDNS
+    Properties:
+      HostedZoneName: !Sub '${HostedZoneName}.'
+      Name: !Sub '${CNAME}.${HostedZoneName}.'
+      Type: A
+      TTL: '60'
+      ResourceRecords:
+        - !Ref ClusterEIP
   AssociateEIP:
     Type: AWS::EC2::EIPAssociation
     Properties:
@@ -521,23 +585,13 @@ Resources:
             - reconfigure_app
         configure_cfn:
           files:
-{%- if DEBUG == 1 %}
+{%- if DEBUG is defined and DEBUG == 1 %}
             /var/lib/cloud/scripts/vendor/bootstrap.sh:
               source: {{ bootstrapUrl }}
               mode: '000755'
               owner: root
               group: root
 {%- endif %}
-            /etc/xcalar/host.crt:
-              content: !Ref SSLCert
-              mode: '000644'
-              owner: root
-              group: root
-            /etc/xcalar/host.key:
-              content: !Ref SSLKey
-              mode: '000640'
-              owner: root
-              group: xcalar
             /etc/cfn/hooks.d/cfn-asg-reloader.conf:
               content: !Sub |
                 [cfn-asg-reloader-hook]
@@ -577,13 +631,23 @@ Resources:
             /var/www/xcalar-gui/s3buckets.json:
               content: !Sub
                 - |-
-                  {"s3buckets": {
-                  "${Name}": {
-                    "bucket": "${Bucket}",
-                    "prefix": ""
-                  }}}
+                  {
+                    "s3buckets": {
+                      "S3Bucket": {
+                        "bucket": "${Bucket}",
+                        "prefix": "",
+                        "existing": ${Existing}
+                      },
+                      "WorkBucket": {
+                        "bucket": "${WorkBucket}",
+                        "prefix": "${AWS::StackName}/",
+                        "existing": false
+                      }
+                    }
+                  }
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
                   Name: !If [CreateNewS3, 'S3Bucket', 'ExistingS3']
+                  Existing: !If [CreateNewS3, 'false', 'true']
               mode: '000644'
               owner: xcalar
               group: xcalar
@@ -603,12 +667,15 @@ Resources:
                 - |-
                   AWS_DEFAULT_REGION=${AWS::Region}
                   CLUSTER_NAME=${AWS::StackName}
+                  CLUSTERSIZE=${ClusterSize}
                   BUCKET=${Bucket}
                   SSLCRT="${SSLCert}"
                   SSLKEY="${SSLKey}"
                   NFSHOST=${SharedRoot}
                   SUBNET=${Subnet}
                   NIC=${ClusterNIC}
+                  HOSTEDZONENAME=${HostedZoneName}
+                  CNAME=${CNAME}
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
 {%- if enableExistingShare %}
                   SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
@@ -629,6 +696,12 @@ Resources:
                   export PATH=/opt/aws/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin
                   export AWS_DEFAULT_REGION=${AWS::Region}
                   # The ec2-tags utility prints instance tags as key=value pairs suitable for parsing from bash
+                  set -a
+                  source /var/lib/cloud/instance/ec2.env
+                  eval $(ec2-tags -s -i)
+                  set +a
+                  test -n "$SSLCRT" && echo "$SSLCRT" > /etc/xcalar/host.crt
+                  test -n "$SSLKEY" && echo "$SSLKEY" > /etc/xcalar/host.key
                   AWS_AUTOSCALING_GROUPNAME="$(ec2-tags -s -i | tr -d "'" | awk -F'=' '/^AWS_AUTOSCALING_GROUPNAME/{print $2}')"
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
                   bash /var/lib/cloud/scripts/vendor/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" \
@@ -687,10 +760,13 @@ Resources:
             log()  {
               logger --id -p "$1" -t user-data -s <<< "$2"
             }
+            start=$(date +%s)
+            log local0.info "Bootstrap started at $(date --utc +'%FT%T%z')"
             /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchTemplate --region ${AWS::Region} -c setup
             rc=$?
-            log local0.info "Bootstrap returned $rc"
-            /opt/aws/bin/cfn-signal -e $rc  --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
+            dt=$(( $(date +%s) - start ))
+            log local0.info "Bootstrap returned $rc in dt=$dt seconds at $(date --utc +'%FT%T%z')"
+            /opt/aws/bin/cfn-signal -e $rc --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
             exit $rc
   IamInstanceRole:
     Type: AWS::IAM::Role
@@ -706,6 +782,7 @@ Resources:
             Principal:
               Service:
                 - ec2.amazonaws.com
+                #- lambda.amazonaws.com
       Policies:
         - PolicyName: ClusterPolicy
           PolicyDocument:
@@ -713,20 +790,31 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - ec2:DescribeRegions
                   - ec2:DescribeInstances
                   - autoscaling:DescribeAutoScalingGroups
                 Resource:
                   - '*'
               - Effect: Allow
                 Action:
+                  - cloudformation:DescribeStacks
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*'
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStack
+                  - cloudformation:DescribeStacks
                   - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:SignalResource
                 Resource:
                   - '*'
               - Effect: Allow
                 Action:
                   - ec2:CreateTags
                   - ec2:DeleteTags
-                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance*'
+                Resource:
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
                 Condition:
                   StringEquals:
                     ec2:ResourceTag/aws:cloudformation:stack-name: !Ref 'AWS::StackName'
@@ -754,9 +842,8 @@ Resources:
                   - '*'
               - Effect: Allow
                 Action:
-                  - s3:GetBucketLocation
-                  - s3:ListBucket
-                  - s3:ListBucketMultipartUploads
+                  - s3:GetBucket*
+                  - s3:ListBucket*
                   - s3:HeadBucket
                 Resource:
                   - !Sub
@@ -764,11 +851,11 @@ Resources:
                     - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
               - Effect: Allow
                 Action:
-                  - s3:AbortMultipartUpload
-                  - s3:DeleteObject
-                  - s3:GetObject
                   - s3:ListMultipartUploadParts
+                  - s3:AbortMultipartUpload
+                  - s3:GetObject
                   - s3:PutObject
+                  - s3:DeleteObject
                 Resource:
                   - !Sub
                     - 'arn:aws:s3:::${Bucket}/*'
@@ -782,7 +869,10 @@ Resources:
 Outputs:
   URL:
     Description: URL of your new Xcalar Cluster
-    Value: !Join ["", ["http://",!Ref 'ClusterEIP']]
+    Value: !If
+      - CreateDNS
+      - !Join ["", ["https://",!Ref CNAME,".",!Ref HostedZoneName]]
+      - !Join ["", ["http://",!Ref 'ClusterEIP']]
   EIP:
     Description: Cluster ElasticIP
     Value: !Ref 'ClusterEIP'

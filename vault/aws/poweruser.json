@@ -50,14 +50,18 @@
         "iam:List*",
         "iam:Get*",
         "iam:PassRole",
-        "iam:AssumeRole",
-        "iam:AddRoleToInstanceProfile",
-        "iam:AttachRolePolicy",
         "sts:GetFederationToken",
         "sts:GetSessionToken",
         "sts:DecodeAuthorizationMessage"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sts:AssumeRole"
+      ],
+      "Resource": "arn:aws:iam::559166403383:role/*"
     }
   ]
 }
