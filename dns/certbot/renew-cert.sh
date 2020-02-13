@@ -64,6 +64,7 @@ fi
 
 if [ -z "$IMAGE" ]; then
     case "$DOMAIN" in
+        *.demo.xcalar.cloud | demo.xcalar.cloud) IMAGE=certbot/dns-route53; AWS_ACCOUNT=aws-xcalar-trials;;
         *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53 ;;
         *.xcalar.rocks | xcalar.rocks) IMAGE=certbot/dns-route53 ;;
         *.xcalar.io | xcalar.io) IMAGE=certbot/dns-google ;;

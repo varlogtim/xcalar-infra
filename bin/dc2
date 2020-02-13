@@ -429,7 +429,7 @@ dc2_upload() {
             if ! templateMd5=$(md5sum "${templateJson}" | awk '{print $1}') || [ -z "$templateMd5" ]; then
                 die "Failed to generate md5 for input"
             fi
-            validateS3="s3://${BUCKET}/cfn/validation/${templateMd5}/${TEMPLATEOUT}.json"
+            validateS3="s3://${BUCKET}/.tmp/validation/${templateMd5}/${TEMPLATEOUT}.json"
             if ! s3_cp "${GENDIR}/${TEMPLATEOUT}.json" "$validateS3"; then
                 die "Failed to upload template for validation to $validateS3"
             fi

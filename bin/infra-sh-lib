@@ -260,6 +260,28 @@ urlencode() {
     fi
 }
 
+#
+# Consul Helpers
+#
+CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR-http://127.0.0.1:8500}
+
+#
+# consul_node_meta_host returns all nodes with the specified
+# role in ansible hosts format ([groupname]\nIP hostname\n... )
+#
+#  consul_node_meta_hosts 'role=jenkins_slave'
+#
+consul_node_meta_hosts() {
+    local filter="$1"
+    if [ "${filter[0]}" != '-' ]; then
+        filter="-node-meta=$1"
+    fi
+
+    consul catalog nodes "$filter" | \
+        tail -n+2 | \
+        (echo "[${1#*=}]"; awk '{print $3, $1}')
+}
+
 consul_session() {
     if [ $# -lt 2 ]; then
         say "ERROR: Must specify session name"
@@ -270,7 +292,6 @@ consul_session() {
         | jq -r .ID
 }
 
-CONSUL_HTTP_ADDR=${CONSUL_HTTP_ADDR-http://127.0.0.1:8500}
 
 acquire_lock() {
     local session_id=$1 task_name=$2 result

@@ -360,11 +360,12 @@ pkgmain() {
     if [ -z "$srcpkgdir" ]; then
         for srcpkgdir in \
             "${srcdir}/${pkgname}-${pkgver}" "${srcdir}/${pkgname}_${pkgver}" "${srcdir}/${pkgname}" \
-            "${srcdir}/${pkgver}" "${srcdir}/v${pkgver}" $(ls -1d "$srcdir"/* | head -1); do
+            "${srcdir}/$(basename ${filen%%.*})" "${srcdir}/${pkgver}" "${srcdir}/v${pkgver}" $(ls -1d "$srcdir"/* | head -1); do
+            info "Trying $srcpkgdir"
             test -d "$srcpkgdir" && break
         done
 
-        srcpkgdir="${pkgname}-${pkgver}"
+        #srcpkgdir="${pkgname}-${pkgver}"
     fi
     if [ "${srcpkgdir:0:1}" != / ]; then
         srcpkgdir="${srcdir}/$srcpkgdir"
