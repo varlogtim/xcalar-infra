@@ -79,7 +79,9 @@ collectFaildLogs() {
     else
         cp $XLRDIR/$TmpSqlDfLogs /var/log/xcalar/failedLogs/
     fi
-    cp $XLRDIR/$TmpCaddyLogs /var/log/xcalar/failedLogs/
+    cp $TmpCaddyLogs /var/log/xcalar/failedLogs/
+
+    pkill -F $TmpCaddyPid || true
 }
 
 onExit() {
@@ -443,6 +445,7 @@ pkill caddy || true
 TmpCaddyDir=`mktemp -d -t Caddy.XXXXXX`
 TmpCaddy=$TmpCaddyDir/Caddyfile
 TmpCaddyLogs=$TmpCaddyDir/CaddyLogs.log
+TmpCaddyPid=$TmpCaddyDir/caddy.pid
 cp $XLRDIR/conf/Caddyfile "$TmpCaddy"
 sed -i -e 's!/var/www/xcalar-gui!'$XLRGUIDIR'/'$GUI_FOLDER'!g' "$TmpCaddy"
 # strip out the jwt settings for testing (for now) to allow unauthenticated access
@@ -450,10 +453,13 @@ sed -i -e '/jwt {/,/}/d' "$TmpCaddy"
 sed -i 's@{\$XCE_LOGDIR}@'${TmpCaddyDir}'@' "$TmpCaddy"
 sed -i 's/log .*$/log stdout/; s/errors .*$/errors stderr/' "$TmpCaddy"
 echo "Caddy logs at $TmpCaddyLogs"
-(cd $TmpCaddyDir && caddy -pidfile caddy.pid >"$TmpCaddyLogs" 2>&1) &
+cd $TmpCaddyDir
+caddy -pidfile $TmpCaddyPid >"$TmpCaddyLogs" 2>&1 </dev/null &
+cd - >/dev/null
 caddyPid=$!
-echo "Caddy pid $caddyPid running in $TmpCaddyDir"
+echo "Caddy pid $caddyPid running in $TmpCaddyDir. Pidfile=$TmpCaddyPid ($(cat $TmpCaddyPid))"
 sleep 5
+
 
 if [ $JOB_NAME = "XDEndToEndTest" ]; then
     cd $XLRGUIDIR/assets/dev/e2eTest
@@ -503,8 +509,10 @@ elif [ $JOB_NAME = "XDFuncTest" ]; then
 fi
 
 
+pkill -F $TmpCaddyPid | true
 sudo unlink /var/www/xcalar-gui || true
 kill -TERM $caddyPid || true
+
 if [ "$useXc2" == "true" ]; then
     xc2 cluster stop
 fi
