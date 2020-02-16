@@ -75,11 +75,17 @@ fix_networking() {
     )
 }
 
+install_lego() {
+    curl -L https://github.com/go-acme/lego/releases/download/v3.3.0/lego_v3.3.0_linux_amd64.tar.gz | tar zxvf - -C /usr/local/bin
+    setcap cap_net_bind_service=+ep /usr/local/bin/lego
+}
+
 install_sysdig() {
     curl -s https://s3.amazonaws.com/download.draios.com/stable/install-sysdig | bash
 }
 
 install_osid
+install_lego
 #fix_networking
 
 echo 'exclude=kernel-debug* *.i?86 *.i686' >> /etc/yum.conf
