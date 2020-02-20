@@ -302,6 +302,10 @@
       "metadata": {
         "description": "Size of swap disk"
       }
+    },
+    "cluster": {
+      "type": "string",
+      "defaultValue": "[replace(resourceGroup().name,'-rg','')]"
     }
   },
   "variables": {
@@ -730,7 +734,7 @@
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', parameters('shareName'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -c ', parameters('appName'),' -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', concat(parameters('installerUrl'), parameters('installerUrlSasToken')), '\"')]"
+          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -c \"', parameters('cluster'), '\" -s ', parameters('shareName'),' -d ', parameters('domainNameLabel'),' -i ', copyIndex(), ' -c ', parameters('appName'),' -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', concat(parameters('installerUrl'), parameters('installerUrlSasToken')), '\"')]"
         }
       }
     }

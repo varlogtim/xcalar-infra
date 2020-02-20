@@ -285,6 +285,18 @@
     "cgroupsEnabled": {
       "type": "string",
       "defaultValue": "false"
+    },
+    "cluster": {
+      "type": "string",
+      "defaultValue": "[replace(resourceGroup().name,'-rg','')]"
+    },
+    "customScriptUrl": {
+      "type": "string",
+      "defaultValue": "[concat(parameters('_artifactsLocation'),'bootstrap.sh', parameters('_artifactsLocationSasToken'))]"
+    },
+    "customScriptCommandToExecute": {
+      "type": "string",
+      "defaultValue": "/bin/bash -x bootstrap.sh "
     }
   },
   "variables": {
@@ -375,11 +387,12 @@
       "Standard_E64-16s_v3",
       "Standard_E64-32s_v3",
       "Standard_E64is_v3",
-      "Standard_E64s_v3"
+      "Standard_E64s_v3",
+      "Standard_L8s",
+      "Standard_L16s",
+      "Standard_L32s"
     ],
     "storageAccountId": "[resourceId(parameters('storageAccountRG'),'Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-    "customScriptUrl": "[concat(parameters('_artifactsLocation'),'bootstrap.sh', parameters('_artifactsLocationSasToken'))]",
-    "customScriptCommandToExecute": "/bin/bash -x bootstrap.sh ",
     "imageReference": {
       "publisher": "OpenLogic",
       "offer": "CentOS",
@@ -387,7 +400,6 @@
       "version": "latest"
     },
     "placementGroup": "[concat(parameters('appName'),'-ppg')]",
-    "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
     "linuxConfiguration": {
       "disablePasswordAuthentication": "true",
       "ssh": {
@@ -866,11 +878,11 @@
         "autoUpgradeMinorVersion": true,
         "settings": {
           "fileUris": [
-            "[variables('customScriptUrl')]"
+            "[parameters('customScriptUrl')]"
           ]
         },
         "protectedSettings": {
-          "commandToExecute": "[concat(variables('customScriptCommandToExecute'), ' -t \"', variables('customerUploads'), '\" -s ', if( equals(parameters('shareServerNewOrExisting'),'new'), reference(resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))).ipConfigurations[0].properties.privateIPAddress, parameters('shareName')),':', parameters('shareFolder'),' -d ', parameters('domainNameLabel'),' -b ',parameters('cgroupsEnabled'),' -i ', copyIndex(), ' -e \"', variables('vmName'), '\" -c \"', parameters('appName'),'\" -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'), parameters('installerUrlSasToken'), '\"')]"
+          "commandToExecute": "[concat(parameters('customScriptCommandToExecute'), ' -s ', if( equals(parameters('shareServerNewOrExisting'),'new'), reference(resourceId('Microsoft.Network/networkInterfaces', variables('shareNic'))).ipConfigurations[0].properties.privateIPAddress, parameters('shareName')),':', parameters('shareFolder'),' -d ', parameters('domainNameLabel'),' -b ',parameters('cgroupsEnabled'),' -i ', copyIndex(), ' -e \"', variables('vmName'), '\" -c \"', parameters('cluster'),'\" -n ', parameters('scaleNumber'), ' -l \"', parameters('licenseKey'), '\" -v \"', parameters('adminEmail'), '\" -w \"', parameters('appUsername'), '\" -x \"', parameters('appPassword'), '\" -y ', parameters('storageAccountName'), ' -z \"', listKeys(variables('storageAccountId'), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value, '\" -u \"', parameters('installerUrl'), parameters('installerUrlSasToken'), '\"')]"
         }
       }
     }

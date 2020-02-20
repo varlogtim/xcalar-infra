@@ -35,7 +35,6 @@ HTML="${PUBLIC_REPO}/html-4.tar.gz"
 CADDY_VERSION="0.11.0-103"
 CADDY="${PUBLIC_REPO}/caddy_${CADDY_VERSION}_linux_amd64.gz"
 
-CONTAINER="customer"
 SHARE=""
 WEBHOOK=""
 
@@ -77,6 +76,7 @@ done
 shift $((OPTIND-1))
 
 CLUSTER="${CLUSTER:-${HOSTNAME%-vm[0-9]*}}"
+CONTAINER="${CONTAINER:-$CLUSTER}"
 VMBASE="${CLUSTER}-vm"
 
 XLRDIR=/opt/xcalar

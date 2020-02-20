@@ -18,7 +18,7 @@ az_setup() {
     AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
     TODAY=$(date +%Y%m%d)
     TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
-    TEMPLATE_VERSION=${TEMPLATE_VERSION:-v11}
+    TEMPLATE_VERSION=${TEMPLATE_VERSION:-v12}
     TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/${TEMPLATE_VERSION}/mainTemplate.json
     DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
     LICENSEDEV=$XLRINFRADIR/azure/xdp-standard/licenseDev.json
@@ -551,7 +551,7 @@ az_deploy_usage() {
 
     cat << EOF
     az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer installer] [--dnslabel dns]
-              [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
+              [--cluster cluster] [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
               [--parameters-file params.json] [-n|--name name] [--dnslabel dns] [--mode Incremental|Complete] ${str[*]}
 EOF
     return 0
@@ -587,6 +587,7 @@ az_deploy() {
     local installer_url installer dnslabel
     local licenseParamFile=$LICENSEDEV
     local mode=Incremental
+    local cluster=
     local osDiskSize=127
     local timezone='Pacific Standard Time' time=2300
     local role='Virtual Machine Contributor'
@@ -634,6 +635,10 @@ az_deploy() {
                 parameters_file="${1##*=}"
                 shift 1
                 ;;
+            --cluster=*)
+                cluster="${1##*=}"
+                shift 1
+                ;;
             --count=*)
                 count="${1##*=}"
                 shift 1
@@ -660,6 +665,10 @@ az_deploy() {
                 ;;
             --artifacts-location)
                 _artifactsLocation="$2"
+                shift 2
+                ;;
+            -c|--cluster)
+                cluster="$2"
                 shift 2
                 ;;
             -l | --location)
@@ -776,6 +785,9 @@ az_deploy() {
     else
         echo >&2 "ERROR: Must specify an installer via -i"
         return 1
+    fi
+    if [ -n "$cluster" ]; then
+        extra_params+=(cluster="$cluster")
     fi
 
     case "$template" in
