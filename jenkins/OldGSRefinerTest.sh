@@ -52,9 +52,15 @@ say "OldGSRefinerTest RUN old_gs_refiner_test.py ===="
 host_options="--host $HOST --port $PORT"
 user_options="--user $USER --pass $PASSWORD"
 load_options="--batches $BATCHES --instances $INSTANCES"
+if [ "${NOSTATS}" = true ]; then
+    stats_options="--nostats"
+else
+    stats_options=""
+fi
+
 
 XLRINFRADIR="${XLRINFRADIR:-${XLRDIR}/xcalar-infra}"
 cd ${XLRINFRADIR}/jenkins/scripts
-python ./old_gs_refiner_test.py $host_options $user_options $load_options
+python ./old_gs_refiner_test.py $host_options $user_options $load_options $stats_options
 
 say "OldGSRefinerTest END ===="
