@@ -18,7 +18,7 @@ az_setup() {
     AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
     TODAY=$(date +%Y%m%d)
     TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
-    TEMPLATE_VERSION=${TEMPLATE_VERSION:-v14}
+    TEMPLATE_VERSION=${TEMPLATE_VERSION:-v15}
     TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/${TEMPLATE_VERSION}/mainTemplate.json
     DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
     LICENSEDEV=$XLRINFRADIR/azure/xdp-standard/licenseDev.json
