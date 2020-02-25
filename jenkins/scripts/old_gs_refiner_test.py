@@ -36,7 +36,7 @@ os.environ["XLR_PYSDK_VERIFY_SSL_CERT"] = "false"
 class OldGSRefinerTest(object):
 
     def __init__(self, *, host, port, user, password,
-                          nostats = False,
+                          statsfreq = 1,
                           workbook_path=WORKBOOK_PATH,
                           workbook_name=WORKBOOK_NAME,
                           data_target_name=DATA_TARGET_NAME):
@@ -47,8 +47,11 @@ class OldGSRefinerTest(object):
         self.xcalar_api = XcalarApi(url=self.xcalar_url, client_secrets=self.client_secrets)
         self.client = Client(url=self.xcalar_url, client_secrets=self.client_secrets)
 
-        if nostats:
+        if not statsfreq:
             self.client.set_config_param("CollectDataflowStats", False, False)
+        else:
+            self.client.set_config_param("CollectDataflowStats", True, False)
+            self.client.set_config_param("StatsCollectionInterval", statsfreq, False)
 
         self.workbook_path = workbook_path
         self.workbook_name = workbook_name
@@ -185,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("--pass", dest='password', help="User's password", required=True)
     parser.add_argument("--batches", help="Number of Batches", type=int, required=True)
     parser.add_argument("--instances", help="Number of parallel instances per batch", type=int, required=True)
-    parser.add_argument("--nostats", help="Disable stats collection", action="store_true")
+    parser.add_argument("--statsfreq", help="Frequency of stats collection", type=int, default=1)
     args = parser.parse_args()
 
     failed = False
@@ -194,11 +197,11 @@ if __name__ == "__main__":
     end_time = None
 
     try:
-        test = OldGSRefinerTest(host     = args.host,
-                                port     = args.port,
-                                user     = args.user,
-                                password = args.password,
-                                nostats  = args.nostats)
+        test = OldGSRefinerTest(host      = args.host,
+                                port      = args.port,
+                                user      = args.user,
+                                password  = args.password,
+                                statsfreq = args.statsfreq)
 
     except:
         logger.exception("FAIL: Unexpected Exception during initialization")
