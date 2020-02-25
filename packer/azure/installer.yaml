@@ -33,14 +33,14 @@ builders:
     client_secret: '{{ user `client_secret` }}'
     subscription_id: '{{ user `subscription_id` }}'
     tenant_id: '{{ user `tenant_id` }}'
-    shared_image_gallery_destination:
-      resource_group: '{{user `shared_image_gallery_resource_group`}}'
-      gallery_name: '{{user `shared_image_gallery`}}'
-      image_name: '{{user `shared_image_name`}}'
-      image_version: '{{user `version`}}'
-      replication_regions:
-        - '{{user `location`}}'
-    shared_image_gallery_timeout: '180m'  # yes, 3 hours
+    #shared_image_gallery_destination:
+    #  resource_group: '{{user `shared_image_gallery_resource_group`}}'
+    #  gallery_name: '{{user `shared_image_gallery`}}'
+    #  image_name: '{{user `shared_image_name`}}'
+    #  image_version: '{{user `version`}}'
+    #  replication_regions:
+    #    - '{{user `location`}}'
+    #shared_image_gallery_timeout: '180m'  # yes, 3 hours
     managed_image_name: '{{ user `image_name`}}'
     managed_image_resource_group_name: '{{user `shared_image_gallery_resource_group`}}'
     os_type: Linux
@@ -59,7 +59,7 @@ builders:
       image_build_number: '{{user `image_build_number`}}'
     os_disk_size_gb: '{{user `disk_size`}}'
     location: '{{user `location`}}'
-    vm_size: Standard_D4_v3
+    vm_size: Standard_D8_v3
     async_resourcegroup_delete: true
     virtual_network_resource_group_name: '{{user `virtual_network_resource_group_name`}}'
     virtual_network_name: '{{user `virtual_network_name`}}'

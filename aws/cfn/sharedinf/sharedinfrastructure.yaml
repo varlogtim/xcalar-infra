@@ -6,31 +6,60 @@ Parameters:
     MaxLength: 18
     AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
     ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/16
-    Default: 10.20.0.0/16
+    Default: 10.99.0.0/16
   psharedacidr:
     Type: String
     MinLength: 9
     MaxLength: 18
     AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
     ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/22
-    Default: 10.20.0.0/22
+    Default: 10.99.32.0/20
   psharedbcidr:
     Type: String
     MinLength: 9
     MaxLength: 18
     AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
     ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/22
-    Default: 10.20.4.0/22
+    Default: 10.99.96.0/20
+  psharedccidr:
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/22
+    Default: 10.99.160.0/20
+  pshareddcidr:
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/22
+    Default: 10.99.224.0/20
+  privateacidr:
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/22
+    Default: 10.99.0.0/19
+  privatebcidr:
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a valid CIDR range in the form x.x.x.x/22
+    Default: 10.99.64.0/19
   deploynatgw:
     Type: String
     AllowedValues:
       - 'true'
       - 'false'
       - 'ha'
-    Default: 'false'
+    Default: 'true'
 Conditions:
   DeployNATA: !Not [!Equals [!Ref deploynatgw, 'false']]
   DeployNATB: !Equals [!Ref deploynatgw, 'ha']
+  SubnetD: !Equals ['false', 'true']
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -38,13 +67,39 @@ Resources:
       CidrBlock: !Ref vpccidr
       EnableDnsSupport: true
       EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vpcid'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   IGW:
     Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-igw'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
+  S3WorkBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-workbucket-${AWS::AccountId}-${AWS::Region}
+      Tags:
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: Purpose
+          Value: Scratch
   S3LogBucket:
     DeletionPolicy: Retain
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub ${AWS::StackName}-logbucket-${AWS::AccountId}-${AWS::Region}
+      Tags:
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: Purpose
+          Value: Logs
   S3AppBucket:
     DeletionPolicy: Retain
     Type: AWS::S3::Bucket
@@ -64,6 +119,11 @@ Resources:
       WebsiteConfiguration:
         ErrorDocument: index.html
         IndexDocument: index.html
+      Tags:
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: Purpose
+          Value: App
   BucketPolicyApp:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -87,6 +147,11 @@ Resources:
       WebsiteConfiguration:
         ErrorDocument: index.html
         IndexDocument: index.html
+      Tags:
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: Purpose
+          Value: Lambda
   BucketPolicyLambda:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -115,6 +180,11 @@ Resources:
       CidrBlock: !Ref psharedacidr
       MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-subnetpublica'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   SubnetPublicSharedB:
     Type: AWS::EC2::Subnet
     Properties:
@@ -124,6 +194,69 @@ Resources:
       CidrBlock: !Ref psharedbcidr
       MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-subnetpublicb'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
+  SubnetPublicSharedC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs ''
+      CidrBlock: !Ref psharedccidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-subnetpublicc'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
+  SubnetPublicSharedD:
+    Condition: SubnetD
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 3
+        - !GetAZs ''
+      CidrBlock: !Ref pshareddcidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-subnetpublicd'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
+
+  SubnetPrivateA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Ref privateacidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-subnetprivatea'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
+  SubnetPrivateB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Ref privatebcidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-subnetprivateb'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   SubnetRouteTableAssociatePublicA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -134,6 +267,30 @@ Resources:
     Properties:
       RouteTableId: !Ref RouteTablePublic
       SubnetId: !Ref SubnetPublicSharedB
+  SubnetRouteTableAssociatePublicC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref SubnetPublicSharedC
+  SubnetRouteTableAssociatePublicD:
+    Condition: SubnetD
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref SubnetPublicSharedD
+
+  SubnetRouteTableAssociatePrivateA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: DeployNATA
+    Properties:
+      RouteTableId: !Ref RouteTablePrivateA
+      SubnetId: !Ref SubnetPrivateA
+  SubnetRouteTableAssociatePrivateB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: DeployNATB
+    Properties:
+      RouteTableId: !Ref RouteTablePrivateB
+      SubnetId: !Ref SubnetPrivateB
   RouteDefaultPublic:
     Type: AWS::EC2::Route
     DependsOn: GatewayAttach
@@ -157,40 +314,78 @@ Resources:
       RouteTableId: !Ref RouteTablePrivateB
   RouteTablePublic:
     Type: AWS::EC2::RouteTable
+    DependsOn: GatewayAttach
     Properties:
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-routetablepublic'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   RouteTablePrivateA:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-routetableprivatea'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   RouteTablePrivateB:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-routetableprivateb'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   EIPNatGWA:
     Type: AWS::EC2::EIP
     Condition: DeployNATA
     DependsOn: GatewayAttach
     Properties:
       Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-eipnatgwa'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   EIPNatGWB:
     Type: AWS::EC2::EIP
     Condition: DeployNATB
     DependsOn: GatewayAttach
     Properties:
       Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-eipnatgwb'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   NatGatewayA:
     Type: AWS::EC2::NatGateway
     Condition: DeployNATA
+    DependsOn: GatewayAttach
     Properties:
       AllocationId: !GetAtt EIPNatGWA.AllocationId
       SubnetId: !Ref SubnetPublicSharedA
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-natgwa'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   NatGatewayB:
     Type: AWS::EC2::NatGateway
     Condition: DeployNATB
+    DependsOn: GatewayAttach
     Properties:
       AllocationId: !GetAtt EIPNatGWB.AllocationId
       SubnetId: !Ref SubnetPublicSharedB
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-natgwb'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   S3Endpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -202,7 +397,6 @@ Resources:
             Resource: '*'
             Principal: '*'
       RouteTableIds:
-        - !Ref RouteTablePublic
         - !Ref RouteTablePrivateA
         - !Ref RouteTablePrivateB
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
@@ -219,7 +413,6 @@ Resources:
             Resource: '*'
             Principal: '*'
       RouteTableIds:
-        - !Ref RouteTablePublic
         - !Ref RouteTablePrivateA
         - !Ref RouteTablePrivateB
       ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
@@ -228,10 +421,14 @@ Resources:
   EfsShare:
     Type: AWS::EFS::FileSystem
     Properties:
-      Encrypted: false
+      Encrypted: true
+      LifecyclePolicies:
+        - TransitionToIA: 'AFTER_7_DAYS'
       FileSystemTags:
         - Key: Name
-          Value: EfsShare
+          Value: !Sub '${AWS::StackName}-EFS'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
   EfsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -260,21 +457,62 @@ Resources:
       SecurityGroups:
         - !Ref EfsSecurityGroup
 Outputs:
-  vpciprange:
+  vpccidr:
     Description: IP Range of Shared Infrastructure VPC
     Value: !Ref vpccidr
     Export:
-      Name: !Sub ${AWS::StackName}-vpciprange
-  vpcreservedrange1:
+      Name: !Sub ${AWS::StackName}-vpccidr
+  subnetpublica:
+    Value: !Ref SubnetPublicSharedA
+    Export:
+      Name: !Sub ${AWS::StackName}-subnetpublica
+  subnetpublicb:
+    Description: Subnet Public B
+    Value: !Ref SubnetPublicSharedB
+    Export:
+      Name: !Sub ${AWS::StackName}-subnetpublicb
+  subnetpublicc:
+    Description: Subnet Public C
+    Value: !Ref SubnetPublicSharedC
+    Export:
+      Name: !Sub ${AWS::StackName}-subnetpublicc
+  subnetpublicd:
+    Description: Subnet Public D
+    Condition: SubnetD
+    Value: !Ref SubnetPublicSharedD
+    Export:
+      Name: !Sub ${AWS::StackName}-subnetpublicd
+  vpcsharedacidr:
     Description: IP Range of Shared Public SubnetA
     Value: !Ref psharedacidr
     Export:
-      Name: !Sub ${AWS::StackName}-vpcreservedrange1
-  vpcreservedrange2:
+      Name: !Sub ${AWS::StackName}-vpcsharedacidr
+  vpcsharedbcidr:
     Description: IP Range of Shared Public SubnetB
     Value: !Ref psharedbcidr
     Export:
-      Name: !Sub ${AWS::StackName}-vpcreservedrange2
+      Name: !Sub ${AWS::StackName}-vpcsharedbcidr
+  vpcsharedccidr:
+    Description: IP Range of Shared Public SubnetC
+    Value: !Ref psharedccidr
+    Export:
+      Name: !Sub ${AWS::StackName}-vpcsharedccidr
+  vpcshareddcidr:
+    Condition: SubnetD
+    Description: IP Range of Shared Public SubnetD
+    Value: !Ref pshareddcidr
+    Export:
+      Name: !Sub ${AWS::StackName}-vpcshareddcidr
+  vpcprivateacidr:
+    Description: IP Range of Shared Private SubnetA
+    Value: !Ref privateacidr
+    Export:
+      Name: !Sub ${AWS::StackName}-vpcprivateacidr
+  vpcprivatebcidr:
+    Description: IP Range of Shared Private SubnetB
+    Value: !Ref psharedbcidr
+    Export:
+      Name: !Sub ${AWS::StackName}-vpcprivatebcidr
   vpcid:
     Description: ID of Shared Infrastructure VPC
     Value: !Ref VPC
@@ -284,10 +522,14 @@ Outputs:
     Condition: DeployNATA
     Description: ID of NAT Gateway A
     Value: !Ref NatGatewayA
+    Export:
+      Name: !Sub ${AWS::StackName}-natgatewayaid
   natgatewaybid:
     Condition: DeployNATB
     Description: ID of NAT Gateway B
     Value: !Ref NatGatewayB
+    Export:
+      Name: !Sub ${AWS::StackName}-natgatewaybid
   publicroutetable:
     Description: ID of Public Route Table
     Value: !Ref RouteTablePublic
@@ -303,6 +545,11 @@ Outputs:
     Value: !Ref RouteTablePrivateB
     Export:
       Name: !Sub ${AWS::StackName}-privatertb
+  workbucket:
+    Description: Shared Infrastructure Work or Temp Bucket
+    Value: !Ref S3WorkBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-workbucket
   logbucket:
     Description: Shared Infrastructure Logs Bucket
     Value: !Ref S3LogBucket
@@ -328,6 +575,16 @@ Outputs:
     Value: !Ref EfsShare
     Export:
       Name: !Sub ${AWS::StackName}-efs
+  efstargeta:
+    Description: EFS Target Zone1
+    Value: !Ref EfsMountTargetPublicSubnetA
+    Export:
+      Name: !Sub ${AWS::StackName}-efstargeta
+  efstargetb:
+    Description: EFS Target Zone2
+    Value: !Ref EfsMountTargetPublicSubnetB
+    Export:
+      Name: !Sub ${AWS::StackName}-efstargetb
   efssg:
     Description: EFS Security Group
     Value: !Ref EfsSecurityGroup

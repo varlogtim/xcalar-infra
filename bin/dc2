@@ -290,7 +290,7 @@ dc2_deploy() {
 }
 
 dc2_upload() {
-    FLAVORS="default,withvpc"
+    FLAVORS="default"
     while [[ $# -gt 0 ]]; do
         local cmd="$1" shift_amount
         if dc2_parse_common "$@" > $TMPDIR/shift.txt; then
@@ -333,7 +333,7 @@ dc2_upload() {
     test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
 
     GENDIR="$TMPDIR"/gen
-    mkdir -p "$GENDIR"/scripts/
+    mkdir -p "$GENDIR"/scripts/ "$GENDIR"/lambda/
     #cd "$GENDIR" || die "Failed to cd to $GENDIR"
     for ii in "$PROJDIR"/scripts/*; do
         if [[ $ii =~ .j2$ ]]; then
@@ -342,6 +342,12 @@ dc2_upload() {
             cp $ii $GENDIR/scripts/
         fi
     done
+    if test -e "$PROJDIR"/lambda; then
+        cp -a "$PROJDIR"/lambda "$GENDIR"
+        pip install -q -r "$PROJDIR"/lambda/requirements.txt -c "$PROJDIR"/lambda/constraints.txt -t "$GENDIR"/lambda
+        (cd "$GENDIR"/lambda && zip -q -9r "$GENDIR"/lambda.zip .)
+        rm -rf "$GENDIR"/lambda
+    fi
 
     case "$AWS_DEFAULT_REGION" in
         us-west-2) BUCKET=xcrepo ;;
@@ -356,6 +362,9 @@ dc2_upload() {
     TARGET=cfn/${CONTEXT}-${RELEASE}
     BASE_URL="${BUCKET_ENDPOINT}/${TARGET}"
     bootstrapUrl="${BASE_URL}/scripts/user-data.sh"
+    bucketLocation=$(aws s3api get-bucket-location --bucket $BUCKET --query LocationConstraint --output text)
+
+    rm -f "$PROJDIR"/vars/deploy.yaml
 
     mkdir -p "$TMPDIR"/vars
     rm -fv "$TMPDIR"/vars/* "$TMPDIR"/allvars.*
@@ -365,11 +374,16 @@ dc2_upload() {
 	PROJECT: '$PROJECT'
 	RELEASE: '$RELEASE'
 	baseUrl: '$BASE_URL'
+	baseBucket: '${BUCKET}'
+	basePrefix: '${TARGET}/'
+	baseLocation: '${bucketLocation}'
+	baseUrlPath: 'https://s3.${bucketLocation}.amazonaws.com/${BUCKET}/${TARGET}/'
+	baseUrlVirtual: 'https://${BUCKET}.s3.amazonaws.com/${TARGET}/'
+	Bucket: '$BUCKET'
+	Prefix: '$TARGET'
 	bootstrapUrl: '$bootstrapUrl'
 	${PUBLISHING:+PUBLISHING: "${PUBLISHING^}"}
 	${DEBUG:+DEBUG: $DEBUG}
-	EOF
-    cat > "$TMPDIR"/vars/build.yaml <<- EOF
 	Date: '$(date +%FT%T%z)'
 	EOF
     # jq_from_text user_data < "$PROJDIR"/scripts/user-data.sh | cfn-flip >> "$PROJDIR"/vars/deploy.yaml
@@ -398,11 +412,16 @@ dc2_upload() {
         fi
     fi
     aws ec2 describe-images --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TMPDIR"/vars/image.yaml
+    for YAML in $(ls "$PROJDIR"/*.{yaml,template} 2>/dev/null); do
+        TEMPLATE=$(basename "${YAML%%.*}")
+        cfn-flip "$YAML" > "${GENDIR}/${TEMPLATE}.json"
+    done
     for J2TEMPLATE in "$PROJDIR"/*.j2; do
         if [[ $J2TEMPLATE =~ quickcreate ]]; then
             continue
         fi
-        TEMPLATE=$(basename $J2TEMPLATE .template.j2)
+        TEMPLATE=$(basename $J2TEMPLATE)
+        TEMPLATE="${TEMPLATE%%.*}"
         for flavor in ${FLAVORS//,/ }; do
             case "$flavor" in
                 default) TEMPLATEOUT=${TEMPLATE} ;;
@@ -413,7 +432,8 @@ dc2_upload() {
 
             local templateJson=${GENDIR}/${TEMPLATEOUT}.json
             # shellcheck disable=SC2002
-            if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "PUBLISHING=${PUBLISHING^}" -D "DEBUG=$DEBUG" -D "bootstrapUrl=$bootstrapUrl" -D "ami_""${AWS_DEFAULT_REGION//-/_}""=$ami_id" -D "region=${AWS_DEFAULT_REGION}" -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" \
+            #if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "PUBLISHING=${PUBLISHING^}" -D "DEBUG=$DEBUG" -D "bootstrapUrl=$bootstrapUrl" -D "ami_""${AWS_DEFAULT_REGION//-/_}""=$ami_id" -D "region=${AWS_DEFAULT_REGION}" -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" \
+            if ! cat "$TMPDIR"/allvars.yaml | jinja2 "$J2TEMPLATE" \
                 | tee ${TMPDIR}/${TEMPLATEOUT}.yaml \
                 | cfn-flip > "$templateJson"; then
                 #| jq_put_userata_in_lt $PROJDIR/scripts/user-data.sh > "$templateJson"; then
@@ -443,13 +463,13 @@ dc2_upload() {
             quick_urls+=("$quickUrl")
             urls+=("$templateUrl")
 
-            if [ "$flavor" != default ]; then
-                echo "templateUrl_${flavor}: $templateUrl" | tee -a "$PROJDIR"/vars/deploy.yaml
-                echo "quickUrl_${flavor}: $quickUrl"
-            else
-                echo "templateUrl: $templateUrl" | tee -a "$PROJDIR"/vars/deploy.yaml
-                echo "quickUrl: $quickUrl"
-            fi
+#            if [ "$flavor" != default ]; then
+#                echo "templateUrl_${flavor}: $templateUrl" | tee "$PROJDIR"/vars/deploy.yaml
+#                echo "quickUrl_${flavor}: $quickUrl"
+#            else
+#                echo "templateUrl: $templateUrl" | tee "$PROJDIR"/vars/deploy.yaml
+#                echo "quickUrl: $quickUrl"
+#            fi
         done
     done
 

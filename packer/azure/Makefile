@@ -2,6 +2,7 @@ SHELL = /bin/bash
 
 VERSION ?= $(shell date '+%Y.%m.%d')
 BUILD_NUMBER ?= 1
+INSTALLER ?=
 
 default: jenkins.azure
 

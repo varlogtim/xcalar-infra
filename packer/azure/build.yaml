@@ -12,6 +12,7 @@ variables:
   puppet_src: '{{ env `HOME` }}/puppet'
   image_name: '{{ user `instance_name` }}-{{user `osid`}}-{{user `today`}}-{{user `build_number`}}'
   installer_url: '{{env `INSTALLER_URL` }}'
+  disk_size: '127'
   build_number: '{{env `BUILD_NUMBER`}}'
   version: '{{ isotime "2006.01.02" }}'
   client_id: '{{ env `ARM_CLIENT_ID` }}'
@@ -54,7 +55,8 @@ builders:
       Author: Packer SP
       version: '{{user `version`}}'
       build_number: '{{user `build_number`}}'
-    os_disk_size_gb: 128
+      # image_build_number: '{{user `image_build_number`}}'
+    os_disk_size_gb: '{{user `disk_size`}}'
     location: '{{user `location`}}'
     vm_size: Standard_D8_v3
     async_resourcegroup_delete: true

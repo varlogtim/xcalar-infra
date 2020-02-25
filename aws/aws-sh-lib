@@ -380,6 +380,16 @@ cfn_template_default() {
     esac
 }
 
+cfn_template_defaults_to_params() {
+    (
+    if [[ "$1" =~ yaml ]]; then
+        cfn-flip "$1"
+    else
+        cat "$1"
+    fi
+    ) | jq -r '.Parameters|to_entries|map_values({UsePreviousValue: false, ParameterKey: .key, ParameterValue: .value.Default})'
+}
+
 aws_canonical_user_id() {
     aws s3api list-buckets --query 'Owner.ID' --output text
 }

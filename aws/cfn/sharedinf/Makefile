@@ -10,6 +10,7 @@ SHAREDINF_TEMPLATE = sharedinfrastructure.yaml
 sharedinf:
 	$(COPY) $(SHAREDINF_TEMPLATE) $(BASE)$(STACK)/
 
-
-deploy: sharedinfra
+update: sharedinf
+	aws cloudformation update-stack --stack-name sharedinf --template-url https://xcrepo.s3.amazonaws.com/cfn/$(STACK)/$(SHAREDINF_TEMPLATE)
+deploy: sharedinf
 	aws cloudformation create-stack --stack-name sharedinf --template-url https://xcrepo.s3.amazonaws.com/cfn/$(STACK)/$(SHAREDINF_TEMPLATE)

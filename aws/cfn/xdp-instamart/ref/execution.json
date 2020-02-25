@@ -1,0 +1,8 @@
+{
+  "Comment": "Insert your JSON here",
+  "ClusterSize": 1,
+  "ClusterName": "Cluster-1234",
+  "Input": "dataFlow.xlrwb.tar.gz",
+  "Output": "export/dataFlowOut.txt",
+  "KeepCluster": false
+}

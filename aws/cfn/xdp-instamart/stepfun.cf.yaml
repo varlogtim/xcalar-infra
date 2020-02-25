@@ -1,0 +1,834 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Step function support for Xcalar Lambda Schedules
+
+Parameters:
+  InstanceType:
+    Type: String
+    Description: Instance Type
+    Default: 'r5d.xlarge'
+  LaunchTemplate:
+    Type: String
+    Description: Template used for lanching Ec2 nodes
+  NotificationEmail:
+    Type: String
+    Description: Email address to be notified once work completes
+  EventBucket:
+    Type: String
+    Description: Bucket to monitor
+  EventPrefix:
+    Type: String
+    Description: 'Prefix in bucket to monitor. Eg, s3://Bucket/Prefix/'
+  ExistingBucket:
+    Type: String
+    Description: Your source bucket
+  WorkBucket:
+    Type: String
+    Description: Temporary work bucket
+  BaseURL:
+    Type: String
+    Description: Base URL of the deployment
+  ParentStackId:
+    Type: String
+    Description: Name of the parent stack
+  EfsSharedRoot:
+    Description: EFS to use for Xcalar Shared Roots
+    Type: String
+Resources:
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref NotificationEmail
+          Protocol: "email"
+
+  StatesExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - !Sub "states.${AWS::Region}.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "sns:Publish"
+                Resource: !Ref SNSTopic
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - !GetAtt TerminateEC2.Arn
+                  - !GetAtt LaunchCluster.Arn
+                  - !GetAtt CheckClusterStatus.Arn
+                  - !GetAtt RunSSMCommands.Arn
+                  - !GetAtt CheckSSMCommandStatus.Arn
+
+  AddS3NotificationRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  AddS3Notification:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: add_notification.lambda_handler
+      Role: !GetAtt AddS3NotificationRole.Arn
+      Runtime: python3.6
+      Timeout: 60
+      Code:
+        S3Bucket: !ImportValue sharedinf-lambdabucket
+        S3Key: xdp-instamart/ed1919bb1302236c.zip
+
+  ScheduleUpdateTrigger:
+    Type: 'Custom::LambdaTrigger'
+    DependsOn: ScheduleUpdateCallPermission
+    Properties:
+      ServiceToken: !GetAtt 'AddS3Notification.Arn'
+      LambdaArn: !GetAtt 'ScheduleUpdateFunction.Arn'
+      Bucket: !Ref EventBucket
+      Prefix: !Ref EventPrefix
+
+  ScheduleUpdateRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${EventBucket}'
+                Condition:
+                  StringLike:
+                    's3:prefix':
+                      - !Sub '${EventPrefix}'
+                      - !Sub '${EventPrefix}/*'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${EventBucket}/${EventPrefix}/*'
+
+  ScheduleExecuteEventRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StepAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'states:StartExecution'
+                  - 'states:*'
+                Resource:
+                  - !Ref 'DataAppStateMachine'
+              - Effect: Allow
+                Action:
+                  - 'iam:PassRole'
+                  - 'iam:GetRole'
+                Resource: '*'
+  ScheduleUpdateFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import json
+          import os,uuid
+          from botocore.exceptions import ClientError
+          from pathlib import PurePath
+          def lambda_handler(event,context):
+              print(json.dumps(event))
+              StackId = os.environ['StackId']
+              s3 = boto3.client('s3')
+              eb = boto3.client('events')
+              for e in event['Records']:
+                  bucket = e['s3']['bucket']['name']
+                  key = e['s3']['object']['key']
+                  eTag = e['s3']['object']['eTag']
+                  p = PurePath(f'/{bucket}/{key}')
+                  name = p.as_posix()[1:].replace('/','-')+'-rule'
+                  evt,evt_op = e['eventName'].split(':')
+                  try:
+                      if evt == 'ObjectDeleted':
+                          eb.delete_rule(Name=name)
+                      if evt == 'ObjectCreated':
+                          response = s3.get_object(Bucket=bucket,Key=key,IfMatch=eTag)
+                          body = response['Body']
+                          rawdata = body.read(128*1024)
+                          body.close()
+                          data = json.loads(rawdata.decode('utf-8'))
+                          if 'schedule' in data:
+                              schedule = data['schedule']
+                          if 'input' in data:
+                              input = data['input']
+                          if 'output' in data:
+                              output = data['output']
+                        response = eb.put_rule(
+                          Name=name,
+                          ScheduleExpression=schedule,
+                          State='ENABLED',
+                          Tags=[{'Key': 'Name', 'Value': name}, {'Key': 'StackId', 'Value': StackId}]
+                        )
+                        uid = uuid.uuid1().hex
+                        input = {
+                            "Comment": "Insert your JSON here",
+                            "ClusterSize": 1,
+                            "ClusterName": "Cluster-"+uid,
+                            "Input": "dataFlow.xlrwb.tar.gz",
+                            "Output": "export/dataFlowOut.txt",
+                            "KeepCluster": False
+                        }
+                        RuleArn = response['RuleArn']
+                        response = eb.put_targets(
+                          Rule=name,
+                          Targets=[{
+                            'Id': 'target1',
+                            'Arn': os.environ['StateMachineArn'],
+                            'RoleArn': os.environ['EventRoleArn'],
+                            'Input': json.dumps(input)
+                          }]
+                        )
+                  except ClientError as e:
+                      ec = e['Error']['Code']
+                      print(f'Error: {ec} when handling {evt}:{evt_op} on {name}.')
+                      print(e)
+      Handler: index.lambda_handler
+      Role: !GetAtt ScheduleUpdateRole.Arn
+      Runtime: python3.6
+      Timeout: 60
+      Environment:
+        Variables:
+          StackName: !Ref 'AWS::StackName'
+          StackId: !Ref 'AWS::StackId'
+          ParentStackId: !Ref ParentStackId
+          Bucket: !Ref EventBucket
+          Prefix: !Ref EventPrefix
+          StateMachineArn: !Ref DataAppStateMachine
+          EventRoleArn: !GetAtt ScheduleExecuteEventRole.Arn
+
+
+  ScheduleUpdateCallPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref ScheduleUpdateFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub 'arn:aws:s3:::${EventBucket}'
+
+  StepStartCallPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref StepStartFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      #SourceAccount: !Ref 'AWS::AccountId'
+      #SourceArn: !Sub 'arn:aws:s3:::${EventBucket}'
+
+  ###################
+  #
+  # Lambda related resources for for Ec2/Cluster Control
+  #
+  ###################
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+        - arn:aws:iam::aws:policy/IAMFullAccess
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+      Policies:
+        - PolicyName: "LambdaProxyClusterPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - "ssm:ListCommands"
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: "Allow"
+                Action:
+                  - "ssm:PutParameter"
+                  - "ssm:GetParameter"
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*"
+              - Effect: "Allow"
+                Action:
+                  - "ssm:SendCommand"
+                Resource:
+                  - "arn:aws:ssm:*:*:document/*"
+              - Effect: "Allow"
+                Action:
+                  - "ssm:SendCommand"
+                  - "elasticfilesystem:DescribeMountTargets"
+                Resource: "*"
+                #                Resource:
+                #  - "arn:aws:ec2:*:*:instance/*"
+#                Condition:
+#                  StringLike:
+#                    "ssm:resourceTag/aws:cloudformation:stack-id":
+#                      - !Ref ParentStackId
+              - Effect: "Allow"
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${ExistingBucket}"
+                  - !Sub "arn:aws:s3:::${WorkBucket}"
+              - Effect: "Allow"
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${EventBucket}"
+              - Effect: "Allow"
+                Action:
+                  - s3:*
+                Resource:
+                  - !Sub "arn:aws:s3:::${EventBucket}/${EventPrefix}/*"
+
+  Ec2SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Effect: Allow
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: "Ec2ProxyClusterPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "kms:DescribeCustomKeyStores"
+                  - "kms:ListKeys"
+                  - "kms:Decrypt"
+                  - "kms:DescribeKey"
+                  - "kms:ConnectCustomKeyStore"
+                  - "kms:ListGrants"
+                  - "ec2:DescribeInstances"
+                  - "cloudformation:DescribeStackResource*"
+                  - "autoscaling:DescribeAutoScalingGroups"
+                  - "elasticfilesystem:DescribeMountTargets"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${ExistingBucket}"
+                  - !Sub "arn:aws:s3:::${WorkBucket}"
+                  - !Sub "arn:aws:s3:::${EventBucket}"
+              - Effect: "Allow"
+                Action:
+                  - s3:Put*
+                Resource:
+                  - !Sub "arn:aws:s3:::${WorkBucket}/*"
+              - Effect: "Allow"
+                Action:
+                  - 's3:Get*'
+                Resource:
+                  - !Sub "arn:aws:s3:::${ExistingBucket}"
+                  - !Sub "arn:aws:s3:::${WorkBucket}"
+                  - !Sub "arn:aws:s3:::${EventBucket}"
+  DataAppProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref Ec2SSMRole
+
+  StepStartFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import json
+          import uuid
+          step = boto3.client('stepfunctions')
+          def lambda_handler(event,context):
+              print(json.dumps(event))
+              StateMachineArn = os.environ['StateMachineArn']
+              StateMachineName = os.environ['StateMachineName']
+              StackName = os.environ['StackName']
+              uid = uuid.uuid1().hex
+              input = {
+                  "Comment": "Insert your JSON here",
+                  "ClusterSize": 1,
+                  "ClusterName": "Cluster-"+uid,
+                  "Input": "dataFlow.xlrwb.tar.gz",
+                  "Output": "export/dataFlowOut.txt",
+                  "KeepCluster": False
+              }
+              name = f'{StackName}-{StateMachineName}-{uid}'
+              response = step.start_execution(
+                stateMachineArn=StateMachineArn,
+                name=name,
+                input=json.dumps(input)
+              )
+              return response['executionArn']
+      Description: "Launches a statemachine"
+      Environment:
+        Variables:
+          StateMachineArn: !Ref DataAppStateMachine
+          StateMachineName: !GetAtt DataAppStateMachine.Name
+          StackName: !Ref 'AWS::StackName'
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 300
+
+  LaunchCluster:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: !Sub |
+          import json
+          import boto3
+          import os
+          import gzip
+          import base64
+          from botocore.vendored import requests
+
+          def lambda_handler(event, context):
+              print(json.dumps(event))
+              client = boto3.client('ec2')
+              InstanceType = os.environ['InstanceType']
+              InstanceArn = os.environ['InstanceArn']
+              ClusterName = event['ClusterName']
+              ClusterSize = int(event['ClusterSize'])
+              LaunchTemplate = os.environ['LaunchTemplate']
+              BaseURL = os.environ['BaseURL']
+              EfsSharedRoot = os.environ['EfsSharedRoot']
+              Email = os.environ['Email']
+              url = requests.get(f'{BaseURL}scripts/batch.sh')
+              response = client.run_instances(
+                  LaunchTemplate={
+                    'LaunchTemplateId': LaunchTemplate
+                  },
+                  InstanceType=InstanceType,
+                  IamInstanceProfile={
+                      'Arn': InstanceArn
+                  },
+                  MinCount=int(ClusterSize),
+                  MaxCount=int(ClusterSize),
+                  TagSpecifications=[{
+                    'ResourceType': 'instance',
+                    'Tags': [
+                      {'Key': 'Name', 'Value': f'{ClusterName}-vm' },
+                      {'Key': 'ClusterName', 'Value': ClusterName },
+                      {'Key': 'ClusterSize', 'Value': str(ClusterSize) },
+                      {'Key': 'FileSystemId', 'Value': EfsSharedRoot },
+                      {'Key': 'Owner', 'Value': Email}
+                    ]
+                  }],
+                  UserData=url.content
+              )
+              event['InstanceIds'] =  [instance['InstanceId'] for instance in response['Instances']]
+              return event
+      Description: "Creates cluster to perform DataApp processing"
+      Environment:
+        Variables:
+          InstanceType: !Ref InstanceType
+          InstanceArn: !GetAtt DataAppProfile.Arn
+          LaunchTemplate: !Ref LaunchTemplate
+          BaseURL: !Ref BaseURL
+          EfsSharedRoot: !Ref EfsSharedRoot
+          Email: !Ref NotificationEmail
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 300
+
+  CheckClusterStatus:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: !Sub |
+          import sys, os
+          import boto3
+          import json
+
+          client = boto3.client('ec2')
+
+          def lambda_handler(event, context):
+              print(json.dumps(event,indent=4))
+              instance_ids=event['InstanceIds']
+              current_status=checkInstanceStatus(instance_ids) # Hack
+              if current_status == 'running':
+                  event['HasClusterStarted'] = 'YES'
+              else:
+                  event['HasClusterStarted'] = 'NO'
+              return event
+
+          def checkInstanceStatus(instance_ids):
+              status_resp = client.describe_instances(InstanceIds=instance_ids)
+              return status_resp['Reservations'][0]['Instances'][0]['State']['Name']
+
+      Description: "Checks whether the cluster is started or not"
+      Environment:
+        Variables:
+          InstanceType: !Ref InstanceType
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 300
+
+  RunSSMCommands:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import os
+          import json
+          client = boto3.client('ssm')
+          ec2 = boto3.client('ec2')
+          #dynamodbclient = boto3.client('dynamodb')
+          Bucket = os.environ['Bucket']
+          BaseURL = os.environ['BaseURL']
+          def lambda_handler(event, context):
+              instance_ids = event['InstanceIds']
+              #AMIConfigTable = event['AMIConfigTable']
+              #dynamodbresponse = dynamodbclient.scan(TableName=AMIConfigTable)
+              Input = event['Input']
+              Output = event['Output']
+              Items = [] #dynamodbresponse['Items']
+              print(instance_ids)
+              print(ec2.describe_instances(InstanceIds=instance_ids))
+              event['Commands'] = []
+              response = client.send_command(
+                InstanceIds=[instance_ids[0]],
+                DocumentName='AWS-RunShellScript',
+                Parameters={
+                  'commands': [
+                    'systemctl start xcalar.service',
+                    f'curl {BaseURL}scripts/batch.py -o /usr/bin/batch.py',
+                    'chmod +x /usr/bin/batch.py',
+                    f'/opt/xcalar/bin/python3.6 /usr/bin/batch.py s3://{Bucket}/{Input} s3://{Bucket}/{Output}'
+                  ]
+                }
+              )
+              event['Commands'].append(response['Command']['CommandId'])
+              return event
+      Description: "Send SSM Command to instance"
+      Environment:
+        Variables:
+          InstanceType: !Ref InstanceType
+          Bucket: !Ref WorkBucket
+          BaseURL: !Ref BaseURL
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 300
+
+  CheckSSMCommandStatus:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+
+          client = boto3.client('ssm')
+
+          def lambda_handler(event, context):
+              print(json.dumps(event,indent=4))
+              event['commandstatus'] =  "SUCCESS"
+              for command_id in event['Commands']:
+                  print (command_id)
+                  status = check_ssm_command_status(command_id)
+                  print (status)
+                  if status == 'InProgress':
+                      event['commandstatus'] =  "PENDING"
+                  if status == 'Failed':
+                          event['commandstatus'] =  "FAILED"
+                  if status == 'Cancelled':
+                          event['commandstatus'] =  "FAILED"
+              # handle 3 scenarios: PENDING, SUCCESS, FAILED
+              return event
+
+          def check_ssm_command_status(command_id):
+              response = client.list_commands(
+                  CommandId=command_id
+              )
+              return response['Commands'][0]['Status']
+
+      Description: "Checks whether all SSM Commands has been executed"
+      Environment:
+        Variables:
+          InstanceType: !Ref InstanceType
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 300
+
+  TerminateEC2:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: !Sub |
+          import sys, os
+          import boto3
+          import json
+
+          client = boto3.client('ec2')
+
+          def lambda_handler(event, context):
+              print(json.dumps(event,indent=4))
+              if not 'InstanceIds' in event:
+                  return event
+              if 'KeepCluster' in event:
+                  if event['KeepCluster']:
+                      event['hasClusterTerminated'] = 'running'
+                      return event
+              instance_ids=event['InstanceIds']
+              current_status=terminateInstance(instance_ids)
+              event['hasClusterTerminated'] = current_status
+              waiter = client.get_waiter('instance_terminated')
+              waiter.wait(
+                  InstanceIds=instance_ids
+              )
+              return event
+
+          def terminateInstance(instance_ids):
+              status_resp = client.terminate_instances(InstanceIds=instance_ids)
+              return status_resp['TerminatingInstances'][0]['CurrentState']['Name']
+
+      Description: "Terminates EC2 instance"
+      Environment:
+        Variables:
+          InstanceType: !Ref InstanceType
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 300
+
+      #DataAppDynamoDBTable:
+      #  Type: AWS::DynamoDB::Table
+      #  Properties:
+      #    AttributeDefinitions:
+      #      -
+      #        AttributeName: "documentname"
+      #        AttributeType: "S"
+      #    KeySchema:
+      #      -
+      #        AttributeName: "documentname"
+      #        KeyType: "HASH"
+      #    ProvisionedThroughput:
+      #      ReadCapacityUnits: "5"
+      #      WriteCapacityUnits: "5"
+      #    TableName: "Create-Golden-AMI-Metadata"
+
+  DataAppStateMachine:
+    Type: "AWS::StepFunctions::StateMachine"
+    Properties:
+      DefinitionString: !Sub |
+          {
+            "Comment": "State Machine for reliable DataApp Execution",
+            "StartAt": "StartCluster",
+            "States": {
+              "StartCluster": {
+                "Type": "Task",
+                "Resource": "${LaunchCluster.Arn}",
+                "Next": "ClusterStartCheck"
+              },
+              "ClusterStartCheck": {
+                "Type": "Task",
+                "Resource": "${CheckClusterStatus.Arn}",
+                "ResultPath": "$",
+                "Next": "HasClusterStarted"
+              },
+              "HasClusterStarted": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.HasClusterStarted",
+                    "StringEquals": "YES",
+                    "Next": "RunScripts"
+                  },
+                  {
+                    "Variable": "$.HasClusterStarted",
+                    "StringEquals": "NO",
+                    "Next": "Wait Cluster"
+                  }
+                ],
+                "Default": "Wait Cluster"
+              },
+              "Wait Cluster": {
+                "Type": "Wait",
+                "Seconds": 60,
+                "Next": "ClusterStartCheck"
+              },
+              "RunScripts": {
+                "Type": "Task",
+                "Resource": "${RunSSMCommands.Arn}",
+                "ResultPath": "$",
+                "Next": "CheckScripts"
+              },
+              "CheckScripts": {
+                "Type": "Task",
+                "Resource": "${CheckSSMCommandStatus.Arn}",
+                "ResultPath": "$",
+                "Next": "HaveScriptsCompleted"
+              },
+              "HaveScriptsCompleted": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.commandstatus",
+                    "StringEquals": "SUCCESS",
+                    "Next": "Finish Cluster"
+                  },
+                  {
+                    "Variable": "$.commandstatus",
+                    "StringEquals": "PENDING",
+                    "Next": "Wait Scripts"
+                  },
+                  {
+                    "Variable": "$.commandstatus",
+                    "StringEquals": "FAILED",
+                    "Next": "Fail Cluster"
+                  }
+                ],
+                "Default": "Wait Scripts"
+              },
+              "Wait Scripts": {
+                "Type": "Wait",
+                "Seconds": 30,
+                "Next": "CheckScripts"
+              },
+              "Finish Cluster": {
+                "Type": "Task",
+                "Resource": "${TerminateEC2.Arn}",
+                "ResultPath": "$",
+                "Next": "Send Notification Finished"
+              },
+              "Send Notification Finished": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::sns:publish",
+                "Parameters": {
+                  "TopicArn": "${SNSTopic}",
+                  "Message": "DataApp process completed successfully"
+                },
+                "ResultPath": "$",
+                "End": true
+              },
+              "Fail Cluster": {
+                "Type": "Task",
+                "Resource": "${TerminateEC2.Arn}",
+                "ResultPath": "$",
+                "Next": "Send Notification Failed"
+              },
+              "Send Notification Failed": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::sns:publish",
+                "Parameters": {
+                  "TopicArn": "${SNSTopic}",
+                  "Message": "DataApp process failed"
+                },
+                "ResultPath": "$",
+                "Next": "DefaultState"
+              },
+              "DefaultState": {
+                "Type": "Fail",
+                "Error": "DefaultStateError",
+                "Cause": "No Matches!"
+              }
+            }
+          }
+      RoleArn: !GetAtt [ StatesExecutionRole, Arn ]
+# vim: ft=yaml
