@@ -35,7 +35,7 @@ class DataflowJobFail(Exception):
 class DataflowEngine(object):
 
     def __init__(self, *, test_id, host, port, user, password, cfg_path, statsfreq=1):
-            
+
         self.logger = logging.getLogger(__name__)
         self.data_logger = DLogger(test_id=test_id)
         self.logger.info("STARTING")
@@ -282,8 +282,8 @@ if __name__ == "__main__":
         except Exception as exc:
             fail = True
             msg = "Unhandled exception"
-            logger.exception("FAIL: {}".format(msg), fatal=True)
-            data_logger.exception(msg=msg, exc=exc)
+            data_logger.exception(msg=msg, exc=exc, fatal=True)
+            logger.exception("FAIL: {}".format(msg))
 
     if engine:
         try:
