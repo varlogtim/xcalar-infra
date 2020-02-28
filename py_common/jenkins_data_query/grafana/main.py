@@ -218,14 +218,18 @@ def _all_jobs_table(*, from_ms, to_ms):
 
         pass_total_dur_ms = 0
         fail_total_dur_ms = 0
+
+        info['pass_avg_duration_s'] = 0
         if pass_cnt:
             pass_total_dur_ms = info['pass_total_duration_ms']
             info['pass_avg_duration_s'] = int((pass_total_dur_ms/pass_cnt)/1000)
 
+        info['fail_avg_duration_s'] = 0
         if fail_cnt:
             fail_total_dur_ms = info['fail_total_duration_ms']
             info['fail_avg_duration_s'] = int((fail_total_dur_ms/fail_cnt)/1000)
 
+        info['total_avg_duration_s'] = 0
         if total_complete:
             total_dur_ms = pass_total_dur_ms + fail_total_dur_ms
             info['total_avg_duration_s'] = int((total_dur_ms/total_complete)/1000)
