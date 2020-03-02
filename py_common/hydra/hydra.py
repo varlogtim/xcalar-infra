@@ -780,5 +780,4 @@ if __name__ == '__main__':
     if not test_id:
         test_id = 'NotSupplied'
 
-    hydra = Hydra(test_id=test_id, cmd=args.cmd, cfg=args.cfg)
-    hydra.run()
+    sys.exit(Hydra(test_id=test_id, cmd=args.cmd, cfg=args.cfg).run())
