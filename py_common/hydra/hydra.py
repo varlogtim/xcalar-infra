@@ -7,10 +7,11 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
-
 from abc import ABC, abstractmethod
 
 import argparse
+from importlib import import_module
+import json
 import logging
 import multiprocessing
 import os
@@ -21,7 +22,11 @@ import subprocess
 import sys
 import time
 
+if __name__ == '__main__':
+    sys.path.append(os.environ.get('XLRINFRADIR', ''))
+
 from py_common.dlogger import DLogger, SDKMetricsDLoggerSource
+from py_common.env_configuration import EnvConfiguration
 
 from xcalar.external.LegacyApi.XcalarApi import XcalarApi
 from xcalar.external.client import Client
@@ -37,10 +42,10 @@ logging.basicConfig(level=logging.DEBUG,
 class LogScraperBase(ABC):
     """
     Base class for a "log scraper" function which can be registered to
-    a ProcessWatcher instance.
+    a ProcessManager instance.
 
     run() method will be sent all lines from stdout/stderr
-    of the process underlying the ProcessWatcher instance.
+    of the process underlying the ProcessManager instance.
 
     run() will be called with a multiprocess-safe output lock
     held so that any/all logging on stdout/stderr and will be safely
@@ -49,22 +54,23 @@ class LogScraperBase(ABC):
     XXXrs - FUTURE - register blacklist/whitelist filters to control
             What gets sent to run()
     """
-    def __init__(self, *, test_id):
-        self.data_logger = DLogger(test_id=test_id)
+    def __init__(self):
+        cfg = EnvConfiguration({'TEST_ID': {'required': True}})
+        self.data_logger = DLogger(test_id=cfg.get('TEST_ID'))
 
     @abstractmethod
     def run(self, *, line):
         pass
 
+
 class WatcherClassBase(ABC):
     """
     Base class for a "watcher" function which can be registered to
     a Hydra instance.
-
-    run() method
     """
-    def __init__(self, *, test_id):
-        self.data_logger = DLogger(test_id=test_id)
+    def __init__(self):
+        cfg = EnvConfiguration({'TEST_ID': {'required': True}})
+        self.data_logger = DLogger(test_id=cfg.get('TEST_ID'))
 
     @abstractmethod
     def run(self):
@@ -72,14 +78,14 @@ class WatcherClassBase(ABC):
 
 
 # ================
-# PROCESS WATCHERS
+# PROCESS MANAGERS
 # ================
 
-class ProcessWatcherUninitializedLockError(Exception):
+class ProcessManagerUninitializedLockError(Exception):
     pass
 
 
-class ProcessWatcher(ABC):
+class ProcessManager(ABC):
     """
     Class wrapping a parallel (sub)process.  Arranges to read
     stdout/stderr of that process and calls any registered
@@ -89,14 +95,11 @@ class ProcessWatcher(ABC):
     any log scrapers into the final output log.
     """
 
-    def __init__(self, *, frequency = None, scrapers = None):
+    def __init__(self, *, frequency):
 
         self.logger = logging.getLogger(__name__)
         self.frequency = frequency
-        if scrapers is not None:
-            self.scrapers = scrapers
-        else:
-            self.scrapers = []
+        self.scrapers = []
         self.launcher_process = None
         self.output_lock = None
         self.shutdown_event = None
@@ -110,8 +113,15 @@ class ProcessWatcher(ABC):
         self.exit_event = exit_event
 
     def add(self, *, scraper):
+        # class instance must implement run()
+        run_func = getattr(scraper, "run", None)
+        if not run_func or not callable(run_func):
+            raise ValueError("class instance does not implement run()")
         self.logger.debug("scraper: {}".format(scraper))
         self.scrapers.append(scraper)
+
+    def _add_from_config(self, *, scraper_config):
+        pass
 
     @abstractmethod
     def sub_process_start(self):
@@ -213,7 +223,7 @@ class ProcessWatcher(ABC):
     def start(self):
         self.logger.debug("start")
         if not self.output_lock or not self.shutdown_event or not self.exit_event:
-            raise ProcessWatcherUninitializedLockError("locks not initialized")
+            raise ProcessManagerUninitializedLockError("locks not initialized")
         p = multiprocessing.Process(target=self._subprocess_launcher)
         p.daemon = True # hygineic :)
         p.start()
@@ -241,20 +251,22 @@ class ProcessWatcher(ABC):
         return self.launcher_process and self.launcher_process.is_alive()
 
 
-class SubprocessWatcher(ProcessWatcher):
+class PopenProcessManager(ProcessManager):
     """
-    A ProcessWatcher wrapping a sub-process started with subprocess.Popen
+    A ProcessManager controlling a sub-process started with subprocess.Popen
     """
-    def __init__(self, *, cmdline, frequency=None, scrapers=None):
-        super().__init__(frequency=frequency, scrapers=scrapers)
+    def __init__(self, *, cmdline, env, frequency):
+        super().__init__(frequency=frequency)
         self.cmdline = cmdline
         self.subprocess = None
+        self.env = env
 
     def sub_process_start(self):
         self.logger.debug("launching command {}".format(self.cmdline))
         args = shlex.split(self.cmdline)
         p = subprocess.Popen(args, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT,
+                                   env=self.env,
                                    universal_newlines=True,
                                    bufsize=0)
         self.subprocess = p
@@ -289,13 +301,14 @@ class Unbuffered(object):
         return getattr(self.stream, attr)
 
 
-class ForkedProcessWatcher(ProcessWatcher):
+class ForkProcessManager(ProcessManager):
     """
-    A ProcessWatcher wrapping a child sub-process started with os.fork()
+    A ProcessManager controlling a child sub-process started with os.fork()
     """
-    def __init__(self, *, func, args=None, frequency=None, scrapers=None):
-        super().__init__(frequency=frequency, scrapers=scrapers)
+    def __init__(self, *, func, env, args=None, frequency):
+        super().__init__(frequency=frequency)
         self.func = func
+        self.env = env
         self.args = args
         self.pid = None
 
@@ -313,6 +326,8 @@ class ForkedProcessWatcher(ProcessWatcher):
             # Anything written to stdout/stderr from this point on goes
             # through the pipe to the parent and is processed...
 
+            if self.env is not None:
+                os.environ = self.env
             if self.args:
                 ec = self.func(**(self.args))
             else:
@@ -366,51 +381,219 @@ class ForkedProcessWatcher(ProcessWatcher):
         self.logger.debug("end")
 
 
-class WatcherClassWatcher(ForkedProcessWatcher):
+class ClassManager(ForkProcessManager):
     """
-    A ProcessWatcher wrapping a WatcherClass (class with a run() method)
+    A ProcessManager wrapping a "watcher" class
     """
-    def __init__(self, *, instance, frequency=None, scrapers=None):
+    def __init__(self, *, instance, env, frequency):
         # class instance must implement run()
         run_func = getattr(instance, "run", None)
         if not run_func or not callable(run_func):
-            raise ValueError("class instance does not implement run_func()")
-        super().__init__(func=run_func, frequency=frequency, scrapers=scrapers)
+            raise ValueError("class instance does not implement run()")
+        super().__init__(func=run_func, env=env, frequency=frequency)
 
 
 # ==================================
 # HYDRA - Multiple Heads! (Watchers)
 # ==================================
 
+class HydraConfigurationError(Exception):
+    pass
+
+
 class Hydra(object):
-    def __init__(self, *, test_id):
+    def __init__(self, *, test_id, cmd=None, cfg=None):
         self.logger = logging.getLogger(__name__)
         self.logger.debug("start")
 
-        self.test_id = test_id
-        self.data_logger = DLogger(test_id=self.test_id)
-        self.watchers = []
+        os.environ['TEST_ID'] = test_id
+        self.data_logger = DLogger(test_id=test_id)
+
+        self.scraper_cfg_by_name = {}
+        self.watcher_cfg_by_name = {}
+        self.watcher_by_name = {}
 
         # Output lock avoids log scrambling
         self.output_lock = multiprocessing.Lock()
         self.shutdown_event = multiprocessing.Event()
+
+        # Orderly shutdown
         self.exit_event = multiprocessing.Event()
         self.do_shutdown = False
         self.returnstatus = 0
 
-    def add(self, *, watcher):
-        self.logger.debug("watcher: {}".format(watcher))
+        if cmd:
+            watcher=PopenProcessManager(cmdline=cmd, env=os.environ, frequency=None)
+            # Stash this watcher under the reserved name "MAIN" so we can
+            # configure scrapers for it in the configuration file.
+            self.add(name="MAIN", watcher=watcher)
+
+        if cfg:
+            # See CONFIG_README.txt for configuration syntax.
+            self.init_from_config(cfg=cfg)
+
+    def _init_watcher(self, *, watcher_name, frequency):
+        watcher_cfg = self.watcher_cfg_by_name.get(watcher_name, None)
+        if watcher_cfg is None:
+            raise HydraConfigurationError("no watcher named: {}"
+                                          .format(watcher_name))
+        env = watcher_cfg.get('environment', None)
+        if env is not None:
+            # In case we need it :)
+            errstr = "invalid environment: {}".format(env)
+            newenv = {}
+            for eitem in env:
+                target = eitem.get('target', None)
+                if not target:
+                    raise HydraConfigurationError(errstr)
+                source = eitem.get('source', None)
+                val = eitem.get('value', None)
+                if source:
+                    val = os.environ.get(source, None)
+                if val is None:
+                    raise HydraConfigurationError(errstr)
+                newenv[target] = val
+
+            self.logger.debug("newenv: {}".format(newenv))
+            env = dict(os.environ, **newenv)
+
+        if env is None:
+            env = os.environ
+
+        # env is the watcher's environment...
+
+        watcher = None
+        builtin = watcher_cfg.get('builtin', None)
+        if builtin is not None:
+            self.logger.debug("builtin: {}".format(builtin))
+            # Built-in presumed already in-scope
+            cur_env = os.environ
+            os.environ = env
+            watcher = ClassManager(instance=get_builtin_class(builtin),
+                                   frequency=frequency,
+                                   env=env)
+            os.environ = cur_env
+
+        if watcher is None:
+            # Command-line
+            cmdline = watcher_cfg.get('cmdline', None)
+            if cmdline is not None:
+                watcher = PopenProcessManager(cmdline=cmdline,
+                                              frequency=frequency,
+                                              env=env)
+
+        if watcher is None:
+            # Custom class
+            module_path = watcher_cfg.get('module_path', None)
+            class_name = watcher_cfg.get('class_name', None)
+            if module_path and class_name:
+                mod = import_module(module_path)
+                cls = getattr(mod, class_name)()
+                cur_env = os.environ
+                os.environ = env
+                watcher = ClassManager(instance=cls,
+                                       frequency=frequency,
+                                       env=env)
+                os.environ = cur_env
+
+        if watcher is None:
+            raise HydraConfigurationError(
+                    "invalid watcher configuration: {}"
+                    .format(watcher_cfg))
+        return (watcher, env)
+
+
+    def _init_scraper(self, *, scraper_name, watcher_env):
+        scraper_cfg = self.scraper_cfg_by_name.get(scraper_name, None)
+        if scraper_cfg is None:
+            raise HydraConfigurationError("no scraper named: {}"
+                                          .format(scraper_name))
+        scraper = None
+        builtin = scraper_cfg.get('builtin', None)
+        if builtin is not None:
+            # Built-in presumed already in-scope
+            cur_env = os.environ
+            os.environ = watcher_env
+            scraper = get_builtin_class(builtin)
+            os.environ = cur_env
+
+        if scraper is None:
+            # Custom class
+            module_path = scraper_cfg.get('module_path', None)
+            class_name = scraper_cfg.get('class_name', None)
+            if module_path and class_name:
+                mod = import_module(module_path)
+                cur_env = os.environ
+                os.environ = watcher_env
+                scraper = getattr(mod, class_name)()
+                os.environ = cur_env
+
+        if scraper is None:
+            raise HydraConfigurationError(
+                            "invalid scraper configuration: {}"
+                            .format(scraper_cfg))
+        return scraper
+
+    def init_from_config(self, *, cfg):
+
+        # See CONFIG_README.txt for configuration syntax.
+        # XXXrs - FUTURE - proper schema validation
+
+        self.logger.debug("start")
+        with open(cfg, 'r') as fd:
+            dikt = json.load(fd)
+
+        self.scraper_cfg_by_name = dikt.get('scrapers', {})
+        self.watcher_cfg_by_name = dikt.get('watchers', {})
+        if "MAIN" in self.watcher_cfg_by_name:
+            raise HydraConfigurationError("\"MAIN\" is a reserved watcher name")
+
+        hydra_list = dikt.get('hydra', None)
+        if not hydra_list:
+            errstr = "missing hydra config: {}".format(dikt)
+            raise HydraConfigurationError(errstr)
+
+        for item in dikt.get('hydra', []):
+            watcher_name = item.get('name', None)
+            if not watcher_name:
+                errstr = "hydra entry missing name: {}".format(item)
+                raise HydraConfigurationError(errstr)
+
+            self.logger.debug("watcher_name: {}".format(watcher_name))
+            if watcher_name == "MAIN":
+                watcher = self.watcher_by_name["MAIN"]
+                watcher_env = os.environ
+            else:
+                frequency = item.get('frequency', None)
+                watcher, watcher_env = self._init_watcher(
+                                                watcher_name = watcher_name,
+                                                frequency = frequency)
+
+            for scraper_name in item.get('scrapers', []):
+                scraper = self._init_scraper(scraper_name = scraper_name,
+                                             watcher_env = watcher_env)
+                watcher.add(scraper=scraper)
+
+            if watcher_name != "MAIN":
+                # We've already got one you see.  And it's veeery nice.
+                self.add(name=watcher_name, watcher=watcher)
+
+    def add(self, *, name, watcher):
+        self.logger.debug("name: {} watcher: {}".format(name, watcher))
+        if name in self.watcher_by_name:
+            raise ValueError("watcher with name {} already exists".format(name))
         watcher.init_locking(output_lock = self.output_lock,
                              shutdown_event = self.shutdown_event,
                              exit_event = self.exit_event)
-        self.watchers.append(watcher)
+        self.watcher_by_name[name] = watcher
 
     def done(self):
         # We're done when all non-periodic watchers are done.
-        # Periodic watchers (aka monitors) run indefinitely until told to stop.
+        # Periodic watchers (aka monitors) run indefinitely until they
+        # exit, or are signaled to stop.
         self.logger.debug("start")
-        for watcher in self.watchers:
-            self.logger.debug("checking watcher {}".format(watcher))
+        for name,watcher in self.watcher_by_name.items():
+            self.logger.debug("checking watcher {}:{}".format(name,watcher))
             if not watcher.frequency:
                 if watcher.is_alive():
                     self.logger.debug("return False")
@@ -426,8 +609,8 @@ class Hydra(object):
 
     def run(self, *, startup_timeout=60, shutdown_timeout=60):
         self.logger.debug("start")
-        for watcher in self.watchers:
-            self.logger.debug("start watcher {}".format(watcher))
+        for name,watcher in self.watcher_by_name.items():
+            self.logger.debug("start watcher {}:{}".format(name,watcher))
             watcher.start()
 
         start_by = time.time()+startup_timeout
@@ -439,7 +622,7 @@ class Hydra(object):
                 start_timeout = True
                 break
 
-            for watcher in self.watchers:
+            for name,watcher in self.watcher_by_name.items():
                 if not watcher.started:
                     self.logger.debug("all watchers NOT started")
                     time.sleep(0.1)
@@ -456,7 +639,7 @@ class Hydra(object):
             time.sleep(1)
 
         self.shutdown(shutdown_timeout=shutdown_timeout)
-        uelf.logger.debug("run returnstatus: {}".format(self.returnstatus))
+        self.logger.debug("run returnstatus: {}".format(self.returnstatus))
         return self.returnstatus
 
     def shutdown(self, *, shutdown_timeout=60):
@@ -467,38 +650,73 @@ class Hydra(object):
         self.logger.debug("set shutdown event")
         self.shutdown_event.set()
 
-        for watcher in self.watchers:
+        for name,watcher in self.watcher_by_name.items():
             time_left = give_up_at - time.time()
             if time_left < 1:
                 self.logger.error("shutdown timeout")
                 break
             watcher.join(timeout=time_left)
 
-# BUILT-IN WATCHER CLASSES ==========
+
+# BUILT-IN CLASSES ==========
+# Built-ins are here now, but in future they may need to move to
+# their own space(s).  If/when that happens, will need to import here.
+#
+# All watcher/scraper classes initialize from the environment.
+# Nothing is passed to __init__()
+
+def get_builtin_class(classname):
+    """
+    Factory returning a built-in class.
+    """
+    cls = globals()[classname]
+    return cls()
+
+
+# SCRAPER CLASSES ==========
+# None yet
+
+
+# WATCHER CLASSES ==========
+
 
 class SDKMetricsWatcher(WatcherClassBase):
     """
-    Monitor that initializes an SDK client and SDKMetricsDLoggerSource
-    and uses it to log cluster metrics.
+    Uses an SDK client and SDKMetricsDLoggerSource to log cluster metrics.
     """
-    def __init__(self, *, host, port, user, password, test_id,
-                          node = 0, group_by = None,
-                          metrics_group_pats = None,
-                          metrics_name_pats = None):
-        super().__init__(test_id=test_id)
+    def __init__(self):
+
+        cfg = EnvConfiguration({'TEST_ID': {'required': True},
+                                'HOST': {'required': True},
+                                'PORT': {'default': 442, 'type': EnvConfiguration.NUMBER},
+                                'USER': {'default': 'admin'},
+                                'PASS': {'default': 'admin'},
+                                'NODE': {'default': 0, 'type': EnvConfiguration.NUMBER},
+                                'METRICS_GROUP_PATS': {'required': False},
+                                'METRICS_NAME_PATS': {'required': False}})
+
+        super().__init__()
         self.logger = logging.getLogger(__name__)
         self.logger.info("STARTING")
-        self.xcalar_url = "https://{}:{}".format(host, port)
-        self.client_secrets = {'xiusername': user, 'xipassword': password}
+
+        self.host = cfg.get('HOST')
+        self.port = cfg.get('PORT')
+        self.user = cfg.get('USER')
+        self.passwd = cfg.get('PASS')
+        self.node = cfg.get('NODE')
+        self.group_pats = cfg.get('METRICS_GROUP_PATS', None)
+        self.name_pats = cfg.get('METRICS_NAME_PATS', None)
+
+        self.xcalar_url = "https://{}:{}".format(self.host, self.port)
+        self.client_secrets = {'xiusername': self.user, 'xipassword': self.passwd}
         self.xcalar_api = XcalarApi(url=self.xcalar_url, client_secrets=self.client_secrets)
         self.client = Client(url=self.xcalar_url, client_secrets=self.client_secrets)
 
-        self.monitor_name = "XcalarCluster_{}".format(host)
-        source = SDKMetricsDLoggerSource(name=self.monitor_name, client=self.client,
-                                         node=node, group_by=group_by)
+        self.monitor_name = "XcalarCluster_{}".format(self.host)
+        source = SDKMetricsDLoggerSource(name=self.monitor_name,
+                                         client=self.client,
+                                         node=self.node)
         self.data_logger.register_source(source=source)
-        self.group_pats = metrics_group_pats
-        self.name_pats = metrics_name_pats
 
     def _match_pats(self, *, s, pats):
         for pat in pats:
@@ -527,30 +745,32 @@ class SDKMetricsWatcher(WatcherClassBase):
 
 if __name__ == '__main__':
 
-    # XXXrs - FUTURE - This is a "toy" command interface now.
-    #                  Needs fleshing out.
-
     logger = logging.getLogger(__name__)
-
     hydra = None
-    def shutdownHydra(signum, frame):
+
+    def shutdown_hydra(signum, frame):
+        """
+        Arrange for orderly shutdown on signal.
+        """
         if hydra:
             hydra.do_shutdown = True
 
-    signal.signal(signal.SIGINT, shutdownHydra)
-    signal.signal(signal.SIGHUP, shutdownHydra)
-    signal.signal(signal.SIGTERM, shutdownHydra)
+    signal.signal(signal.SIGINT, shutdown_hydra)
+    signal.signal(signal.SIGHUP, shutdown_hydra)
+    signal.signal(signal.SIGTERM, shutdown_hydra)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", dest='commands', action='append',
-                        help="cmdline[:frequency] command and optional frequency."
-                             " May be called multiple times to run multiple sub-commands.")
-    parser.add_argument("-i", dest='test_id', help="Test identifier")
+    parser.add_argument("--cmd", help="command-line for primary process", required=False)
+    parser.add_argument("--cfg", help="path to hydra configuration file", required=False)
+    parser.add_argument("--test_id", help="test identifier", required=False)
     args = parser.parse_args()
+
+    if not args.cmd and not args.cfg:
+        raise ValueError("at least one of --cmd or --cfg must be supplied")
 
     test_id = args.test_id
 
-    # If test_id not supplied, manufacture one from
+    # If test_id not supplied, manufacture one from (presumed)
     # jenkins job name and build number environment variables.
     if not test_id:
         jenkins_job = os.environ.get('JOB_NAME', None)
@@ -560,14 +780,5 @@ if __name__ == '__main__':
     if not test_id:
         test_id = 'NotSupplied'
 
-    hydra = Hydra(test_id=test_id)
-    if args.commands:
-        for cmd in args.commands:
-            fields = cmd.split(':')
-            if len(fields) > 1:
-                sw = SubprocessWatcher(cmdline=fields[0], frequency=int(fields[1]))
-            else:
-                sw = SubprocessWatcher(cmdline=fields[0])
-            hydra.add(watcher=sw)
-
+    hydra = Hydra(test_id=test_id, cmd=args.cmd, cfg=args.cfg)
     hydra.run()

@@ -1,0 +1,14 @@
+{
+    "watchers": {
+        "edison_metrics": {
+            "builtin": "SDKMetricsWatcher",
+            "environment": [
+                {"target": "HOST", "value": "edison3.int.xcalar.com"},
+                {"target": "PORT", "value": "8443"},
+                {"target": "USER", "value": "admin"},
+                {"target": "PASS", "value": "admin"}
+            ]
+        }
+    },
+    "hydra": [{"name": "edison_metrics", "frequency": 10}]
+}
