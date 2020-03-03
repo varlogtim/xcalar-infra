@@ -34,7 +34,8 @@ from xcalar.external.client import Client
 os.environ["XLR_PYSDK_VERIFY_SSL_CERT"] = "false"
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG,
+cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
+logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     format="'%(asctime)s - %(levelname)s - %(threadName)s - %(funcName)s - %(message)s",
                     handlers=[logging.StreamHandler(sys.stdout)])
 
