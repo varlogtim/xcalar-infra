@@ -247,7 +247,7 @@ setup_instancestore () {
     fi
     # Fix version of ephemeral-disk we install. Really, just a workaround
     # to something caching the package, but we really want to pin this by branch/build anyway.
-    yum install -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-21.noarch.rpm
+    yum install -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-23.noarch.rpm
 
     sed -i '/LV_SWAP_SIZE/d' /etc/sysconfig/ephemeral-disk
     echo "LV_SWAP_SIZE=MEMSIZE2X" >> /etc/sysconfig/ephemeral-disk

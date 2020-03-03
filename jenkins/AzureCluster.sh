@@ -58,6 +58,8 @@ if ! az_deploy -g $GROUP -l $LOCATION -i "$INSTALLER_URL" --count $NUM_NODES \
     exit 1
 fi
 
+az_privdns_update_ssh_hosts || true
+
 URL="https://${APP}.${LOCATION}.cloudapp.azure.com"
 
 echo "Login at $URL using User: ${ADMIN_USERNAME}, Password: ${ADMIN_PASSWORD}"
