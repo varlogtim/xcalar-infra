@@ -18,20 +18,31 @@ if [ "${INSTALLER_URL:0:1}" == / ]; then
 fi
 echo "Installer: $INSTALLER_URL"
 
+sanitize() {
+    tr '[:upper:]' '[:lower:]' | tr '_./ ' '-' | sed -r 's/([-]+)/-/g'
+}
+
 if [ -z "$APP" ]; then
-    if [ -n "$BUILD_USER_ID" ]; then
-        APP="xdp-${BUILD_USER_ID}-${BUILD_NUMBER}"
+    if [ -n "$GROUP" ]; then
+        APP="$GROUP"
     else
-        APP="xdp-${JOB_NAME}-${BUILD_NUMBER}"
+        if [ -n "$BUILD_USER_ID" ]; then
+            APP="xdp-${BUILD_USER_ID}-${BUILD_NUMBER}"
+        else
+            APP="xdp-${JOB_NAME}-${BUILD_NUMBER}"
+        fi
     fi
 fi
 
-APP="$(echo $APP | tr A-Z a-z | tr ' ' '-')"
-GROUP=${GROUP:-${APP}-rg}
+APP="$(echo $APP | sanitize)"
+APP="${APP#xdp-}"
+APP="xdp-${APP}"
 
-GROUP="${GROUP#xdp-}"
+GROUP="${GROUP:-$APP}"
 GROUP="${GROUP%-rg}"
+GROUP="${GROUP#xdp-}"
 GROUP="xdp-${GROUP}-rg"
+
 set -e
 
 LOCATION=${LOCATION:-westus2}
