@@ -8,17 +8,50 @@ MOUNT=/ephemeral/data
 SWAPSIZE=$(free -m | awk '/Mem:/{print $2}')
 LEVEL=0
 SWAPFILE=${MOUNT}/swapfile
-DEVICES=($(ls /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_* /dev/disk/azure/resource 2>/dev/null | grep -v -- -part))
+
+cloudid() {
+    local dmi_id='/sys/class/dmi/id/sys_vendor'
+    local vendor cloud
+
+    if [ -e "$dmi_id" ]; then
+        read -r vendor < "$dmi_id"
+        case "$vendor" in
+            Microsoft\ Corporation) cloud=azure ;;
+            Amazon\ EC2) cloud=aws ;;
+            Google) cloud=gce ;;
+            VMWare*) cloud=vmware ;;
+            oVirt*) cloud=ovirt ;;
+        esac
+    fi
+    echo "$cloud"
+    test -n "$cloud"
+}
+
+cloud="$(cloudid)"
+case "$cloud" in
+    azure)
+        DEVICES=($(ls /dev/disk/by-id/nvme-Microsoft_NVMe_Direct_Disk* 2> /dev/null | grep -v -- -part))
+        if [ "${#DEVICES[@]}" -eq 0 ]; then
+            DEVICES=($(ls /dev/disk/azure/resource 2> /dev/null))
+        fi
+        ;;
+    aws)
+        DEVICES=($(ls /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_* 2> /dev/null | grep -v -- -part))
+        ;;
+esac
+
 FSTYPE=ext4
 MOUNT_OPTIONS='defaults,discard,nobarrier'
+MD_CONFIG=/etc/mdadm.conf
 
 usage() {
-    cat <<EOF >&2
+    cat << EOF >&2
     usage: $0 [-m|--mount directory (default: $MOUNT)]
               [-s|--swapsize swapfile size in MiB (default $SWAPSIZE), or 0 to disable]
               [-l|--level raid-level (default: $LEVEL)]
               [-t|--type filesystem type (default: $FSTYPE)]
               [-o|--options mount options (default: $MOUNT_OPTIONS)]
+              [-c|--config mdadm config (default: $MD_CONFIG)]
               -- DEVICES ... (default: $DEVICES)
 
     Formats the given devices and mounts them. This script is intended to be run on
@@ -53,6 +86,10 @@ while [ $# -gt 0 ]; do
             ;;
         -o | --options)
             MOUNT_OPTIONS="$1"
+            shift
+            ;;
+        -c | --config)
+            MD_CONFIG="$1"
             shift
             ;;
         --) break ;;
@@ -111,13 +148,16 @@ fi
 until test -b $PART; do
     sleep 2
 done
-sed -i '/^# Start of mkraid configuration/,/^# End of mkraid configuration/{d}' "$MD_CONFIG"
+if test -e "$MD_CONFIG"; then
+    sed -i '/^# Start of mkraid configuration/,/^# End of mkraid configuration/{d}' "$MD_CONFIG"
+else
+    touch "$MD_CONFIG"
+fi
 (
     echo "# Start of mkraid configuration"
-    mdadm --detail --scan
+    mdadm --detail --scan --verbose
     echo "# End of mkraid configuration"
 ) | tee -a "$MD_CONFIG"
-
 
 #
 if [ "$FSTYPE" = ext4 ]; then
@@ -129,9 +169,9 @@ fi
 UUID=$(blkid -s UUID $PART -o value)
 LABEL=$(blkid -s LABEL $PART -o value)
 
-mkdir -p $MOUNT &&
-    mount -t $FSTYPE $PART $MOUNT &&
-    echo "UUID=$UUID    $MOUNT      $FSTYPE     ${MOUNT_OPTIONS:-defaults},nofail     0   0 # Added by mkraid"
+mkdir -p $MOUNT \
+    && mount -t $FSTYPE $PART $MOUNT \
+    && echo "UUID=$UUID    $MOUNT      $FSTYPE     ${MOUNT_OPTIONS:-defaults},nofail     0   0 # Added by mkraid"
 if [ $? -ne 0 ]; then
     echo >&2 "ERROR: Unexpected error"
     exit 1
@@ -150,8 +190,9 @@ if [ -n "$SWAPSIZE" ] && [ "$SWAPSIZE" != 0 ]; then
             exit 0
             ;;
     esac
-    chmod 0600 $SWAPFILE &&
-        mkswap $SWAPFILE &&
-        swapon $SWAPFILE &&
-        echo "$SWAPFILE     none        swap    sw,nofail           0   0 # Added by mkraid"
+    chmod 0600 $SWAPFILE \
+        && mkswap $SWAPFILE \
+        && swapon $SWAPFILE \
+        && echo "$SWAPFILE     none        swap    sw,nofail           0   0 # Added by mkraid"
 fi
+dracut --mdadmconf --verbose -f

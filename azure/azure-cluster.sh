@@ -8,6 +8,7 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
+
 #INSTALLER="${INSTALLER:-/netstore/qa/Downloads/byJob/BuildTrunk/xcalar-latest-installer-prod}"
 COUNT=1
 INSTANCE_TYPE=''
@@ -117,4 +118,9 @@ for op in validate create; do
         scaleNumber=$COUNT \
         appName=$CLUSTER ${INSTANCE_TYPE:+vmSize=$INSTANCE_TYPE}
 done
+
 $XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"
+
+source $XLRINFRADIR/azure/azure-sh-lib
+az_privdns_update_ssh_hosts || true
+
