@@ -27,7 +27,7 @@ if [ -z "$APP" ]; then
 fi
 
 APP="$(echo $APP | tr A-Z a-z | tr ' ' '-')"
-GROUP=${APP}-rg
+GROUP=${GROUP:-${APP}-rg}
 
 set -e
 
