@@ -24,6 +24,6 @@ location=$(jq -r .properties.outputs.location.value <<< $DEPLOY_JSON)
 #domainNameLabel=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.domainNameLabel.value' --output tsv`
 #location=`az group deployment show --resource-group "$CLUSTER" --name "$DEPLOY" --output json --query 'properties.outputs.location.value' --output tsv`
 for ii in `seq 0 $(( $count - 1 ))`; do
-    echo "${domainNameLabel}-${ii}.${location}.cloudapp.azure.com"
+    echo "${CLUSTER}-vm${ii}.azure"
 done
 
