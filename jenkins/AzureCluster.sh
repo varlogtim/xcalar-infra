@@ -29,6 +29,9 @@ fi
 APP="$(echo $APP | tr A-Z a-z | tr ' ' '-')"
 GROUP=${GROUP:-${APP}-rg}
 
+GROUP="${GROUP#xdp-}"
+GROUP="${GROUP%-rg}"
+GROUP="xdp-${GROUP}-rg"
 set -e
 
 LOCATION=${LOCATION:-westus2}
