@@ -256,20 +256,19 @@ class PopenProcessManager(ProcessManager):
     """
     A ProcessManager controlling a sub-process started with subprocess.Popen
     """
-    def __init__(self, *, cmdline, env, frequency):
+    def __init__(self, *, cmdargs, env, frequency):
         super().__init__(frequency=frequency)
-        self.cmdline = cmdline
+        self.cmdargs = cmdargs
         self.subprocess = None
         self.env = env
 
     def sub_process_start(self):
-        self.logger.debug("launching command {}".format(self.cmdline))
-        args = shlex.split(self.cmdline)
-        p = subprocess.Popen(args, stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT,
-                                   env=self.env,
-                                   universal_newlines=True,
-                                   bufsize=0)
+        self.logger.debug("launching command {}".format(self.cmdargs))
+        p = subprocess.Popen(self.cmdargs, stdout=subprocess.PIPE,
+                                           stderr=subprocess.STDOUT,
+                                           env=self.env,
+                                           universal_newlines=True,
+                                           bufsize=0)
         self.subprocess = p
         return p.stdout
 
@@ -403,7 +402,7 @@ class HydraConfigurationError(Exception):
 
 
 class Hydra(object):
-    def __init__(self, *, test_id, cmd=None, cfg=None):
+    def __init__(self, *, test_id, cmdargs=None, cfg=None):
         self.logger = logging.getLogger(__name__)
         self.logger.debug("start")
 
@@ -423,8 +422,8 @@ class Hydra(object):
         self.do_shutdown = False
         self.returnstatus = 0
 
-        if cmd:
-            watcher=PopenProcessManager(cmdline=cmd, env=os.environ, frequency=None)
+        if cmdargs:
+            watcher=PopenProcessManager(cmdargs=cmdargs, env=os.environ, frequency=None)
             # Stash this watcher under the reserved name "MAIN" so we can
             # configure scrapers for it in the configuration file.
             self.add(name="MAIN", watcher=watcher)
@@ -479,7 +478,8 @@ class Hydra(object):
             # Command-line
             cmdline = watcher_cfg.get('cmdline', None)
             if cmdline is not None:
-                watcher = PopenProcessManager(cmdline=cmdline,
+                cmdargs = shlex.split(cmdline)
+                watcher = PopenProcessManager(cmdargs=cmdargs,
                                               frequency=frequency,
                                               env=env)
 
@@ -761,13 +761,10 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, shutdown_hydra)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cmd", help="command-line for primary process", required=False)
     parser.add_argument("--cfg", help="path to hydra configuration file", required=False)
     parser.add_argument("--test_id", help="test identifier", required=False)
+    parser.add_argument("cmdargs", help="command-line for primary process", nargs="*")
     args = parser.parse_args()
-
-    if not args.cmd and not args.cfg:
-        raise ValueError("at least one of --cmd or --cfg must be supplied")
 
     test_id = args.test_id
 
@@ -781,4 +778,4 @@ if __name__ == '__main__':
     if not test_id:
         test_id = 'NotSupplied'
 
-    sys.exit(Hydra(test_id=test_id, cmd=args.cmd, cfg=args.cfg).run())
+    sys.exit(Hydra(test_id=test_id, cmdargs=args.cmdargs, cfg=args.cfg).run())
