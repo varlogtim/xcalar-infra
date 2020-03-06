@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# shellcheck disable=SC2086,SC1090,SC2162,SC2155
+# shellcheck disable=SC2086,SC1090,SC2162,SC2155,SC2191
 #
 # Handy Azure aliases/shortcuts. Source this file in your ~/.bash_aliases
 # ## ~/.bash_aliases
@@ -39,6 +39,14 @@ az_login() {
     az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID && \
     az account set --subscription $AZURE_SUBSCRIPTION_ID
     )
+}
+
+az_subscription() {
+    if [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
+        echo "$AZURE_SUBSCRIPTION_ID"
+    else
+        az account show --query 'id' -otsv
+    fi
 }
 
 az_mktemp() {
@@ -310,7 +318,7 @@ az_vms() {
 }
 
 az_vm_running() {
-    local subs="$(az account list -otsv 2> /dev/null | awk '{print $2}')"
+    local subs="$(az_subscription)"
     az_vm_details | grep running #| tr -d "'" | awk '{printf("/subscriptions/'${subs}'/resourceGroups/%s/providers/Microsoft.Compute/virtualMachines/%s\n",tolower($1),$2)}'
 }
 
@@ -438,7 +446,7 @@ az_rg_ips() {
 }
 
 az_rg_url() {
-    local readonly group_info
+    local group_info
     if ! group_info=($(az group show -g $1 -otsv)) && [ -n "${group_info[0]}" ]; then
         return 1
     fi
@@ -579,7 +587,6 @@ az_deploy() {
     local now=$(date +%Y%m%d%H%M%S)
     local -a extra_params=()
     local email="${BUILD_USER_EMAIL:-$(git config user.email)}"
-    local retry ip_address
     local location=${LOCATION}
     local name group count=1 size=Standard_D8_v3 template_arg storageAccount_arg
     local template=$AZ_DEFAULT_TEMPLATE
@@ -804,7 +811,7 @@ az_deploy() {
     local OUTPUT=${XLRINFRADIR}/output
     rm -rf "${OUTPUT:?}"/*
     mkdir -p $OUTPUT
-    az group deployment validate -g $group $template_arg \
+    az group deployment validate -j -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
         _artifactsLocation="${_artifactsLocation}" vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" > /dev/null
@@ -820,7 +827,7 @@ az_deploy() {
     say " and your deployment here: $(az_rg_deployment_url $group)"
     say
 
-    az group deployment create --mode $mode --name deploy-${now} -g $group $template_arg \
+    az group deployment create -j --mode $mode --name deploy-${now} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
         _artifactsLocation="${_artifactsLocation}" "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
@@ -1020,10 +1027,16 @@ az_privdns_update_ssh_hosts() {
     az_privdns_hosts_list "$dnsname" "$subnet"
     az_vmss_hosts_list "$dnsname" "$subnet"
     ) > $tmp || return 1
-    say "Azure DNS has $(wc -l $tmp) entries."
+    local -i nlines
+    nlines=$(wc -l < $tmp)
+    say "Azure DNS has $nlines entries."
+    if [ $nlines -lt 10 ]; then
+        say "That's too few. Bailing"
+        return 1
+    fi
     for ii in "$@"; do
         _scp $tmp ${ii}:/tmp/htmp-$$ \
-        && _ssh $ii "if ! diff -q /tmp/htmp-$$ /etc/azure-fqdn.hosts >/dev/null; then sudo mv -v /tmp/htmp-$$ /etc/azure-fqdn.hosts && echo \"Restarting dnsmasq on $ii\" && sudo killall -HUP dnsmasq; else echo \"No change\"; fi" \
+        && _ssh $ii "if ! diff -q /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts >/dev/null; then sudo mv -v /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts && echo \"Replaced azure-fqdn.hosts on $ii\"; else echo \"No change\"; fi" \
         || return 1
     done
     mv -f $tmp /tmp/azure-fqdn-$(id -u).hosts
