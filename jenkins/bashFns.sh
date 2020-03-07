@@ -40,13 +40,13 @@ cloudXccli() {
 }
 
 stopXcalar() {
-    $XLRINFRADIR/gce/gce-cluster-ssh.sh $cluster "sudo /opt/xcalar/bin/xcalarctl stop-supervisor"
+    $XLRINFRADIR/gce/gce-cluster-ssh.sh $cluster "sudo systemctl stop xcalar.service"
 }
 
 restartXcalar() {
     set +e
     stopXcalar
-    $XLRINFRADIR/gce/gce-cluster-ssh.sh $cluster "sudo service xcalar start"
+    $XLRINFRADIR/gce/gce-cluster-ssh.sh $cluster "sudo systemctl start xcalar.service"
     for ii in $(seq 1 $NUM_INSTANCES ) ; do
         host="${cluster}-${ii}"
         gcloud compute ssh $host --zone us-central1-f -- "sudo /opt/xcalar/bin/xcalarctl status" 2>&1 | grep -q  "Usrnodes started"

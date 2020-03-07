@@ -8,6 +8,11 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
+export PATH=$XLRINFRADIR/bin:$PATH
+
+source infra-sh-lib
+source azure-sh-lib
+
 
 #INSTALLER="${INSTALLER:-/netstore/qa/Downloads/byJob/BuildTrunk/xcalar-latest-installer-prod}"
 COUNT=1
@@ -25,22 +30,32 @@ S3_BOOTSTRAP_KEY="bysha1/$BOOTSTRAP_SHA/`basename $BOOTSTRAP`"
 S3_BOOTSTRAP="s3://$BUCKET/$S3_BOOTSTRAP_KEY"
 PARAMETERS_DEFAULTS="${PARAMETERS_DEFAULTS:-$XLRINFRADIR/azure/xdp-standard/defaults.json}"
 BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://s3-us-west-2.amazonaws.com/$BUCKET/$S3_BOOTSTRAP_KEY}"
-
+#IMAGEID="xdp-sol11-gssim1-rg/xcalar-base-el7-01"
 # Netstore in xcalardev-net vNET. Avoid having to query DNS for this on boot.
 #SHARE_NAME="10.11.1.5:/data/nfs"
 
-usage () {
-    cat << EOF
-    usage: $0 [-i installer (default: $INSTALLER)] [-t instance-type (default: $INSTANCE_TYPE)] [-c count (default: $COUNT)] [-n clusterName (default: $CLUSTER)]
-            [-l location (default: $LOCATION)] [-k licenseKey] [-s server:/share]
-
-EOF
-    exit 1
+image_id() {
+    local rg="${1%/*}"
+    local img="${1#*/}"
+    local subid
+    if ! subid="$(az_subscription)"; then
+        die "Failed to get subscription"
+    fi
+    echo "/subscriptions/${subid}/resourceGroups/${rg}/providers/Microsoft.Compute/images/${img}"
 }
 
-while getopts "hi:c:t:n:l:k:s:p:" opt "$@"; do
+usage () {
+    cat << EOF
+    usage: $0 -i installer -t instance-type [-c count (default: $COUNT)] [-n clusterName (default: $CLUSTER)]
+            [-l location (default: $LOCATION)] [-k licenseKey] [-s server:/share] [-x template.json (default: $TEMPLATE)]
+            [-m imageid]
+
+EOF
+}
+
+while getopts "hi:c:t:n:l:k:s:p:x:m:" opt "$@"; do
     case "$opt" in
-        h) usage;;
+        h) usage; exit 0;;
         i) INSTALLER="$OPTARG";;
         c) COUNT="$OPTARG";;
         t) INSTANCE_TYPE="$OPTARG";;
@@ -49,8 +64,10 @@ while getopts "hi:c:t:n:l:k:s:p:" opt "$@"; do
         k) LICENSE="$OPTARG";;
         s) SHARE_NAME="$OPTARG";;
         p) PARAMETERS_DEFAULTS=$OPTARG;;
-        --) break;;
-        *) echo >&2 "Unknown option $opt"; usage;;
+        x) TEMPLATE="$OPTARG";;
+        m) IMAGEID="$OPTARG";;
+        \?) echo >&2 "Invalid option. $OPTARG"; usage >&2; exit 1;;
+        :) echo >&2 "Invalid option. $OPTARG requires argument."; usage >&2; exit 1;;
     esac
 done
 
@@ -104,23 +121,21 @@ for op in validate create; do
     if [ "$op" = create ]; then
         deploy_name="--name ${DEPLOY}"
     fi
-    az group deployment $op --resource-group "$CLUSTER" $deploy_name --template-file "$TEMPLATE" \
+    az group deployment $op -j --resource-group "$CLUSTER" $deploy_name --template-file "$TEMPLATE" \
         --parameters \
         @${PARAMETERS_DEFAULTS} \
-        ${INSTALLER_URL+installerUrl="$INSTALLER_URL"} \
-        ${INSTALLER_SAS_TOKEN+installerUrlSasToken="$INSTALLER_SAS_TOKEN"} \
-        ${LICENSE+licenseKey="$LICENSE"} \
+        ${INSTALLER_URL:+installerUrl="$INSTALLER_URL"} \
+        ${INSTALLER_SAS_TOKEN:+installerUrlSasToken="$INSTALLER_SAS_TOKEN"} \
+        ${LICENSE:+licenseKey="$LICENSE"} \
         domainNameLabel="$CLUSTER" \
         customScriptName="$CUSTOM_SCRIPT_NAME" \
         bootstrapUrl="$BOOTSTRAP_URL" \
         adminEmail=$EMAIL \
-        ${SHARE_NAME+shareName="$SHARE_NAME"} \
+        ${SHARE_NAME:+shareName="$SHARE_NAME"} \
         scaleNumber=$COUNT \
-        appName=$CLUSTER ${INSTANCE_TYPE:+vmSize=$INSTANCE_TYPE}
+        appName=$CLUSTER ${INSTANCE_TYPE:+vmSize=$INSTANCE_TYPE} ${IMAGEID:+imageid=$(image_id $IMAGEID)}
 done
 
-$XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"
-
-source $XLRINFRADIR/azure/azure-sh-lib
 az_privdns_update_ssh_hosts || true
 
+$XLRINFRADIR/azure/azure-cluster-info.sh "$CLUSTER"

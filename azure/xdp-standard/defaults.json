@@ -39,7 +39,7 @@
             "value": "StandardSSD_LRS"
         },
         "publicIpAddressNewOrExisting": {
-            "value": "new"
+            "value": "none"
         },
         "vmSize": {
             "value": "Standard_E8_v3"
@@ -87,9 +87,6 @@
         },
         "osDiskSize": {
           "value": 1023
-        },
-        "swapDiskSize": {
-          "value": 255
         }
     }
 }

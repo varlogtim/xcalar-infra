@@ -24,6 +24,10 @@ xcalar_version() {
 }
 
 
+cat >/etc/hosts<<EOF
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+EOF
 
 # API Services
 INSTALLER_SERVER="https://zqdkg79rbi.execute-api.us-west-2.amazonaws.com/stable/installer"
@@ -192,13 +196,13 @@ mount_device () {
             # Must use -F[orce] because the partition may have already existed with a valid
             # file system. sgdisk doesn't earase the partitioning information, unlike parted/fdisk.
             # lazy_itable_init=0,lazy_journal_init=0 take too long on Azure
-            time mkfs.ext4 -F -m 0 -E nodiscard $PARTIN && break
+            time mkfs.ext4 -F -m 0 -E discard $PARTIN && break
         fi
     done
     test $? -eq 0 || return 1
     local UUID="$(blkid -s UUID $PARTIN -o value)"
     clean_fstab $UUID && \
-    clean_fstab "$MOUNT " && \
+    clean_fstab "$MOUNT" && \
     mkdir -p $MOUNT && \
     if [ "$FSTYPE" = xfs ]; then
         echo "UUID=$UUID   $MOUNT      xfs         defaults,discard,relatime,nobarrier,nofail  0   0" | tee -a /etc/fstab
@@ -315,12 +319,6 @@ setup_swap() {
     sleep 1
     swapon -a
 }
-
-# Don't swap to HDD
-#if test -b /dev/sdc; then
-#    setup_swap /dev/sdc
-#fi
-
 
 # The root parition is not resized by default on Azure. Handy symlink provided
 # in /dev/disk/azure/root (eg, -> /dev/sda) for where we take the 2nd partition
@@ -456,6 +454,15 @@ for DEV in /dev/sdc /dev/sdd; do
     fi
 done
 
+### Install Xcalar
+if [ -s "$INSTALLER" ]; then
+    if ! bash -x "$INSTALLER" --nostart; then
+        echo >&2 "ERROR: Failed to run installer"
+        serveError "Failed to run installer" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
+        exit 1
+    fi
+fi
+
 # Node 0 will host NFS shared storage for the cluster
 if [ "$MOUNT_TYPE" = nfs ]; then
     if [ "$HOSTNAME" = "$NFSHOST" ]; then
@@ -492,15 +499,6 @@ if [ "$MOUNT_TYPE" = nfs ]; then
     fi
 fi
 
-
-### Install Xcalar
-if [ -s "$INSTALLER" ]; then
-    if ! bash -x "$INSTALLER" --stop --nostart --startonboot; then
-        echo >&2 "ERROR: Failed to run installer"
-        serveError "Failed to run installer" "Please contact Xcalar support at <a href=\"mailto:support@xcalar.com\">support@xcalar.com</a>"
-        exit 1
-    fi
-fi
 
 # az hangs in telemetry.py occasionally casuing the whole cluster bootup sequence to hang
 az_disable_telemetry() {
@@ -604,7 +602,7 @@ fi
 DOMAIN="$(dnsdomainname)"
 MEMBERS=()
 for ii in $(seq 0 $((COUNT-1))); do
-    MEMBERS+=("${VMBASE}${ii}")
+    MEMBERS+=("${VMBASE}${ii}.${DOMAIN}")
 done
 
 # Register domain
@@ -774,7 +772,7 @@ while :; do
     echo >&2 "Sleeping ... waiting for nodes"
     sleep 5
 done
-chown -R xcalar:xcalar "$XCE_HOME"
+chown xcalar:xcalar "$XCE_HOME"
 
 # Populate the local host keys with those of the members so we can SSH into them without
 # the hostkey check warning
@@ -794,9 +792,6 @@ if ! mount_netstore_nfs; then
     mount_netstore
 fi
 
-systemctl enable xcalar
-systemctl start xcalar
-
 # Add in the default admin user into Xcalar
 if [ -n "$ADMIN_USERNAME" ]; then
     mkdir -p $XCE_HOME/config
@@ -814,12 +809,28 @@ else
     echo "ADMIN_USERNAME is not specified"
 fi
 
+DROPIN=/etc/systemd/system/xcalar.service.d
+mkdir -p $DROPIN
+cat > ${DROPIN}/ephemeral.conf <<EOF
+[Unit]
+After=ephemeral-disk.service
+EOF
+
+systemctl daemon-reload
+if systemctl cat xcalar.service | grep -q xcalar-caddy.service; then
+    systemctl enable --now xcalar.service
+else
+    systemctl enable --now xcalar-usrnode.service
+fi
+
+rc=$?
+
 if [ -n "$DEPLOYED_URL" ] && [ -n "$WEBHOOK" ]; then
     # Inform license server about URL
     jsonData="{ \"key\": \"$LICENSE\", \"url\": \"$DEPLOYED_URL\", \"marketplaceName\": \"Internal Deployment\" }"
     safe_curl -H "Content-Type: application/json" -X POST -d "$jsonData" "$WEBHOOK"
     echo
 fi
-echo "DONE"
-exit
+echo "DONE ($rc)"
+exit $rc
 __TARBALL__
