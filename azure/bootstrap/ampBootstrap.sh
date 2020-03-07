@@ -155,7 +155,7 @@ mount_device () {
     test $? -eq 0 || return 1
     local UUID="$(blkid -s UUID $PARTIN -o value)"
     clean_fstab $UUID && \
-    clean_fstab "$MOUNT"  && \
+    clean_fstab "$MOUNT " && \
     mkdir -p $MOUNT && \
     if [ "$FSTYPE" = xfs ]; then
         echo "UUID=$UUID   $MOUNT      xfs         defaults,discard,relatime,nobarrier,nofail  0   0" | tee -a /etc/fstab

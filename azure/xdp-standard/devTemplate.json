@@ -155,11 +155,10 @@
     },
     "publicIpAddressNewOrExisting": {
       "type": "string",
-      "defaultValue": "none",
+      "defaultValue": "new",
       "allowedValues": [
         "new",
-        "existing",
-        "none"
+        "existing"
       ],
       "metadata": {
         "description": "New or existing IP address"
@@ -281,13 +280,6 @@
         "description": "Enable storing boot diagnostics"
       }
     },
-    "providePublicIp": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "Provision public ips for the vms"
-      }
-    },
     "osDiskSize": {
       "type": "int",
       "defaultValue": 127,
@@ -305,8 +297,8 @@
     },
     "swapDiskSize": {
       "type": "int",
-      "defaultValue": 0,
-      "minValue": 0,
+      "defaultValue": 127,
+      "minValue": 127,
       "metadata": {
         "description": "Size of swap disk"
       }
@@ -314,13 +306,6 @@
     "cluster": {
       "type": "string",
       "defaultValue": "[replace(resourceGroup().name,'-rg','')]"
-    },
-    "imageid": {
-        "type": "string",
-        "defaultValue": "",
-        "metadata": {
-            "description": "Image to use. Must be specified as a full image id (eg, /subscription/subid/.../image)"
-        }
     }
   },
   "variables": {
@@ -335,8 +320,7 @@
     "subnetRef": "[concat(variables('vnetID'),'/subnets/', parameters('subnetName'))]",
     "publicIPAddressLookup": {
       "new": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]",
-      "existing": "[resourceId(parameters('publicIpAddressRG'),'Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]",
-      "none": "[json('null')]"
+      "existing": "[resourceId(parameters('publicIpAddressRG'),'Microsoft.Network/publicIPAddresses', parameters('publicIpAddressName'))]"
     },
     "publicIPAddress": {
       "id": "[variables('publicIPAddressLookup')[parameters('publicIpAddressNewOrExisting')]]"
@@ -437,23 +421,6 @@
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
     "imageSKU": "7.7",
-    "cleanimage": {
-            "publisher": "[variables('imagePublisher')]",
-            "offer": "[variables('imageOffer')]",
-            "sku": "[variables('imageSKU')]",
-            "version": "latest"
-    },
-    "imageref": {
-        "id": "[parameters('imageid')]"
-    },
-    "swapDiskDef": [{
-        "diskSizeGB": "[parameters('swapDiskSize')]",
-        "lun": 0,
-        "createOption": "Empty",
-        "managedDisk": {
-        "storageAccountType": "[parameters('vmDiskType')]"
-        }
-    }],
     "customerUploads": "[concat('customer-', toLower(resourceGroup().name))]",
     "linuxConfiguration": {
       "sshPublicKey": {
@@ -492,7 +459,6 @@
     },
     {
       "apiVersion": "2018-08-01",
-      "condition": "[parameters('providePublicIp')]",
       "type": "Microsoft.Network/publicIPAddresses",
       "name": "[concat(parameters('publicIpAddressName'), copyIndex())]",
       "location": "[parameters('location')]",
@@ -643,8 +609,8 @@
         "adminEmail": "[parameters('adminEmail')]"
       },
       "dependsOn": [
-        "[parameters('virtualNetworkName')]",
-        "[if(parameters('providePublicIp'), resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'), copyIndex())),parameters('virtualNetworkName'))]"
+        "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'), copyIndex()))]",
+        "[parameters('virtualNetworkName')]"
       ],
       "properties": {
         "primary": true,
@@ -654,7 +620,9 @@
             "name": "ipconfig1",
             "properties": {
               "privateIPAllocationMethod": "Dynamic",
-//              "publicIPAddress": "[if(parameters('providePublicIp'), json('{ "id": "[resourceId(''Microsoft.Network/publicIPAddresses'', concat(parameters(''publicIpAddressName''), copyIndex()))]" }'), json('null'))]",
+              "publicIPAddress": {
+                  "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'), copyIndex()))]"
+              },
               "subnet": {
                 "id": "[variables('subnetRef')]"
               }
@@ -695,7 +663,12 @@
           "linuxConfiguration": "[variables('linuxConfiguration')[parameters('authenticationType')]]"
         },
         "storageProfile": {
-          "imageReference": "[if(equals(parameters('imageid'),''),variables('cleanimage'),variables('imageref'))]",
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('imageSKU')]",
+            "version": "latest"
+          },
           "osDisk": {
             "name": "[concat(variables('vmName'), copyIndex(), '-osdisk')]",
             "createOption": "FromImage",
@@ -706,7 +679,16 @@
               "storageAccountType": "[if(parameters('osDiskEphemeral'), 'Standard_LRS', parameters('vmDiskType'))]"
             }
           },
-          "dataDisks": "[if(greater(parameters('swapDiskSize'), 0), variables('swapDiskDef'), json('null'))]"
+          "dataDisks": [
+            {
+              "diskSizeGB": "[parameters('swapDiskSize')]",
+              "lun": 0,
+              "createOption": "Empty",
+              "managedDisk": {
+                "storageAccountType": "[parameters('vmDiskType')]"
+              }
+            }
+          ]
         },
         "networkProfile": {
           "networkInterfaces": [
@@ -769,6 +751,10 @@
     "location": {
       "type": "string",
       "value": "[resourceGroup().location]"
+    },
+    "fqdn": {
+      "value": "[reference(concat(parameters('publicIpAddressName'), '0')).dnsSettings.fqdn]",
+      "type": "string"
     }
   }
 }
