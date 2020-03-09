@@ -194,18 +194,26 @@ restartXcalar() {
         exit 1
     fi
     local cluster="$1"
+    local clusterHosts=($(getNodes "$cluster"))
     set +e
     stopXcalar "$cluster"
     clusterSsh $cluster "sudo systemctl status xcalar"
+    local startMsg = "Usrnodes started"
+    local statusCmd = "/etc/rc.d/init.d/xcalar status"
+    if nodeSsh "$cluster" "${clusterHosts[0]}" \
+               "sudo systemctl cat xcalar-usrnode.service 2>&1 >/dev/null"; then
+        startMsg = "usrnode --nodeId"
+        statusCmd = "systemctl status xcalar-usrnode.service"
+    fi
     local host
-    for host in $(getNodes "$cluster"); do
+    for host in "${clusterHosts[@]}"; do
         nodeSsh "$cluster" "$host" "sudo systemctl start xcalar" 2>&1
         local ret=$?
         local numRetries=3600
         local try=0
         while [ $ret -ne 0 -a "$try" -lt "$numRetries" ]; do
             sleep 1s
-            nodeSsh "$cluster" "$host" "sudo systemctl status xcalar" 2>&1
+            nodeSsh "$cluster" "$host" "sudo $statusCmd 2>&1 | grep -q '$startMsg'" 2>&1
             ret=$?
             try=$(( $try + 1 ))
         done
