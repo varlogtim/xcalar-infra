@@ -185,7 +185,7 @@ stopXcalar() {
         echo "Must provide a cluster to stopXcalar" >&2
         exit 1
     fi
-    clusterSsh "$1" "sudo service xcalar stop-supervisor"
+    clusterSsh "$1" "sudo systemctl stop xcalar"
 }
 
 restartXcalar() {
@@ -196,16 +196,16 @@ restartXcalar() {
     local cluster="$1"
     set +e
     stopXcalar "$cluster"
-    clusterSsh $cluster "sudo service xcalar start"
+    clusterSsh $cluster "sudo systemctl status xcalar"
     local host
     for host in $(getNodes "$cluster"); do
-        nodeSsh "$cluster" "$host" "sudo service xcalar status" 2>&1 | grep -q  "Usrnodes started"
+        nodeSsh "$cluster" "$host" "sudo systemctl start xcalar" 2>&1
         local ret=$?
         local numRetries=3600
         local try=0
         while [ $ret -ne 0 -a "$try" -lt "$numRetries" ]; do
             sleep 1s
-            nodeSsh "$cluster" "$host" "sudo service xcalar status" 2>&1 | grep -q "Usrnodes started"
+            nodeSsh "$cluster" "$host" "sudo systemctl status xcalar" 2>&1
             ret=$?
             try=$(( $try + 1 ))
         done

@@ -64,9 +64,9 @@ class Email:
 class Xcalar:
     def __init__ (self, xccli="/opt/xcalar/bin/xccli"):
         self.xccli = xccli
-        self.xcalar_stop_cmd = "sudo service xcalar stop"
-        self.xcalar_start_cmd = "sudo service xcalar start"
-        self.xcalar_status_cmd = "service xcalar status"
+        self.xcalar_stop_cmd = "sudo systemctl stop xcalar"
+        self.xcalar_start_cmd = "sudo systemctl start xcalar"
+        self.xcalar_status_cmd = "sudo systemctl status xcalar"
 
     def status(self):
         res = os.popen(self.xcalar_status_cmd).read()[:-1]

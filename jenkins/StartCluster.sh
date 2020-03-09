@@ -12,10 +12,7 @@ export GenConfig="$XLRDIR/scripts/genConfig.sh"
 
 set +e
 
-sudo service xcalar stop
-
-sudo service xcalar stop-supervisor
-
+sudo systemctl stop xcalar
 ret=$?
 
 if [ "$ret" != "0" ]; then
