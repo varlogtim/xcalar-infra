@@ -644,7 +644,7 @@
       },
       "dependsOn": [
         "[parameters('virtualNetworkName')]",
-        "[if(parameters('providePublicIp'), resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'), copyIndex())),parameters('virtualNetworkName'))]"
+        "[if(parameters('providePublicIp'), resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'), copyIndex())), parameters('virtualNetworkName'))]"
       ],
       "properties": {
         "primary": true,
@@ -654,7 +654,8 @@
             "name": "ipconfig1",
             "properties": {
               "privateIPAllocationMethod": "Dynamic",
-//              "publicIPAddress": "[if(parameters('providePublicIp'), json('{ "id": "[resourceId(''Microsoft.Network/publicIPAddresses'', concat(parameters(''publicIpAddressName''), copyIndex()))]" }'), json('null'))]",
+              "publicIPAddress": "[if(parameters('providePublicIp'), json(concat('{ \"id\": \"',resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'),copyIndex())),'\" }')), json('null'))]",
+              // "publicIPAddress": { "id": "[if(parameters('providePublicIp'), resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'),copyIndex())), json('null')]" },
               "subnet": {
                 "id": "[variables('subnetRef')]"
               }
@@ -664,7 +665,7 @@
       }
     },
     {
-      "apiVersion": "2018-10-01",
+      "apiVersion": "2019-07-01",
       "type": "Microsoft.Compute/virtualMachines",
       "name": "[concat(variables('vmName'), copyIndex())]",
       "location": "[parameters('location')]",
@@ -724,7 +725,7 @@
       }
     },
     {
-      "apiVersion": "2018-10-01",
+      "apiVersion": "2019-07-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "name": "[concat(variables('vmName'), copyIndex(), '/bootstrap')]",
       "location": "[parameters('location')]",
@@ -769,6 +770,11 @@
     "location": {
       "type": "string",
       "value": "[resourceGroup().location]"
+    },
+    "fqdn": {
+      "type": "string",
+      "condition": "[parameters('providePublicIp')]",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'),'0'))).dnsSettings.fqdn]"
     }
   }
 }

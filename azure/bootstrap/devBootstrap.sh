@@ -238,7 +238,7 @@ yum install -y --enablerepo='xcalar-deps-common' xcalar-ssh-ca
 # END DEBUG
 
 yum install -y nfs-utils parted gdisk curl lvm2 yum-utils cloud-utils-growpart java-1.8.0-openjdk-headless freetds
-yum install -y jq python-pip awscli azure-cli sshpass htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
+yum install -y jq python-pip azure-cli htop tmux iperf3 vim-enhanced ansible samba-client samba-common cifs-utils iotop iftop perf
 
 # Microsoft's Network testing tool. See: https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-bandwidth-testing
 curl -L -f -o /usr/local/bin/ntttcp https://xcrepo.blob.core.windows.net/public/azuremp/v1/ntttcp && chmod +x /usr/local/bin/ntttcp
@@ -249,9 +249,7 @@ setup_instancestore () {
         log "ERROR: Disk $1 isn't a block device"
         return 1
     fi
-    # Fix version of ephemeral-disk we install. Really, just a workaround
-    # to something caching the package, but we really want to pin this by branch/build anyway.
-    yum install -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-23.noarch.rpm
+    yum install -y --enablerepo='xcalar*' ephemeral-disk
 
     sed -i '/LV_SWAP_SIZE/d' /etc/sysconfig/ephemeral-disk
     echo "LV_SWAP_SIZE=MEMSIZE2X" >> /etc/sysconfig/ephemeral-disk
