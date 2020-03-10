@@ -20,9 +20,6 @@ import threading
 import time
 import traceback
 
-from xcalar.external.LegacyApi.XcalarApi import XcalarApi, XcalarApiStatusException
-from xcalar.external.client import Client
-
 # ======================
 # Sources of detail data
 # ======================

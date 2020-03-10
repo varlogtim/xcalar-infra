@@ -1,0 +1,11 @@
+{
+    "watchers": {
+        "sdk_metrics": {
+            "builtin": "SDKMetricsWatcher",
+            "environment": [
+                {"target": "PASS", "source": "PASSWORD"}
+            ]
+        }
+    },
+    "hydra": [{"name": "sdk_metrics", "frequency": 300}]
+}

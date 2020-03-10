@@ -34,7 +34,7 @@ class DataflowJobFail(Exception):
 
 class DataflowEngine(object):
 
-    def __init__(self, *, test_id, host, port, user, password, cfg_path, statsfreq=1):
+    def __init__(self, *, test_id, host, port, user, password, cfg_path):
 
         self.logger = logging.getLogger(__name__)
         self.data_logger = DLogger(test_id=test_id)
@@ -50,12 +50,6 @@ class DataflowEngine(object):
         self.client_secrets = {'xiusername': user, 'xipassword': password}
         self.xcalar_api = XcalarApi(url=self.xcalar_url, client_secrets=self.client_secrets)
         self.client = Client(url=self.xcalar_url, client_secrets=self.client_secrets)
-
-        if not statsfreq:
-            self.client.set_config_param("CollectDataflowStats", False, False)
-        else:
-            self.client.set_config_param("CollectDataflowStats", True, False)
-            self.client.set_config_param("StatsCollectionInterval", statsfreq, False)
 
         self.workbook_path = cfg.get('workbook_path')
         self.workbook_name = cfg.get('workbook_name')
@@ -111,26 +105,21 @@ class DataflowEngine(object):
     def start_jobs(self, *, batch, instances):
         self.logger.info("STARTING")
 
-        job_pfx = "Xcalar_{}".format(int(time.time()))
+        job_tag = "Xcalar_{}".format(int(time.time()))
         for instance in range(instances):
-            job_name = "{}_batch{}_instance{}".format(job_pfx, batch, instance)
+            job_name = "{}_batch{}_instance{}".format(job_tag, batch, instance)
             self._execute_df(job_name = job_name,
                              dataflow_name = self.dataflow_name,
                              dataflow_params = self.dataflow_params)
-        return job_pfx
+        return job_tag
 
 
-    def _check_jobs(self, *, job_name_pfx, job_states):
+    def _check_jobs(self, *, job_tag, job_states):
         q_pending = False
         q_num_done=0
         q_num_pending=0
-        qs = self.xcalar_api.listQueries("{}*".format(job_name_pfx))
+        qs = self.xcalar_api.listQueries("*{}*".format(job_tag))
         for q in qs.queries:
-            if job_name_pfx not in q.name:
-                self.logger.error("listed job/query {} does not contain prefix {}"
-                                  .format(q.name, job_name_prefix))
-                continue
-
             prior_state = job_states.get(q.name, "Uninitialized")
             if q.state != prior_state:
                 self.data_logger.log(data_type="TEST_EVENT",
@@ -161,7 +150,7 @@ class DataflowEngine(object):
                 return True
         return False
 
-    def wait_for_jobs(self, *, job_name_pfx):
+    def wait_for_jobs(self, *, job_tag):
         self.logger.info("STARTING")
         check_interval = 10 # parameterize?
 
@@ -174,23 +163,19 @@ class DataflowEngine(object):
             now = int(time.time())
 
             if now >= next_check_time:
-                if not self._check_jobs(job_name_pfx=job_name_pfx,
+                if not self._check_jobs(job_tag=job_tag,
                                         job_states=job_states):
                     # No jobs pending, we're done!
                     return
                 next_check_time = now + check_interval
 
-    def cleanup_jobs(self, *, job_name_pfx):
+    def cleanup_jobs(self, *, job_tag):
         self.logger.info("STARTING")
-        qs = self.xcalar_api.listQueries("{}*".format(job_name_pfx))
+        qs = self.xcalar_api.listQueries("*{}*".format(job_tag))
         q_pending = True
         while q_pending:
             q_pending = False
             for q in qs.queries:
-                if job_name_pfx not in q.name:
-                    self.logger.error("listed job/query {} does not contain prefix {}"
-                                      .format(q.name, job_name_prefix))
-                    continue
                 if q.state == 'qrProcessing':
                     # Shouldn't get here :/
                     self.logger.info("cancel job {}".format(q.name))
@@ -206,9 +191,9 @@ class DataflowEngine(object):
         start_time = time.time()
         self.data_logger.log(data_type="TEST_EVENT", data_label="TEST_START")
         for batch in range(batches):
-            job_name_pfx = self.start_jobs(batch=batch, instances=instances)
-            self.wait_for_jobs(job_name_pfx=job_name_pfx)
-            self.cleanup_jobs(job_name_pfx=job_name_pfx)
+            job_tag = self.start_jobs(batch=batch, instances=instances)
+            self.wait_for_jobs(job_tag=job_tag)
+            self.cleanup_jobs(job_tag=job_tag)
         self.data_logger.log(data_type="TEST_EVENT", data_label="TEST_END")
         self.logger.info("Test Duration: {}".format(int(time.time() - start_time)))
 
@@ -240,8 +225,6 @@ if __name__ == "__main__":
                         help="Number of Batches (loops)")
     parser.add_argument("--instances", required=True, type=int,
                         help="Number of parallel instances per batch")
-    parser.add_argument("--statsfreq", type=int, default=1,
-                        help="Frequency of stats collection or 0 for off")
     parser.add_argument("--config", required=True,
                         help="Path to JSON configuration file")
     parser.add_argument("--test_id", required=True, help="Test ID string")
@@ -260,8 +243,7 @@ if __name__ == "__main__":
                                 user = args.user,
                                 password = args.password,
                                 cfg_path = args.config,
-                                test_id = args.test_id,
-                                statsfreq = args.statsfreq)
+                                test_id = args.test_id)
 
     except Exception as exc:
         fail = True

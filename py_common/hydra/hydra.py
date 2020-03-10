@@ -25,11 +25,8 @@ import time
 if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
-from py_common.dlogger import DLogger, SDKMetricsDLoggerSource
+from py_common.dlogger import DLogger
 from py_common.env_configuration import EnvConfiguration
-
-from xcalar.external.LegacyApi.XcalarApi import XcalarApi
-from xcalar.external.client import Client
 
 os.environ["XLR_PYSDK_VERIFY_SSL_CERT"] = "false"
 
@@ -38,6 +35,7 @@ cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     format="'%(asctime)s - %(levelname)s - %(threadName)s - %(funcName)s - %(message)s",
                     handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger(__name__)
 
 
 class LogScraperBase(ABC):
@@ -264,11 +262,13 @@ class PopenProcessManager(ProcessManager):
 
     def sub_process_start(self):
         self.logger.debug("launching command {}".format(self.cmdargs))
-        p = subprocess.Popen(self.cmdargs, stdout=subprocess.PIPE,
-                                           stderr=subprocess.STDOUT,
-                                           env=self.env,
-                                           universal_newlines=True,
-                                           bufsize=0)
+        args = ["unbuffer"]
+        args.extend(self.cmdargs)
+        p = subprocess.Popen(args, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT,
+                                   env=self.env,
+                                   universal_newlines=True,
+                                   bufsize=0)
         self.subprocess = p
         return p.stdout
 
@@ -305,10 +305,9 @@ class ForkProcessManager(ProcessManager):
     """
     A ProcessManager controlling a child sub-process started with os.fork()
     """
-    def __init__(self, *, func, env, args=None, frequency):
+    def __init__(self, *, func, args=None, frequency):
         super().__init__(frequency=frequency)
         self.func = func
-        self.env = env
         self.args = args
         self.pid = None
 
@@ -326,16 +325,15 @@ class ForkProcessManager(ProcessManager):
             # Anything written to stdout/stderr from this point on goes
             # through the pipe to the parent and is processed...
 
-            if self.env is not None:
-                os.environ = self.env
-            if self.args:
-                ec = self.func(**(self.args))
-            else:
-                ec = self.func()
-            #sys.stdout.flush()
-            #sys.stderr.flush()
+            try:
+                if self.args:
+                    ec = self.func(**(self.args))
+                else:
+                    ec = self.func()
+            except Exception as e:
+                ec = 1
             if ec is None:
-                ec = 0 # um....
+                ec = 0
             sys.exit(ec)
 
         # Parent process
@@ -385,12 +383,12 @@ class ClassManager(ForkProcessManager):
     """
     A ProcessManager wrapping a "watcher" class
     """
-    def __init__(self, *, instance, env, frequency):
+    def __init__(self, *, instance, frequency):
         # class instance must implement run()
         run_func = getattr(instance, "run", None)
         if not run_func or not callable(run_func):
             raise ValueError("class instance does not implement run()")
-        super().__init__(func=run_func, env=env, frequency=frequency)
+        super().__init__(func=run_func, frequency=frequency)
 
 
 # ==================================
@@ -466,13 +464,8 @@ class Hydra(object):
         builtin = watcher_cfg.get('builtin', None)
         if builtin is not None:
             self.logger.debug("builtin: {}".format(builtin))
-            # Built-in presumed already in-scope
-            cur_env = os.environ
-            os.environ = env
-            watcher = ClassManager(instance=get_builtin_class(builtin),
-                                   frequency=frequency,
-                                   env=env)
-            os.environ = cur_env
+            watcher = ClassManager(instance=get_builtin_class(builtin, env),
+                                   frequency=frequency)
 
         if watcher is None:
             # Command-line
@@ -488,14 +481,8 @@ class Hydra(object):
             module_path = watcher_cfg.get('module_path', None)
             class_name = watcher_cfg.get('class_name', None)
             if module_path and class_name:
-                mod = import_module(module_path)
-                cls = getattr(mod, class_name)()
-                cur_env = os.environ
-                os.environ = env
-                watcher = ClassManager(instance=cls,
-                                       frequency=frequency,
-                                       env=env)
-                os.environ = cur_env
+                watcher = ClassManager(instance=get_custom_class(module_path, class_name, env),
+                                       frequency=frequency)
 
         if watcher is None:
             raise HydraConfigurationError(
@@ -512,22 +499,14 @@ class Hydra(object):
         scraper = None
         builtin = scraper_cfg.get('builtin', None)
         if builtin is not None:
-            # Built-in presumed already in-scope
-            cur_env = os.environ
-            os.environ = watcher_env
-            scraper = get_builtin_class(builtin)
-            os.environ = cur_env
+            scraper = get_builtin_class(builtin, watcher_env)
 
         if scraper is None:
             # Custom class
             module_path = scraper_cfg.get('module_path', None)
             class_name = scraper_cfg.get('class_name', None)
             if module_path and class_name:
-                mod = import_module(module_path)
-                cur_env = os.environ
-                os.environ = watcher_env
-                scraper = getattr(mod, class_name)()
-                os.environ = cur_env
+                scraper = get_custom_class(module_path, class_name, watcher_env)
 
         if scraper is None:
             raise HydraConfigurationError(
@@ -657,6 +636,73 @@ class Hydra(object):
                 self.logger.error("shutdown timeout")
                 break
             watcher.join(timeout=time_left)
+            status = watcher.returnstatus
+            if status:
+                self.returnstatus = status
+
+
+# Class factories for built-in and custom classes
+
+initialized_classes = {}
+
+def class_pre_init(class_name, cls):
+    logger.debug("start {}".format(class_name))
+
+    # Once is enough!
+    if class_name in initialized_classes:
+        logger.debug("already initialized")
+        return
+    initialized_classes[class_name] = True
+
+    if not hasattr(cls, "pre_init_cmds"):
+        logger.debug("no pre_init_cmds")
+        return
+
+    logger.debug("running pre_init_cmds")
+    for cmdline in cls.pre_init_cmds:
+        cmdargs = shlex.split(cmdline)
+        cp = subprocess.run(cmdargs, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT,
+                                     universal_newlines=True)
+        if cp.stdout:
+            print(cp.stdout)
+        if cp.returncode:
+            raise Exception("Script returned non-zero")
+
+    logger.debug("end")
+
+def class_init(class_name, cls, env):
+    logger.debug("start {}".format(class_name))
+
+    class_pre_init(class_name, cls)
+    cur_env = os.environ
+    os.environ = env
+    try:
+        instance = cls()
+        os.environ = cur_env
+        logger.debug("returning instance")
+        return instance
+    except:
+        os.environ = cur_env
+        raise
+
+def get_custom_class(module_path, class_name, env=os.environ):
+    """
+    Factory returning a custom class.
+    """
+    logger.debug("start")
+    mod = import_module(module_path)
+    cls = getattr(mod, class_name)
+    return class_init(class_name, cls, env)
+
+
+def get_builtin_class(class_name, env=os.environ):
+    """
+    Factory returning a built-in class.
+    """
+    logger.debug("start")
+    cls = globals()[class_name]
+    return class_init(class_name, cls, env)
 
 
 # BUILT-IN CLASSES ==========
@@ -666,13 +712,6 @@ class Hydra(object):
 # All watcher/scraper classes initialize from the environment.
 # Nothing is passed to __init__()
 
-def get_builtin_class(classname):
-    """
-    Factory returning a built-in class.
-    """
-    cls = globals()[classname]
-    return cls()
-
 
 # SCRAPER CLASSES ==========
 # None yet
@@ -680,12 +719,24 @@ def get_builtin_class(classname):
 
 # WATCHER CLASSES ==========
 
-
 class SDKMetricsWatcher(WatcherClassBase):
     """
     Uses an SDK client and SDKMetricsDLoggerSource to log cluster metrics.
     """
+
+    # These commands will be run prior to class initialization.
+    pre_init_cmds = ["python3 -m pip install -U pip",
+                     "curl https://storage.googleapis.com/repo.xcalar.net/xcalar-sdk/requirements-2.2.0.txt --output requirements.txt",
+                     "pip install -r requirements.txt"]
+
+
     def __init__(self):
+
+        # Note that execution environment must be prepared in order
+        # for these imports to succeed.
+        from py_common.dlogger import SDKMetricsDLoggerSource
+        from xcalar.external.LegacyApi.XcalarApi import XcalarApi
+        from xcalar.external.client import Client
 
         cfg = EnvConfiguration({'TEST_ID': {'required': True},
                                 'HOST': {'required': True},
@@ -746,7 +797,6 @@ class SDKMetricsWatcher(WatcherClassBase):
 
 if __name__ == '__main__':
 
-    logger = logging.getLogger(__name__)
     hydra = None
 
     def shutdown_hydra(signum, frame):
