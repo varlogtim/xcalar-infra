@@ -56,9 +56,8 @@ pydir="${XLRINFRADIR}/jenkins/python"
 host_options="--host $HOST --port $PORT"
 user_options="--user $USER --pass $PASSWORD"
 load_options="--batches $BATCHES --instances $INSTANCES"
-stats_options="--statsfreq $STATSFREQ"
 config_options="--config ${pydir}/old_gs_refiner_edison.json"
 
-python ${pydir}/dataflow_engine.py --test_id $test_id $host_options $user_options $load_options $stats_options $config_options
+python ${pydir}/dataflow_engine.py --test_id $test_id $host_options $user_options $load_options $config_options
 
 say "OldGSRefinerTest END ===="
