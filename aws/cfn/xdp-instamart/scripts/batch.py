@@ -23,7 +23,6 @@ S3_PATH_TO_PROJECT = '/my-xdp-instamart-workbucket-xnzjk0jhphq9/PROJECT_EXPORT_P
 
 project_name = 'superSerialProject'
 
-
 USAGE = """
 Purpose:
        Uploads and executes an "Optimized SDK App" stored inside of a
@@ -73,10 +72,12 @@ def upload_project(name, project_bytes):
         # ... but I do attempt clean up at the end.
         pass
 
+
 def fix_s3path(s):
     if s.startswith('s3://'):
         return s[4:]
     return s
+
 
 def main(s3_import_path, s3_export_path):
     # So, we need to check the list of targets for the target
@@ -110,10 +111,9 @@ def main(s3_import_path, s3_export_path):
         # Per: src/bin/sdk/xdp/xcalar/external/session.py
         # If query state is error we raise an exception.
         # So, if this doens't raise, we successfully executed.
-        params = {
-            "EXPORT_PATH": s3_export_path
-        }
-        query_name = session.execute_dataflow(dataflow, optimized=True,
+        params = {"EXPORT_PATH": s3_export_path}
+        query_name = session.execute_dataflow(dataflow,
+                                              optimized=True,
                                               params=params)
         print(f"Successfully executed query graph: {query_name}")
     except Exception as e:

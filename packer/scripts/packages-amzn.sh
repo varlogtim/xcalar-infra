@@ -144,6 +144,7 @@ case "$OSID" in
         #systemctl mask network.service || true
         amazon-linux-extras install -y ansible2=2.8 kernel-ng vim
         yum install -y libcgroup-tools
+        systemctl set-default multi-user.target
         #yum install -y NetworkManager
         #systemctl enable --now NetworkManager.service
         ;;
@@ -157,7 +158,7 @@ mkdir -p /etc/ansible
 curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg | \
     sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg
 
-for svc in xcalar puppet collectd consul node_exporter lifecycled; do
+for svc in xcalar puppet collectd consul node_exporter lifecycled update-motd; do
     if [ "$OSID" = amzn1 ]; then
         if test -e /etc/init/${svc}.conf; then
             echo manual > /etc/init/${svc}.override
@@ -165,7 +166,6 @@ for svc in xcalar puppet collectd consul node_exporter lifecycled; do
             chkconfig ${svc} off || true
         fi
     elif [ "$OSID" = amzn2 ]; then
-        systemctl set-default multi-user.target
         systemctl disable ${svc} || true
     fi
 done

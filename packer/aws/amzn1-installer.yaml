@@ -159,7 +159,6 @@ provisioners:
       - ln -sfn /usr/bin/python2.7 /usr/bin/python2
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
       - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
-      - systemctl disable update-motd.service || true
       - test -f /etc/profile.d/jdk.sh && rm -f /etc/profile.d/zjava.sh || true
   - type: shell
     environment_vars:

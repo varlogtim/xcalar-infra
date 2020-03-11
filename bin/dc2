@@ -186,7 +186,7 @@ dc2_parse_common() {
             echo 2
             ;;
         --environment | --env | -e)
-            ENVIRONMENT="$1"
+            ENV="$1"
             echo 2
             ;;
         --template)
@@ -329,7 +329,7 @@ dc2_upload() {
     test -n "${PROJECT:-}" || die "Need to set --project"
     test -n "${VERSION:-}" || VERSION=$(cat $PROJECT/VERSION) || die "Need to set --version"
     PROJDIR="${TEMPLATEDIR}/${PROJECT}"
-    CONTEXT="${ENVIRONMENT}/${PROJECT}/${VERSION}"
+    CONTEXT="${ENV}/${PROJECT}/${VERSION}"
     test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
 
     GENDIR="$TMPDIR"/gen
@@ -343,7 +343,8 @@ dc2_upload() {
         fi
     done
     if test -e "$PROJDIR"/lambda; then
-        cp -a "$PROJDIR"/lambda "$GENDIR"
+        mkdir -p "$GENDIR"/lambda
+        cp "$PROJDIR"/lambda/*.{py,txt} "$GENDIR"/lambda/
         pip install -q -r "$PROJDIR"/lambda/requirements.txt -c "$PROJDIR"/lambda/constraints.txt -t "$GENDIR"/lambda
         (cd "$GENDIR"/lambda && zip -q -9r "$GENDIR"/lambda.zip .)
         rm -rf "$GENDIR"/lambda
@@ -373,7 +374,7 @@ dc2_upload() {
 	VERSION: '$VERSION'
 	PROJECT: '$PROJECT'
 	RELEASE: '$RELEASE'
-	ENVIRONMENT: '$ENVIRONMENT'
+	ENV: $ENV
 	baseUrl: '$BASE_URL'
 	baseBucket: '${BUCKET}'
 	basePrefix: '${TARGET}/'
@@ -518,9 +519,9 @@ dc2_cleanup() {
 
 dc2_defaults() {
     declare -g FIND_AMI=0 DRY=0 KEEP=0 DEBUG=${DEBUG:-0} CLOUD=aws MODE='create'
-    declare -g ENVIRONMENT=${ENVIRONMENT:-dev} PUBLISHING=${PUBLISHING:-False}
+    declare -g ENV=dev PUBLISHING=${PUBLISHING:-False}
     declare -g TMPBASE="${TMPDIR:-/tmp}/$(basename $0 .sh)-$(id -u)" # EG /tmp/dc2-1000/
-    export DEBUG PUBLISHING ENVIRONMENT
+    export DEBUG PUBLISHING
 
     declare -g -a J2DEFS=()
     case "$CLOUD" in

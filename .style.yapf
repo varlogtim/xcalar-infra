@@ -1,4 +1,7 @@
 [style]
 based_on_style = pep8
 spaces_before_comment = 4
-indent_dictionary_value = true
+indent_dictionary_value = True
+# dedent_closing_brackets = True
+arithmetic_precedence_indication = True
+column_limit = 130

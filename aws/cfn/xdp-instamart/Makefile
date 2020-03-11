@@ -5,7 +5,8 @@ PROJECT = xdp-instamart
 GEN = ref/xdp-standard-byovpc.cf.yaml ref/xdp-standard.cf.yaml
 VALIDATION = $(patsubst %.cf.yaml, %.valid, $(GEN))
 PARAMS = $(patsubst %.valid, %.params, $(VALIDATION))
-DEBUG = 1
+DEBUG = 0
+ENV = test
 S3FLAGS = --cache-control 'private, no-cache, no-store, must-revalidate, max-age=0, no-transform' --acl public-read --metadata-directive REPLACE
 SOURCES = xdp-standard.cf.yaml stepfun.cf.yaml scripts/user-data.sh scripts/batch.sh
 LAMBDA_BUCKET = sharedinf-lambdabucket-559166403383-us-west-2
@@ -14,6 +15,7 @@ UUID := $(shell uuidgen)
 CHANGE_SET = mychange-$(UUID)
 NAME := $(shell id -un)
 STACK_NAME = $(NAME)-instamart
+BASEURL := $(shell baseurl.sh `img2json.sh --format=cli $(AMI_ID)` --env $(ENV) --project $(PROJECT))
 
 all: check
 
@@ -28,35 +30,44 @@ check: $(GEN) $(VALIDATION) $(PARAMS)
 	jq -r '[.Parameters[]|{ParameterKey:.ParameterKey, UsePreviousValue: true}]' $< > $@.tmp
 	mv $@.tmp $@
 
+ref/$(AMI_ID).json:
+	aws ec2 describe-images --image-ids $(AMI_ID) --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' > $@.tmp
+	@mv $@.tmp $@
+
 clean:
 	rm -fv $(GEN) $(VALIDATION) $(PARAMS)
 
 ref/xdp-standard-byovpc.cf.yaml: xdp-standard.template.j2
-	jinja2 -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=False $< vars/allowed_types.yaml > $@
+	jinja2 -DbaseUrl=$(BASEURL) -DbootstrapUrl=$(BASEURL)scripts/user-data.sh  -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=False $< vars/allowed_types.yaml > $@
 
 ref/xdp-standard.cf.yaml: xdp-standard.template.j2
-	jinja2 -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=True $< vars/allowed_types.yaml > $@
+	jinja2 -DbaseUrl=$(BASEURL) -DbootstrapUrl=$(BASEURL)scripts/user-data.sh  -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=True $< vars/allowed_types.yaml > $@
 
-lambda.zip: lambda/requirements.txt lambda/constraints.txt lambda/add_notification.py
-	rm -rf pkg
-	mkdir -p pkg
-	cp $^ pkg
-	cd pkg && pip install -r requirements.txt -c constraints.txt -t .
+%.zip: %/requirements.txt %/constraints.txt
+	rm -rf pkg/$(<D)
+	cp -a $(<D) pkg/
+	cd pkg/$(<D) && pip install -r requirements.txt -c constraints.txt -t .
+	cd pkg/$(<D) && zip -9r ../../$@ *
+
+
+lambda.zip: lambda/schedule.py lambda/add_notification.py
 	rm -f $@
-	cd pkg && zip -q -9r ../$@ *
+	cd $(<D) && zip -q -9r ../$@ $(^F)
 	md5sum $@ > $@.md5sum
 
+#--manifest $(XLRINFRADIR)/output/packer-manifest.json
+
 upload: lambda.zip
-	MD5=`md5sum $< | cut -c1-16`; aws s3 cp $(S3FLAGS) $^ s3://$(LAMBDA_BUCKET)/$(PROJECT)/$${MD5}.zip \
-        && sed -i 's@S3Key:.*$$@S3Key: $(PROJECT)/'$${MD5}'.zip@' stepfun.cf.yaml
-	dc2 upload --debug --keep --project $(PROJECT) --env test --manifest $(XLRINFRADIR)/output/packer-manifest.json `img2json.sh --format=cli $(AMI_ID)` --url-file $(URL)
+	MD5=`md5sum $< | cut -c1-16`; aws s3 cp $(S3FLAGS) $< s3://$(LAMBDA_BUCKET)/$(PROJECT)/$${MD5}.zip \
+        && sed -i 's@S3Key: xdp.*$$@S3Key: $(PROJECT)/'$${MD5}'.zip@' stepfun.cf.yaml
+	dc2 upload --debug --keep --project $(PROJECT) --env $(ENV) --manifest $(XLRINFRADIR)/output/packer-manifest.json `img2json.sh --format=cli $(AMI_ID)` --url-file $(URL)
 
 STACK_CHANGE = --stack-name $(STACK_NAME) --change-set-name $(CHANGE_SET)
 create: check upload
-	aws cloudformation create-stack --stack-name $(STACK_NAME) --template-url `cat $(URL)` --parameters file://./ref/abakshi.params.json --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+	aws cloudformation create-stack --stack-name $(STACK_NAME) --template-url `cat $(URL)` --parameters file://./ref/$(NAME).params.json --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
 
 deploy:
-	aws cloudformation create-change-set $(STACK_CHANGE) --template-url `cat $(URL)` --parameters file://./ref/xdp-standard.params --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+	aws cloudformation create-change-set $(STACK_CHANGE) --template-url `cat $(URL)` --parameters file://./ref/$(NAME).params.json --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
 	aws cloudformation wait change-set-create-complete $(STACK_CHANGE)
 	aws cloudformation describe-change-set $(STACK_CHANGE) | tee ref/$(STACK_NAME)-$(CHANGE_SET).change
 	aws cloudformation execute-change-set $(STACK_CHANGE)

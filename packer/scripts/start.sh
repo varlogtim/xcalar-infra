@@ -91,8 +91,10 @@ if [ "$CLOUD" = gce ]; then
         yum localinstall -y http://repo.xcalar.net/deps/gcsfuse-0.20.1-1.x86_64.rpm
     fi
 elif [ "$CLOUD" = aws ]; then
-    curl -O http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-30.noarch.rpm
+    curl -O http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-32.noarch.rpm
     yum install -y  ephemeral-disk*.rpm || exit 1
+    systemctl daemon-reload
+    systemctl enable ephemeral-disk
     rm -f ephemeral-disk*.rpm
     ephemeral-disk
     if ! command -v ec2-tags; then
@@ -102,6 +104,8 @@ elif [ "$CLOUD" = aws ]; then
     fi
 elif [ "$CLOUD" = azure ]; then
     yum install -y --enablerepo='xcalar*' ephemeral-disk
+    systemctl daemon-reload
+    systemctl enable ephemeral-disk
     ephemeral-disk
 fi
 

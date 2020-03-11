@@ -12,6 +12,15 @@ EPHEMERAL=/ephemeral/data
 if ! rpm -q ephemeral-disk; then
     yum install -y ephemeral-disk --enablerepo='xcalar-*'
 fi
+systemctl enable ephemeral-disk
+XCUNIT=/etc/systemd/system/xcalar.service.d
+mkdir -p $XCUNIT
+cat >${XCUNIT}/ephemeral.conf<<EOF
+[Unit]
+Wants=ephemeral-disk.service
+After=ephemeral-disk.service
+EOF
+systemctl daemon-reload
 
 NOW=$(date +%s)
 if test -x /usr/bin/ephemeral-disk; then

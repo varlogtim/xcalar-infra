@@ -135,6 +135,15 @@ builders:
         virtual_name: ephemeral1
 provisioners:
   - type: shell
+    execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
+    expect_disconnect: true
+    inline:
+      - amazon-linux-extras install -y kernel-ng
+      - yum update -y
+      - sleep 60
+      - reboot -h now
+  - type: shell
+    pause_before: "1m"
     environment_vars:
       - OSID={{split build_name "-" 2}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''

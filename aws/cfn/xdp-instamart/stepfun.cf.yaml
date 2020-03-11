@@ -1,11 +1,11 @@
 ---
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
 Description: Step function support for Xcalar Lambda Schedules
-
 Parameters:
   InstanceType:
     Type: String
-    Description: Instance Type
+    Description: Instance Type to launch
     Default: 'r5d.xlarge'
   LaunchTemplate:
     Type: String
@@ -28,7 +28,7 @@ Parameters:
   BaseURL:
     Type: String
     Description: Base URL of the deployment
-  ParentStackId:
+  ParentStack:
     Type: String
     Description: Name of the parent stack
   EfsSharedRoot:
@@ -83,7 +83,6 @@ Resources:
                   - !GetAtt CheckClusterStatus.Arn
                   - !GetAtt RunSSMCommands.Arn
                   - !GetAtt CheckSSMCommandStatus.Arn
-
   AddS3NotificationRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -109,7 +108,7 @@ Resources:
       Timeout: 60
       Code:
         S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/addb3896cc110798.zip
+        S3Key: xdp-instamart/349b7938bd5e8419.zip
 
   ScheduleUpdateTrigger:
     Type: 'Custom::LambdaTrigger'
@@ -194,83 +193,21 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        ZipFile: |
-          import json
-          import boto3
-          import json
-          import os,uuid
-          from botocore.exceptions import ClientError
-          from pathlib import PurePath
-          def lambda_handler(event,context):
-              print(json.dumps(event))
-              StackId = os.environ['StackId']
-              s3 = boto3.client('s3')
-              eb = boto3.client('events')
-              for e in event['Records']:
-                  bucket = e['s3']['bucket']['name']
-                  key = e['s3']['object']['key']
-                  p = PurePath(f'/{bucket}/{key}')
-                  name = p.as_posix()[1:].replace('/','-')+'-rule'
-                  name = name[-62:]
-                  evt,evt_op = e['eventName'].split(':')
-                  try:
-                      if evt == 'ObjectDeleted':
-                          eb.delete_rule(Name=name)
-                      if evt == 'ObjectCreated':
-                          eTag = e['s3']['object']['eTag']
-                          response = s3.get_object(Bucket=bucket,Key=key,IfMatch=eTag)
-                          body = response['Body']
-                          rawdata = body.read(128*1024)
-                          body.close()
-                          data = json.loads(rawdata.decode('utf-8'))
-                          input = None
-                          output = None
-                          schedule = None
-                          if 'schedule' in data:
-                              schedule = data['schedule']
-                          if 'input' in data:
-                              input = data['input']
-                          if 'output' in data:
-                              output = data['output']
-                          response = eb.put_rule(
-                            Name=name,
-                            ScheduleExpression=schedule,
-                            State='ENABLED',
-                            Tags=[{'Key': 'Name', 'Value': name}, {'Key': 'StackId', 'Value': StackId}])
-                          uid = uuid.uuid1().hex
-                          input = {
-                            "Comment": "Insert your JSON here",
-                            "ClusterSize": 1,
-                            "ClusterName": "Cluster-"+uid,
-                            "Input": input, #"dataFlow.xlrwb.tar.gz",
-                            "Output": output, #"export/dataFlowOut.txt",
-                            "KeepCluster": False
-                          }
-                          #RuleArn = response['RuleArn']
-                          response = eb.put_targets(
-                            Rule=name,
-                            Targets=[{
-                              'Id': 'target1',
-                              'Arn': os.environ['StateMachineArn'],
-                              'RoleArn': os.environ['EventRoleArn'],
-                              'Input': json.dumps(input)
-                            }]
-                          )
-                  except ClientError as e:
-                    #ec = response['Error']['Code']
-                    #print(f'Error: {ec} when handling {evt}:{evt_op} on {name}.')
-                    print(e)
-      Handler: index.lambda_handler
+        S3Bucket: !ImportValue sharedinf-lambdabucket
+        S3Key: xdp-instamart/349b7938bd5e8419.zip
+      Handler: schedule.update_handler
       Role: !GetAtt ScheduleUpdateRole.Arn
+      Layers:
+        - !ImportValue sharedinf-lambdalayer
       Runtime: python3.6
       Timeout: 60
       Environment:
         Variables:
           StackName: !Ref 'AWS::StackName'
           StackId: !Ref 'AWS::StackId'
-          ParentStackId: !Ref ParentStackId
-          Bucket: !Ref EventBucket
-          Prefix: !Ref EventPrefix
+          ParentStack: !Ref ParentStack
+          EventBucket: !Ref EventBucket
+          EventPrefix: !Ref EventPrefix
           StateMachineArn: !Ref DataAppStateMachine
           EventRoleArn: !GetAtt ScheduleExecuteEventRole.Arn
 
@@ -355,7 +292,7 @@ Resources:
 #                Condition:
 #                  StringLike:
 #                    "ssm:resourceTag/aws:cloudformation:stack-id":
-#                      - !Ref ParentStackId
+#                      - !Ref ParentStack
               - Effect: "Allow"
                 Action:
                   - s3:ListBucket
@@ -580,6 +517,7 @@ Resources:
           import json
           client = boto3.client('ssm')
           ec2 = boto3.client('ec2')
+          s3 = boto3.client('s3')
           #dynamodbclient = boto3.client('dynamodb')
           Bucket = os.environ['Bucket']
           BaseURL = os.environ['BaseURL']

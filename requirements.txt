@@ -18,8 +18,8 @@ pre-commit
 pylint
 pytest
 python-consul
-PyYAML==5.1.2
-requests==2.22.0
+PyYAML
+requests
 sceptre
 sentry-sdk==0.14.1
 testinfra
