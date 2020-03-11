@@ -1,5 +1,5 @@
 {
-  "Comment": "Insert your JSON here",
+  "Comment": "Run DataApp flow example",
   "ClusterSize": 1,
   "ClusterName": "Cluster-1234",
   "Input": "dataFlow.xlrwb.tar.gz",

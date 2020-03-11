@@ -333,7 +333,7 @@ dc2_upload() {
     test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
 
     GENDIR="$TMPDIR"/gen
-    mkdir -p "$GENDIR"/scripts/ "$GENDIR"/lambda/
+    mkdir -p "$GENDIR"/scripts/
     #cd "$GENDIR" || die "Failed to cd to $GENDIR"
     for ii in "$PROJDIR"/scripts/*; do
         if [[ $ii =~ .j2$ ]]; then
@@ -412,11 +412,17 @@ dc2_upload() {
         fi
     fi
     aws ec2 describe-images --image-ids $ami_id --query 'Images[].Tags[]' | jq '{ami: map_values({(.Key): .Value})|add}' | cfn-flip > "$TMPDIR"/vars/image.yaml
-    for YAML in $(ls "$PROJDIR"/*.{yaml,template} 2>/dev/null); do
+    for YAML in "$PROJDIR"/*.{yaml,template}; do
+        if ! test -f "$YAML"; then
+            continue
+        fi
         TEMPLATE=$(basename "${YAML%%.*}")
         cfn-flip "$YAML" > "${GENDIR}/${TEMPLATE}.json"
     done
     for J2TEMPLATE in "$PROJDIR"/*.j2; do
+        if ! test -f "$J2TEMPLATE"; then
+            continue
+        fi
         if [[ $J2TEMPLATE =~ quickcreate ]]; then
             continue
         fi
@@ -432,13 +438,14 @@ dc2_upload() {
 
             local templateJson=${GENDIR}/${TEMPLATEOUT}.json
             # shellcheck disable=SC2002
-            #if ! cat "$TMPDIR"/allvars.yaml | jinja2 -D "PUBLISHING=${PUBLISHING^}" -D "DEBUG=$DEBUG" -D "bootstrapUrl=$bootstrapUrl" -D "ami_""${AWS_DEFAULT_REGION//-/_}""=$ami_id" -D "region=${AWS_DEFAULT_REGION}" -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" \
-            if ! cat "$TMPDIR"/allvars.yaml | jinja2 "$J2TEMPLATE" \
+            set -o pipefail
+            if ! jinja2 -D "PUBLISHING=${PUBLISHING^}" -D "DEBUG=$DEBUG" -D "bootstrapUrl=$bootstrapUrl" -D "ami_""${AWS_DEFAULT_REGION//-/_}""=$ami_id" -D "region=${AWS_DEFAULT_REGION}" -D "ami_id=$ami_id" -D "templateUrl=$templateUrl" "$J2TEMPLATE" "$TMPDIR"/allvars.yaml \
                 | tee ${TMPDIR}/${TEMPLATEOUT}.yaml \
                 | cfn-flip > "$templateJson"; then
                 #| jq_put_userata_in_lt $PROJDIR/scripts/user-data.sh > "$templateJson"; then
                 die "Failed to apply jinja template $templateJson"
             fi
+            set +o pipefail
             if test -x $TEMPLATEDIR/verify.sh; then
                 echo >&2 "Running verify script"
                 if ! $TEMPLATEDIR/verify.sh --template "$templateJson" --bootstrap-url "$bootstrapUrl" --ami-id "$ami_id" --region "$AWS_DEFAULT_REGION"; then
@@ -463,13 +470,13 @@ dc2_upload() {
             quick_urls+=("$quickUrl")
             urls+=("$templateUrl")
 
-#            if [ "$flavor" != default ]; then
-#                echo "templateUrl_${flavor}: $templateUrl" | tee "$PROJDIR"/vars/deploy.yaml
-#                echo "quickUrl_${flavor}: $quickUrl"
-#            else
-#                echo "templateUrl: $templateUrl" | tee "$PROJDIR"/vars/deploy.yaml
-#                echo "quickUrl: $quickUrl"
-#            fi
+            if [ "$flavor" != default ]; then
+                echo "templateUrl_${flavor}: $templateUrl"
+                echo "quickUrl_${flavor}: $quickUrl"
+            else
+                echo "templateUrl: $templateUrl"
+                echo "quickUrl: $quickUrl"
+            fi
         done
     done
 

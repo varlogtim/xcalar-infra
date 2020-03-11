@@ -100,7 +100,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
-
   AddS3Notification:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -110,7 +109,7 @@ Resources:
       Timeout: 60
       Code:
         S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/ed1919bb1302236c.zip
+        S3Key: xdp-instamart/addb3896cc110798.zip
 
   ScheduleUpdateTrigger:
     Type: 'Custom::LambdaTrigger'
@@ -137,6 +136,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
       Policies:
         - PolicyName: S3Access
           PolicyDocument:
@@ -209,54 +209,57 @@ Resources:
               for e in event['Records']:
                   bucket = e['s3']['bucket']['name']
                   key = e['s3']['object']['key']
-                  eTag = e['s3']['object']['eTag']
                   p = PurePath(f'/{bucket}/{key}')
                   name = p.as_posix()[1:].replace('/','-')+'-rule'
+                  name = name[-62:]
                   evt,evt_op = e['eventName'].split(':')
                   try:
                       if evt == 'ObjectDeleted':
                           eb.delete_rule(Name=name)
                       if evt == 'ObjectCreated':
+                          eTag = e['s3']['object']['eTag']
                           response = s3.get_object(Bucket=bucket,Key=key,IfMatch=eTag)
                           body = response['Body']
                           rawdata = body.read(128*1024)
                           body.close()
                           data = json.loads(rawdata.decode('utf-8'))
+                          input = None
+                          output = None
+                          schedule = None
                           if 'schedule' in data:
                               schedule = data['schedule']
                           if 'input' in data:
                               input = data['input']
                           if 'output' in data:
                               output = data['output']
-                        response = eb.put_rule(
-                          Name=name,
-                          ScheduleExpression=schedule,
-                          State='ENABLED',
-                          Tags=[{'Key': 'Name', 'Value': name}, {'Key': 'StackId', 'Value': StackId}]
-                        )
-                        uid = uuid.uuid1().hex
-                        input = {
+                          response = eb.put_rule(
+                            Name=name,
+                            ScheduleExpression=schedule,
+                            State='ENABLED',
+                            Tags=[{'Key': 'Name', 'Value': name}, {'Key': 'StackId', 'Value': StackId}])
+                          uid = uuid.uuid1().hex
+                          input = {
                             "Comment": "Insert your JSON here",
                             "ClusterSize": 1,
                             "ClusterName": "Cluster-"+uid,
-                            "Input": "dataFlow.xlrwb.tar.gz",
-                            "Output": "export/dataFlowOut.txt",
+                            "Input": input, #"dataFlow.xlrwb.tar.gz",
+                            "Output": output, #"export/dataFlowOut.txt",
                             "KeepCluster": False
-                        }
-                        RuleArn = response['RuleArn']
-                        response = eb.put_targets(
-                          Rule=name,
-                          Targets=[{
-                            'Id': 'target1',
-                            'Arn': os.environ['StateMachineArn'],
-                            'RoleArn': os.environ['EventRoleArn'],
-                            'Input': json.dumps(input)
-                          }]
-                        )
+                          }
+                          #RuleArn = response['RuleArn']
+                          response = eb.put_targets(
+                            Rule=name,
+                            Targets=[{
+                              'Id': 'target1',
+                              'Arn': os.environ['StateMachineArn'],
+                              'RoleArn': os.environ['EventRoleArn'],
+                              'Input': json.dumps(input)
+                            }]
+                          )
                   except ClientError as e:
-                      ec = e['Error']['Code']
-                      print(f'Error: {ec} when handling {evt}:{evt_op} on {name}.')
-                      print(e)
+                    #ec = response['Error']['Code']
+                    #print(f'Error: {ec} when handling {evt}:{evt_op} on {name}.')
+                    print(e)
       Handler: index.lambda_handler
       Role: !GetAtt ScheduleUpdateRole.Arn
       Runtime: python3.6

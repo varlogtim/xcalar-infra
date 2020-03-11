@@ -82,6 +82,9 @@ do_packer() {
 
     unset INSTALLER
     export INSTALLER_URL
+    if ! test -e $(basename $MANIFEST); then
+        cp -a $MANIFEST . || true
+    fi
     bash -x ../build.sh --template $PACKERCONFIG --installer-url "$INSTALLER_URL" -- ${BUILDER:+-only=${BUILDER}} -var license="${LICENSE}" -var disk_size=$DISK_SIZE -color=false 2>&1 | tee $OUTDIR/output.txt
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         exit 1
@@ -115,7 +118,7 @@ do_packer() {
 do_upload_template() {
     (
     cd $XLRINFRADIR/aws/cfn
-    local builder osid image_id
+    local builder osid
     packer_manifest_all $MANIFEST > $OUTDIR/amis.yaml
     for builder in ${BUILDER//,/ }; do
         osid="${builder##*-}"

@@ -110,18 +110,18 @@ Parameters:
     Description: Desired DNS name without domain name. For example, if you wanted 'xcalar.example.com', you'd put 'xcalar' here. Leave blank to skip assignment.
     Type: String
     Default: ''
-  QSS3BucketName:
-    Description: Source bucket for this stack's initial cloudformation data
-    Type: String
-    Default: '{{ baseBucket }}'
-  QSS3KeyPrefix:
-    Description: Source prefix for this stack's initial cloudformation data
-    Type: String
-    Default: '{{ basePrefix }}'
-  QSS3Region:
-    Description: Source region for this stack's initial cloudformation data
-    Type: String
-    Default: '{{ baseLocation }}'
+    #  QSS3BucketName:
+    #    Description: Source bucket for this stack's initial cloudformation data
+    #    Type: String
+    #    Default: '{{ baseBucket }}'
+    #  QSS3KeyPrefix:
+    #    Description: Source prefix for this stack's initial cloudformation data
+    #    Type: String
+    #    Default: '{{ basePrefix }}'
+    #  QSS3Region:
+    #    Description: Source region for this stack's initial cloudformation data
+    #    Type: String
+    #    Default: '{{ baseLocation }}'
 {%- if enableLicense %}
   LicenseKey:
     Description: XDP License Key
@@ -188,12 +188,12 @@ Metadata:
 {%- if enableExistingShare %}
           - ExistingShare
 {%- endif %}
-      - Label:
-          default: QuickStart (Advanced)
-        Parameters:
-          - QSS3Region
-          - QSS3BucketName
-          - QSS3KeyPrefix
+#      - Label:
+#          default: QuickStart (Advanced)
+#        Parameters:
+#          - QSS3Region
+#          - QSS3BucketName
+#          - QSS3KeyPrefix
     ParameterLabels:
 {%- if enableLicense %}
       LicenseKey:
@@ -227,12 +227,12 @@ Metadata:
         default: 'Hosted Zone Domain Name (Optional)'
       CNAME:
         default: 'Name to register in the specified Hosted Zone (Optional)'
-      QSS3Region:
-        default: 'QuickStart Bucket Region'
-      QSS3BucketName:
-        default: 'QuickStart Bucket'
-      QSS3KeyPrefix:
-        default: 'QuickStart Prefix'
+        #      QSS3Region:
+        #        default: 'QuickStart Bucket Region'
+        #      QSS3BucketName:
+        #        default: 'QuickStart Bucket'
+        #      QSS3KeyPrefix:
+        #        default: 'QuickStart Prefix'
 {%- if createVpc %}
       VpcCidr:
         default: 'VPC CIDR Range'
@@ -266,7 +266,7 @@ Resources:
   LambdaStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub 'https://s3.${QSS3Region}.amazonaws.com/${QSS3BucketName}/${QSS3KeyPrefix}stepfun.json'
+      TemplateURL: '{{ baseUrl }}/stepfun.json'
       Parameters:
         InstanceType: !Ref InstanceType
         EventBucket: !Ref WorkBucket
@@ -274,7 +274,7 @@ Resources:
         ExistingBucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
         WorkBucket: !Ref WorkBucket
         NotificationEmail: !Ref NotificationEmail
-        BaseURL: !Sub 'https://s3.${QSS3Region}.amazonaws.com/${QSS3BucketName}/${QSS3KeyPrefix}'
+        BaseURL: '{{ baseUrl }}/'
         EfsSharedRoot: !Ref EfsSharedRoot
         LaunchTemplate: !Ref LaunchTemplate
         ParentStackId: !Ref 'AWS::StackId'
@@ -855,6 +855,8 @@ Resources:
             Principal:
               Service:
                 - 'kinesisanalytics.amazonaws.com'
+                - 'ec2.amazonaws.com'
+                - 'lambda.amazonaws.com'
             Action:
               - 'sts:AssumeRole'
       Path: '/'
@@ -888,11 +890,16 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
+                  - kinesisanalytics:DiscoverInputSchema
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:GetRole
                   - iam:PassRole
                 Resource: !GetAtt 'KinesisServiceRole.Arn'
-                Condition:
-                  StringEquals:
-                    iam:PassedToService: kinesisanalytics.amazonaws.com
+                #                Condition:
+                #                  StringEquals:
+                #                    iam:PassedToService: kinesisanalytics.amazonaws.com
               - Effect: Allow
                 Action:
                   - ec2:DescribeRegions
