@@ -715,23 +715,26 @@ Resources:
                   - /etc/cfn/hooks.d/cfn-asg-reloader.conf
         configure_app:
           files:
-            #            /etc/pki/host.crt:
-            #              content: !Ref SSLCert
-            #              mode: '000400'
-            #              owner: root
-            #              group: root
+            /etc/xcalar/host.crt:
+              content: !Ref SSLCert
+              mode: '000644'
+              owner: root
+              group: root
+            /etc/xcalar/host.key:
+              content: !Ref SSLKey
+              mode: '000640'
+              owner: root
+              group: xcalar
 
             /var/lib/cloud/instance/ec2.env:
               content: !Sub
-                - |-
+                - |
                   AWS_DEFAULT_REGION=${AWS::Region}
                   CLUSTER_NAME=${AWS::StackName}
                   CLUSTERSIZE=${ClusterSize}
                   BUCKET=${Bucket}
                   WORKBUCKET=${WorkBucket}
                   WORKPREFIX=${AWS::StackName}/
-                  SSLCRT="${SSLCert}"
-                  SSLKEY="${SSLKey}"
                   NFSHOST=${SharedRoot}
                   SUBNET=${Subnet}
                   NIC=${ClusterNIC}
@@ -777,8 +780,6 @@ Resources:
                   source /var/lib/cloud/instance/ec2.env
                   eval $(ec2-tags -s -i)
                   set +a
-                  test -n "$SSLCRT" && echo "$SSLCRT" > /etc/xcalar/host.crt
-                  test -n "$SSLKEY" && echo "$SSLKEY" > /etc/xcalar/host.key
                   AWS_AUTOSCALING_GROUPNAME="$(ec2-tags -s -i | tr -d "'" | awk -F'=' '/^AWS_AUTOSCALING_GROUPNAME/{print $2}')"
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
                   bash /var/lib/cloud/scripts/vendor/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" \
@@ -1019,4 +1020,5 @@ Outputs:
   LaunchTemplate:
     Description: Launch template for cluster
     Value: !Ref LaunchTemplate
+
 # vim: ft=yaml
