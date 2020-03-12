@@ -89,6 +89,16 @@ aws_format_instances() {
         ] |@tsv' | aws_format_output
 }
 
+aws_parse_s3_url() {
+    if [[ $1 =~ https://([a-z0-9\.-]+)\.s3\.amazonaws\.com/(.*)$ ]]; then
+        echo "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+    elif [[ $1 =~ https://s3\.([a-z0-9-]+)\.amazonaws\.com/([^/]+)/(.*)$ ]]; then
+        echo "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+    else
+        return 1
+    fi
+}
+
 aws_list_instances_info() {
     aws ec2 describe-instances "$@" --output=json | aws_format_instances
 }

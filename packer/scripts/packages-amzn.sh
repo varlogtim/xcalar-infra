@@ -91,6 +91,7 @@ install_lego
 echo 'exclude=kernel-debug* *.i?86 *.i686' >> /etc/yum.conf
 yum upgrade -y
 yum install -y "https://storage.googleapis.com/repo.xcalar.net/xcalar-release-${OSID}.rpm" || true
+yum clean all --enablerepo='*'
 yum erase   -y 'ntp*' || true
 
 yum install -y --enablerepo='xcalar*' --enablerepo=epel \
@@ -100,7 +101,7 @@ yum install -y --enablerepo='xcalar*' --enablerepo=epel \
         libnfs-utils
 
 yum install -y --enablerepo='xcalar*' --enablerepo='epel' --disableplugin=priorities \
-    ec2tools ephemeral-disk tmux ccache restic neovim lifecycled consul node_exporter \
+    ec2tools ephemeral-disk tmux ccache restic lifecycled consul node_exporter \
     freetds xcalar-node10 java-1.8.0-openjdk-headless opthaproxy2
 
 yum remove -y python26 python-pip || true
@@ -138,6 +139,7 @@ case "$OSID" in
     amzn2)
         systemctl enable --now chronyd
         systemctl enable --now atd
+        systemctl disable motd.service || true
         #chkconfig network off || true
         #systemctl mask network.service || true
         amazon-linux-extras install -y ansible2=2.8 kernel-ng vim

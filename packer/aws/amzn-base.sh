@@ -58,6 +58,7 @@ export BUILD_NUMBER=${BUILD_NUMBER:-1}
 if ! packer.io build \
     -machine-readable \
     -timestamp-ui \
+    -only=amazon-ebs-amzn2 \
     -var base_owner='137112412989' \
     -var region=${AWS_DEFAULT_REGION:-us-west-2} \
     -var destination_regions=${REGIONS:-us-west-2} \
@@ -67,9 +68,9 @@ if ! packer.io build \
     exit 1
 fi
 
-ami_amzn1=$(packer_ami_from_manifest amazon-ebs-amzn1 $MANIFEST)
+#ami_amzn1=$(packer_ami_from_manifest amazon-ebs-amzn1 $MANIFEST)
 ami_amzn2=$(packer_ami_from_manifest amazon-ebs-amzn2 $MANIFEST)
-echo "ami_amzn1: $ami_amzn1"
+#echo "ami_amzn1: $ami_amzn1"
 echo "ami_amzn2: $ami_amzn2"
 
 exit $?

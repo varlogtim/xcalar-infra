@@ -1,6 +1,6 @@
 SHELL:=/bin/bash
 
-AMI_ID = ami-084f7ad9109713f77
+AMI_ID = ami-0c7f3778b6dfb6401
 PROJECT = xdp-instamart
 GEN = ref/xdp-standard-byovpc.cf.yaml ref/xdp-standard.cf.yaml
 VALIDATION = $(patsubst %.cf.yaml, %.valid, $(GEN))
@@ -12,7 +12,8 @@ LAMBDA_BUCKET = sharedinf-lambdabucket-559166403383-us-west-2
 URL = ref/output.url
 UUID := $(shell uuidgen)
 CHANGE_SET = mychange-$(UUID)
-STACK_NAME = abakshi-instamart
+NAME := $(shell id -un)
+STACK_NAME = $(NAME)-instamart
 
 all: check
 
@@ -48,7 +49,7 @@ lambda.zip: lambda/requirements.txt lambda/constraints.txt lambda/add_notificati
 upload: lambda.zip
 	MD5=`md5sum $< | cut -c1-16`; aws s3 cp $(S3FLAGS) $^ s3://$(LAMBDA_BUCKET)/$(PROJECT)/$${MD5}.zip \
         && sed -i 's@S3Key:.*$$@S3Key: $(PROJECT)/'$${MD5}'.zip@' stepfun.cf.yaml
-	dc2 upload --debug --project $(PROJECT) --env test --manifest $(XLRINFRADIR)/output/packer-manifest.json --version 2.2.0 --release 4025 --url-file $(URL)
+	dc2 upload --debug --keep --project $(PROJECT) --env test --manifest $(XLRINFRADIR)/output/packer-manifest.json `img2json.sh --format=cli $(AMI_ID)` --url-file $(URL)
 
 STACK_CHANGE = --stack-name $(STACK_NAME) --change-set-name $(CHANGE_SET)
 create: check upload

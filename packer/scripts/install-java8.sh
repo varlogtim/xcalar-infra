@@ -8,10 +8,11 @@ install_java8() {
         apt-get install -y openjdk-8-jdk
         export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
     else
+        unset JAVA_HOME
         yum remove -y java-1.7.0-openjdk-headless java-1.7.0-openjdk || true
         yum install -y java-1.8.0-openjdk-devel
         for dir in /usr/lib/jvm/java-1.8.0-openjdk /usr/lib/jvm/java-1.8.0 /usr/lib/jvm/java-1.8.0-openjdk.x86_64 /usr/java/latest; do
-            if test -e "$dir/bin/java"; then
+            if test -e "$dir/bin/javac"; then
                 export JAVA_HOME=$dir
                 break
             fi

@@ -1,6 +1,11 @@
 #!/bin/bash
 
 set -x
+
+while  pgrep -af dracut; do
+    sleep 10
+done
+
 if [ -e  /var/cache/yum ]; then
     yum clean all --enablerepo='*'
     rm -rf /var/cache/yum/*

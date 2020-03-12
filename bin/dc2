@@ -327,7 +327,7 @@ dc2_upload() {
     J2DEFS+=(-D "PUBLISHING=${PUBLISHING^}")
 
     test -n "${PROJECT:-}" || die "Need to set --project"
-    test -n "${VERSION:-}" || VERSION=$(cat $PORJECT/VERSION) || die "Need to set --version"
+    test -n "${VERSION:-}" || VERSION=$(cat $PROJECT/VERSION) || die "Need to set --version"
     PROJDIR="${TEMPLATEDIR}/${PROJECT}"
     CONTEXT="${ENVIRONMENT}/${PROJECT}/${VERSION}"
     test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
@@ -373,6 +373,7 @@ dc2_upload() {
 	VERSION: '$VERSION'
 	PROJECT: '$PROJECT'
 	RELEASE: '$RELEASE'
+	ENVIRONMENT: '$ENVIRONMENT'
 	baseUrl: '$BASE_URL'
 	baseBucket: '${BUCKET}'
 	basePrefix: '${TARGET}/'

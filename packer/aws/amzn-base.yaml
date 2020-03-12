@@ -149,6 +149,8 @@ provisioners:
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     inline:
+      - source /etc/profile.d/zjava.sh
+      - test -x $JAVA_HOME/bin/javac || exit 1
       - chmod 0755 /tmp/aws-verify.sh
       - chown root:root /tmp/aws-verify.sh
       - mv /tmp/aws-verify.sh /usr/bin/
@@ -163,7 +165,7 @@ provisioners:
     environment_vars:
       - OSID={{split build_name "-" 2}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
-    pause_before: "1m"
+    pause_before: "2m"
     scripts:
       - '{{ template_dir }}/../scripts/finish.sh'
 post-processors:

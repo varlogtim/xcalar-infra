@@ -242,11 +242,29 @@ Metadata:
 Conditions:
   CreateNewS3: !Equals [!Ref ExistingS3, '']
   NoInstances: !Equals [!Ref ClusterSize, 0]
+  CreateInstances: !Not [!Equals [!Ref ClusterSize, '0']]
   CreateDNS: !Not [!Or [!Equals [!Ref HostedZoneName, ''], !Equals [!Ref CNAME, '']]]
+  #  IsUsEast1: !Equals [!Ref 'AWS::Region', 'us-east-1']
 {%- if enableExistingShare %}
   CreateNewShare: !Equals [!Ref ExistingShare, '']
 {%- endif %}
 Mappings:
+  #  AccountLUT:
+  #    '043829555035':
+  #      AccountName: 'xcalar-test'
+  #      HostedZoneId: 'ZOHHT2AHYTDDN'
+  #      HostedZoneName: 'test.xcalar.cloud'
+  #      Failover: 'redirector.test.xcalar.cloud'
+  #    '559166403383':
+  #      AccountName: 'xcalar'
+  #      HostedZoneId: 'ZM6YP51I9IZCW'
+  #      HostedZoneName: 'xcalar.rocks'
+  #      Failover: 'redirector.xcalar.rocks'
+  #    '876030232190':
+  #      AccountName: 'xcpegasus'
+  #      HostedZoneId: 'Z3OAJRCVE57A0G'
+  #      HostedZoneName: 'xcalar.cloud'
+  #      Failover: 'redirector.xcalar.cloud'
   AWSAMIRegionMap:
 {%- for reg in ['us-east-1','us-west-2','us-east-2','us-west-1'] %}
     {{ reg }}:
@@ -389,6 +407,7 @@ Resources:
   WorkBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -589,6 +608,7 @@ Resources:
         WaitOnResourceSignals: false
   ClusterEIP:
     Type: AWS::EC2::EIP
+    Condition: CreateInstances
 {%- if createVpc %}
     DependsOn: GatewayAttachment
 {%- endif %}
@@ -608,14 +628,29 @@ Resources:
       Type: A
       TTL: '60'
       ResourceRecords:
-        - !Ref ClusterEIP
+        - !If
+          - CreateInstances
+          - !Ref ClusterEIP
+          - '0.0.0.0'
+        #        - !If
+        #          - CreateInstances
+        #          - !Sub
+        #            - "ec2-${IpDash}.${Domain}."
+        #            - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
+        #              Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
+        #          - !FindInMap
+        #            - AccountLUT
+        #            - !Ref 'AWS::AccountId'
+        #            - Failover
   AssociateEIP:
     Type: AWS::EC2::EIPAssociation
+    Condition: CreateInstances
     Properties:
       AllocationId: !GetAtt ClusterEIP.AllocationId
       NetworkInterfaceId: !Ref ClusterNIC
   ClusterNIC:
     Type: AWS::EC2::NetworkInterface
+    Condition: CreateInstances
     Properties:
       SubnetId: !Ref Subnet
       Description: Interface for traffic from the internet to the cluster head node
@@ -738,12 +773,13 @@ Resources:
                   SUBNET=${Subnet}
                   SSLKEYFILE=/etc/xcalar/host.key
                   SSLCRTFILE=/etc/xcalar/host.crt
-                  NIC=${ClusterNIC}
+                  NIC=${NIC}
                   HOSTEDZONENAME=${HostedZoneName}
                   CNAME=${CNAME}
                   KINESISROLEARN=${KinesisRoleARN}
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
                   KinesisRoleARN: !GetAtt 'KinesisServiceRole.Arn'
+                  NIC: !If [CreateInstances, !Ref ClusterNIC, '']
 {%- if enableExistingShare %}
                   SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
 {%- else %}
@@ -785,12 +821,13 @@ Resources:
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
                   bash /var/lib/cloud/scripts/vendor/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" \
                             --cluster-size "$DESIREDCAP" --tag-key "aws:autoscaling:groupName" --tag-value "$AWS_AUTOSCALING_GROUPNAME" --cluster-name "${AWS::StackName}" \
-                            --bucket "${Bucket}" --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic ${ClusterNIC}
+                            --bucket "${Bucket}" --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic ${NIC}
                   rc=$?
                   dt=$(( $(date +%s) - start ))
                   log local0.info "bootstrap.sh returned $rc in $dt seconds"
                   exit $rc
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                  NIC: !If [CreateInstances, !Ref ClusterNIC, '']
 {%- if enableExistingShare %}
                   SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
 {%- else %}
@@ -990,8 +1027,9 @@ Outputs:
     Value: !If
       - CreateDNS
       - !Join ["", ["https://",!Ref CNAME,".",!Ref HostedZoneName]]
-      - !Join ["", ["http://",!Ref 'ClusterEIP']]
+      - !Join ["", ["https://",!Ref 'ClusterDNSRecord']]
   EIP:
+    Condition: CreateInstances
     Description: Cluster ElasticIP
     Value: !Ref 'ClusterEIP'
 {%- if createVpc %}
