@@ -725,7 +725,6 @@ Resources:
               mode: '000640'
               owner: root
               group: xcalar
-
             /var/lib/cloud/instance/ec2.env:
               content: !Sub
                 - |
@@ -737,6 +736,8 @@ Resources:
                   WORKPREFIX=${AWS::StackName}/
                   NFSHOST=${SharedRoot}
                   SUBNET=${Subnet}
+                  SSLKEYFILE=/etc/xcalar/host.key
+                  SSLCRTFILE=/etc/xcalar/host.crt
                   NIC=${ClusterNIC}
                   HOSTEDZONENAME=${HostedZoneName}
                   CNAME=${CNAME}
@@ -748,7 +749,7 @@ Resources:
 {%- else %}
                   SharedRoot: !Ref EfsSharedRoot
 {%- endif %}
-              mode: '000400'
+              mode: '000444'
               owner: root
               group: root
             /etc/systemd/system/xcalar-usrnode.service.d/env.conf:
@@ -955,8 +956,8 @@ Resources:
                   - '*'
               - Effect: Allow
                 Action:
-                  - s3:GetBucket*
-                  - s3:ListBucket*
+                  - s3:Get*
+                  - s3:List*
                   - s3:HeadBucket
                 Resource:
                   - !Sub
@@ -967,7 +968,9 @@ Resources:
                 Action:
                   - s3:ListMultipartUploadParts
                   - s3:AbortMultipartUpload
+                  - s3:CreateMultipartUpload
                   - s3:GetObject
+                  - s3:GetObjectVersion
                   - s3:PutObject
                   - s3:DeleteObject
                 Resource:
