@@ -139,7 +139,7 @@ case "$OSID" in
     amzn2)
         systemctl enable --now chronyd
         systemctl enable --now atd
-        systemctl disable motd.service || true
+        systemctl disable update-motd.service || true
         #chkconfig network off || true
         #systemctl mask network.service || true
         amazon-linux-extras install -y ansible2=2.8 kernel-ng vim
