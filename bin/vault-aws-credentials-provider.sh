@@ -156,6 +156,9 @@ if [[ $OSTYPE =~ darwin ]]; then
     readlink() {
         greadlink "$@"
     }
+    sha256sum() {
+        shasum -a 256 "$@"
+    }
 else
     please_install() {
         say
