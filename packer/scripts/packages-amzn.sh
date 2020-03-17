@@ -102,7 +102,7 @@ yum install -y --enablerepo='xcalar*' --enablerepo=epel \
 
 yum install -y --enablerepo='xcalar*' --enablerepo='epel' --disableplugin=priorities \
     ec2tools ephemeral-disk tmux ccache restic lifecycled consul node_exporter \
-    freetds xcalar-node10 java-1.8.0-openjdk-headless opthaproxy2
+    freetds xcalar-node10 java-1.8.0-openjdk-headless opthaproxy2 su-exec tini
 
 yum remove -y python26 python-pip || true
 

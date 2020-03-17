@@ -99,16 +99,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
-  AddS3Notification:
-    Type: 'AWS::Lambda::Function'
-    Properties:
-      Handler: add_notification.lambda_handler
-      Role: !GetAtt AddS3NotificationRole.Arn
-      Runtime: python3.6
-      Timeout: 60
-      Code:
-        S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/349b7938bd5e8419.zip
 
   ScheduleUpdateTrigger:
     Type: 'Custom::LambdaTrigger'
@@ -189,28 +179,6 @@ Resources:
                   - 'iam:PassRole'
                   - 'iam:GetRole'
                 Resource: '*'
-  ScheduleUpdateFunction:
-    Type: 'AWS::Lambda::Function'
-    Properties:
-      Code:
-        S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/349b7938bd5e8419.zip
-      Handler: schedule.update_handler
-      Role: !GetAtt ScheduleUpdateRole.Arn
-      Layers:
-        - !ImportValue sharedinf-lambdalayer
-      Runtime: python3.6
-      Timeout: 60
-      Environment:
-        Variables:
-          StackName: !Ref 'AWS::StackName'
-          StackId: !Ref 'AWS::StackId'
-          ParentStack: !Ref ParentStack
-          EventBucket: !Ref EventBucket
-          EventPrefix: !Ref EventPrefix
-          StateMachineArn: !Ref DataAppStateMachine
-          EventRoleArn: !GetAtt ScheduleExecuteEventRole.Arn
-
 
   ScheduleUpdateCallPermission:
     Type: 'AWS::Lambda::Permission'
@@ -343,6 +311,7 @@ Resources:
                   - "cloudformation:DescribeStackResource*"
                   - "autoscaling:DescribeAutoScalingGroups"
                   - "elasticfilesystem:DescribeMountTargets"
+                  - "autoscaling:CompleteLifecycleAction"
                 Resource: "*"
               - Effect: "Allow"
                 Action:
@@ -353,7 +322,7 @@ Resources:
                   - !Sub "arn:aws:s3:::${EventBucket}"
               - Effect: "Allow"
                 Action:
-                  - s3:Put*
+                  - "s3:Put*"
                 Resource:
                   - !Sub "arn:aws:s3:::${WorkBucket}/*"
               - Effect: "Allow"
@@ -369,44 +338,56 @@ Resources:
       Roles:
         - !Ref Ec2SSMRole
 
+  AddS3Notification:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        S3Bucket: !ImportValue sharedinf-lambdabucket
+        S3Key: xdp-instamart/80e8e9564c13610f.zip
+      Handler: add_notification.lambda_handler
+      Role: !GetAtt AddS3NotificationRole.Arn
+      Layers:
+        - !ImportValue sharedinf-lambdalayer
+      Runtime: python3.6
+      Timeout: 60
+
+  ScheduleUpdateFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        S3Bucket: !ImportValue sharedinf-lambdabucket
+        S3Key: xdp-instamart/80e8e9564c13610f.zip
+      Handler: schedule.update_handler
+      Role: !GetAtt ScheduleUpdateRole.Arn
+      Layers:
+        - !ImportValue sharedinf-lambdalayer
+      Runtime: python3.6
+      Timeout: 100
+      Environment:
+        Variables:
+          StackName: !Ref 'AWS::StackName'
+          StackId: !Ref 'AWS::StackId'
+          ParentStack: !Ref ParentStack
+          EventBucket: !Ref EventBucket
+          EventPrefix: !Ref EventPrefix
+          StateMachineArn: !Ref DataAppStateMachine
+          EventRoleArn: !GetAtt ScheduleExecuteEventRole.Arn
+
   StepStartFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        ZipFile: |
-          import boto3
-          import os
-          import json
-          import uuid
-          step = boto3.client('stepfunctions')
-          def lambda_handler(event,context):
-              print(json.dumps(event))
-              StateMachineArn = os.environ['StateMachineArn']
-              StateMachineName = os.environ['StateMachineName']
-              StackName = os.environ['StackName']
-              uid = uuid.uuid1().hex
-              input = {
-                  "Comment": "Insert your JSON here",
-                  "ClusterSize": 1,
-                  "ClusterName": "Cluster-"+uid,
-                  "Input": "dataFlow.xlrwb.tar.gz",
-                  "Output": "export/dataFlowOut.txt",
-                  "KeepCluster": False
-              }
-              name = f'{StackName}-{StateMachineName}-{uid}'
-              response = step.start_execution(
-                stateMachineArn=StateMachineArn,
-                name=name,
-                input=json.dumps(input)
-              )
-              return response['executionArn']
+        S3Bucket: !ImportValue sharedinf-lambdabucket
+        S3Key: xdp-instamart/80e8e9564c13610f.zip
+      Handler: schedule.startstep_handler
+      Layers:
+        - !ImportValue sharedinf-lambdalayer
       Description: "Launches a statemachine"
       Environment:
         Variables:
           StateMachineArn: !Ref DataAppStateMachine
           StateMachineName: !GetAtt DataAppStateMachine.Name
           StackName: !Ref 'AWS::StackName'
-      Handler: index.lambda_handler
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
       Timeout: 300
@@ -415,50 +396,11 @@ Resources:
     Type: "AWS::Lambda::Function"
     Properties:
       Code:
-        ZipFile: !Sub |
-          import json
-          import boto3
-          import os
-          import gzip
-          import base64
-          from botocore.vendored import requests
-
-          def lambda_handler(event, context):
-              print(json.dumps(event))
-              client = boto3.client('ec2')
-              InstanceType = os.environ['InstanceType']
-              InstanceArn = os.environ['InstanceArn']
-              ClusterName = event['ClusterName']
-              ClusterSize = int(event['ClusterSize'])
-              LaunchTemplate = os.environ['LaunchTemplate']
-              BaseURL = os.environ['BaseURL']
-              EfsSharedRoot = os.environ['EfsSharedRoot']
-              Email = os.environ['Email']
-              url = requests.get(f'{BaseURL}scripts/batch.sh')
-              response = client.run_instances(
-                  LaunchTemplate={
-                    'LaunchTemplateId': LaunchTemplate
-                  },
-                  InstanceType=InstanceType,
-                  IamInstanceProfile={
-                      'Arn': InstanceArn
-                  },
-                  MinCount=int(ClusterSize),
-                  MaxCount=int(ClusterSize),
-                  TagSpecifications=[{
-                    'ResourceType': 'instance',
-                    'Tags': [
-                      {'Key': 'Name', 'Value': f'{ClusterName}-vm' },
-                      {'Key': 'ClusterName', 'Value': ClusterName },
-                      {'Key': 'ClusterSize', 'Value': str(ClusterSize) },
-                      {'Key': 'FileSystemId', 'Value': EfsSharedRoot },
-                      {'Key': 'Owner', 'Value': Email}
-                    ]
-                  }],
-                  UserData=url.content
-              )
-              event['InstanceIds'] =  [instance['InstanceId'] for instance in response['Instances']]
-              return event
+        S3Bucket: !ImportValue sharedinf-lambdabucket
+        S3Key: xdp-instamart/80e8e9564c13610f.zip
+      Handler: schedule.launchcluster_handler
+      Layers:
+        - !ImportValue sharedinf-lambdalayer
       Description: "Creates cluster to perform DataApp processing"
       Environment:
         Variables:
@@ -468,7 +410,6 @@ Resources:
           BaseURL: !Ref BaseURL
           EfsSharedRoot: !Ref EfsSharedRoot
           Email: !Ref NotificationEmail
-      Handler: index.lambda_handler
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
       Timeout: 300
@@ -477,7 +418,7 @@ Resources:
     Type: "AWS::Lambda::Function"
     Properties:
       Code:
-        ZipFile: !Sub |
+        ZipFile: |
           import sys, os
           import boto3
           import json
@@ -511,35 +452,36 @@ Resources:
     Type: "AWS::Lambda::Function"
     Properties:
       Code:
-        ZipFile: !Sub |
+        ZipFile: |
           import boto3
           import os
           import json
-          client = boto3.client('ssm')
-          ec2 = boto3.client('ec2')
-          s3 = boto3.client('s3')
-          #dynamodbclient = boto3.client('dynamodb')
-          Bucket = os.environ['Bucket']
-          BaseURL = os.environ['BaseURL']
+          import datetime
           def lambda_handler(event, context):
+              print(json.dumps(event))
+              client = boto3.client('ssm')
+              ec2 = boto3.client('ec2')
+              s3 = boto3.client('s3')
+              BaseURL = os.environ['BaseURL']
+              now = datetime.datetime.now()
               instance_ids = event['InstanceIds']
-              #AMIConfigTable = event['AMIConfigTable']
-              #dynamodbresponse = dynamodbclient.scan(TableName=AMIConfigTable)
-              Input = event['Input']
-              Output = event['Output']
-              Items = [] #dynamodbresponse['Items']
+              Items = []
               print(instance_ids)
               print(ec2.describe_instances(InstanceIds=instance_ids))
               event['Commands'] = []
+              command = event['Command']
+              command = command.replace('%Y',str(now.year)).replace('%m',str(now.month)).replace('%d',str(now.day))
+              command = command.replace('%H',str(now.hour)).replace('%M',str(now.minute)).replace('%S',str(now.second))
               response = client.send_command(
                 InstanceIds=[instance_ids[0]],
                 DocumentName='AWS-RunShellScript',
                 Parameters={
                   'commands': [
+                    "yum install -y --enablerepo='xcalar*' su-exec",
                     'systemctl start xcalar.service',
-                    f'curl {BaseURL}scripts/batch.py -o /usr/bin/batch.py',
-                    'chmod +x /usr/bin/batch.py',
-                    f'/opt/xcalar/bin/python3.6 /usr/bin/batch.py s3://{Bucket}/{Input} s3://{Bucket}/{Output}'
+                    f'curl {BaseURL}scripts/runner.sh -o /usr/bin/runner.sh',
+                    'chmod +x /usr/bin/runner.sh',
+                    f'/usr/bin/runner.sh --runas xcalar -- {command}'
                   ]
                 }
               )

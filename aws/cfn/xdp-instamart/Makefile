@@ -1,6 +1,6 @@
 SHELL:=/bin/bash
 
-AMI_ID = ami-0c7f3778b6dfb6401
+AMI_ID = ami-0998e0b76894fa4b3
 PROJECT = xdp-instamart
 GEN = ref/xdp-standard-byovpc.cf.yaml ref/xdp-standard.cf.yaml
 VALIDATION = $(patsubst %.cf.yaml, %.valid, $(GEN))
@@ -38,10 +38,11 @@ clean:
 	rm -fv $(GEN) $(VALIDATION) $(PARAMS)
 
 ref/xdp-standard-byovpc.cf.yaml: xdp-standard.template.j2
-	jinja2 -DbaseUrl=$(BASEURL) -DbootstrapUrl=$(BASEURL)scripts/user-data.sh  -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=False $< vars/allowed_types.yaml > $@
+	jinja2 -DbaseUrl=$(BASEURL) -DenableLifecycle=True -DbootstrapUrl=$(BASEURL)scripts/user-data.sh  -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=False $< vars/allowed_types.yaml > $@
+
 
 ref/xdp-standard.cf.yaml: xdp-standard.template.j2
-	jinja2 -DbaseUrl=$(BASEURL) -DbootstrapUrl=$(BASEURL)scripts/user-data.sh  -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=True $< vars/allowed_types.yaml > $@
+	jinja2 -DbaseUrl=$(BASEURL) -DenableLifecycle=True -DbootstrapUrl=$(BASEURL)scripts/user-data.sh  -DDEBUG=$(DEBUG) -Dami_id=$(AMI_ID) -DcreateVpc=True $< vars/allowed_types.yaml > $@
 
 %.zip: %/requirements.txt %/constraints.txt
 	rm -rf pkg/$(<D)
@@ -50,9 +51,13 @@ ref/xdp-standard.cf.yaml: xdp-standard.template.j2
 	cd pkg/$(<D) && zip -9r ../../$@ *
 
 
-lambda.zip: lambda/schedule.py lambda/add_notification.py
+lambda.zip: lambda/schedule.py lambda/add_notification.py lambda/requirements.txt lambda/constraints.txt
 	rm -f $@
-	cd $(<D) && zip -q -9r ../$@ $(^F)
+	rm -rf pkg/
+	mkdir -p pkg
+	cp -a $^ pkg/
+	cd pkg && pip install -r requirements.txt -c constraints.txt -t .
+	cd pkg && zip -9r ../$@ *
 	md5sum $@ > $@.md5sum
 
 #--manifest $(XLRINFRADIR)/output/packer-manifest.json

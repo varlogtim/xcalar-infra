@@ -111,18 +111,6 @@ Parameters:
     Description: Desired DNS name without domain name. For example, if you wanted 'xcalar.example.com', you'd put 'xcalar' here. Leave blank to skip assignment.
     Type: String
     Default: ''
-    #  QSS3BucketName:
-    #    Description: Source bucket for this stack's initial cloudformation data
-    #    Type: String
-    #    Default: '{{ baseBucket }}'
-    #  QSS3KeyPrefix:
-    #    Description: Source prefix for this stack's initial cloudformation data
-    #    Type: String
-    #    Default: '{{ basePrefix }}'
-    #  QSS3Region:
-    #    Description: Source region for this stack's initial cloudformation data
-    #    Type: String
-    #    Default: '{{ baseLocation }}'
 {%- if enableLicense %}
   LicenseKey:
     Description: XDP License Key
@@ -189,12 +177,6 @@ Metadata:
 {%- if enableExistingShare %}
           - ExistingShare
 {%- endif %}
-#      - Label:
-#          default: QuickStart (Advanced)
-#        Parameters:
-#          - QSS3Region
-#          - QSS3BucketName
-#          - QSS3KeyPrefix
     ParameterLabels:
 {%- if enableLicense %}
       LicenseKey:
@@ -228,12 +210,6 @@ Metadata:
         default: 'Hosted Zone Domain Name (Optional)'
       CNAME:
         default: 'Name to register in the specified Hosted Zone (Optional)'
-        #      QSS3Region:
-        #        default: 'QuickStart Bucket Region'
-        #      QSS3BucketName:
-        #        default: 'QuickStart Bucket'
-        #      QSS3KeyPrefix:
-        #        default: 'QuickStart Prefix'
 {%- if createVpc %}
       VpcCidr:
         default: 'VPC CIDR Range'
@@ -245,27 +221,30 @@ Conditions:
   NoInstances: !Equals [!Ref ClusterSize, 0]
   CreateInstances: !Not [!Equals [!Ref ClusterSize, '0']]
   CreateDNS: !Not [!Or [!Equals [!Ref HostedZoneName, ''], !Equals [!Ref CNAME, '']]]
-  #  IsUsEast1: !Equals [!Ref 'AWS::Region', 'us-east-1']
+  IsUsEast1: !Equals [!Ref 'AWS::Region', 'us-east-1']
 {%- if enableExistingShare %}
   CreateNewShare: !Equals [!Ref ExistingShare, '']
 {%- endif %}
 Mappings:
-  #  AccountLUT:
-  #    '043829555035':
-  #      AccountName: 'xcalar-test'
-  #      HostedZoneId: 'ZOHHT2AHYTDDN'
-  #      HostedZoneName: 'test.xcalar.cloud'
-  #      Failover: 'redirector.test.xcalar.cloud'
-  #    '559166403383':
-  #      AccountName: 'xcalar'
-  #      HostedZoneId: 'ZM6YP51I9IZCW'
-  #      HostedZoneName: 'xcalar.rocks'
-  #      Failover: 'redirector.xcalar.rocks'
-  #    '876030232190':
-  #      AccountName: 'xcpegasus'
-  #      HostedZoneId: 'Z3OAJRCVE57A0G'
-  #      HostedZoneName: 'xcalar.cloud'
-  #      Failover: 'redirector.xcalar.cloud'
+  AccountLUT:
+    '043829555035':
+      AccountName: 'xcalar-test'
+      HostedZoneId: 'ZOHHT2AHYTDDN'
+      HostedZoneName: 'test.xcalar.cloud'
+      Failover: 'redirector.test.xcalar.cloud'
+      Ip: '0.0.0.0'
+    '559166403383':
+      AccountName: 'xcalar'
+      HostedZoneId: 'ZM6YP51I9IZCW'
+      HostedZoneName: 'xcalar.rocks'
+      Failover: 'redirector.xcalar.rocks'
+      Ip: '0.0.0.0'
+    '876030232190':
+      AccountName: 'xcpegasus'
+      HostedZoneId: 'Z3OAJRCVE57A0G'
+      HostedZoneName: 'xcalar.cloud'
+      Failover: 'redirector.xcalar.cloud'
+      Ip: '0.0.0.0'
   AWSAMIRegionMap:
 {%- for reg in ['us-east-1','us-west-2','us-east-2','us-west-1'] %}
     {{ reg }}:
@@ -617,23 +596,19 @@ Resources:
     Properties:
       HostedZoneName: !Sub '${HostedZoneName}.'
       Name: !Sub '${CNAME}.${HostedZoneName}.'
-      Type: A
+      Type: CNAME
       TTL: '60'
       ResourceRecords:
         - !If
           - CreateInstances
-          - !Ref ClusterEIP
-          - '0.0.0.0'
-        #        - !If
-        #          - CreateInstances
-        #          - !Sub
-        #            - "ec2-${IpDash}.${Domain}."
-        #            - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
-        #              Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
-        #          - !FindInMap
-        #            - AccountLUT
-        #            - !Ref 'AWS::AccountId'
-        #            - Failover
+          - !Sub
+            - "ec2-${IpDash}.${Domain}."
+            - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
+              Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
+          - !FindInMap
+            - AccountLUT
+            - !Ref 'AWS::AccountId'
+            - Failover
   AssociateEIP:
     Type: AWS::EC2::EIPAssociation
     Condition: CreateInstances
@@ -666,6 +641,40 @@ Resources:
             - reconfigure_app
         configure_cfn:
           files:
+{%- if enableLifecycle %}
+            /etc/sysconfig/lifecycled:
+              content: !Sub
+                - |
+                  AWS_DEFAULT_REGION=${AWS::Region}
+                  AWS_REGION=${AWS::Region}
+                  LIFECYCLED_HANDLER=/usr/bin/copylogs.sh
+                  LIFECYCLED_SNS_TOPIC=${LifecycleHookTopic}
+                  LIFECYCLE_HOOK_NAME=LifecycleTerminating
+                  LOGBUCKET=${LogBucket}
+                  LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
+                - { LogBucket: !ImportValue sharedinf-logbucket }
+              mode: '000400'
+              owner: root
+              group: root
+            /usr/bin/copylogs.sh:
+              content: !Sub |
+                #!/bin/bash
+                set -x
+                echo "$(date +%TF%T%z) Running copylogs.sh" | logger --id -p "local0.info" -t copy-logs -s
+                eval $(ec2-tags -s -i)
+                source /etc/sysconfig/lifecycled
+                export AWS_DEFAULT_REGION="${AWS::Region}"
+                InstanceId=$(curl -s http://169.254.169.254/2018-09-24/meta-data/instance-id)
+                S3Uri=${!LOGBUCKET}${!LOGPREFIX}${!InstanceId}
+                for dir in /var/log /var/opt/xcalar /home/xcalar; do
+                  aws s3 cp --recursive ${!dir}/ s3://${!S3Uri}${!dir}/ 2>&1 | logger --id -p "local0.info" -t copy-logs -s
+                done
+                aws autoscaling complete-lifecycle-action --lifecycle-action-result CONTINUE --instance-id ${!InstanceId} --lifecycle-hook-name $LIFECYCLE_HOOK_NAME --auto-scaling-group-name "$AWS_AUTOSCALING_GROUPNAME"
+                exit 0
+              mode: '000750'
+              owner: root
+              group: root
+{%- endif %}
 {%- if ENV != 'prod' %}
             /var/lib/cloud/scripts/vendor/bootstrap.sh:
               source: '{{ bootstrapUrl }}'
@@ -711,17 +720,19 @@ Resources:
               group: xcalar
             /var/www/xcalar-gui/s3buckets.json:
               content: !Sub
-                - |-
+                - |
                   {
                     "s3buckets": {
                       "S3Bucket": {
                         "bucket": "${Bucket}",
                         "prefix": "",
+                        "event_prefix": "",
                         "existing": ${Existing}
                       },
                       "WorkBucket": {
                         "bucket": "${WorkBucket}",
                         "prefix": "${AWS::StackName}/",
+                        "event_prefix": ".events/",
                         "existing": false
                       }
                     }
@@ -752,6 +763,11 @@ Resources:
               mode: '000640'
               owner: root
               group: xcalar
+            /usr/bin/runner:
+              source: '{{ baseUrl }}scripts/runner.sh'
+              mode: '000755'
+              owner: root
+              group: root
             /var/lib/cloud/instance/ec2.env:
               content: !Sub
                 - |
@@ -763,6 +779,7 @@ Resources:
                   EVENTPREFIX=.events/
                   WORKPREFIX=${AWS::StackName}/
                   NFSHOST=${SharedRoot}
+                  NFSIP=${NFSIp}
                   SUBNET=${Subnet}
                   SSLKEYFILE=/etc/xcalar/host.key
                   SSLCRTFILE=/etc/xcalar/host.crt
@@ -771,9 +788,17 @@ Resources:
                   CNAME=${CNAME}
                   KINESISROLEARN=${KinesisRoleARN}
                   BASEURL={{ baseUrl }}
+{%- if enableLifecycle %}
+                  LOGBUCKET=${LogBucket}
+                  LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
+{%- endif %}
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
                   KinesisRoleARN: !GetAtt 'KinesisServiceRole.Arn'
                   NIC: !If [CreateInstances, !Ref ClusterNIC, '']
+                  NFSIp: !GetAtt 'EfsMountTarget.IpAddress'
+{%- if enableLifecycle %}
+                  LogBucket: !ImportValue sharedinf-logbucket
+{%- endif %}
 {%- if enableExistingShare %}
                   SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
 {%- else %}
@@ -808,10 +833,13 @@ Resources:
                   eval $(ec2-tags -s -i)
                   set +a
                   systemctl daemon-reload
+{%- if enableLifecycle %}
+                  systemctl enable --now lifecycled
+{%- endif %}
                   AWS_AUTOSCALING_GROUPNAME="$(ec2-tags -s -i | tr -d "'" | awk -F'=' '/^AWS_AUTOSCALING_GROUPNAME/{print $2}')"
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
                   bash /var/lib/cloud/scripts/vendor/bootstrap.sh --admin-username "${AdminUsername}" --admin-password "${AdminPassword}" \
-                            --cluster-size "$DESIREDCAP" --tag-key "aws:autoscaling:groupName" --tag-value "$AWS_AUTOSCALING_GROUPNAME" --cluster-name "${AWS::StackName}" \
+                            --cluster-size "$DESIREDCAP" --tag-key "aws:autoscaling:groupName" --tag-value "$AWS_AUTOSCALING_GROUPNAME" --cluster-name "$CLUSTER_NAME" \
                             --bucket "${Bucket}" --nfs-mount "${SharedRoot}" --subnet "${Subnet}" --nic "${NIC}"
                   rc=$?
                   dt=$(( $(date +%s) - start ))
@@ -900,7 +928,35 @@ Resources:
               - Effect: Deny
                 Action: s3:ListAllMyBuckets
                 Resource: '*'
-
+{%- if enableLifecycle %}
+  LifecycleHookTopic:
+    Type: AWS::SNS::Topic
+  LifecycleHook:
+    Type: AWS::AutoScaling::LifecycleHook
+    Properties:
+      AutoScalingGroupName: !Ref ClusterASG
+      HeartbeatTimeout: 60
+      DefaultResult: 'CONTINUE'
+      LifecycleHookName: 'LifecycleTerminating'
+      LifecycleTransition: "autoscaling:EC2_INSTANCE_TERMINATING"
+      NotificationTargetARN: !Ref LifecycleHookTopic
+      RoleARN: !GetAtt LifecycleHookRole.Arn
+  LifecycleHookRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - autoscaling.amazonaws.com
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AutoScalingNotificationAccessRole'
+{%- endif %}
   IamInstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -981,6 +1037,7 @@ Resources:
                   - '*'
               - Effect: Allow
                 Action:
+                  - autoscaling:CompleteLifecycleAction
                   - autoscaling:UpdateAutoScalingGroup
                   - autoscaling:SetInstanceProtection
                   - autoscaling:TerminateInstanceInAutoScalingGroup
@@ -1006,9 +1063,10 @@ Resources:
                   - !Sub 'arn:aws:s3:::${WorkBucket}'
               - Effect: Allow
                 Action:
-                  - s3:ListMultipartUploadParts
+                  - s3:ListMultipartUploads
                   - s3:AbortMultipartUpload
                   - s3:CreateMultipartUpload
+                  - s3:CompleteMultipartUpload
                   - s3:GetObject
                   - s3:GetObjectVersion
                   - s3:PutObject
@@ -1018,6 +1076,26 @@ Resources:
                     - 'arn:aws:s3:::${Bucket}/*'
                     - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
                   - !Sub 'arn:aws:s3:::${WorkBucket}/*'
+{%- if enableLifecycle %}
+                  - !Sub
+                    - 'arn:aws:s3:::${LogBucket}/logs/${AccountId}/${StackName}/*'
+                    - LogBucket: !ImportValue sharedinf-logbucket
+                      AccountId: !Ref AWS::AccountId
+                      StackName: !Ref AWS::StackName
+{%- endif %}
+{%- if enableLifecycle %}
+              - Effect: Allow
+                Action:
+                  - sns:Subscribe
+                  - sns:Unsubscribe
+                Resource:
+                  - !Ref 'LifecycleHookTopic'
+              - Effect: Allow
+                Action:
+                  - 'sqs:*'
+                Resource:
+                  - !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:lifecycled-*'
+{%- endif %}
   IamInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:

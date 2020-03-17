@@ -1,11 +1,76 @@
 import os
 import uuid
 import json
+import gzip
+import base64
 from pathlib import PurePath
 
 import boto3
+import requests
 from botocore.exceptions import ClientError
 
+
+def startstep_handler(event,context):
+    print(json.dumps(event))
+    print(json.dumps(context))
+    step = boto3.client('stepfunctions')
+    StateMachineArn = os.environ['StateMachineArn']
+    StateMachineName = os.environ['StateMachineName']
+    StackName = os.environ['StackName']
+    uid = uuid.uuid1().hex
+    input = event['Input']
+#    = {
+#        "Comment": "Insert your JSON here",
+#        "ClusterSize": 1,
+#        "ClusterName": "Cluster-"+uid,
+#        "Input": "dataFlow.xlrwb.tar.gz",
+#        "Output": "export/dataFlowOut.txt",
+#        "KeepCluster": False
+#    }
+    name = f'{StackName}-{StateMachineName}-{uid}'
+    response = step.start_execution(
+        stateMachineArn=StateMachineArn,
+        name=name,
+        input=json.dumps(input)
+    )
+    return response['executionArn']
+
+def launchcluster_handler(event, context):
+    print(json.dumps(event))
+    client = boto3.client('ec2')
+    InstanceType = os.environ['InstanceType']
+    InstanceArn = os.environ['InstanceArn']
+    ClusterName = event['ClusterName']
+    ClusterSize = int(event['ClusterSize'])
+    LaunchTemplate = os.environ['LaunchTemplate']
+    BaseURL = os.environ['BaseURL']
+    EfsSharedRoot = os.environ['EfsSharedRoot']
+    Email = os.environ['Email']
+    url = requests.get(f'{BaseURL}scripts/batch.sh')
+    response = client.run_instances(
+        LaunchTemplate={
+        'LaunchTemplateId': LaunchTemplate
+        },
+        InstanceType=InstanceType,
+        IamInstanceProfile={
+            'Arn': InstanceArn
+        },
+        MinCount=int(ClusterSize),
+        MaxCount=int(ClusterSize),
+        TagSpecifications=[{
+        'ResourceType': 'instance',
+        'Tags': [
+            {'Key': 'Name', 'Value': f'{ClusterName}-vm' },
+            {'Key': 'ClusterName', 'Value': ClusterName },
+            {'Key': 'ClusterSize', 'Value': str(ClusterSize) },
+            {'Key': 'FileSystemId', 'Value': EfsSharedRoot },
+            {'Key': 'Owner', 'Value': Email}
+        ]
+        }],
+        UserData=url.content
+    )
+    event['InstanceIds'] =  [instance['InstanceId'] for instance in response['Instances']]
+    return event
 
 def update_handler(event, _):
     print(json.dumps(event))
@@ -18,11 +83,15 @@ def update_handler(event, _):
     for e in event['Records']:
         bucket = e['s3']['bucket']['name']
         key = e['s3']['object']['key']
+        if not key.endswith('.json'):
+            continue
         p = PurePath(f'/{bucket}/{key}')
         name = f'{StackName}-{p.stem}-rule'
         evt = e['eventName'].split(':')[0]
         try:
             if evt == 'ObjectRemoved':
+                print(f'Removing targets Rule={name}, Ids=["1"]')
+                eb.remove_targets(Rule=name,Ids=['1'])
                 print(f'Deleting rule Name={name}')
                 eb.delete_rule(Name=name)
             if evt == 'ObjectCreated':
@@ -33,17 +102,16 @@ def update_handler(event, _):
                 body.close()
                 uid = uuid.uuid1().hex
                 params = {
-                    "Comment": "Insert your JSON here",
                     "ClusterSize": 1,
                     "ClusterName": "-".join(['cluster',p.stem,uid]),
-                    "Script": "s3://sharedinf-lambdabucket-559166403383-us-west-2/xdp-instamart/batch.py",
+                    "Script": "s3://sharedinf-lambdabucket-559166403383-us-west-2/xdp-instamart/runner.sh",
                     "KeepCluster": False
                 }
                 if 'schedule' in schedreq:
                     schedule = schedreq['schedule']
                     if not any([schedule.startswith(s) for s in ['rate(', 'cron(']]):
                         schedule = 'cron(' + schedule + ')'
-                    params['schedule'] = schedule
+                    params['Schedule'] = schedule
                 if 'input' in schedreq:
                     params['Input'] = schedreq['input']
                 if 'output' in schedreq:
@@ -66,7 +134,7 @@ def update_handler(event, _):
                 print(json.dumps(response))
                 response = eb.put_targets(Rule=name,
                                           Targets=[{
-                                              'Id': 'target1',
+                                              'Id': '1',
                                               'Arn': os.environ['StateMachineArn'],
                                               'RoleArn': os.environ['EventRoleArn'],
                                               'Input': json.dumps(params)

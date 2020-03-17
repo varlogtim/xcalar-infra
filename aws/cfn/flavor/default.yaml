@@ -1,3 +1,4 @@
 createVpc: True
 retainPolicy: False
 licenseArg: False
+enableLifecycle: True

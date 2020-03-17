@@ -1,1 +1,2 @@
 createVpc: False
+enableLifecycle: True

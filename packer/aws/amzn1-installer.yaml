@@ -156,6 +156,7 @@ provisioners:
       - chmod +x /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh
       - chown root:root /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh
       - yum remove -y python26 || true
+      - yum install su-exec --enablerepo='xcalar*' -y
       - ln -sfn /usr/bin/python2.7 /usr/bin/python2
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
       - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
