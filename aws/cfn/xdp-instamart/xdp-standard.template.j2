@@ -595,6 +595,7 @@ Resources:
           Value: !Ref 'AWS::StackName'
   ClusterDNSRecord:
     Type: AWS::Route53::RecordSet
+    Condition: CreateDNS
     Properties:
       HostedZoneName: !Sub '${HostedZoneName}.'
       Name: !Sub '${CNAME}.${HostedZoneName}.'
