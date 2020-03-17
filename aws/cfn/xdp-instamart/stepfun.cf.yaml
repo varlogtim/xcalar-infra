@@ -336,8 +336,13 @@ Resources:
                   - !Sub "arn:aws:s3:::${EventBucket}"
               - Effect: "Allow"
                 Action:
-                  - "s3:Put*"
+                  - 's3:GetObject'
+                  - "s3:PutObject"
+                  - 's3:CreateMultipartUpload'
+                  - 's3:FinishMultipartUpload'
+                  - 's3:DeleteObject'
                 Resource:
+                  - !Sub "arn:aws:s3:::${ExistingBucket}/*"
                   - !Sub "arn:aws:s3:::${WorkBucket}/*"
               - Effect: "Allow"
                 Action:

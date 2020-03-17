@@ -1,6 +1,6 @@
 SHELL:=/bin/bash
 
-AMI_ID = ami-0fa354fc3ff3bfbb8
+AMI_ID = ami-01f6a031d50246f98
 PROJECT = xdp-instamart
 GEN = ref/xdp-standard-byovpc.cf.yaml ref/xdp-standard.cf.yaml
 VALIDATION = $(patsubst %.cf.yaml, %.valid, $(GEN))
