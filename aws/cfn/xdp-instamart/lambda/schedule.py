@@ -43,13 +43,30 @@ def launchcluster_handler(event, context):
     ClusterName = event['ClusterName']
     ClusterSize = int(event['ClusterSize'])
     LaunchTemplate = os.environ['LaunchTemplate']
+    LaunchTemplateVersion = os.environ['LaunchTemplateVersion']
     BaseURL = os.environ['BaseURL']
     EfsSharedRoot = os.environ['EfsSharedRoot']
     Email = os.environ['Email']
-    url = requests.get(f'{BaseURL}scripts/batch.sh')
+    AdminUsername = os.environ['AdminUsername']
+    AdminPassword = os.environ['AdminPassword']
+    #url = requests.get(f'{BaseURL}scripts/batch.sh')
+    userData = f'''\
+#!/bin/bash
+export ADMIN_USERNAME="{AdminUsername}"
+export ADMIN_PASSWORD='{AdminPassword}'
+export ADMIN_EMAIL='{Email}'
+export CLUSTERNAME='{ClusterName}'
+set -x
+cd /var/lib/cloud/instance
+curl -fsSL -o batch.sh "{BaseURL}scripts/batch.sh"
+set -o pipefail
+bash -x batch.sh 2>&1 | tee -a /var/log/user-data-batch.log
+exit $?
+'''
     response = client.run_instances(
         LaunchTemplate={
-        'LaunchTemplateId': LaunchTemplate
+        'LaunchTemplateId': LaunchTemplate,
+        'Version': LaunchTemplateVersion,
         },
         InstanceType=InstanceType,
         IamInstanceProfile={
@@ -60,16 +77,16 @@ def launchcluster_handler(event, context):
         TagSpecifications=[{
         'ResourceType': 'instance',
         'Tags': [
-            {'Key': 'Name', 'Value': f'{ClusterName}-vm' },
-            {'Key': 'ClusterName', 'Value': ClusterName },
-            {'Key': 'ClusterSize', 'Value': str(ClusterSize) },
-            {'Key': 'FileSystemId', 'Value': EfsSharedRoot },
+            {'Key': 'Name', 'Value': f'{ClusterName}-vm'},
+            {'Key': 'ClusterName', 'Value': ClusterName},
+            {'Key': 'ClusterSize', 'Value': str(ClusterSize)},
+            {'Key': 'FileSystemId', 'Value': EfsSharedRoot},
             {'Key': 'Owner', 'Value': Email}
         ]
         }],
-        UserData=url.content
+        UserData=userData
     )
-    event['InstanceIds'] =  [instance['InstanceId'] for instance in response['Instances']]
+    event['InstanceIds'] = [instance['InstanceId'] for instance in response['Instances']]
     return event
 
 def update_handler(event, _):
@@ -144,3 +161,4 @@ def update_handler(event, _):
             #ec = response['Error']['Code']
             #print(f'Error: {ec} when handling {evt}:{evt_op} on {name}.')
             print(e)
+        return event

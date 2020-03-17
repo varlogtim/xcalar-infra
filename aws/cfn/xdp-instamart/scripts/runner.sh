@@ -63,6 +63,11 @@ main() {
         fi
     fi
     log "RUNDIR=$RUNDIR RUNAS=$RUNAS"
+    if test -e /opt/xcalar/etc/default/xcalar; then
+        set -a
+        .  /opt/xcalar/etc/default/xcalar
+        set +a
+    fi
     export XLRDIR=/opt/xcalar
     export PATH="$XLRDIR/bin:$PATH"
 

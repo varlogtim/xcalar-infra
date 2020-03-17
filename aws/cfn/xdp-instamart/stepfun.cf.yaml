@@ -3,6 +3,17 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: Step function support for Xcalar Lambda Schedules
 Parameters:
+  AdminUsername:
+    Description: Username of the Administrator
+    Type: String
+    MinLength: 5
+    MaxLength: 128
+  AdminPassword:
+    Description: Password of Administrator
+    NoEcho: true
+    Type: String
+    MinLength: 5
+    MaxLength: 128
   InstanceType:
     Type: String
     Description: Instance Type to launch
@@ -10,6 +21,9 @@ Parameters:
   LaunchTemplate:
     Type: String
     Description: Template used for lanching Ec2 nodes
+  LaunchTemplateVersion:
+    Type: String
+    Description: Version of Launch Template used for lanching Ec2 nodes
   NotificationEmail:
     Type: String
     Description: Email address to be notified once work completes
@@ -335,15 +349,16 @@ Resources:
   DataAppProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
+      Path: "/"
       Roles:
-        - !Ref Ec2SSMRole
+        - !Ref 'Ec2SSMRole'
 
   AddS3Notification:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
         S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/80e8e9564c13610f.zip
+        S3Key: xdp-instamart/d8d97274c9f13b56.zip
       Handler: add_notification.lambda_handler
       Role: !GetAtt AddS3NotificationRole.Arn
       Layers:
@@ -356,7 +371,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/80e8e9564c13610f.zip
+        S3Key: xdp-instamart/d8d97274c9f13b56.zip
       Handler: schedule.update_handler
       Role: !GetAtt ScheduleUpdateRole.Arn
       Layers:
@@ -378,7 +393,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/80e8e9564c13610f.zip
+        S3Key: xdp-instamart/d8d97274c9f13b56.zip
       Handler: schedule.startstep_handler
       Layers:
         - !ImportValue sharedinf-lambdalayer
@@ -397,16 +412,19 @@ Resources:
     Properties:
       Code:
         S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/80e8e9564c13610f.zip
+        S3Key: xdp-instamart/d8d97274c9f13b56.zip
       Handler: schedule.launchcluster_handler
       Layers:
         - !ImportValue sharedinf-lambdalayer
       Description: "Creates cluster to perform DataApp processing"
       Environment:
         Variables:
+          AdminUsername: !Ref AdminUsername
+          AdminPassword: !Ref AdminPassword
           InstanceType: !Ref InstanceType
           InstanceArn: !GetAtt DataAppProfile.Arn
           LaunchTemplate: !Ref LaunchTemplate
+          LaunchTemplateVersion: !Ref LaunchTemplateVersion
           BaseURL: !Ref BaseURL
           EfsSharedRoot: !Ref EfsSharedRoot
           Email: !Ref NotificationEmail
@@ -457,31 +475,38 @@ Resources:
           import os
           import json
           import datetime
+          import base64
           def lambda_handler(event, context):
               print(json.dumps(event))
               client = boto3.client('ssm')
               ec2 = boto3.client('ec2')
               s3 = boto3.client('s3')
               BaseURL = os.environ['BaseURL']
+              AdminPassword = os.environ['AdminPassword']
+              AdminUsername = os.environ['AdminUsername']
               now = datetime.datetime.now()
               instance_ids = event['InstanceIds']
               Items = []
               print(instance_ids)
               print(ec2.describe_instances(InstanceIds=instance_ids))
               event['Commands'] = []
+              script = f'{BaseURL}scripts/runner.sh'
+              if 'Script' in event:
+                  script = event['Script']
               command = event['Command']
               command = command.replace('%Y',str(now.year)).replace('%m',str(now.month)).replace('%d',str(now.day))
               command = command.replace('%H',str(now.hour)).replace('%M',str(now.minute)).replace('%S',str(now.second))
+              if command.lstrip(' ').startswith('xc2'):
+                  command = f'xc2 login --username {AdminUsername} --password {AdminPassword} && ' + command
               response = client.send_command(
                 InstanceIds=[instance_ids[0]],
                 DocumentName='AWS-RunShellScript',
                 Parameters={
                   'commands': [
-                    "yum install -y --enablerepo='xcalar*' su-exec",
                     'systemctl start xcalar.service',
                     f'curl {BaseURL}scripts/runner.sh -o /usr/bin/runner.sh',
                     'chmod +x /usr/bin/runner.sh',
-                    f'/usr/bin/runner.sh --runas xcalar -- {command}'
+                    f'/usr/bin/runner.sh --runas xcalar -- /bin/bash -c "{command}"'
                   ]
                 }
               )
@@ -490,9 +515,10 @@ Resources:
       Description: "Send SSM Command to instance"
       Environment:
         Variables:
-          InstanceType: !Ref InstanceType
           Bucket: !Ref WorkBucket
           BaseURL: !Ref BaseURL
+          AdminUsername: !Ref AdminUsername
+          AdminPassword: !Ref AdminPassword
       Handler: index.lambda_handler
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6

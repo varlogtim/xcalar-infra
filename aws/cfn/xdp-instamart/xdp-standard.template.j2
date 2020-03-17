@@ -267,6 +267,8 @@ Resources:
       #TemplateURL: !Sub 'https://s3.${QSS3Region}.amazonaws.com/${QSS3BucketName}/${QSS3KeyPrefix}stepfun.json'
       TemplateURL: '{{ baseUrl }}/stepfun.json'
       Parameters:
+        AdminUsername: !Ref AdminUsername
+        AdminPassword: !Ref AdminPassword
         InstanceType: !Ref InstanceType
         EventBucket: !Ref WorkBucket
         EventPrefix: '.events/'
@@ -276,6 +278,7 @@ Resources:
         BaseURL: '{{ baseUrl }}/'
         EfsSharedRoot: !Ref EfsSharedRoot
         LaunchTemplate: !Ref LaunchTemplate
+        LaunchTemplateVersion: !GetAtt LaunchTemplate.LatestVersionNumber
         ParentStack: !Ref 'AWS::StackName'
 {%- if createVpc %}
   VpcId:
@@ -592,7 +595,6 @@ Resources:
           Value: !Ref 'AWS::StackName'
   ClusterDNSRecord:
     Type: AWS::Route53::RecordSet
-    Condition: CreateDNS
     Properties:
       HostedZoneName: !Sub '${HostedZoneName}.'
       Name: !Sub '${CNAME}.${HostedZoneName}.'
@@ -763,11 +765,6 @@ Resources:
               mode: '000640'
               owner: root
               group: xcalar
-            /usr/bin/runner:
-              source: '{{ baseUrl }}scripts/runner.sh'
-              mode: '000755'
-              owner: root
-              group: root
             /var/lib/cloud/instance/ec2.env:
               content: !Sub
                 - |
@@ -787,7 +784,7 @@ Resources:
                   HOSTEDZONENAME=${HostedZoneName}
                   CNAME=${CNAME}
                   KINESISROLEARN=${KinesisRoleARN}
-                  BASEURL={{ baseUrl }}
+                  BASEURL={{ baseUrl }}/
 {%- if enableLifecycle %}
                   LOGBUCKET=${LogBucket}
                   LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
@@ -1105,10 +1102,11 @@ Resources:
 Outputs:
   URL:
     Description: URL of your new Xcalar Cluster
+    Condition: CreateInstances
     Value: !If
       - CreateDNS
       - !Join ["", ["https://",!Ref CNAME,".",!Ref HostedZoneName]]
-      - !Join ["", ["https://",!Ref 'ClusterDNSRecord']]
+      - !Join ["", ["https://",!Ref ClusterEIP]]
   EIP:
     Condition: CreateInstances
     Description: Cluster ElasticIP

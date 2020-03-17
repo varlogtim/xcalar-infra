@@ -70,6 +70,12 @@ Node.${i}.MonitorPort=8000
 EOF
 done
 
+mkdir -p $XLRROOT/config
+chmod 0700 $XLRROOT/config
+/opt/xcalar/scripts/genDefaultAdmin.sh -u "${ADMIN_USERNAME:-xdpadmin}" -p "${ADMIN_PASSWORD:-Welcome1}" -e "${ADMIN_EMAIL:-info@xcalar.com}" > $XLRROOT/config/defaultAdmin.json
+chmod 0600 $XLRROOT/config/defaultAdmin.json
+chown -R xcalar:xcalar $XLRROOT/config
+
 mkdir -p $XLRROOT $XCE_LOGDIR
 chown xcalar:xcalar $XLRROOT $XCE_LOGDIR /etc/xcalar/*
 
