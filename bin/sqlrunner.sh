@@ -225,7 +225,7 @@ createCluster() {
     fi
 
     echo "Creating $optNumNodes node cluster $optClusterName"
-    IMAGE="rhel-7" INSTANCE_TYPE=$optInstanceType NOTPREEMPTIBLE=$optNoPreempt \
+    IMAGE="${IMAGE:-rhel-7}" INSTANCE_TYPE=$optInstanceType NOTPREEMPTIBLE=$optNoPreempt \
         $XLRINFRADIR/gce/gce-cluster.sh "$optXcalarImage" $optNumNodes $optClusterName
     echo "Waiting for Xcalar start on $optNumNodes node cluster $optClusterName"
 
