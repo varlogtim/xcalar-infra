@@ -42,7 +42,14 @@ if ! test -s $tmpfile; then
     exit 1
 fi
 
-sort -Vr -k3 < $tmpfile | column -t | uniq -w 10 | sort | tee ${tmpfile}2
+longest=0
+for ii in $(awk '{print $1}' $tmpfile); do
+    if [ "${#ii}" -gt $longest ]; then
+        longest=${#ii}
+    fi
+done
+
+sort -Vr -k3 < $tmpfile | column -t | uniq -w $longest | sort | tee ${tmpfile}2
 awk '{print $(NF)}' < ${tmpfile}2 > ${tmpfile}3
 if ((REPORT)); then
     size=$(mbused -- *.rpm)
