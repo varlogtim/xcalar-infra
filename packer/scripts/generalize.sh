@@ -13,6 +13,24 @@ say() {
     echo >&2 "$1"
 }
 
+
+cloudid() {
+    local dmi_id='/sys/class/dmi/id/sys_vendor'
+    local vendor cloud=
+
+    if [ -e "$dmi_id" ]; then
+        read -r vendor < "$dmi_id"
+        case "$vendor" in
+            Microsoft\ Corporation) cloud=azure;;
+            Amazon\ EC2) cloud=aws;;
+            Google) cloud=gce;;
+            #VMWare*) cloud=vmware;;
+            #oVirt*) cloud=ovirt;;
+        esac
+    fi
+    echo "$cloud"
+}
+
 if [ $(id -u) != 0 ]; then
     die "This script needs to run as root!"
 fi
@@ -23,7 +41,7 @@ fi
 
 ## Set DEPROVISION_NETWORK=0 or 1 to clean up network settings
 if [ -z "${DEPROVISION_NETWORK:-}" ]; then
-    if [ -n "$CLOUD" ] || [ -n "$FACTER_cloud" ]; then
+    if ([ -n "$CLOUD" ] && [ "$CLOUD" != nocloud ]) || ([ -n "$FACTER_cloud" ] && [ "$FACTER_cloud" != nocloud ]); then
         DEPROVISION_NETWORK=0
     else
         DEPROVISION_NETWORK=1
@@ -244,9 +262,9 @@ EOF
 if ((DEPROVISION_NETWORK)); then
     rm -f ${ROOTFS}/etc/hostname
     if command -v hostnamectl >/dev/null; then
-        hostnamectl set-hostname 'localhost.localdomain'
+        hostnamectl set-hostname 'localhost'
     else
-        hostname 'localhost.localdomain'
+        hostname 'localhost'
     fi
 fi
 export HISTFILESIZE=0

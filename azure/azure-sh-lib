@@ -966,8 +966,11 @@ az_privdns_hosts_list() {
     local dnsname="${1:-azure.xcalar.io}"
     local shortdns="${dnsname%%.*}"
     local subnet="${2-10.11}"
+    local rc
     az vm list-ip-addresses -o table | grep "${subnet//./\\.}" |  tr -s ' ' \
         | awk  '{printf "%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1 }'
+    rc="${PIPERESULT[0]}"
+    return $rc
 }
 
 az_vmss_hosts_list() {
@@ -1024,8 +1027,8 @@ az_privdns_update_ssh_hosts() {
     chmod 0644 $tmp
 
     (
-    az_privdns_hosts_list "$dnsname" "$subnet"
-    az_vmss_hosts_list "$dnsname" "$subnet"
+    az_privdns_hosts_list "$dnsname" "$subnet" \
+     && az_vmss_hosts_list "$dnsname" "$subnet" || exit 1
     ) > $tmp || return 1
     local -i nlines
     nlines=$(wc -l < $tmp)
@@ -1042,4 +1045,7 @@ az_privdns_update_ssh_hosts() {
     mv -f $tmp /tmp/azure-fqdn-$(id -u).hosts
 }
 
+az_feature() {
+    az feature list --output json --query "[?properties.state=='${1:-NotRegistered}'].name" --output table
+}
 az_setup

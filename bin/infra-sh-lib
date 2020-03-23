@@ -5,7 +5,7 @@
 # shellcheck disable=SC1091,SC2015,SC2086,SC1090,SC2164
 
 if [ -z "$XLRINFRADIR" ]; then
-    export XLRINFRADIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    export XLRINFRADIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/".. && pwd)"
     export PATH="$XLRINFRADIR/bin:$PATH"
 fi
 
@@ -21,11 +21,17 @@ say() {
 }
 
 debug_run() {
-    test "${DEBUG-1}" = "1" && say "debug: $*" || :
+    if [ "${DEBUG-1}" = "1" ]; then
+        local rc
+        say "debug: $*"
+        "$@"
+        rc=$?
+        if [ $rc -ne 0 ]; then
+            say "debug: Returned code $rc"
+        fi
+        return $rc
+    fi
     "$@"
-    local rc=$?
-    test "${DEBUG-1}" = "1" && test $rc -ne 0 && say "debug: Returned code $rc" || :
-    return $rc
 }
 
 debug() {
@@ -238,6 +244,43 @@ fi
 
 file_sizemb() {
     echo $(stat -c %b "$1")'/(2*1024)' | bc
+}
+
+file_pkg() {
+    if command -v dpkg >/dev/null 2>&1; then
+        dpkg -S "$@"
+    else
+        rpm -qf "$@"
+    fi
+}
+
+file_deps() {
+    local infile
+    while read infile; do
+        ldd $infile \
+            | grep -v '^/'
+    done | sort \
+        | uniq \
+        | grep -Eow ' /(usr|lib)/([^ ]+)' \
+        | uniq \
+        | while read MYLIB; do file_pkg $MYLIB; done \
+        | awk -F':' '{print $1}' \
+        | sort \
+        | uniq
+}
+
+filedir_deps() {
+    find $1 -maxdepth 1 -executable -type f \
+        | xargs -n1 -I{} ldd {} \
+        | grep -v '^/' \
+        | sort \
+        | uniq \
+        | grep -Eow ' /(usr|lib)/([^ ]+)' \
+        | uniq \
+        | while read MYLIB; do file_pkg $MYLIB; done \
+        | awk -F':' '{print $1}' \
+        | sort \
+        | uniq
 }
 
 ip_network() {
@@ -548,6 +591,13 @@ version_build_from_filename() {
         return 0
     fi
     return 1
+}
+
+version_build_from_filename2() {
+    local x="$1"
+    x="${x##*/}"
+    x="${x//[A-Za-z_]/}"
+    echo ${x//-/ }
 }
 
 build_type_from_installer_path() {

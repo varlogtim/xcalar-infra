@@ -287,6 +287,14 @@ aws_get_role_iam() {
     curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/$1 | jq -r '{AWS_ACCESS_KEY_ID:.AccessKeyId,AWS_SECRET_ACCESS_KEY:.SecretAccessKey,AWS_SESSION_TOKEN:.Token}' | jq -r "to_entries|map(\"export \(.key)=\(.value|tostring)\")|.[]"
 }
 
+aws_s3_list_for_delete() {
+    if [ -n "$3" ]; then
+        aws s3api list-objects-v2 --bucket "$1" ${2:+--prefix "$2"} | jq -r '{"Quiet": true, Objects: [ .Contents[]|select(.Size=='$3')|{Key: .Key}]}'
+    else
+        aws s3api list-objects-v2 --bucket "$1" ${2:+--prefix "$2"} | jq -r '{"Quiet": true, Objects: [ .Contents[]|{Key: .Key}]}'
+    fi
+}
+
 aws_s3_region() {
     local bucket=$(aws_s3_bucket_from_s3url "$1")
     local region
@@ -368,9 +376,9 @@ aws_quickcreate() {
 
 aws_quickurl() {
     local s3Url="$1" stackName="${2:-$(id -un)-stack-$(date +%Y%m%d)}"
- # replace("/", "%2A")
+    # replace("/", "%2A")
     local region="${AWS_DEFAULT_REGION:-us-west-2}"
-    cat <<EOF
+    cat << EOF
 https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateUrl=${safeUrl}&stackName=${stackName}
 EOF
 }
@@ -381,7 +389,7 @@ cfn_template_default() {
         return 1
     fi
     case "$ext" in
-        json) jq -r ".Parameters.$2.Default" <"$1" ;;
+        json) jq -r ".Parameters.$2.Default" < "$1" ;;
         yml | yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default" ;;
         *)
             echo >&2 "Unknown file type: $1"
@@ -392,11 +400,11 @@ cfn_template_default() {
 
 cfn_template_defaults_to_params() {
     (
-    if [[ "$1" =~ yaml ]]; then
-        cfn-flip "$1"
-    else
-        cat "$1"
-    fi
+        if [[ $1 =~ yaml ]]; then
+            cfn-flip "$1"
+        else
+            cat "$1"
+        fi
     ) | jq -r '.Parameters|to_entries|map_values({UsePreviousValue: false, ParameterKey: .key, ParameterValue: .value.Default})'
 }
 
@@ -472,7 +480,7 @@ aws_cfn_template_default() {
         return 1
     fi
     case "$ext" in
-        json) jq -r ".Parameters.$2.Default" <"$1" ;;
+        json) jq -r ".Parameters.$2.Default" < "$1" ;;
         yml | yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default" ;;
         *)
             echo >&2 "Unknown file type: $1"
@@ -646,7 +654,7 @@ aws_r53_upsert() {
     local action='UPSERT'
     local tmpf=$(mktemp -t r53XXXXXX.json)
     local yaml="${tmpf}.yaml"
-    cat >$yaml <<EOF
+    cat > $yaml << EOF
 Comment: 'Updated $(date +%Y%m%d)'
 Changes:
   - Action: UPSERT
@@ -658,11 +666,11 @@ Changes:
 EOF
     local val
     for val in "${@}"; do
-        cat >>$yaml <<EOF
+        cat >> $yaml << EOF
         - Value: '${val}'
 EOF
     done
-    cfn-flip <$yaml >$tmpf
+    cfn-flip < $yaml > $tmpf
     local rc
     aws route53 change-resource-record-sets --hosted-zone-id $zoneid --change-batch file://${tmpf} --query 'ChangeInfo.[Id,Status]' --output text
     rc=$?
@@ -694,7 +702,6 @@ aws_start_and_dns() {
     echo ${dnsAddress}
 }
 
-
 aws_s3_undelete() {
     local bucket=$(aws_s3_bucket_from_s3url "$1")
     local key=$(aws_s3_key_from_s3url "$1")
@@ -715,7 +722,7 @@ aws_seconds_until_spot_termination() {
     if action_time="$(curl -sf http://169.254.169.254/latest/meta-data/spot/termination-time | jq -r .time)"; then
         if action_time_unix="$(date -u -d"${action_time}" +%s)"; then
             now=$(date +%s)
-            echo $(( action_time_unix - now ))
+            echo $((action_time_unix - now))
             return 0
         fi
     fi
@@ -746,15 +753,19 @@ aws_ami_add_account() {
     done
 }
 
-aws_asg_detach () {
+aws_cfn_asg() {
+    aws cloudformation describe-stack-resource --stack-name "$1" --logical-resource-id InstanceGroup --query 'StackResourceDetail.PhysicalResourceId' --output text
+}
+
+aws_asg_detach() {
     local asg_name="$1"
     shift
-    local -i count=$# min_size=''
+    local -i count=$# min_size=
     if [ -z "$asg_name" ] || [ $count -eq 0 ]; then
-        echo "Specify autoscaling group name and instance ids to detach." 1>&2
+        echo >&2 "Specify autoscaling group name and instance ids to detach."
         return 1
     fi
     min_size=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query 'AutoScalingGroups[].MinSize' --output text) \
-    && aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --min-size $(( min_size - count )) \
-    && aws autoscaling detach-instances --auto-scaling-group-name $asg_name --should-decrement-desired-capacity --instance-ids "$@"
+        && aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --min-size $((min_size - count)) \
+        && aws autoscaling detach-instances --auto-scaling-group-name $asg_name --should-decrement-desired-capacity --instance-ids "$@"
 }

@@ -53,7 +53,7 @@ while [ $# -gt 0 ]; do
         --serial) ARGS+=(-serial mon:stdio);;
         --) break ;;
         --*) die "Unknown argument $cmd" ;;
-        -*) break ;;
+        -*) die "Unknown argument $cmd" ;;
         *)
             if ! file "$cmd" | grep -q 'QEMU QCOW Image'; then
                 die "Unrecognized file or argument: $cmd"
@@ -104,7 +104,7 @@ fi
 #    -drive file=${CI_ISO} \
 
 set -x
-qemu-system-x86_64 -name $NAME \
+exec qemu-system-x86_64 -name $NAME \
     -nographic \
     -drive file=${IMAGE_TO_USE},if=virtio,cache=writeback,discard=ignore,format=qcow2 \
     -m ${MEM} \
@@ -114,4 +114,5 @@ qemu-system-x86_64 -name $NAME \
     -device virtio-net-pci,netdev=user.0 \
     -netdev user,id=user.0,hostfwd=tcp::$(freeport 2224)-:22 \
     -smbios "type=1,serial=ds=nocloud;h=${NAME}-${INSTANCE_ID}.int.xcalar.com;i=i-${INSTANCE_ID}" "${ARGS[@]}" "$@"
+    #-smbios "type=1,serial=ds=nocloud-net;h=${NAME}-${INSTANCE_ID}.int.xcalar.com;i=i-${INSTANCE_ID};s=http://10.10.4.6:80/" "${ARGS[@]}" "$@"
     #-cdrom /root/packer/packer_cache/bbd74514a6e11bf7916adb6b0bde98a42ff22a8f853989423e5ac064f4f89395.iso
