@@ -993,9 +993,6 @@ Resources:
                   - iam:GetRole
                   - iam:PassRole
                 Resource: !GetAtt 'KinesisServiceRole.Arn'
-                Condition:
-                  StringEquals:
-                    iam:PassedToService: kinesisanalytics.amazonaws.com
               - Effect: Allow
                 Action:
                   - ec2:DescribeRegions
