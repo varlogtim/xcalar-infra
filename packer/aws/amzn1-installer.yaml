@@ -1,4 +1,5 @@
 ---
+min_packer_version: '1.5.4'
 variables:
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
@@ -56,13 +57,16 @@ builders:
     run_tags:
       Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
     snapshot_tags:
-      BaseOS: '{{.SourceAMIName}}'
+      SourceAMI: '{{.SourceAMI}}'
+      SourceAMIName: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
     tags:
+      SourceAMI: '{{.SourceAMI}}'
+      SourceAMIName: '{{.SourceAMIName}}'
       BaseOS: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
@@ -110,14 +114,16 @@ builders:
     run_tags:
       Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
     snapshot_tags:
-      BaseOS: '{{.SourceAMIName}}'
+      SourceAMI: '{{.SourceAMI}}'
+      SourceAMIName: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
     tags:
-      BaseOS: '{{.SourceAMIName}}'
+      SourceAMI: '{{.SourceAMI}}'
+      SourceAMIName: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'
@@ -145,6 +151,12 @@ provisioners:
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
       - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
   - type: file
+    source: '{{ template_dir }}/../../aws/aws-discover-input-schema.sh'
+    destination: /tmp/aws-discover-input-schema.sh
+  - type: file
+    source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
+    destination: /tmp/genDefaultAdmin.sh
+  - type: file
     source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
     destination: /tmp/genDefaultAdmin.sh
   - type: file
@@ -153,13 +165,14 @@ provisioners:
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     inline:
-      - chmod +x /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh
-      - chown root:root /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh
+      - chmod +x /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh /tmp/aws-discover-input-schema.sh
+      - chown root:root /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh /tmp/aws-discover-input-schema.sh
       - yum remove -y python26 || true
       - yum install su-exec --enablerepo='xcalar*' -y
       - ln -sfn /usr/bin/python2.7 /usr/bin/python2
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
       - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
+      - mv /tmp/aws-discover-input-schema.sh /usr/bin/
       - test -f /etc/profile.d/jdk.sh && rm -f /etc/profile.d/zjava.sh || true
   - type: shell
     environment_vars:
