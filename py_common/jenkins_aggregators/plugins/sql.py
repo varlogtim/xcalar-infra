@@ -7,9 +7,9 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
-PLUGIN = [{'module_path': 'sql_perf',
-           'class_name': 'SqlPerfResultsAggregator',
-           'job_names': ['SqlScaleTest']}]
+AGGREGATOR_PLUGINS = [{'module_path': 'sql_perf',
+                       'class_name': 'SqlPerfResultsAggregator',
+                       'job_names': ['SqlScaleTest']}]
 
 # In-line "unit test"
 if __name__ == '__main__':

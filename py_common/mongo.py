@@ -262,7 +262,8 @@ class JenkinsMongoDB(object):
         Return the collection associated with the timestamp
         """
         name = '_builds_by_time_{}'.format(self._time_idx(time_ms=time_ms))
-        return self._db.collection(name)
+        db = self.jenkins_db()
+        return db.collection(name)
 
     def builds_by_time_collections(self, *, start_time_ms, end_time_ms):
         """
@@ -273,13 +274,15 @@ class JenkinsMongoDB(object):
         """
         idxs = self.time_collection_indices(start_time_ms=start_time_ms,
                                             end_time_ms=end_time_ms)
-        return [self._db.collection('_builds_by_time_{}'.format(i)) for i in idxs]
+        db = self.jenkins_db()
+        return [db.collection('_builds_by_time_{}'.format(i)) for i in idxs]
 
     def downstream_jobs(self):
         """
         Return the downstream jobs collection.
         """
-        return self._db.collection('_downstream_jobs')
+        db = self.jenkins_db()
+        return db.collection('_downstream_jobs')
 
 if __name__ == '__main__':
     print("Compile check A-OK!")

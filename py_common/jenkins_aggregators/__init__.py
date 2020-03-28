@@ -51,7 +51,7 @@ class JenkinsAllJobIndex(object):
              'duration_ms': jbi.duration_ms(),
              'result': jbi.result()}
         """
-        self.logger.debug("job_name: {} bnum: {}".format(job_name, bnum))
+        self.logger.info("job_name: {} bnum: {}".format(job_name, bnum))
 
         # XXXrs - more fields?
         start_time_ms = data.get('start_time_ms', None)
@@ -74,7 +74,7 @@ class JenkinsAllJobIndex(object):
             try:
                 coll.insert(job_entry)
             except DuplicateKeyError as e:
-                self.logger.debug("builds_by_time duplicate {}".format(job_entry))
+                self.logger.error("builds_by_time duplicate {}".format(job_entry))
 
             if built_on is not None:
                 coll = self.jmdb.builds_by_time_collection(time_ms=start_time_ms)
@@ -84,7 +84,7 @@ class JenkinsAllJobIndex(object):
                 try:
                     coll.insert(job_entry)
                 except DuplicateKeyError as e:
-                    self.logger.debug("host {} _builds_by_time duplicate {}"
+                    self.logger.error("host {} _builds_by_time duplicate {}"
                                       .format(built_on, job_entry))
 
         # Downstream Jobs
@@ -94,11 +94,11 @@ class JenkinsAllJobIndex(object):
             self.logger.debug('upstream: {}'.format(item))
             up_jname = item.get('job_name', None)
             if not up_jname:
-                self.logger.debug("missing expected upstream job_name: {}".format(item))
+                self.logger.error("missing expected upstream job_name: {}".format(item))
                 continue
             up_bnum = item.get('build_number', None)
             if not up_bnum:
-                self.logger.debug("missing expected upstream build_number: {}".format(item))
+                self.logger.error("missing expected upstream build_number: {}".format(item))
                 continue
             up_key = "{}:{}".format(up_jname, up_bnum)
             self.logger.debug("up_key {} down_key {}".format(up_key, down_key))
@@ -165,25 +165,25 @@ class JenkinsJobDataCollection(object):
             data.pop('_id')
 
     def get_data(self, *, bnum):
-        self.logger.debug("start bnum {}".format(bnum))
+        self.logger.info("start bnum {}".format(bnum))
         # Return the data, if any.
         doc = self.coll.find_one({'_id': bnum})
         if self._no_data(doc=doc):
-            self.logger.debug("return None")
+            self.logger.info("return None")
             return None
-        self.logger.debug("return match")
+        self.logger.info("return match")
         return doc
 
     def get_data_by_build(self):
-        self.logger.debug("start")
+        self.logger.info("start")
         rtn = {}
         for doc in self.coll.find({}):
             doc_id = doc["_id"]
-            self.logger.debug("_id: {}".format(doc_id))
+            self.logger.info("_id: {}".format(doc_id))
             if self._no_data(doc=doc):
                 continue
             rtn[doc_id] = doc
-        self.logger.debug("rtn: {}".format(rtn))
+        self.logger.info("rtn: {}".format(rtn))
         return rtn
 
     def all_builds(self):
@@ -294,6 +294,14 @@ class JenkinsJobMetaCollection(object):
                                           {'$addToSet': {'values': val}},
                                           upsert = True)
 
+    def store_data(self, *, key, data):
+        """
+        Store the passed data, or delete any existing if data is None
+        """
+        if data is None:
+            self.coll.find_one_and_delete({'_id': key})
+            return
+        self.coll.find_one_and_replace({'_id': key}, data, upsert=True)
 
     def all_builds(self):
         """
@@ -477,6 +485,8 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
         return jbi
 
     def update_build(self, *, bnum, jbi, log):
+
+        self.logger.debug("start bnum: {}".format(bnum))
         rtn = {}
         try:
             # This is the "standard" set of job data.
@@ -499,11 +509,122 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
         self.logger.debug("rtn: {}".format(rtn))
         return rtn
 
+class JenkinsPostprocessorBase(ABC):
+    """
+    Base class for post-procesing data and meta-data
+    associated with a specific Jenkins job.
+    """
+    def __init__(self, *, name, job_name):
+        """
+        Initializer.
+
+        Required parameters:
+            name:       any returned data will be stored in the job's
+                        meta-collection using this as the document _id
+            job_name:   Jenkins job name
+
+        """
+        self.logger = logging.getLogger(__name__)
+        self.name = name
+        self.job_name = job_name
+
+    @abstractmethod
+    def update_job(self):
+        """
+        Post-process and return any result data structure.
+        Every post-processor must implement the update_job method.
+
+        Required Parameters:
+            None
+
+        Returns:
+            Data structure to be associated with the job.
+            Will be stored in the job's meta-collection with
+            _id equal to the value of self.name
+        """
+        pass
+
+
+class JenkinsJobPostprocessor(JenkinsPostprocessorBase):
+    """
+    Default Jenkins job post-processing.
+    Used for all jobs.
+    """
+
+    def __init__(self, *, jenkins_host, job_name):
+        super().__init__(name="default_postprocessor", job_name=job_name)
+        self.logger = logging.getLogger(__name__)
+        self.japi = JenkinsApi(jenkins_host=jenkins_host)
+        self.jmdb = JenkinsMongoDB(jenkins_host=jenkins_host)
+        self.alljob = JenkinsAllJobIndex(jmdb=self.jmdb)
+
+    def _avg_pass_duration(self, *, builds):
+        self.logger.info("start")
+        builds = builds.get('builds', None)
+        if not builds:
+            return 0
+        pass_cnt = 0
+        pass_total_duration_ms = 0
+        for bld in builds:
+            job_name = bld.get('job_name', None)
+            if not job_name or job_name != self.job_name:
+                continue
+            result = bld.get('result', None)
+            if not result or result != 'SUCCESS':
+                continue
+            pass_cnt += 1
+            pass_total_duration_ms += bld.get('duration_ms', 0)
+        if not pass_cnt:
+            return 0
+        return int(pass_total_duration_ms/pass_cnt)
+
+    def update_job(self):
+        self.logger.info("start job_name: {}".format(self.job_name))
+        pdh = {}
+        try:
+            day_ms = 3600000 * 24
+            now = int(time.time()*1000)
+
+            last_24h = self.alljob.builds_by_time(start_time_ms = now-day_ms,
+                                                  end_time_ms = now)
+            pdh['last_24h_avg_pass_duration_ms'] = self._avg_pass_duration(builds=last_24h)
+
+            prev_24h = self.alljob.builds_by_time(start_time_ms = now-(day_ms*2),
+                                                  end_time_ms = now-day_ms-1)
+            pdh['prev_24h_avg_pass_duration_ms'] = self._avg_pass_duration(builds=prev_24h)
+
+            last_7d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*7),
+                                                 end_time_ms = now)
+            pdh['last_7d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=last_7d)
+
+            prev_7d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*14),
+                                                 end_time_ms = now-(day_ms*7)-1)
+            pdh['prev_7d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=prev_7d)
+
+            last_30d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*30),
+                                                  end_time_ms = now)
+            pdh['last_30d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=last_30d)
+
+            prev_30d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*60),
+                                                  end_time_ms = now-(day_ms*30)-1)
+            pdh['prev_30d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=prev_30d)
+
+            # XXXrs - consider alerting
+
+        except Exception as e:
+            self.logger.exception("update_job exception")
+            return None
+
+        rtn = {'pass_duration_history':pdh}
+        self.logger.info("rtn: {}".format(rtn))
+        return rtn
+
+
 from importlib import import_module
 
 class Plugins(object):
 
-    def __init__(self):
+    def __init__(self, *, pi_label):
         self.logger = logging.getLogger(__name__)
         plugins_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                    "plugins")
@@ -521,11 +642,11 @@ class Plugins(object):
                 raise
 
             try:
-                defs = getattr(mod, 'PLUGIN')
+                defs = getattr(mod, pi_label)
                 self.logger.debug("loaded: {}".format(mname))
-                self.logger.debug("PLUGIN defs: {}".format(defs))
+                self.logger.debug("{} defs: {}".format(pi_label, defs))
             except AttributeError as e:
-                self.logger.info("falied to find PLUGIN defs: {}".format(mname))
+                self.logger.error("falied to find {} defs: {}".format(pi_label, mname))
                 continue
 
             for info in defs:
@@ -544,6 +665,14 @@ class Plugins(object):
 
     def by_job(self, *, job_name):
         return self.byjob.get(job_name, [])
+
+class AggregatorPlugins(Plugins):
+    def __init__(self):
+        super().__init__(pi_label="AGGREGATOR_PLUGINS")
+
+class PostprocessorPlugins(Plugins):
+    def __init__(self):
+        super().__init__(pi_label="POSTPROCESSOR_PLUGINS")
 
 # In-line "unit test"
 if __name__ == '__main__':

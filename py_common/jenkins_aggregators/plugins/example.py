@@ -11,15 +11,15 @@ import logging
 
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
 
-# The PLUGIN list registers aggregator classes with Jenkins jobs.
+# The AGGREGATOR_PLUGINS list registers aggregator plug-in classes with Jenkins jobs.
 # Each entry in the list is a dictionary of the form:
 #
 #   {'class': <class name>, 'job_names': [<jenkins job name>, ...]}
 #
 #
 
-PLUGIN = [{'class_name': 'ExampleAggregator', 
-           'job_names': ['BuildTrunk']}]
+AGGREGATOR_PLUGINS = [{'class_name': 'ExampleAggregator', 
+                       'job_names': ['BuildTrunk']}]
 
 # Aggregator class must subclass from JenkinsAggregatorBase
 

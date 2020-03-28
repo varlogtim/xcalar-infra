@@ -7,13 +7,13 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
-PLUGIN = [{'module_path': 'coverage.xce_func_test_coverage',
-           'class_name': 'XCEFuncTestCoverageAggregator',
-           'job_names': ['XCEFuncTest']},
+AGGREGATOR_PLUGINS = [{'module_path': 'coverage.xce_func_test_coverage',
+                       'class_name': 'XCEFuncTestCoverageAggregator',
+                       'job_names': ['XCEFuncTest']},
 
-          {'module_path': 'coverage.xd_unit_test_coverage',
-           'class_name': 'XDUnitTestCoverageAggregator',
-           'job_names': ['XDUnitTest']} ]
+                      {'module_path': 'coverage.xd_unit_test_coverage',
+                       'class_name': 'XDUnitTestCoverageAggregator',
+                       'job_names': ['XDUnitTest']}]
 
 # In-line "unit test"
 if __name__ == '__main__':
