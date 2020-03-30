@@ -1039,7 +1039,7 @@ az_privdns_update_ssh_hosts() {
     fi
     for ii in "$@"; do
         _scp $tmp ${ii}:/tmp/htmp-$$ \
-        && _ssh $ii "if ! diff -q /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts >/dev/null; then sudo mv -v /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts && echo \"Replaced azure-fqdn.hosts on $ii\"; else echo \"No change\"; fi" \
+        && _ssh $ii "if ! diff -q /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts >/dev/null; then sudo mv -v /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts && echo \"Replaced azure-fqdn.hosts on $ii\"; sudo service dnsmasq restart; else echo \"No change\"; fi" \
         || return 1
     done
     mv -f $tmp /tmp/azure-fqdn-$(id -u).hosts
