@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2019 Xcalar, Inc. All rights reserved.
+# Copyright 2019-2020 Xcalar, Inc. All rights reserved.
 #
 # No use, or distribution, of this source code is permitted in any form or
 # means without a valid, written license agreement with Xcalar, Inc.
@@ -55,7 +55,6 @@ class JDQClient(object):
             return x['job_name']
 
         resp = self._cmd(uri = '/jenkins_jobs')
-        self.logger.info("XXX: {}".format(resp))
         jobs = resp.get('jobs', [])
         return sorted(jobs, key=_sortkey)
 

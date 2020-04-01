@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2019 Xcalar, Inc. All rights reserved.
+# Copyright 2019-2020 Xcalar, Inc. All rights reserved.
 #
 # No use, or distribution, of this source code is permitted in any form or
 # means without a valid, written license agreement with Xcalar, Inc.
@@ -46,6 +46,12 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 
 methods = ('GET', 'POST')
 
+# All Jobs Modes
+JOBS_STATS = 'All Jobs Stats'
+TOTAL_BUILDS = 'Total Builds Trends'
+PASS_PCT = 'Pass Pct. Trends'
+PASS_DUR = 'Pass Duration Trends'
+
 @app.route('/', methods=methods)
 @cross_origin()
 def test_connection():
@@ -76,9 +82,13 @@ def find_metrics():
     if not target:
         return jsonify(values) # XXXrs - exception?
 
+    if target == 'all_jobs_modes':
+        values.append(JOBS_STATS)
+        values.append(TOTAL_BUILDS)
+        values.append(PASS_PCT)
+        values.append(PASS_DUR)
     if target == 'job_names':
-        values.append('All Jobs') # Special :)
-        values.extend(jdq_client.job_names())
+        values.extend(sorted(jdq_client.job_names()))
     elif target == 'host_names':
         values = jdq_client.host_names()
     elif 'parameter_names:' in target:
@@ -117,15 +127,15 @@ def _timeserie_results(*, target, from_ms, to_ms):
         logger.exception(err)
         abort(404, ValueError(err))
 
-    if mode != 'job' and mode != 'host':
+    if mode == 'host':
+        host_names = _parse_multi(name)
+    elif mode == 'job':
+        job_names = _parse_multi(name)
+    else:
         err = "invalid mode {}".format(mode)
         logger.exception(err)
         abort(404, ValueError(err))
 
-    if mode == 'host':
-        host_names = _parse_multi(name)
-    if mode == 'job':
-        job_names = _parse_multi(name)
 
     logger.info("mode: {} name: {}".format(mode, name))
     resp = jdq_client.builds_by_time(start_time_ms=from_ms, end_time_ms=to_ms)
@@ -265,6 +275,98 @@ def _all_jobs_table(*, from_ms, to_ms):
                          info['pass_pct']])
     return [{"columns": columns, "rows": rows, "type" : "table"}]
 
+def _jobs_trends_table(*, table_mode):
+
+    build_cnt_trends = [
+            {'colhdr': 'Prev 24h', 'key': 'build_cnt', 'subkey': 'prev_24h'},
+            {'colhdr': 'Last 24h', 'key': 'build_cnt', 'subkey': 'last_24h'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'},
+
+
+            {'colhdr': 'Prev 7d', 'key': 'build_cnt', 'subkey': 'prev_7d'},
+            {'colhdr': 'Last 7d', 'key': 'build_cnt', 'subkey': 'last_7d'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'},
+
+            {'colhdr': 'Prev 30d', 'key': 'build_cnt', 'subkey': 'prev_30d'},
+            {'colhdr': 'Last 30d', 'key': 'build_cnt', 'subkey': 'last_30d'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'}
+    ]
+
+    pass_pct_trends = [
+            {'colhdr': 'Prev 24h', 'key': 'pass_pct', 'subkey': 'prev_24h'},
+            {'colhdr': 'Last 24h', 'key': 'pass_pct', 'subkey': 'last_24h'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'},
+
+            {'colhdr': 'Prev 7d', 'key': 'pass_pct', 'subkey': 'prev_7d'},
+            {'colhdr': 'Last 7d', 'key': 'pass_pct', 'subkey': 'last_7d'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'},
+
+            {'colhdr': 'Prev 30d', 'key': 'pass_pct', 'subkey': 'prev_30d'},
+            {'colhdr': 'Last 30d', 'key': 'pass_pct', 'subkey': 'last_30d'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'}
+    ]
+
+    pass_duration_trends = [
+            {'colhdr': 'Prev 24h', 'key': 'pass_avg_duration_s', 'subkey': 'prev_24h'},
+            {'colhdr': 'Last 24h', 'key': 'pass_avg_duration_s', 'subkey': 'last_24h'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'},
+
+            {'colhdr': 'Prev 7d', 'key': 'pass_avg_duration_s', 'subkey': 'prev_7d'},
+            {'colhdr': 'Last 7d', 'key': 'pass_avg_duration_s', 'subkey': 'last_7d'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'},
+
+            {'colhdr': 'Prev 30d', 'key': 'pass_avg_duration_s', 'subkey': 'prev_30d'},
+            {'colhdr': 'Last 30d', 'key': 'pass_avg_duration_s', 'subkey': 'last_30d'},
+            {'colhdr': 'Chg%', 'func': 'pct_chg'}
+    ]
+
+    if table_mode == TOTAL_BUILDS:
+        job_trends = build_cnt_trends
+    elif table_mode == PASS_PCT:
+        job_trends = pass_pct_trends
+    elif table_mode == PASS_DUR:
+        job_trends = pass_duration_trends
+    else:
+        err = "invalid table mode {}".format(table_mode)
+        logger.exception(err)
+        abort(404, ValueError(err))
+
+    columns = [{"text":"Job Name", "type":"string"}]
+    for jt in job_trends:
+        if 'colhdr' not in jt:
+            continue
+        columns.append({"text":jt['colhdr'], "type":"number"})
+
+    rows = []
+    for job in jdq_client.job_info():
+        vals = []
+        row = [job.get('job_name', 'Unknown')]
+        ppd = job.get('default_postprocessor_data', {})
+        have_data = False
+        for jt in job_trends:
+            func = jt.get('func', None)
+            if func is None:
+                val = ppd.get(jt['key'],{}).get(jt['subkey'], 0)
+                vals.append(val)
+                row.append(val)
+                if val:
+                    have_data = True
+                continue
+            if func == 'pct_chg':
+                # XXXrs - assumes positions of previous two values
+                v0 = vals[0]
+                v1 = vals[1]
+                vals = [] # XXXrs - assumes clear previous values
+                if not v0:
+                    row.append('nan')
+                else:
+                    row.append(((v1-v0)/v0)*100)
+        if have_data:
+            rows.append(row)
+
+    return [{"columns": columns, "rows": rows, "type" : "table"}]
+
+
 def _map_result(result):
     """
     Map the result string to a numeric value to allow for threshold
@@ -393,24 +495,32 @@ def query_metrics():
             results.extend(_timeserie_results(target=target, from_ms=from_ts_ms, to_ms=to_ts_ms))
         return jsonify(results)
 
-    # Table
     if data_format != 'table':
         abort(404, Exception('unknown target data format (type) {}'.format(data_format)))
+
+    # Table
     if len(req['targets']) > 1:
         abort(404, Exception('only single target allowed for table'))
     target = req['targets'][0]
     fields = target.get('target', "").split(':')
     if not fields:
         abort(404, Exception('missing target (job name)'))
-    job_names = _parse_multi(fields[0])
-    if "All Jobs" in job_names:
+    table_mode = _parse_multi(fields[0])
+    if JOBS_STATS in table_mode:
         results = _all_jobs_table(from_ms=from_ts_ms, to_ms=to_ts_ms)
+    elif TOTAL_BUILDS in table_mode:
+        results = _jobs_trends_table(table_mode=TOTAL_BUILDS)
+    elif PASS_PCT in table_mode:
+        results = _jobs_trends_table(table_mode=PASS_PCT)
+    elif PASS_DUR in table_mode:
+        results = _jobs_trends_table(table_mode=PASS_DUR)
     else:
         parameter_names = []
         if len(fields) == 2:
             parameter_names = _parse_multi(fields[1])
 
-        results = _job_table(job_names=job_names,
+        # At this point, "table_mode" is a list of job names.
+        results = _job_table(job_names=table_mode,
                              parameter_names=parameter_names,
                              from_ms=from_ts_ms, to_ms=to_ts_ms)
 

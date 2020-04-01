@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2019 Xcalar, Inc. All rights reserved.
+# Copyright 2019-2020 Xcalar, Inc. All rights reserved.
 #
 # No use, or distribution, of this source code is permitted in any form or
 # means without a valid, written license agreement with Xcalar, Inc.
@@ -68,8 +68,10 @@ def jenkins_jobs():
         # XXXrs - shouldn't be in DB!
         if not job_name or job_name == "None":
             continue
+        jjmc = JenkinsJobMetaCollection(job_name=job_name, db=jdb)
         jobs.append({'job_name': job_name,
-                     'job_url': "http://{}/job/{}".format(jenkins_host, job_name)})
+                     'job_url': "http://{}/job/{}".format(jenkins_host, job_name),
+                     'default_postprocessor_data': jjmc.get_data(key='default_postprocessor')})
     return make_response(jsonify({'jobs': jobs}))
 
 @app.route('/jenkins_hosts', methods=methods)

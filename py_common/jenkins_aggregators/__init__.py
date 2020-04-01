@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-
-# Copyright 2019 Xcalar, Inc. All rights reserved.
+# Copyright 2019-2020 Xcalar, Inc. All rights reserved.
 #
 # No use, or distribution, of this source code is permitted in any form or
 # means without a valid, written license agreement with Xcalar, Inc.
@@ -303,6 +302,13 @@ class JenkinsJobMetaCollection(object):
             return
         self.coll.find_one_and_replace({'_id': key}, data, upsert=True)
 
+    def get_data(self, *, key):
+        doc = self.coll.find_one({'_id': key})
+        if not doc:
+            return {}
+        doc.pop('_id', None)
+        return doc
+
     def all_builds(self):
         """
         Return the list of all builds for which we have indexed data.
@@ -558,64 +564,69 @@ class JenkinsJobPostprocessor(JenkinsPostprocessorBase):
         self.jmdb = JenkinsMongoDB(jenkins_host=jenkins_host)
         self.alljob = JenkinsAllJobIndex(jmdb=self.jmdb)
 
-    def _avg_pass_duration(self, *, builds):
+    def _job_stats(self, *, builds):
         self.logger.info("start")
+        rtn = {'build_cnt': 0, 'pass_avg_duration_s': 0, 'pass_pct': 0}
         builds = builds.get('builds', None)
         if not builds:
-            return 0
+            return rtn
+        build_cnt = 0
         pass_cnt = 0
+        fail_cnt = 0
         pass_total_duration_ms = 0
         for bld in builds:
             job_name = bld.get('job_name', None)
             if not job_name or job_name != self.job_name:
                 continue
+            build_cnt += 1
             result = bld.get('result', None)
-            if not result or result != 'SUCCESS':
+            if not result or result == 'ABORTED':
+                continue
+            elif result == 'FAILURE':
+                fail_cnt += 1
+                continue
+            elif result != 'SUCCESS':
                 continue
             pass_cnt += 1
             pass_total_duration_ms += bld.get('duration_ms', 0)
+        rtn['build_cnt'] = build_cnt
         if not pass_cnt:
-            return 0
-        return int(pass_total_duration_ms/pass_cnt)
+            return rtn
+        rtn['pass_avg_duration_s'] = int((pass_total_duration_ms/pass_cnt)/1000)
+        rtn['pass_pct'] = (pass_cnt/(pass_cnt+fail_cnt))*100
+        return rtn
 
     def update_job(self):
         self.logger.info("start job_name: {}".format(self.job_name))
-        pdh = {}
+        bch = {} # build count history
+        pph = {} # pass percentage history
+        pdh = {} # pass duration history
         try:
             day_ms = 3600000 * 24
             now = int(time.time()*1000)
+            periods = [{'label': 'last_24h', 'start': now-day_ms, 'end': now},
+                       {'label': 'prev_24h', 'start': now-(day_ms*2), 'end': now-day_ms-1},
+                       {'label': 'last_7d', 'start': now-(day_ms*7), 'end':now},
+                       {'label': 'prev_7d', 'start': now-(day_ms*14), 'end': now-(day_ms*7)-1},
+                       {'label': 'last_30d', 'start': now-(day_ms*30), 'end': now},
+                       {'label': 'prev_30d', 'start': now-(day_ms*60), 'end': now-(day_ms*30)-1}]
+            for period in periods:
+                builds = self.alljob.builds_by_time(start_time_ms = period['start'],
+                                                    end_time_ms = period['end'])
+                stats = self._job_stats(builds=builds)
+                bch[period['label']] = stats['build_cnt']
+                pph[period['label']] = stats['pass_pct']
+                pdh[period['label']] = stats['pass_avg_duration_s']
 
-            last_24h = self.alljob.builds_by_time(start_time_ms = now-day_ms,
-                                                  end_time_ms = now)
-            pdh['last_24h_avg_pass_duration_ms'] = self._avg_pass_duration(builds=last_24h)
-
-            prev_24h = self.alljob.builds_by_time(start_time_ms = now-(day_ms*2),
-                                                  end_time_ms = now-day_ms-1)
-            pdh['prev_24h_avg_pass_duration_ms'] = self._avg_pass_duration(builds=prev_24h)
-
-            last_7d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*7),
-                                                 end_time_ms = now)
-            pdh['last_7d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=last_7d)
-
-            prev_7d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*14),
-                                                 end_time_ms = now-(day_ms*7)-1)
-            pdh['prev_7d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=prev_7d)
-
-            last_30d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*30),
-                                                  end_time_ms = now)
-            pdh['last_30d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=last_30d)
-
-            prev_30d = self.alljob.builds_by_time(start_time_ms = now-(day_ms*60),
-                                                  end_time_ms = now-(day_ms*30)-1)
-            pdh['prev_30d_avg_pass_duration_ms'] = self._avg_pass_duration(builds=prev_30d)
-
-            # XXXrs - consider alerting
+                # XXXrs - consider alerting
 
         except Exception as e:
             self.logger.exception("update_job exception")
             return None
 
-        rtn = {'pass_duration_history':pdh}
+        rtn = {'build_cnt':bch,
+               'pass_pct':pph,
+               'pass_avg_duration_s':pdh}
         self.logger.info("rtn: {}".format(rtn))
         return rtn
 
