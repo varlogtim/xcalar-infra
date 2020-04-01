@@ -185,11 +185,9 @@ generateThriftVersionSig() {
     md5sum $DEF_FILE | cut -d " "  -f 1
 }
 generateThriftVersionSigNew() {
-    local DEF_FILES="$@"
-
     local newline=$'\n'
     local files=""
-    for defFile in ${DEF_FILES[@]}; do
+    for defFile in "$@"; do
         if [ -f "$defFile" ]; then
             files="${files} ${defFile}"
         fi
@@ -198,10 +196,6 @@ generateThriftVersionSigNew() {
     local content="$(cat ${files})${newline}"
     echo -n "$content" | md5sum | cut -d " " -f 1
 }
-
-# Make symbolic link
-sudo mkdir /var/www || true
-sudo ln -sfn $WORKSPACE/xcalar-gui/xcalar-gui /var/www/xcalar-gui
 
 if [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
     cd $XLRGUIDIR
@@ -220,30 +214,32 @@ if [ $JOB_NAME = "GerritSQLCompilerTest" ]; then
     fi
 fi
 
-echo "Installing required packages"
-if grep -q Ubuntu /etc/os-release; then
-    sudo apt-get install -y libnss3-dev chromium-browser
-    sudo apt-get install -y libxss1 libappindicator1 libindicator7 libgconf-2-4
-    sudo apt-get install -y Xvfb
-    if [ ! -f /usr/bin/chromedriver ]; then
-        echo "Wget chrome driver"
-        wget http://chromedriver.storage.googleapis.com/2.24/chromedriver_linux64.zip
-        unzip chromedriver_linux64.zip
-        chmod +x chromedriver
-        sudo mv chromedriver /usr/bin/
+install_reqs() {
+    echo "Installing required packages"
+    if grep -q Ubuntu /etc/os-release; then
+        sudo apt-get install -y libnss3-dev chromium-browser
+        sudo apt-get install -y libxss1 libappindicator1 libindicator7 libgconf-2-4
+        sudo apt-get install -y Xvfb
+        if [ ! -f /usr/bin/chromedriver ]; then
+            echo "Wget chrome driver"
+            wget http://chromedriver.storage.googleapis.com/2.24/chromedriver_linux64.zip
+            unzip chromedriver_linux64.zip
+            chmod +x chromedriver
+            sudo mv chromedriver /usr/bin/
+        else
+            pwd
+            echo "Chrome driver already installed"
+        fi
     else
-        pwd
-        echo "Chrome driver already installed"
+        sudo curl -ssL http://repo.xcalar.net/rpm-deps/google-chrome.repo | sudo tee /etc/yum.repos.d/google-chrome.repo
+        curl -sSO https://dl.google.com/linux/linux_signing_key.pub
+        sudo rpm --import linux_signing_key.pub
+        rm linux_signing_key.pub
+        sudo yum install -y google-chrome-stable
+        sudo yum localinstall -y /netstore/infra/packages/chromedriver-2.34-2.el7.x86_64.rpm
+        sudo yum install -y Xvfb
     fi
-else
-    sudo curl -ssL http://repo.xcalar.net/rpm-deps/google-chrome.repo | sudo tee /etc/yum.repos.d/google-chrome.repo
-    curl -sSO https://dl.google.com/linux/linux_signing_key.pub
-    sudo rpm --import linux_signing_key.pub
-    rm linux_signing_key.pub
-    sudo yum install -y google-chrome-stable
-    sudo yum localinstall -y /netstore/infra/packages/chromedriver-2.34-2.el7.x86_64.rpm
-    sudo yum install -y Xvfb
-fi
+}
 
 pip install pyvirtualdisplay selenium
 
@@ -515,7 +511,6 @@ fi
 
 
 pkill -F $TmpCaddyPid | true
-sudo unlink /var/www/xcalar-gui || true
 kill -TERM $caddyPid || true
 
 if [ "$useXc2" == "true" ]; then
