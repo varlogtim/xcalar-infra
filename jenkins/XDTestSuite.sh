@@ -190,7 +190,9 @@ generateThriftVersionSigNew() {
     local newline=$'\n'
     local content=""
     for defFile in "${DEF_FILES[@]}"; do
-        content="${content}$(cat ${defFile})${newline}"
+        if [ -f "$defFile" ]; then
+            content="${content}$(cat ${defFile})${newline}"
+        fi
     done
     echo -n "$content" | md5sum | cut -d " " -f 1
 }
