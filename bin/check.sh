@@ -6,7 +6,9 @@ for FILE in "$@"; do
     desc="$(file $FILE)"
     if [[ "$desc" =~ "shell script" ]]; then
         echo >&2 "Checking $FILE ..."
-        $DIR/shellcheck.sh "$FILE" || rc=1
+        if ! shellcheck -S info "$FILE"; then
+            $DIR/shellcheck.sh "$FILE" || rc=1
+        fi
     elif echo "$FILE" | grep -q '\.json$'; then
         echo >&2 "Checking $FILE ..."
         jq -r . "$FILE" >/dev/null || rc=1

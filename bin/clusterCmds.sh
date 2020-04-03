@@ -198,12 +198,12 @@ restartXcalar() {
     set +e
     stopXcalar "$cluster"
     clusterSsh $cluster "sudo systemctl status xcalar"
-    local startMsg = "Usrnodes started"
-    local statusCmd = "/etc/rc.d/init.d/xcalar status"
+    local startMsg="Usrnodes started"
+    local statusCmd="/etc/rc.d/init.d/xcalar status"
     if nodeSsh "$cluster" "${clusterHosts[0]}" \
                "sudo systemctl cat xcalar-usrnode.service 2>&1 >/dev/null"; then
-        startMsg = "usrnode --nodeId"
-        statusCmd = "systemctl status xcalar-usrnode.service"
+        startMsg="usrnode --nodeId"
+        statusCmd="systemctl status xcalar-usrnode.service"
     fi
     local host
     for host in "${clusterHosts[@]}"; do

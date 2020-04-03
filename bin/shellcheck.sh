@@ -7,7 +7,7 @@
 #
 set -e
 
-SHELLCHECK_IMAGE='koalaman/shellcheck:latest'
+SHELLCHECK_IMAGE='koalaman/shellcheck@sha256:adccaae3037f6e89793c16ecc728a60a5d35cee24bb50f70a832dc325c87a2a5'
 
 if test $# -eq 1 && test -d "$1"; then
     DIR="$1"
@@ -59,6 +59,7 @@ for FILE in "$@"; do
         --shell=bash \
         --exclude=${SHELLCHECK_EXCLUDES} \
         --color=always \
+        --severity=error \
         "$FILE"
     rc=$?
     if [ $rc != 0 ]; then
