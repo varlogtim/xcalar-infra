@@ -93,10 +93,10 @@ EOF
 
 log() {
     echo "[$(date +%FT%T%z) $USER@$HOSTNAME $PROG $$] $*" >> $LOG
+    say "[$(date +%FT%T%z) $USER@$HOSTNAME $PROG] $*"
 }
 
 say() {
-    log "say: $1"
     echo >&2 "$1"
 }
 
@@ -290,7 +290,7 @@ vault_sanity() {
             fi
         done
     fi
-    echo "1..6"
+    echo "1..7"
     if [ "${#UNMET_DEPS[@]}" -gt 0 ]; then
         echo "not ok    1  - missing dependencies ${UNMET_DEPS[*]}"
         die "You have unmet dependencies: ${UNMET_DEPS[*]}"
@@ -304,14 +304,18 @@ vault_sanity() {
         echo "not ok    2  - awscli 15.40 or higher"
         die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
     fi
-    if [ ${aws_version[1]} -lt 15 ]; then
-        echo "not ok    2  - awscli 15.40 or higher"
-        die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
-    elif [ ${aws_version[1]} -eq 15 ] && [ ${aws_version[2]} -lt 40 ]; then
-        echo "not ok    2  - awscli 15.40 or higher"
-        die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
+    if [ ${aws_version[0]} -eq 2 ]; then
+        echo "ok    2  - awscli v2"
+    else
+        if [ ${aws_version[1]} -lt 15 ]; then
+            echo "not ok    2  - awscli 15.40 or higher"
+            die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
+        elif [ ${aws_version[1]} -eq 15 ] && [ ${aws_version[2]} -lt 40 ]; then
+            echo "not ok    2  - awscli 15.40 or higher"
+            die "awscli needs to be version 15.40 or higher. Use virtualenv and pip install -U awscli."
+        fi
+        echo "ok    2  - awscli 15.40 or higher"
     fi
-    echo "ok    2  - awscli 15.40 or higher"
 
     if [ -z "$VAULT_ADDR" ]; then
         echo "not ok    3  - VAULT_ADDR is set"
@@ -341,6 +345,12 @@ vault_sanity() {
         die "Failed to get 'vault health', or vault is sealed"
     fi
     echo "ok    6  - checked vault health"
+    if cvault auth/token/lookup-self | jq -r '.data|[.policies[],.identity_policies[]]' | grep -q aws; then
+        echo "not ok  7  - not a member of aws enabled group in LDAP. Check with IT."
+    else
+        echo "ok  7  - member of aws enabled group"
+    fi
+
 }
 
 iso2unix() {
