@@ -384,18 +384,21 @@ set -e
 cmBuild clean
 cmBuild config prod
 if [ $JOB_NAME = "GerritExpServerTest" ]; then
+    cmBuild xce
     cmBuild qa
 else
-    cmBuild
+    cmBuild xce
 fi
 
 echo "Building XD"
 cd $XLRGUIDIR
 
 if [ $JOB_NAME = "XDFuncTest" ]; then
-    make dev PRODUCT="$GUI_PRODUCT"
+    # XXX Revert this to make dev when ENG-6945 is done
+    make trunk PRODUCT="$GUI_PRODUCT"
 else
-    make debug PRODUCT="$GUI_PRODUCT"
+    # XXX Revert this to make debug when ENG-6945 is done
+    make trunk PRODUCT="$GUI_PRODUCT"
 fi
 
 if [ "$GUI_PRODUCT" = "XI" ]; then
