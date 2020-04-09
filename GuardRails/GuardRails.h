@@ -137,6 +137,7 @@ typedef struct MemSlot {
     size_t totalUserRequestedBytes;
     size_t totalUserFreedBytes;
     pthread_mutex_t lock; // Move to MemBin
+    bool slotLock; // XXX: Hack to allow internal allocs without deadlock
 } MemSlot;
 
 typedef struct MemHisto {
