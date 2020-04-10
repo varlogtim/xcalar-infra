@@ -286,7 +286,6 @@ initBinsMeta(void) {
 
     for (int slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
         pthread_mutex_init(&memSlots[slotNum].lock, NULL);
-        memSlots[slotNum].slotLock = true;
 
         // When the low water mark is hit for a bin, batch allocate from the pool
         // until hitting high-water.
@@ -328,21 +327,13 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
     // Used only for stats
     const int usrSizeBin = log2fast(usrSize);
 
-    int ret;
-
-    if (likely(memSlots[slotNum].slotLock)) {
-        ret = pthread_mutex_lock(&memSlots[slotNum].lock);
-        GR_ASSERT_ALWAYS(ret == 0);
-    }
-
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&memSlots[slotNum].lock));
+    int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
+    GR_ASSERT_ALWAYS(ret == 0);
 
     ret = replenishBin(slotNum, binNum);
     if (ret) {
-        if (likely(memSlots[slotNum].slotLock)) {
-            ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
-            GR_ASSERT_ALWAYS(ret == 0);
-        }
+        ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
+        GR_ASSERT_ALWAYS(ret == 0);
         return(NULL);
     }
 
@@ -364,10 +355,8 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
         GR_ASSERT_ALWAYS(false);
     }
 
-    if (likely(memSlots[slotNum].slotLock)) {
-        ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
-        GR_ASSERT_ALWAYS(ret == 0);
-    }
+    ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
+    GR_ASSERT_ALWAYS(ret == 0);
 
     GR_ASSERT_ALWAYS(hdr->magic == MAGIC_FREE);
     // First invalid byte address after buffer
@@ -383,16 +372,10 @@ putBuf(void *buf) {
 
     const size_t slotNum = hdr->slotNum;
 
-    int ret;
-
-    if (likely(memSlots[slotNum].slotLock)) {
-        ret = pthread_mutex_lock(&memSlots[slotNum].lock);
-        GR_ASSERT_ALWAYS(ret == 0);
-    }
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&memSlots[slotNum].lock));
-
+    int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
     const int binNum = hdr->binNum;
     MemBin *bin = &memSlots[slotNum].memBins[binNum];
+    GR_ASSERT_ALWAYS(ret == 0);
 
     const int usrSizeBin = log2fast(hdr->usrDataSize);
     GR_ASSERT_ALWAYS(usrSizeBin < MAX_ALLOC_POWER);
@@ -410,10 +393,8 @@ putBuf(void *buf) {
 
     bin->frees++;
 
-    if (likely(memSlots[slotNum].slotLock)) {
-        ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
-        GR_ASSERT_ALWAYS(ret == 0);
-    }
+    ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
+    GR_ASSERT_ALWAYS(ret == 0);
 }
 
 void sigUsr2Handler(int sig) {
@@ -541,7 +522,7 @@ initialize(void) {
         // additional preallocated memory for the first backing pool.
         initSize = START_POOL_MULT * initBinsMeta();
 
-        // printf("Initializing GuardRails with %lu byte starting pool\n", initSize);
+        printf("Initializing GuardRails with %lu byte starting pool\n", initSize);
 
         ret = pthread_mutex_lock(&gMutex);
         GR_ASSERT_ALWAYS(ret == 0);
@@ -563,7 +544,7 @@ initialize(void) {
     }
     // Must be done post-init as these functions allocate memory
     ssize_t totalMem = get_phys_pages() * getpagesize();
-    // printf("Total system physical memory: %ld\n", totalMem);
+    printf("Total system physical memory: %ld\n", totalMem);
     if (grArgs.maxMemPct != 0) {
         struct rlimit vaLimit;
         ret = getrlimit(RLIMIT_AS, &vaLimit);
@@ -813,11 +794,6 @@ onExitHelper(bool useLocale) {
     for (size_t slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
         int ret = pthread_mutex_lock(&memSlots[slotNum].lock);
         GR_ASSERT_ALWAYS(ret == 0);
-
-        // Allow libc calls (ie dprintf) to allocate memory without causing
-        // deadlock in guardrails
-        memSlots[slotNum].slotLock = false;
-
         totalUserRequestedBytes += memSlots[slotNum].totalUserRequestedBytes;
         totalUserFreedBytes += memSlots[slotNum].totalUserFreedBytes;
         printf("Number mem pools used: %lu\n", currMemPool+1);
@@ -857,8 +833,6 @@ onExitHelper(bool useLocale) {
                     binAllocedBytes - binFreedBytes);
             totalRequestedPow2Bytes += binAllocedBytes;
         }
-
-        memSlots[slotNum].slotLock = true;
         ret = pthread_mutex_unlock(&memSlots[slotNum].lock);
         GR_ASSERT_ALWAYS(ret == 0);
     }
