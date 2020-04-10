@@ -84,7 +84,7 @@ delayFreeBatch(MemSlot *slot) {
 
 void
 delayPut(MemSlot *slot, ElmHdr *hdr) {
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&slot->lock));
+    GR_ASSERT_ALWAYS(verifyLocked(&slot->lock));
     if (circCount(&slot->delay) > MAX_DELAY_ELMS / 2) {
         delayFreeBatch(slot);
     }

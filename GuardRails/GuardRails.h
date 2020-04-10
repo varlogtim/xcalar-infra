@@ -146,5 +146,6 @@ typedef struct MemHisto {
 
 void delayPut(MemSlot *slot, ElmHdr *hdr);
 void insertElmHead(struct ElmHdr **head, struct ElmHdr *elm);
+bool verifyLocked(pthread_mutex_t *lock);
 
 #endif // _GUARDRAILS_H_

@@ -76,6 +76,11 @@ static void grPrintf(const char *fmt, ...) {
     va_end(args);
 }
 
+bool
+verifyLocked(pthread_mutex_t *lock) {
+    return lock->__data.__count > 0;
+}
+
 static ssize_t
 getBacktrace (void **buf, const ssize_t maxFrames) {
     unw_cursor_t cursor;
@@ -229,7 +234,7 @@ static int
 replenishBin(const size_t slotNum, const size_t binNum) {
     const size_t binSize = (1UL << binNum);
 
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&memSlots[slotNum].lock));
+    GR_ASSERT_ALWAYS(verifyLocked(&memSlots[slotNum].lock));
     MemBin *bin = &memSlots[slotNum].memBins[binNum];
     // When using guard pages minimum alloc size must be one page
     if (NUM_GP > 0 && binSize < PAGE_SIZE) {
@@ -257,7 +262,7 @@ replenishBin(const size_t slotNum, const size_t binNum) {
 
 static int
 replenishBins(const size_t slotNum) {
-    GR_ASSERT_ALWAYS(pthread_mutex_trylock(&memSlots[slotNum].lock));
+    GR_ASSERT_ALWAYS(verifyLocked(&memSlots[slotNum].lock));
     for (int binNum = 0; binNum < MAX_PREALLOC_POWER; binNum++) {
         int ret = replenishBin(slotNum, binNum);
         if (ret != 0) {
@@ -285,7 +290,13 @@ initBinsMeta(void) {
     size_t initSize = 0;
 
     for (int slotNum = 0; slotNum < grArgs.numSlots; slotNum++) {
-        pthread_mutex_init(&memSlots[slotNum].lock, NULL);
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        // Newer libc versions are prone to allocating memory from formatted
+        // output functions like dprintf.  Allow this to occur from onExit
+        // handler without deadlocking
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutex_init(&memSlots[slotNum].lock, &attr);
 
         // When the low water mark is hit for a bin, batch allocate from the pool
         // until hitting high-water.
@@ -516,13 +527,11 @@ initialize(void) {
 
     ret = pthread_mutex_lock(&initMutex);
     GR_ASSERT_ALWAYS(ret == 0);
+    size_t initSize = 0;
     if (!isInit) {
-        size_t initSize;
         // Allocate memory to accomodate all bins at their high water mark plus
         // additional preallocated memory for the first backing pool.
         initSize = START_POOL_MULT * initBinsMeta();
-
-        printf("Initializing GuardRails with %lu byte starting pool\n", initSize);
 
         ret = pthread_mutex_lock(&gMutex);
         GR_ASSERT_ALWAYS(ret == 0);
@@ -544,7 +553,6 @@ initialize(void) {
     }
     // Must be done post-init as these functions allocate memory
     ssize_t totalMem = get_phys_pages() * getpagesize();
-    printf("Total system physical memory: %ld\n", totalMem);
     if (grArgs.maxMemPct != 0) {
         struct rlimit vaLimit;
         ret = getrlimit(RLIMIT_AS, &vaLimit);
@@ -556,6 +564,12 @@ initialize(void) {
 
     ret = pthread_mutex_unlock(&initMutex);
     GR_ASSERT_ALWAYS(ret == 0);
+
+    // formatted output may allocate memory so only call after init
+    if (initSize != 0) {
+        printf("Initializing GuardRails with %lu byte starting pool\n", initSize);
+        printf("Total system physical memory: %ld\n", totalMem);
+    }
 }
 
 static void *
