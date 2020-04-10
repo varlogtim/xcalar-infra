@@ -62,7 +62,7 @@ static uint8_t slopValArr[PAGE_SIZE];
 // and alignment.
 static MemHisto memHisto[MAX_SLOTS][MAX_ALLOC_POWER];
 
-static void onExitHelper(bool useLocale);
+static void onExitHelper(bool useLocale, size_t hwm);
 static void onExit(void);
 
 static void grPrintf(const char *fmt, ...) {
@@ -158,7 +158,7 @@ addNewMemPool(const size_t poolSizeReq) {
         // Allow debug code to test intentional allocation failure above rlim
         if (grArgs.abortOnOOM && (poolSizeReq < vaLimit.rlim_cur)) {
             printf("Failed to mmap more memory\n");
-            onExitHelper(false);
+            onExitHelper(false, 0);
             GR_ASSERT_ALWAYS(false);
         }
         return(-1);
@@ -169,7 +169,7 @@ addNewMemPool(const size_t poolSizeReq) {
         int ret = mlock(mapStart, poolSize);
         if (ret != 0) {
             printf("Failed to mlock memory\n");
-            onExitHelper(false);
+            onExitHelper(false, 0);
             GR_ASSERT_ALWAYS(false);
         }
     }
@@ -359,10 +359,20 @@ getBuf(size_t allocSize, void **end, size_t usrSize) {
     GR_ASSERT_ALWAYS(usrSizeBin < MAX_ALLOC_POWER);
     memHisto[slotNum][usrSizeBin].allocs++;
     memSlots[slotNum].totalUserRequestedBytes += usrSize;
+    memSlots[slotNum].HWMUsrBytes = MAX(memSlots[slotNum].HWMUsrBytes,
+            memSlots[slotNum].totalUserRequestedBytes -
+            memSlots[slotNum].totalUserFreedBytes);
+
+    // Everytime HWM increases by specified amount, dump heap state
+    if (memSlots[slotNum].HWMUsrBytes > memSlots[slotNum].lastHWMUsrBytesDump +
+            grArgs.slotHWMDumpIntervalBytes) {
+        memSlots[slotNum].lastHWMUsrBytesDump = memSlots[slotNum].HWMUsrBytes;
+        onExitHelper(false, memSlots[slotNum].HWMUsrBytes);
+    }
 
     if (unlikely(memSlots[slotNum].totalUserRequestedBytes >
                 grArgs.maxRequestedBytes)) {
-        onExitHelper(false);
+        onExitHelper(false, 0);
         GR_ASSERT_ALWAYS(false);
     }
 
@@ -461,7 +471,8 @@ parseArgs(GRArgs *args) {
 
     args->numSlots = 1;
     args->maxRequestedBytes = ULONG_MAX;
-    while ((c = getopt(argc, argv, "aAdmM:p:s:t:T:v")) != -1) {
+    args->slotHWMDumpIntervalBytes = ULONG_MAX;
+    while ((c = getopt(argc, argv, "aAdD:mM:p:s:t:T:v")) != -1) {
         switch (c) {
             case 'a':
                 args->abortOnOOM = true;
@@ -471,6 +482,9 @@ parseArgs(GRArgs *args) {
                 break;
             case 'd':
                 args->useDelay = true;
+                break;
+            case 'D':
+                args->slotHWMDumpIntervalBytes = strtoull(optarg, NULL, 10) * 1024 * 1024;
                 break;
             case 'm':
                 args->maxMemPct = atoi(optarg);
@@ -766,7 +780,7 @@ void *aligned_alloc(size_t alignment, size_t usrSize) {
 }
 
 static void
-onExitHelper(bool useLocale) {
+onExitHelper(bool useLocale, size_t hwm) {
     size_t totalAllocedBytes = 0;
     size_t totalAllocedBytesGP = 0;
     size_t totalFreedBytesGP = 0;
@@ -783,7 +797,11 @@ onExitHelper(bool useLocale) {
         pid_t tid = syscall(SYS_gettid);
         char of[NAME_MAX];
 
-        ret = snprintf(of, NAME_MAX, "%s-%d.txt", TRACKER_FILE_PRE, tid);
+        if (hwm > 0) {
+            ret = snprintf(of, NAME_MAX, "%s-%lu-%d.txt", TRACKER_FILE_PRE, hwm, tid);
+        } else {
+            ret = snprintf(of, NAME_MAX, "%s-%d.txt", TRACKER_FILE_PRE, tid);
+        }
         GR_ASSERT_ALWAYS(ret > 0);
 
         outfd = open(of, O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -882,5 +900,5 @@ onExitHelper(bool useLocale) {
 
 __attribute__((destructor)) static void
 onExit(void) {
-    onExitHelper(true);
+    onExitHelper(true, 0);
 }

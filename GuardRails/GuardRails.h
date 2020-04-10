@@ -72,6 +72,7 @@ typedef struct GRArgs {
     size_t maxTrackFreeFrames;
     size_t numSlots;
     size_t maxMemPct;
+    size_t slotHWMDumpIntervalBytes;
     // Maximum requested bytes allowed for a slot before GuardRails
     // will report and abort.  This doesn't include buf$ unless running
     // in malloc-backed buf$ mode.
@@ -136,6 +137,8 @@ typedef struct MemSlot {
     // Actual number of bytes requested by user, used to track allocator efficiency
     size_t totalUserRequestedBytes;
     size_t totalUserFreedBytes;
+    size_t HWMUsrBytes;
+    size_t lastHWMUsrBytesDump;
     pthread_mutex_t lock; // Move to MemBin
 } MemSlot;
 
