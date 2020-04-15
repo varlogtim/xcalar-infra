@@ -308,7 +308,8 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     echo "Detecting version of XCE to use"
     cd $XLRDIR
     foundVersion="false"
-    isCheckXcrpc="true"
+    # Temporarily disable auto-detect xcrpc version
+    isCheckXcrpc="false"
     checkOutFiles="${thriftDefFileList[@]} $thriftDefFile $thriftDefFileH $xcrpcDefDir"
     if [ ! -f "$xcrpcVersionFile" ]; then
         isCheckXcrpc="false"
