@@ -17,7 +17,7 @@ job "vsphere-prom" {
       driver = "docker"
 
       config {
-        image = "registry.int.xcalar.com/cblomart/vsphere-prom:latest"
+        image = "registry.int.xcalar.com/cblomart/vsphere-prom:v20200409"
 
         volumes = [
           "secrets/vsphere-prom.json:/etc/vsphere-graphite.json",

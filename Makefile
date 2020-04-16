@@ -12,11 +12,12 @@ endif
 VIRTUAL_ENV = .venv
 PIP_FLAGS   ?= -q
 REQUIRES     = requirements.txt
-CONSTRAINTS  = constraints.txt
+REQUIRES_IN     = requirements.in
 HOOKS        = .git/hooks/pre-commit
 PYTHON  ?= /opt/xcalar/bin/python3.6
 
 all: venv
+	@echo "Run source bin/activate"
 
 hooks: $(HOOKS)
 
@@ -28,22 +29,21 @@ venv: .updated
 .updated: $(VIRTUAL_ENV)/bin/pip
 	@/usr/bin/touch $@
 
+$(REQUIRES): $(REQUIRES_IN)
+	pip-compile -v
+
 $(VIRTUAL_ENV)/bin/pip: $(VIRTUAL_ENV) $(REQUIRES)
 	@echo "Updating virtualenv in $(VIRTUAL_ENV) with packages in $(REQUIRES) ..."
-	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools wheel
-	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -r $(REQUIRES) -c $(CONSTRAINTS)
+	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools wheel pip-tools
+	$(VIRTUAL_ENV)/bin/pip-sync
+	#$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -r $(REQUIRES)
 	@/usr/bin/touch $@
 
 $(VIRTUAL_ENV):
 	@echo "Creating new virtualenv in $@ ..."
 	@mkdir -p $@
 	@deactivate 2>/dev/null || true; $(PYTHON) -m venv --prompt=$(shell basename $(current_dir)) $@
-	@deactivate 2>/dev/null || true; $(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools wheel pipenv
-
-$(CONSTRAINTS): venv
-	@echo "Saving requirements to $@ ..."
-	$(VIRTUAL_ENV)/bin/pip freeze -r $(REQUIRES) | grep -v pkg-resources > $@.tmp
-	mv $@.tmp $@
+	@deactivate 2>/dev/null || true; $(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools
 
 clean:
 	@echo Removing $(VIRTUAL_ENV) ...

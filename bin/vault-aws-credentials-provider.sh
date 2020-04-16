@@ -455,7 +455,6 @@ vault_render_file() {
 
 main() {
     mkdir -p "${VAULTCACHE_BASE}"
-    log "Env: $(print_clean_env)"
     log "Args: $*"
     while [ $# -gt 0 ]; do
         local cmd="$1"
