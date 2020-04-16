@@ -510,7 +510,17 @@ scrape_configs:
       - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
         datacenter: xcalar-sjc
         services: ["vsphere-exporter"]
-
+  - job_name: ovirt
+    params:
+      format:
+        - prometheus
+    metrics_path: /metrics
+    scrape_interval: 1m
+    scrape_timeout: 20s
+    consul_sd_configs:
+      - server: '{{ env "NOMAD_IP_prometheus_ui" }}:8500'
+        datacenter: xcalar-sjc
+        services: ["ovirt-exporter"]
   - job_name: pushgateway
     params:
       format:
