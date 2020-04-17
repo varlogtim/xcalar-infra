@@ -7,11 +7,13 @@ azure-storage-common>=2.1.0
 azure-storage-queue>=2.1.0
 bumpversion
 cfn-flip
+cfn-lint
 cookiecutter
 crcmod
 diceware
 docker
 flake8
+git-review
 jinja2-cli[yaml]
 pip-tools
 pre-commit

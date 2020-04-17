@@ -48,6 +48,7 @@ filelock==3.0.12          # via virtualenv
 flake8==3.7.9             # via -r requirements.in
 flask==1.0.4              # via aws-sam-cli
 future==0.18.2            # via cookiecutter, python-jose-cryptodome
+git-review==1.28.0        # via -r requirements.in
 hvac==0.10.0              # via ansible-modules-hashivault
 identify==1.4.14          # via pre-commit
 idna==2.8                 # via requests
@@ -92,13 +93,13 @@ pytz==2019.3              # via dateparser, tzlocal
 pyyaml==5.3.1             # via -r requirements.in, ansible, aws-sam-cli, awscli, cfn-flip, jinja2-cli, pre-commit, sceptre, serverlessrepo, yamllint
 regex==2020.2.20          # via dateparser
 requests-oauthlib==1.3.0  # via msrest
-requests==2.22.0          # via -r requirements.in, ansible-modules-hashivault, aws-sam-cli, azure-core, azure-storage-common, cookiecutter, docker, hvac, msrest, python-consul, requests-oauthlib, warrant
+requests==2.22.0          # via -r requirements.in, ansible-modules-hashivault, aws-sam-cli, azure-core, azure-storage-common, cookiecutter, docker, git-review, hvac, msrest, python-consul, requests-oauthlib, warrant
 rsa==3.4.2                # via awscli
 s3transfer==0.3.3         # via awscli, boto3
 sceptre==2.3.0            # via -r requirements.in
 sentry-sdk==0.14.1        # via -r requirements.in
 serverlessrepo==0.1.9     # via aws-sam-cli
-six==1.14.0               # via astroid, aws-lambda-builders, aws-sam-translator, azure-core, cfn-flip, cryptography, docker, ecdsa, hvac, isodate, jsonschema, packaging, pip-tools, python-consul, python-dateutil, python-jose-cryptodome, sceptre, serverlessrepo, virtualenv, websocket-client
+six==1.14.0               # via astroid, aws-lambda-builders, aws-sam-translator, azure-core, cfn-flip, cryptography, docker, ecdsa, git-review, hvac, isodate, jsonschema, packaging, pip-tools, python-consul, python-dateutil, python-jose-cryptodome, sceptre, serverlessrepo, virtualenv, websocket-client
 testinfra==5.0.0          # via -r requirements.in
 toml==0.10.0              # via pre-commit
 tomlkit==0.5.8            # via aws-sam-cli
