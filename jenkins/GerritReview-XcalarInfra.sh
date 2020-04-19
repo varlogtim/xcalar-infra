@@ -5,5 +5,7 @@
 export XLRINFRADIR="$(cd "$(dirname ${BASH_SOURCE[0]})"/.. && pwd)"
 export PATH=$XLRINFRADIR/bin:$PATH
 
-FILES=($(git diff-tree --no-commit-id --name-only -r HEAD))
-$XLRINFRADIR/bin/check.sh "${FILES[@]}"
+FILES=($(git diff-tree --no-commit-id --name-only --diff-filter=d -r HEAD))
+if [ -n "$FILES" ]; then
+    $XLRINFRADIR/bin/check.sh "${FILES[@]}"
+fi
