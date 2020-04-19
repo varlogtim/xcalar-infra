@@ -1,4 +1,4 @@
-.PHONY: all venv hooks clean update frozen clean
+.PHONY: all venv hooks clean update frozen clean recompile
 
 SHELL=/bin/bash
 
@@ -9,15 +9,15 @@ ifeq ($(XLRINFRADIR),)
 $(error Must set XLRINFRADIR. Please source .env file)
 endif
 
-VIRTUAL_ENV = .venv
+VENV = .venv
 PIP_FLAGS   ?= -q
 REQUIRES     = requirements.txt
-REQUIRES_IN     = requirements.in
+REQUIRES_IN  = requirements.in
 HOOKS        = .git/hooks/pre-commit
 PYTHON  ?= /opt/xcalar/bin/python3.6
 
 all: venv
-	@echo "Run source bin/activate"
+	@echo "Run source .venv/bin/activate"
 
 hooks: $(HOOKS)
 
@@ -26,28 +26,29 @@ $(HOOKS) : scripts/hooks/pre-commit.sh
 
 venv: .updated
 
-.updated: $(VIRTUAL_ENV)/bin/pip
+.updated: $(VENV)/bin/pip-compile $(REQUIRES)
+	@echo "Syncing virtualenv in $(VENV) with packages in $(REQUIRES) ..."
+	@$(VENV)/bin/pip-sync $(REQUIRES)
 	@/usr/bin/touch $@
 
-$(REQUIRES): $(REQUIRES_IN)
-	pip-compile -v
+recompile: $(VENV)/bin/pip-compile
+	$(VENV)/bin/pip-compile -o $(REQUIRES) -v $(REQUIRES_IN)
+	make venv
 
-$(VIRTUAL_ENV)/bin/pip: $(VIRTUAL_ENV) $(REQUIRES)
-	@echo "Updating virtualenv in $(VIRTUAL_ENV) with packages in $(REQUIRES) ..."
-	$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools wheel pip-tools
-	$(VIRTUAL_ENV)/bin/pip-sync
-	#$(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -r $(REQUIRES)
-	@/usr/bin/touch $@
-
-$(VIRTUAL_ENV):
+$(VENV):
 	@echo "Creating new virtualenv in $@ ..."
 	@mkdir -p $@
 	@deactivate 2>/dev/null || true; $(PYTHON) -m venv --prompt=$(shell basename $(current_dir)) $@
-	@deactivate 2>/dev/null || true; $(VIRTUAL_ENV)/bin/python -m pip install $(PIP_FLAGS) -U pip setuptools
+
+$(VENV)/bin/pip-compile: $(VENV) $(REQUIRES)
+	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -U pip
+	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -U setuptools wheel pip-tools
+	@/usr/bin/touch $@
 
 clean:
-	@echo Removing $(VIRTUAL_ENV) ...
-	@if test -e $(VIRTUAL_ENV); then rm -r $(VIRTUAL_ENV); fi
+	@echo Removing $(VENV) ...
+	@rm -f .updated
+	@if test -e $(VENV); then rm -r $(VENV); fi
 
 # Used for running testing/verifying sources and json data
 include mk/check.mk
