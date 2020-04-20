@@ -94,6 +94,7 @@ def update_handler(event, _):
     #StackId = os.environ['StackId']
     #
     StackName = os.environ['StackName']
+    Region = os.environ['Region']
     #EventPrefix = os.environ['EventPrefix']
     s3 = boto3.client('s3')
     eb = boto3.client('events')
@@ -121,7 +122,7 @@ def update_handler(event, _):
                 params = {
                     "ClusterSize": 1,
                     "ClusterName": "-".join(['cluster',p.stem,uid]),
-                    "Script": "s3://sharedinf-lambdabucket-559166403383-us-west-2/xdp-instamart/runner.sh",
+                    "Script": f"s3://sharedinf-lambdabucket-559166403383-{Region}/xdp-instamart/runner.sh",
                     "KeepCluster": False
                 }
                 if 'schedule' in schedreq:

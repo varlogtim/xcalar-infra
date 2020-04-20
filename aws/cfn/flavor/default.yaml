@@ -1,4 +1,5 @@
 createVpc: True
 retainPolicy: False
 licenseArg: False
-enableLifecycle: True
+enableLifecycle: False
+keepIp: True

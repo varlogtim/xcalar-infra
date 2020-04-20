@@ -362,12 +362,12 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/d8d97274c9f13b56.zip
+        S3Bucket: {{ lambdabucket }}
+        S3Key: xdp-instamart/5611ac0967b3366c.zip
       Handler: add_notification.lambda_handler
       Role: !GetAtt AddS3NotificationRole.Arn
-      Layers:
-        - !ImportValue sharedinf-lambdalayer
+      #      Layers:
+      #        - {{ lambdalayer }}
       Runtime: python3.6
       Timeout: 60
 
@@ -375,17 +375,18 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/d8d97274c9f13b56.zip
+        S3Bucket: {{ lambdabucket }}
+        S3Key: xdp-instamart/5611ac0967b3366c.zip
       Handler: schedule.update_handler
       Role: !GetAtt ScheduleUpdateRole.Arn
-      Layers:
-        - !ImportValue sharedinf-lambdalayer
+      #      Layers:
+      #        - {{ lambdalayer }}
       Runtime: python3.6
       Timeout: 100
       Environment:
         Variables:
           StackName: !Ref 'AWS::StackName'
+          Region: !Ref 'AWS::Region'
           StackId: !Ref 'AWS::StackId'
           ParentStack: !Ref ParentStack
           EventBucket: !Ref EventBucket
@@ -397,11 +398,11 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/d8d97274c9f13b56.zip
+        S3Bucket: {{ lambdabucket }}
+        S3Key: xdp-instamart/5611ac0967b3366c.zip
       Handler: schedule.startstep_handler
-      Layers:
-        - !ImportValue sharedinf-lambdalayer
+      #      Layers:
+      #        - {{ lambdalayer }}
       Description: "Launches a statemachine"
       Environment:
         Variables:
@@ -416,11 +417,11 @@ Resources:
     Type: "AWS::Lambda::Function"
     Properties:
       Code:
-        S3Bucket: !ImportValue sharedinf-lambdabucket
-        S3Key: xdp-instamart/d8d97274c9f13b56.zip
+        S3Bucket: {{ lambdabucket }}
+        S3Key: xdp-instamart/5611ac0967b3366c.zip
       Handler: schedule.launchcluster_handler
-      Layers:
-        - !ImportValue sharedinf-lambdalayer
+      #      Layers:
+      #        - {{ lambdalayer }}
       Description: "Creates cluster to perform DataApp processing"
       Environment:
         Variables:

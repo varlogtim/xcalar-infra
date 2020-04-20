@@ -54,7 +54,6 @@ fix_networking() {
     (
     cat > /etc/sysconfig/network <<-EOF
 	NETWORKING=yes
-	HOSTNAME=localhost.localdomain
 	NOZEROCONF=yes
 	EOF
     cd /etc/sysconfig/network-scripts
@@ -165,7 +164,7 @@ for svc in xcalar puppet collectd consul node_exporter lifecycled update-motd; d
         else
             chkconfig ${svc} off || true
         fi
-    elif [ "$OSID" = amzn2 ]; then
+    else
         systemctl disable ${svc} || true
     fi
 done

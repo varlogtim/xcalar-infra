@@ -147,10 +147,10 @@ generate_ssl() {
           return 0
       fi
   fi
-  cat <<EOF | openssl req -x509 -newkey rsa:4096 -sha256 -days 700 -nodes -keyout ${key} -out ${crt} -extensions san -subj "/C=US/ST=CA/L=San Jose/O=XcalarInc/OU=Self signed Root CA/CN=${name%%.*}" -config /dev/stdin
+  cat <<EOF | openssl req -x509 -newkey rsa:4096 -sha256 -days 700 -nodes -keyout ${key} -out ${crt} -reqexts SAN -extensions SAN -subj "/C=US/ST=CA/L=San Jose/O=XcalarInc/OU=Self signed Root CA/CN=${name%%.*}" -config /dev/stdin
 [req]
 distinguished_name=req
-[san]
+[SAN]
 subjectAltName=DNS.1:${name},DNS.2:localhost,IP.1:$(hostname -i),IP.2:127.0.0.1${public_ip:+,IP.3:$public_ip}
 EOF
     chmod 0640 $key
@@ -195,6 +195,23 @@ systemd_haveunit() {
     test -e /lib/systemd/system/$1 || test -e /etc/systemd/system/$1
 }
 
+file_size() {
+    # $1 = file
+    # $2 = minimum file size
+    local sz
+    if ! sz=$(stat -c %s "$1"); then
+        return 1
+    fi
+    echo "$sz"
+    if [ -z "$2" ]; then
+        return 0
+    fi
+    if [ $sz -ge $2 ]; then
+        return 0
+    fi
+    return 1
+}
+
 main() {
     eval $(ec2-tags -s -i)
     mkdir -p /var/tmp/xcalar-root
@@ -220,6 +237,8 @@ main() {
         . $ENV_FILE
     fi
 
+    SSLKEYFILE=${SSLKEYFILE:-/etc/xcalar/host.key}
+    SSLCRTFILE=${SSLCRTFILE:-/etc/xcalar/host.crt}
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -266,16 +285,16 @@ main() {
                 ;;
             --ssl-cert)
                 SSLCRT="$1"
-                echo "$1" > /etc/xcalar/host.crt
-                chown root:xcalar /etc/xcalar/host.crt
-                chmod 0644 /etc/xcalar/host.crt
+                echo "$1" > $SSLCRTFILE
+                chown root:xcalar $SSLCRTFILE
+                chmod 0644 $SSLCRTFILE
                 shift
                 ;;
             --ssl-key)
                 SSLKEY="$1"
-                echo "$1" > /etc/xcalar/host.key
-                chown root:xcalar /etc/xcalar/host.key
-                chmod 0640 /etc/xcalar/host.key
+                echo "$1" > $SSLKEYFILE
+                chown root:xcalar $SSLKEYFILE
+                chmod 0640 $SSLKEYFILE
                 shift
                 ;;
             --node-id)
@@ -487,6 +506,7 @@ main() {
     cp -n "$XCE_TEMPLATE" "${XCE_TEMPLATE%.*}.bak"
     sed -i '/^Constants.XcalarRootCompletePath/d' $XCE_TEMPLATE
     sed -i "4i Constants.XcalarRootCompletePath=$XLRROOT" $XCE_TEMPLATE
+    sed -i "4i Constants.SendSupportBundle=true" $XCE_TEMPLATE
     sed -i '/Constants.Cgroups/d' ${XCE_TEMPLATE}
     if [ -n "${CGROUPS_ENABLED:-}" ]; then
         if [ "$CGROUPS_ENABLED" != true ]; then
@@ -501,14 +521,20 @@ main() {
             cp -n /etc/xcalar/Caddyfile /etc/xcalar/Caddyfile.orig
         fi
     fi
+    if [ -n "$HOSTEDZONENAME" ] && [ -n "$CNAME" ]; then
+        FQDN="${CNAME}.${HOSTEDZONENAME}"
+    else
+        FQDN="$(hostname -f)"
+    fi
+
     if [ $NODE_ID -eq 0 ]; then
         ec2_attach_nic "$NIC" "$INSTANCE_ID"
         test -d $XLRROOT/config || mkdir -p $XLRROOT/config
         PUBLIC_DNS_AND_IP="$(aws ec2 describe-network-interfaces --network-interface-ids $NIC --query 'NetworkInterfaces[].Association.[PublicDnsName,PublicIp]' --output text)"
-        if test -s /etc/xcalar/host.crt && test -s /etc/xcalar/host.key; then
+        if file_size $SSLCRTFILE 10 && filesize $SSLKEYFILE 10; then
             CRT_KEY=($XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.crt $XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.key)
-            fix_multiline_cert < /etc/xcalar/host.crt > "${CRT_KEY[0]}"
-            fix_multiline_cert < /etc/xcalar/host.key > "${CRT_KEY[1]}"
+            fix_multiline_cert < $SSLCRTFILE > "${CRT_KEY[0]}"
+            fix_multiline_cert < $SSLKEYFILE > "${CRT_KEY[1]}"
             if ! verify_ssl "${CRT_KEY[@]}"; then
                 rm -f "${CRT_KEY[@]}"
                 CRT_KEY=($(cd $XLRROOT/config && generate_ssl $PUBLIC_DNS_AND_IP $AWS_CLOUDFORMATION_STACK_NAME))

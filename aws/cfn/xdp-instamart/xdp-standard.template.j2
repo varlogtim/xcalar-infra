@@ -95,14 +95,16 @@ Parameters:
     Type: String
     Default: ''
   SSLCert:
-    Description: Your website's SSL certificate (.crt file). Paste contents of file here.
+    Description: Your website's SSL certificate (.crt file). Paste contents of file here, or leave as None.
     Type: String
-    Default: ''
+    MinLength: 4
+    Default: 'None'
   SSLKey:
-    Description: Your website's SSL private key (.key file). Paste contents of file here.
+    Description: Your website's SSL private key (.key file). Paste contents of file here, or leave as None.
     Type: String
     NoEcho: true
-    Default: ''
+    MinLength: 4
+    Default: 'None'
   HostedZoneName:
     Description: Route53 hosted-zone domain name in which to register your CNAME in. For example, if you wanted 'xcalar.example.com', you should enter 'example.com' here. Your account must already have a matching Route53 Hosted Zone.
     Type: String
@@ -219,6 +221,11 @@ Metadata:
 Conditions:
   CreateNewS3: !Equals [!Ref ExistingS3, '']
   NoInstances: !Equals [!Ref ClusterSize, 0]
+{%- if keepIp %}
+  KeepIp: !Equals [1, 1]
+{%- else %}
+  KeepIp: !Not [!Equals [!Ref ClusterSize, '0']]
+{%- endif %}
   CreateInstances: !Not [!Equals [!Ref ClusterSize, '0']]
   CreateDNS: !Not [!Or [!Equals [!Ref HostedZoneName, ''], !Equals [!Ref CNAME, '']]]
   IsUsEast1: !Equals [!Ref 'AWS::Region', 'us-east-1']
@@ -226,6 +233,7 @@ Conditions:
   CreateNewShare: !Equals [!Ref ExistingShare, '']
 {%- endif %}
 Mappings:
+{%- if not keepIp %}
   AccountLUT:
     '043829555035':
       AccountName: 'xcalar-test'
@@ -251,6 +259,7 @@ Mappings:
       HostedZoneName: 'qa.xcalar.io'
       Failover: 'redirector.qa.xcalar.io'
       Ip: '0.0.0.0'
+{%- endif %}
   AWSAMIRegionMap:
 {%- for reg in ['us-east-1','us-west-2','us-east-2','us-west-1'] %}
     {{ reg }}:
@@ -365,8 +374,8 @@ Resources:
   S3Bucket:
     Type: AWS::S3::Bucket
     Condition: CreateNewS3
-    DeletionPolicy: {% if ENV == 'prod' %}Retain{% else %}Delete{% endif %}
-    UpdateReplacePolicy: {% if ENV == 'prod' %}Retain{% else %}Delete{% endif %}
+    DeletionPolicy: {% if ENVIRONMENT == 'prod' %}Retain{% else %}Delete{% endif %}
+    UpdateReplacePolicy: {% if ENVIRONMENT == 'prod' %}Retain{% else %}Delete{% endif %}
     Properties:
       AccessControl: Private
       BucketEncryption:
@@ -383,8 +392,8 @@ Resources:
           Value: SourceData
   WorkBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: {% if ENV == 'prod' %}Retain{% else %}Delete{% endif %}
-    UpdateReplacePolicy: {% if ENV == 'prod' %}Retain{% else %}Delete{% endif %}
+    DeletionPolicy: {% if ENVIRONMENT == 'prod' %}Retain{% else %}Delete{% endif %}
+    UpdateReplacePolicy: {% if ENVIRONMENT == 'prod' %}Retain{% else %}Delete{% endif %}
     Properties:
       AccessControl: Private
       BucketEncryption:
@@ -583,12 +592,11 @@ Resources:
       AutoScalingScheduledAction:
         IgnoreUnmodifiedGroupSizeProperties: true
       AutoScalingRollingUpdate:
-        MinInstancesInService: 0
         MaxBatchSize: !If [NoInstances ,!Ref 'AWS::NoValue', !Ref 'ClusterSize']
         WaitOnResourceSignals: false
   ClusterEIP:
     Type: AWS::EC2::EIP
-    Condition: CreateInstances
+    Condition: KeepIp
 {%- if createVpc %}
     DependsOn: GatewayAttachment
 {%- endif %}
@@ -608,8 +616,14 @@ Resources:
       Type: CNAME
       TTL: '60'
       ResourceRecords:
+{%- if keepIp %}
+        - !Sub
+          - "ec2-${IpDash}.${Domain}."
+          - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
+            Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
+{%- else %}
         - !If
-          - CreateInstances
+          - KeepIp
           - !Sub
             - "ec2-${IpDash}.${Domain}."
             - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
@@ -618,15 +632,16 @@ Resources:
             - AccountLUT
             - !Ref 'AWS::AccountId'
             - Failover
+{% endif %}
   AssociateEIP:
     Type: AWS::EC2::EIPAssociation
-    Condition: CreateInstances
+    Condition: KeepIp
     Properties:
       AllocationId: !GetAtt ClusterEIP.AllocationId
       NetworkInterfaceId: !Ref ClusterNIC
   ClusterNIC:
     Type: AWS::EC2::NetworkInterface
-    Condition: CreateInstances
+    Condition: KeepIp
     Properties:
       SubnetId: !Ref Subnet
       Description: Interface for traffic from the internet to the cluster head node
@@ -665,26 +680,31 @@ Resources:
               mode: '000400'
               owner: root
               group: root
+{%- endif %}
             /usr/bin/copylogs.sh:
               content: !Sub |
                 #!/bin/bash
                 set -x
                 echo "$(date +%TF%T%z) Running copylogs.sh" | logger --id -p "local0.info" -t copy-logs -s
                 eval $(ec2-tags -s -i)
+                source /var/lib/cloud/instance/ec2.env
+{%- if enableLifecycle %}
                 source /etc/sysconfig/lifecycled
+{%- endif %}
                 export AWS_DEFAULT_REGION="${AWS::Region}"
                 InstanceId=$(curl -s http://169.254.169.254/2018-09-24/meta-data/instance-id)
                 S3Uri=${!LOGBUCKET}${!LOGPREFIX}${!InstanceId}
                 for dir in /var/log /var/opt/xcalar /home/xcalar; do
                   aws s3 cp --recursive ${!dir}/ s3://${!S3Uri}${!dir}/ 2>&1 | logger --id -p "local0.info" -t copy-logs -s
                 done
+{%- if enableLifecycle %}
                 aws autoscaling complete-lifecycle-action --lifecycle-action-result CONTINUE --instance-id ${!InstanceId} --lifecycle-hook-name $LIFECYCLE_HOOK_NAME --auto-scaling-group-name "$AWS_AUTOSCALING_GROUPNAME"
+{%- endif %}
                 exit 0
               mode: '000750'
               owner: root
               group: root
-{%- endif %}
-{%- if ENV != 'prod' %}
+{%- if ENVIRONMENT != 'prod' %}
             /var/lib/cloud/scripts/vendor/bootstrap.sh:
               source: '{{ bootstrapUrl }}'
               mode: '000755'
@@ -794,11 +814,13 @@ Resources:
                   BASEURL={{ baseUrl }}/
 {%- if enableLifecycle %}
                   LOGBUCKET=${LogBucket}
-                  LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
+{%- else %}
+                  LOGBUCKET=${WorkBucket}
 {%- endif %}
+                  LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
                   KinesisRoleARN: !GetAtt 'KinesisServiceRole.Arn'
-                  NIC: !If [CreateInstances, !Ref ClusterNIC, '']
+                  NIC: !If [KeepIp, !Ref ClusterNIC, '']
                   NFSIp: !GetAtt 'EfsMountTarget.IpAddress'
 {%- if enableLifecycle %}
                   LogBucket: !ImportValue sharedinf-logbucket
@@ -839,6 +861,8 @@ Resources:
                   systemctl daemon-reload
 {%- if enableLifecycle %}
                   systemctl enable --now lifecycled
+{%- else %}
+                  systemctl disable --now lifecycled || true
 {%- endif %}
                   AWS_AUTOSCALING_GROUPNAME="$(ec2-tags -s -i | tr -d "'" | awk -F'=' '/^AWS_AUTOSCALING_GROUPNAME/{print $2}')"
                   DESIREDCAP=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$AWS_AUTOSCALING_GROUPNAME" --query 'AutoScalingGroups[][DesiredCapacity]'  --output text)
@@ -850,7 +874,7 @@ Resources:
                   log local0.info "bootstrap.sh returned $rc in $dt seconds"
                   exit $rc
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
-                  NIC: !If [CreateInstances, !Ref ClusterNIC, '']
+                  NIC: !If [KeepIp, !Ref ClusterNIC, '']
 {%- if enableExistingShare %}
                   SharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
 {%- else %}
@@ -1112,7 +1136,7 @@ Outputs:
       - !Join ["", ["https://",!Ref CNAME,".",!Ref HostedZoneName]]
       - !Join ["", ["https://",!Ref ClusterEIP]]
   EIP:
-    Condition: CreateInstances
+    Condition: KeepIp
     Description: Cluster ElasticIP
     Value: !Ref 'ClusterEIP'
 {%- if createVpc %}
