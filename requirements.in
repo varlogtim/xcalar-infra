@@ -14,10 +14,13 @@ docker
 flake8
 git-review
 jinja2-cli[yaml]
+jupyterlab
+notebook
 pip-tools
 pre-commit
 pylint
 pytest
+pytest-benchmark
 python-consul
 PyYAML
 requests

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# shellcheck disable=SC2086,SC2304,SC2034
+# shellcheck disable=SC2086,SC2304,SC2034,SC2206,SC2207,SC2046
 
 set -x
 LOGFILE=/var/log/user-data.log
@@ -11,9 +11,9 @@ if [ ! -t 1 ]; then
 fi
 start=$(date +%s)
 
-log()  {
+log() {
     local now=$(date +%s)
-    local dt=$(( now - start ))
+    local dt=$((now - start))
     logger --id -p "local0.info" -t user-data -s dt=\"$dt\" "$@"
 }
 
@@ -21,7 +21,7 @@ log()  {
 ec2_find_cluster() {
     aws ec2 describe-instances \
         --filters Name=tag:$1,Values=$2 \
-                  Name=instance-state-name,Values=running \
+        Name=instance-state-name,Values=running \
         --query "Reservations[].Instances[].[LaunchTime,AmiLaunchIndex,${3:-PrivateIpAddress}]" \
         --output text | sort -n | awk '{print $(NF)}'
 }
@@ -34,7 +34,7 @@ asg_healthy_instances() {
 
 asg_capacity() {
     aws autoscaling describe-auto-scaling-groups \
-        --auto-scaling-group-names "$1" --query 'AutoScalingGroups[][MinSize,MaxSize,DesiredCapacity]'  --output text
+        --auto-scaling-group-names "$1" --query 'AutoScalingGroups[][MinSize,MaxSize,DesiredCapacity]' --output text
 }
 
 efsip() {
@@ -65,7 +65,10 @@ mount_xlrroot() {
     NFSDIR="${NFSDIR#/}"
 
     local existing_mount
-    if existing_mount="$(set -o pipefail; findmnt -nT "$2" | awk '{print $2}')"; then
+    if existing_mount="$(
+        set -o pipefail
+        findmnt -nT "$2" | awk '{print $2}'
+    )"; then
         if [ "$existing_mount" == "$1" ]; then
             log "$1 already mounted to $2"
             return 0
@@ -113,14 +116,14 @@ ec2_attach_nic() {
     local eni_status eni_instance
     while true; do
         eni_status=$(aws ec2 describe-network-interfaces --query 'NetworkInterfaces[].Status' --network-interface-ids ${nic} --output text)
-        if [[ "$eni_status" == available ]]; then
+        if [[ $eni_status == available ]]; then
             if aws ec2 attach-network-interface --network-interface-id ${nic} --instance-id ${instance_id} --device-index 1; then
                 log "ENI $nic attached to $instance_id"
                 break
             fi
         fi
         eni_instance=$(aws ec2 describe-network-interfaces --query 'NetworkInterfaces[].Attachment.InstanceId' --network-interface-ids ${nic} --output text)
-        if [[ "$eni_instance" == "$instance_id" ]]; then
+        if [[ $eni_instance == "$instance_id" ]]; then
             log "ENI $nic already attached to $instance_id"
             break
         fi
@@ -134,35 +137,100 @@ fix_multiline_cert() {
     sed -r 's/(BEGIN|END) PRIVATE KEY/\1PRIVATEKEY/g; s/(BEGIN|END) CERTIFICATE/\1CERTIFICATE/g; s/ /\n/g; s/(BEGIN|END)PRIVATEKEY/\1 PRIVATE KEY/g; s/(BEGIN|END)CERTIFICATE/\1 CERTIFICATE/g'
 }
 
-generate_ssl() {
-  local name="${1:-some.site.net}"
-  local public_ip="${2}"
-  local certname=${3:-$name}
-  local key="$(pwd)/${certname}.key"
-  local crt="$(pwd)/${certname}.crt"
+selfsigned_cert() {
+    local name="${1:-some.site.net}"
+    local public_ip="${2}" tmp=
+    local certname=${3:-$name}
+    local key="${certname}.key"
+    local crt="${certname}.crt"
 
-  if test -e "${crt}" && test -e "${key}"; then
-      if verify_ssl "$crt" "$key"; then
-          echo $crt $key
-          return 0
-      fi
-  fi
-  cat <<EOF | openssl req -x509 -newkey rsa:4096 -sha256 -days 700 -nodes -keyout ${key} -out ${crt} -reqexts SAN -extensions SAN -subj "/C=US/ST=CA/L=San Jose/O=XcalarInc/OU=Self signed Root CA/CN=${name%%.*}" -config /dev/stdin
+    if [ "${name%%.*}" != "${name}" ]; then
+        local domain="${name#*.}"
+    fi
+
+    if ! openssl req -x509 -newkey rsa:4096 -sha256 -utf8 -days 365 -nodes -keyout $key -out $crt -config <(
+        cat << EOF
+[CA_default]
+copy_extensions = copy
+
 [req]
-distinguished_name=req
-[SAN]
-subjectAltName=DNS.1:${name},DNS.2:localhost,IP.1:$(hostname -i),IP.2:127.0.0.1${public_ip:+,IP.3:$public_ip}
+default_bits = 4096
+prompt = no
+default_md = sha256
+distinguished_name = req_distinguished_name
+x509_extensions = v3_ca
+
+[req_distinguished_name]
+C = US
+ST = CA
+L = San Jose
+O = Temporary Example CA
+OU = Please Replace
+emailAddress = fake@example.com
+CN = ${name}
+
+[v3_ca]
+basicConstraints = critical, CA:FALSE
+subjectAltName = @alternate_names
+
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = critical, serverAuth, clientAuth
+subjectAltName = @alternate_names
+
+[alternate_names]
+DNS.1 = $name
+DNS.2 = localhost
+DNS.3 = *.localhost
+${domain:+DNS.4 = *.${domain}}
+IP.3 = ${public_ip}
+IP.1 = 127.0.0.1
+IP.2 = ::1
 EOF
-    chmod 0640 $key
+    ); then
+        echo >&2 "Failed to generate OpenSSL cert. See $tmp"
+        return 1
+    fi
+    return 0
+}
+
+generate_ssl() {
+    local name="${1:-some.site.net}"
+    local public_ip="${2}" tmp=
+    local certname=${3:-$name}
+    local key="$(pwd)/${certname}.key"
+    local crt="$(pwd)/${certname}.crt"
+
+    if test -e "${crt}" && test -e "${key}"; then
+        if verify_ssl "$crt" "$key"; then
+            echo $crt $key
+            return 0
+        fi
+        rm -f $crt $key
+    fi
+    if ! selfsigned_cert "$@"; then
+        if /etc/ssl/certs/make-dummy-cert $certname > /dev/null; then
+            sed -n '/---BEGIN CERT/,/---END CERT/p' $certname > $crt
+            sed -n '/---BEGIN PRIVATE/,/---END PRIVATE/p' $certname > $key
+            rm -f $certname
+        else
+            return 1
+        fi
+    fi
+    chmod 0600 $key
     echo $crt $key
 }
 
 verify_ssl() {
     local crt="$1"
     local key="$2"
+    local keyfpmd5 crtfpmd5
 
-    local keyfpmd5=$(openssl rsa -modulus -noout -in $key | openssl md5 | cut -d' ' -f2)
-    local crtfpmd5=$(openssl x509 -modulus -noout -in $crt | openssl md5 | cut -d' ' -f2)
+    if ! keyfpmd5=$(openssl rsa -modulus -noout -in $key | openssl md5 | cut -d' ' -f2); then
+        return 1
+    fi
+    if ! crtfpmd5=$(openssl x509 -modulus -noout -in $crt | openssl md5 | cut -d' ' -f2); then
+        return 1
+    fi
 
     if [ "$keyfpmd5" != "$crtfpmd5" ]; then
         echo >&2 "WARN: Mismatch fingerprints for $crt and $key"
@@ -175,24 +243,37 @@ verify_ssl() {
     return 0
 }
 
+get_default() {
+    awk -F'=' '$1 == "'$1'" {print $2}' $PREFIX/etc/default/xcalar /etc/default/xcalar | tail -1
+}
+
 generate_caddy() {
     local caddyfile="$1"
     local crt="$2"
     local key="$3"
 
-    eval $(grep -E '(XCE_LOGIN_PAGE|XCE_ACCESS_URL)' /etc/default/xcalar | sed 's/^#//')
+    XCE_LOGIN_PAGE=$(get_default XCE_LOGIN_PAGE)
+    XCE_ACCESS_URL=$(get_default XCE_ACCESS_URL)
+
     echo "https://0.0.0.0:443, http://0.0.0.0:80 {"
-    # shellcheck disable=SC2016
+    # shellcheck disable=SC2016,SC2015
     tail -n+2 $caddyfile \
         | sed '/redir 301/,+4d' \
-        | sed 's@tls self_signed.*$@tls '$crt' '$key'@' \
+        | sed '/Strict-Transport-Security/d' \
+        | (test -e "$crt" && sed 's@tls self_signed.*$@tls '$crt' '$key'@' || cat -) \
         | sed 's@{\$XCE_LOGIN_PAGE}@'$XCE_LOGIN_PAGE'@' \
-        | sed 's@{\$XCE_ACCESS_URL}@'$XCE_ACCESS_URL'@' \
-
+        | sed 's@{\$XCE_ACCESS_URL}@'$XCE_ACCESS_URL'@'
 }
 
 systemd_haveunit() {
     test -e /lib/systemd/system/$1 || test -e /etc/systemd/system/$1
+}
+
+pyvenv() {
+    python3 -m venv $1
+    . $1/bin/activate
+    python -m pip install -U pip setuptools wheel
+    python -m pip install -U pip-tools
 }
 
 file_size() {
@@ -220,10 +301,26 @@ main() {
     RELEASE_NAME=$(rpm -qf /etc/system-release --qf '%{NAME}')
     RELEASE_VERSION=$(rpm -qf /etc/system-release --qf '%{VERSION}')
     case "$RELEASE_VERSION" in
-        6 | 6*) OSID=el6; INIT=sysvinit; SYSTEMD=0;;
-        7 | 7*) OSID=el7; INIT=systemd; SYSTEMD=1;;
-        201*) OSID=amzn1; INIT=sysvinit; SYSTEMD=0;;
-        2) OSID=amzn2; INIT=systemd; SYSTEMD=1;;
+        6 | 6*)
+            OSID=el6
+            INIT=sysvinit
+            SYSTEMD=0
+            ;;
+        7 | 7*)
+            OSID=el7
+            INIT=systemd
+            SYSTEMD=1
+            ;;
+        201*)
+            OSID=amzn1
+            INIT=sysvinit
+            SYSTEMD=0
+            ;;
+        2)
+            OSID=amzn2
+            INIT=systemd
+            SYSTEMD=1
+            ;;
         *)
             log "ERROR: Unknown OS version $RELEASE_VERSION"
             exit 1
@@ -232,13 +329,16 @@ main() {
 
     # shellcheck disable=SC2046
     ENV_FILE=/var/lib/cloud/instance/ec2.env
-
     if [ -e "$ENV_FILE" ]; then
         . $ENV_FILE
     fi
 
+    PREFIX=${PREFIX:-/opt/xcalar}
     SSLKEYFILE=${SSLKEYFILE:-/etc/xcalar/host.key}
     SSLCRTFILE=${SSLCRTFILE:-/etc/xcalar/host.crt}
+    SITE_DIR=$($PREFIX/bin/python3 -c 'import site; print(site.getsitepackages()[-1])')
+    PTHFILE=${SITE_DIR}/mnt-xcalar-pysite.pth
+
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -293,8 +393,8 @@ main() {
             --ssl-key)
                 SSLKEY="$1"
                 echo "$1" > $SSLKEYFILE
-                chown root:xcalar $SSLKEYFILE
-                chmod 0640 $SSLKEYFILE
+                chown xcalar:xcalar $SSLKEYFILE
+                chmod 0600 $SSLKEYFILE
                 shift
                 ;;
             --node-id)
@@ -362,7 +462,7 @@ main() {
 
     export AWS_DEFAULT_REGION="${AVZONE%[a-f]}"
 
-    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin:/opt/xcalar/bin
+    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin:$PREFIX/bin
     echo "export PATH=$PATH" > /etc/profile.d/path.sh
 
     NFSHOST="${NFSMOUNT%%:*}"
@@ -428,15 +528,15 @@ main() {
     fi
 
     if [ -z "$TAG_KEY" ]; then
-        if [ -n "$AWS_AUTOSCALING_GROUPNAME" ]; then
+        if [ -n "$CLUSTERNAME" ]; then
+            TAG_KEY=ClusterName
+            TAG_VALUE="$CLUSTERNAME"
+        elif [ -n "$AWS_AUTOSCALING_GROUPNAME" ]; then
             TAG_KEY=aws:autoscaling:groupName
             TAG_VALUE=$AWS_AUTOSCALING_GROUPNAME
         elif [ -n "$AWS_CLOUDFORMATION_STACK_NAME" ]; then
             TAG_KEY=aws:cloudformation:stack-name
             TAG_VALUE=$AWS_CLOUDFORMATION_STACK_NAME
-        elif [ -n "$CLUSTERNAME" ]; then
-            TAG_KEY=ClusterName
-            TAG_VALUE="$CLUSTERNAME"
         elif [ -n "$NAME" ]; then
             TAG_KEY=Name
             TAG_VALUE=$NAME
@@ -462,7 +562,7 @@ main() {
             fi
             sleep 2
         done
-        for NODE_ID in $(seq 0 $((NUM_INSTANCES-1))); do
+        for NODE_ID in $(seq 0 $((NUM_INSTANCES - 1))); do
             if [ "$LOCAL_IPV4" == "${IPS[$NODE_ID]}" ]; then
                 break
             fi
@@ -471,13 +571,13 @@ main() {
             log "WARNING: Unable to find $LOCAL_IPV4 in the list of IPS: ${IPS[*]}"
         fi
     else
-        IPS=( "$LOCAL_IPV4" )
+        IPS=("$LOCAL_IPV4")
         NODE_ID=0
     fi
 
     aws ec2 create-tags --resources $INSTANCE_ID \
-            --tags Key=Name,Value="${AWS_CLOUDFORMATION_STACK_NAME}-${NODE_ID}" \
-                Key=Node_ID,Value="${NODE_ID}"
+        --tags Key=Name,Value="${AWS_CLOUDFORMATION_STACK_NAME}-${NODE_ID}" \
+        Key=Node_ID,Value="${NODE_ID}"
 
     MOUNT_OK=false
     XLRROOT=/var/opt/xcalar
@@ -531,7 +631,7 @@ main() {
         ec2_attach_nic "$NIC" "$INSTANCE_ID"
         test -d $XLRROOT/config || mkdir -p $XLRROOT/config
         PUBLIC_DNS_AND_IP="$(aws ec2 describe-network-interfaces --network-interface-ids $NIC --query 'NetworkInterfaces[].Association.[PublicDnsName,PublicIp]' --output text)"
-        if file_size $SSLCRTFILE 10 && filesize $SSLKEYFILE 10; then
+        if file_size $SSLCRTFILE 10 && file_size $SSLKEYFILE 10; then
             CRT_KEY=($XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.crt $XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.key)
             fix_multiline_cert < $SSLCRTFILE > "${CRT_KEY[0]}"
             fix_multiline_cert < $SSLKEYFILE > "${CRT_KEY[1]}"
@@ -542,12 +642,16 @@ main() {
         else
             CRT_KEY=($(cd $XLRROOT/config && generate_ssl $PUBLIC_DNS_AND_IP $AWS_CLOUDFORMATION_STACK_NAME))
         fi
-        chown root:xcalar "${CRT_KEY[@]}"
-        chmod 0644 "${CRT_KEY[0]}"
-        chmod 0640 "${CRT_KEY[1]}"
+        if test -e ${CRT_KEY[0]} && test -e ${CRT_KEY[1]}; then
+            chown xcalar:xcalar "${CRT_KEY[@]}"
+            chmod 0644 "${CRT_KEY[0]}"
+            chmod 0600 "${CRT_KEY[1]}"
+            generate_caddy /etc/xcalar/Caddyfile.orig "${CRT_KEY[@]}" > $XLRROOT/config/Caddyfile.$$
+        else
+            generate_caddy /etc/xcalar/Caddyfile.orig > $XLRROOT/config/Caddyfile.$$
+        fi
 
-        generate_caddy /etc/xcalar/Caddyfile.orig "${CRT_KEY[@]}" > $XLRROOT/config/Caddyfile.$$ \
-        && mv $XLRROOT/config/Caddyfile.$$ $XLRROOT/config/Caddyfile
+        mv $XLRROOT/config/Caddyfile.$$ $XLRROOT/config/Caddyfile
         /opt/xcalar/scripts/genDefaultAdmin.sh \
             --username "${ADMIN_USERNAME}" \
             --email "${ADMIN_EMAIL:-info@xcalar.com}" \
@@ -556,6 +660,18 @@ main() {
         chmod 0700 $XLRROOT/config
         chmod 0600 $XLRROOT/config/defaultAdmin.json $XLRROOT/config/*.key
         chown xcalar:xcalar $XLRROOT/config $XLRROOT/config/*
+
+        PYSITE=$(cat $PTHFILE 2> /dev/null || echo $XLRROOT/pysite)
+        mkdir -p $PYSITE
+        if ! test -e $PTHFILE; then
+            echo $PYSITE > $PTHFILE
+        fi
+        chown xcalar:xcalar $PYSITE
+        if test -e $XLRROOT/config/requirements.txt; then
+            VENV=$(mktemp -d -t venv.XXXXXX)
+            pyvenv $VENV
+            $VENV/bin/python -m pip install -t $PYSITE -r $XLRROOT/config/requirements.txt
+        fi
     fi
 
     ln -sfn $XLRROOT/config/Caddyfile /etc/xcalar/Caddyfile
@@ -564,7 +680,7 @@ main() {
         local dt=0
         until mountpoint -q $EPHEMERAL; do
             sleep 1
-            dt=$((dt+1))
+            dt=$((dt + 1))
             log "Waiting for $EPHEMERAL ..."
             if [ $dt -gt 120 ]; then
                 break
@@ -583,7 +699,7 @@ main() {
 
     if [ -d "$XCE_XDBSERDESPATH" ]; then
         chown xcalar:xcalar "$XCE_XDBSERDESPATH"
-        XCE_XDBSERDESMB=$(( $(mbfree $XCE_XDBSERDESPATH) - 1000 ))
+        XCE_XDBSERDESMB=$(($(mbfree $XCE_XDBSERDESPATH) - 1000))
         if [[ $XCE_XDBSERDESMB -gt 0 ]]; then
             sed -i "4i Constants.XdbSerDesMode=2" $XCE_TEMPLATE
             sed -i "4i Constants.XdbLocalSerDesPath=$XCE_XDBSERDESPATH" $XCE_TEMPLATE
@@ -606,7 +722,6 @@ main() {
     else
         chkconfig xcalar on
     fi
-
 
     log "All done with user-data.sh (rc=$rc)"
     exit $rc

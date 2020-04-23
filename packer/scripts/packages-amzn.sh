@@ -5,6 +5,7 @@ set -ex
 export PS4='# $(date +%FT%TZ) ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
 
 install_aws_deps() {
+    rpm -q awscli && yum remove awscli -y || true
     local tmpdir="$(mktemp -d /tmp/aws.XXXXXX)"
     cd $tmpdir
     curl -L "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o awscli-bundle.zip
@@ -12,7 +13,7 @@ install_aws_deps() {
     ./awscli-bundle/install -i /opt/aws -b /usr/local/bin/aws
     ln -sfn /opt/aws/bin/aws_completer /usr/local/bin/
     echo 'complete -C aws_completer aws' > /etc/bash_completion.d/awscli.sh
-    cd - >/dev/null
+    cd - > /dev/null
     rm -rf "$tmpdir"
 }
 
@@ -36,7 +37,6 @@ fix_cloud_init() {
     sed -i '/package-update-upgrade-install/d' /etc/cloud/cloud.cfg.d/* /etc/cloud/cloud.cfg || true
 }
 
-
 fix_uids() {
     # Amzn1 has UID_MIN and GID_MIN 500. Unbelievable
     sed -r -i 's/^([UG]ID_MIN).*$/\1    1000/' /etc/login.defs
@@ -52,12 +52,14 @@ install_gdb8() {
 
 fix_networking() {
     (
-    cat > /etc/sysconfig/network <<-EOF
+        cat > /etc/sysconfig/network <<- EOF
 	NETWORKING=yes
 	NOZEROCONF=yes
 	EOF
-    cd /etc/sysconfig/network-scripts
-    cat > ifcfg-eth0 <<-EOF
+        cd /etc/sysconfig/network-scripts
+        cat > ifcfg-eth0 <<- EOF
+
+        #sed 's/eth0/eth1/; s/^ONBOOT=.*/ONBOOT=no/' ifcfg-eth0 > ifcfg-eth1
 	DEVICE=eth0
 	BOOTPROTO=dhcp
 	ONBOOT=yes
@@ -70,7 +72,7 @@ fix_networking() {
 	RES_OPTIONS="timeout:2 attempts:5"
 	DHCP_ARP_CHECK=no
 	EOF
-    #sed 's/eth0/eth1/; s/^ONBOOT=.*/ONBOOT=no/' ifcfg-eth0 > ifcfg-eth1
+
     )
 }
 
@@ -85,23 +87,24 @@ install_sysdig() {
 
 install_osid
 install_lego
+install_ssm_agent
 #fix_networking
 
 echo 'exclude=kernel-debug* *.i?86 *.i686' >> /etc/yum.conf
 yum upgrade -y
 yum install -y "https://storage.googleapis.com/repo.xcalar.net/xcalar-release-${OSID}.rpm" || true
 yum clean all --enablerepo='*'
-yum erase   -y 'ntp*' || true
-
+yum erase -y 'ntp*' || true
 yum install -y --enablerepo='xcalar*' --enablerepo=epel \
-        chrony aws-cfn-bootstrap amazon-efs-utils ec2-net-utils ec2-utils \
-        deltarpm curl wget tar gzip htop fuse jq nfs-utils iftop iperf3 sysstat python27-pip \
-        lvm2 util-linux bash-completion nvme-cli nvmetcli libcgroup at python27-devel \
-        libnfs-utils
+    chrony aws-cfn-bootstrap amazon-efs-utils ec2-net-utils ec2-utils \
+    deltarpm curl wget tar gzip htop fuse jq nfs-utils iftop iperf3 sysstat python27-pip \
+    lvm2 util-linux bash-completion nvme-cli nvmetcli libcgroup at python27-devel \
+    libnfs-utils stunnel
 
 yum install -y --enablerepo='xcalar*' --enablerepo='epel' --disableplugin=priorities \
     ec2tools ephemeral-disk tmux ccache restic lifecycled consul node_exporter \
-    freetds xcalar-node10 java-1.8.0-openjdk-headless opthaproxy2 su-exec tini
+    freetds xcalar-node10 java-1.8.0-openjdk-headless opthaproxy2 su-exec tini \
+    nomad
 
 yum remove -y python26 python-pip || true
 
@@ -115,7 +118,6 @@ blkid
 
 echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin' > /etc/profile.d/path.sh
 . /etc/profile.d/path.sh
-install_ssm_agent
 
 case "$OSID" in
     amzn1)
@@ -154,8 +156,8 @@ install_sysdig
 fix_cloud_init
 
 mkdir -p /etc/ansible
-curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg | \
-    sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg
+curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg \
+    | sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg
 
 for svc in xcalar puppet collectd consul node_exporter lifecycled update-motd; do
     if [ "$OSID" = amzn1 ]; then
@@ -169,7 +171,6 @@ for svc in xcalar puppet collectd consul node_exporter lifecycled update-motd; d
     fi
 done
 
-rpm -q awscli && yum remove awscli -y || true
 yum update -y
 
 exit 0

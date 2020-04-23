@@ -39,8 +39,8 @@ job "registry_browser" {
       }
 
       resources {
-        memory = 500
-        cpu    = 1000
+        memory = 200
+        cpu    = 500
 
         network {
           port "http" {}

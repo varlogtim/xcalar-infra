@@ -347,6 +347,7 @@ pkgmain() {
             die "SHA256 checksum failed for $filen"
         fi
         case "$filen" in
+            *.tar.xz|*.txz) tar Jxf "$filen" ;;
             *.tar.gz|*.tgz) tar zxf "$filen" ;;
             *.tar.bz2) tar axf "$filen" ;;
             *.tar) tar xf "$filen" ;;

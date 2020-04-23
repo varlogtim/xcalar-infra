@@ -114,6 +114,10 @@ fi
 echo >&2 "Setting up cgroups"
 /opt/xcalar/bin/cgconfig-setup.sh
 
+echo '/mnt/xcalar/pysite' > /opt/xcalar/lib/python3.6/site-packages/mnt-xcalar-pysite.pth
+mkdir -p /var/opt/xcalar/pysite
+chown xcalar:xcalar /var/opt/xcalar/pysite
+
 LICENSE_FILE="${XCE_CONFDIR}/XcalarLic.key"
 if [ -z "$LICENSE" ] && [ -n "$LICENSE_URL" ]; then
     set +e
@@ -170,6 +174,7 @@ if [ -n "${POSTINSTALL}" ]; then
         exit $rc
     fi
 fi
+
 
 sed -i '/# Provides:/a# Should-Start: cloud-final' /etc/init.d/xcalar
 
