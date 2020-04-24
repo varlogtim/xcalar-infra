@@ -93,8 +93,8 @@ job "jenkins2" {
       }
 
       resources {
-        cpu    = 8000
-        memory = 8000
+        cpu    = 4000
+        memory = 2000
 
         network {
           port "http" {}

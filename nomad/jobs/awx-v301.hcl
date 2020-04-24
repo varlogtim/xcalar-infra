@@ -65,8 +65,8 @@ job "awx-301" {
         DATABASE_USER     = "awx"
         DATABASE_PASSWORD = "awxpass"
         DATABASE_NAME     = "awx"
-        DATABASE_HOST     = "${NOMAD_IP_postgres_tcp}"    #postgres
-        DATABASE_PORT     = "${NOMAD_PORT_postgres_tcp}"  #5432
+        DATABASE_HOST     = "${NOMAD_IP_postgres_tcp}"   #postgres
+        DATABASE_PORT     = "${NOMAD_PORT_postgres_tcp}" #5432
         RABBITMQ_USER     = "guest"
         RABBITMQ_PASSWORD = "guest"
         RABBITMQ_VHOST    = "awx"
@@ -110,8 +110,8 @@ job "awx-301" {
         DATABASE_USER     = "awx"
         DATABASE_PASSWORD = "awxpass"
         DATABASE_NAME     = "awx"
-        DATABASE_HOST     = "${NOMAD_IP_postgres_tcp}"    #"postgres"
-        DATABASE_PORT     = "${NOMAD_PORT_postgres_tcp}"  #5432
+        DATABASE_HOST     = "${NOMAD_IP_postgres_tcp}"   #"postgres"
+        DATABASE_PORT     = "${NOMAD_PORT_postgres_tcp}" #5432
         RABBITMQ_USER     = "guest"
         RABBITMQ_PASSWORD = "guest"
         RABBITMQ_VHOST    = "awx"
@@ -257,7 +257,7 @@ job "awx-301" {
         #]
       }
     } # END task/postgres
-  } # END group/kos
+  }   # END group/kos
 
   ## =============================================================================
 } # END job

@@ -1,24 +1,24 @@
-job "redis" {
+job "redis5" {
   datacenters = ["xcalar-sjc"]
   type        = "service"
 
-  update {
-    max_parallel      = 1
-    min_healthy_time  = "10s"
-    healthy_deadline  = "3m"
-    progress_deadline = "10m"
-    auto_revert       = false
-    canary            = 0
-  }
+  #  update {
+  #    max_parallel      = 1
+  #    min_healthy_time  = "10s"
+  #    healthy_deadline  = "3m"
+  #    progress_deadline = "10m"
+  #    auto_revert       = false
+  #    canary            = 0
+  #  }
+  #
+  #  migrate {
+  #    max_parallel     = 1
+  #    health_check     = "checks"
+  #    min_healthy_time = "10s"
+  #    healthy_deadline = "5m"
+  #  }
 
-  migrate {
-    max_parallel     = 1
-    health_check     = "checks"
-    min_healthy_time = "10s"
-    healthy_deadline = "5m"
-  }
-
-  group "redis" {
+  group "redis5" {
     count = 1
 
     restart {
@@ -34,14 +34,14 @@ job "redis" {
     }
 
 
-    task "redis" {
+    task "redis5" {
       driver = "docker"
 
       config {
-        image = "redis:3.2"
+        image = "redis:5"
 
         volumes = [
-          "/netstore/infra/redis:/data",
+          "/netstore/infra/redis5:/data",
         ]
 
         port_map {
@@ -59,7 +59,7 @@ job "redis" {
       }
 
       service {
-        name = "redis"
+        name = "redis5"
         tags = ["global", "cache", "kv"]
         port = "db"
 
