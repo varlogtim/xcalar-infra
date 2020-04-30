@@ -8,10 +8,13 @@ export PATH=$XLRDIR/bin:$XLRINFRADIR/bin:$PATH
 cd $XLRDIR
 . doc/env/xc_aliases
 
+export PATH="$XLRINFRADIR/bin:$XLRDIR/bin:$PATH"
+
 cd $XLRINFRADIR
 . bin/activate
 
-vault kv get -format=json -field=data secret/data/xcalar_licenses/cloud | jq -r '{license:.}' > license.json
+export VAULT_TOKEN=$($XLRINFRADIR/bin/vault-auth-puppet-cert.sh --print-token)
+vault kv get -format=json -field=data secret/xcalar_licenses/cloud | jq -r '{license:.}' > license.json
 export LICENSE_DATA=$PWD/license.json
 
 (

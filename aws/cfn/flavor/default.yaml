@@ -3,3 +3,5 @@ retainPolicy: False
 licenseArg: False
 enableLifecycle: False
 keepIp: True
+logGroup: False
+samAsg: False

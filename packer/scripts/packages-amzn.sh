@@ -6,20 +6,35 @@ export PS4='# $(date +%FT%TZ) ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SH
 
 install_aws_deps() {
     rpm -q awscli && yum remove awscli -y || true
-    local tmpdir="$(mktemp -d /tmp/aws.XXXXXX)"
-    cd $tmpdir
-    curl -L "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o awscli-bundle.zip
-    unzip awscli-bundle.zip
-    ./awscli-bundle/install -i /opt/aws -b /usr/local/bin/aws
-    ln -sfn /opt/aws/bin/aws_completer /usr/local/bin/
-    echo 'complete -C aws_completer aws' > /etc/bash_completion.d/awscli.sh
-    cd - > /dev/null
-    rm -rf "$tmpdir"
+    (
+    set -e
+    TMPDIR=$(mktemp -d /tmp/awscli-XXXXXX)
+    cd $TMPDIR
+    curl -L "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    if ! command -v unzip >/dev/null; then
+        sudo yum install -y unzip
+    fi
+    unzip awscliv2.zip
+    ver=$(aws/dist/aws --version | cut -d' ' -f1 | cut -d'/' -f2)
+    bundle=awscliv2-bundle-${ver}.tar.gz
+    tar czf $bundle aws
+    PREFIX=/opt/awscliv2
+    ITERATION=${ITERATION:-1}
+
+    sudo rm -rf $PREFIX
+    sudo mkdir -p $PREFIX
+    sudo -H aws/install -i $PREFIX -b /usr/bin
+    sudo ln -sfn ${PREFIX}/v2/current/bin/aws_completer /usr/bin/
+    echo 'complete -C /usr/bin/aws_completer aws' | sudo tee /usr/share/bash-completion/completions/aws >/dev/null
+    cd - >/dev/null
+
+    rm -rf $TMPDIR
+    )
 }
 
 install_ssm_agent() {
     yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm || true
-    if [ $(osid -i) == "systemd" ]; then
+    if [ $(osid -i) = "systemd" ]; then
         systemctl daemon-reload
         systemctl enable amazon-ssm-agent.service || true
     else
@@ -57,20 +72,20 @@ fix_networking() {
 	NOZEROCONF=yes
 	EOF
         cd /etc/sysconfig/network-scripts
-        cat > ifcfg-eth0 <<- EOF
-
         #sed 's/eth0/eth1/; s/^ONBOOT=.*/ONBOOT=no/' ifcfg-eth0 > ifcfg-eth1
+        cat > ifcfg-eth0 <<- EOF
 	DEVICE=eth0
 	BOOTPROTO=dhcp
 	ONBOOT=yes
 	TYPE=Ethernet
 	USERCTL=yes
-	PEERDNS=yes
+	PEERDNS=no
 	DHCPV6C=no
 	IPV6INIT=no
 	PERSISTENT_DHCLIENT=yes
 	RES_OPTIONS="timeout:2 attempts:5"
 	DHCP_ARP_CHECK=no
+	NM_CONTROLLED=no
 	EOF
 
     )
@@ -97,13 +112,13 @@ yum clean all --enablerepo='*'
 yum erase -y 'ntp*' || true
 yum install -y --enablerepo='xcalar*' --enablerepo=epel \
     chrony aws-cfn-bootstrap amazon-efs-utils ec2-net-utils ec2-utils \
-    deltarpm curl wget tar gzip htop fuse jq nfs-utils iftop iperf3 sysstat python27-pip \
-    lvm2 util-linux bash-completion nvme-cli nvmetcli libcgroup at python27-devel \
-    libnfs-utils stunnel
+    deltarpm curl wget tar gzip htop fuse jq nfs-utils iftop iperf3 sysstat python2-pip \
+    lvm2 util-linux bash-completion nvme-cli nvmetcli libcgroup at python-devel \
+    libnfs-utils stunnel pigz
 
 yum install -y --enablerepo='xcalar*' --enablerepo='epel' --disableplugin=priorities \
     ec2tools ephemeral-disk tmux ccache restic lifecycled consul node_exporter \
-    freetds xcalar-node10 java-1.8.0-openjdk-headless opthaproxy2 su-exec tini \
+    freetds xcalar-node10 opthaproxy2 su-exec tini \
     nomad
 
 yum remove -y python26 python-pip || true
@@ -141,6 +156,7 @@ case "$OSID" in
         systemctl enable --now chronyd
         systemctl enable --now atd
         systemctl disable update-motd.service || true
+        systemctl mask update-motd.service || true
         #chkconfig network off || true
         #systemctl mask network.service || true
         amazon-linux-extras install -y ansible2=2.8 kernel-ng vim
@@ -170,7 +186,5 @@ for svc in xcalar puppet collectd consul node_exporter lifecycled update-motd; d
         systemctl disable ${svc} || true
     fi
 done
-
-yum update -y
 
 exit 0

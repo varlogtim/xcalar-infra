@@ -192,13 +192,17 @@ aws_delete_image() {
 }
 
 aws_delete_ami() {
-    local snapshots ii
+    local snapshots ii jj
     for ii in "$@"; do
-        if ! snapshots=($(aws ec2 describe-images --image-ids "$ii" --query 'Images[].BlockDeviceMappings[0].Ebs.SnapshotId' --output text)); then
+        if ! snapshots=($(aws ec2 describe-images --image-ids "$ii" --query 'Images[].BlockDeviceMappings[].Ebs.SnapshotId' --output text)); then
             echo >&2 "No snapshots found for $ii"
         fi
         if aws ec2 deregister-image --image-id "$ii"; then
-            aws ec2 delete-snapshot --snapshot-id "${snapshots[@]}"
+            if [ "${#snapshots[@]}" -gt 0 ]; then
+                for jj in "${snapshots[@]}"; do
+                    aws ec2 delete-snapshot --snapshot-id "$jj"
+                done
+            fi
         fi
     done
 }

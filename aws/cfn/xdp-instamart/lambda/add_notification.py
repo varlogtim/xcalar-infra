@@ -14,7 +14,8 @@ def cr_add_notification(event, _):
     LambdaArn = event['ResourceProperties']['LambdaArn']
     Bucket = event['ResourceProperties']['Bucket']
     Prefix = event['ResourceProperties']['Prefix']
-    add_notification(LambdaArn, Bucket, Prefix)
+    Suffix = event['ResourceProperties']['Suffix']
+    add_notification(LambdaArn, Bucket, Prefix, Suffix)
 
 
 @helper.delete
@@ -27,7 +28,7 @@ def lambda_handler(event, context):
     helper(event, context)
 
 
-def add_notification(LambdaArn, Bucket, Prefix):
+def add_notification(LambdaArn, Bucket, Prefix, Suffix):
     s3 = boto3.resource('s3')
     bucket_notification = s3.BucketNotification(Bucket)
     response = bucket_notification.put(
@@ -40,11 +41,15 @@ def add_notification(LambdaArn, Bucket, Prefix):
                         'FilterRules': [{
                             'Name': 'prefix',
                             'Value': Prefix
+                        }, {
+                            'Name': 'suffix',
+                            'Value': Suffix
                         }]
                     }
                 }
             }]
-        })
+        }
+    )
     print(json.dumps(response))
     print("Put request completed....")
 

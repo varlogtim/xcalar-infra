@@ -17,6 +17,15 @@ log() {
     logger --id -p "local0.info" -t user-data -s dt=\"$dt\" "$@"
 }
 
+# Instance meta-data service v2
+imds() {
+    IMDSV2=latest
+    if [ -z "$IMDSV2_TOKEN" ]; then
+        IMDSV2_TOKEN=$(curl -s -X PUT "http://169.254.169.254/$IMDSV2/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    fi
+    curl -s -H "X-aws-metadata-token: $IMDSV2_TOKEN" "http://169.254.169.254/$IMDSV2/${1#/}"
+}
+
 #Name=tag:aws:autoscaling:groupName,Values=$AWS_AUTOSCALING_GROUPNAME
 ec2_find_cluster() {
     aws ec2 describe-instances \
@@ -174,7 +183,7 @@ basicConstraints = critical, CA:FALSE
 subjectAltName = @alternate_names
 
 keyUsage = critical, digitalSignature, keyEncipherment
-extendedKeyUsage = critical, serverAuth, clientAuth
+extendedKeyUsage = serverAuth, clientAuth
 subjectAltName = @alternate_names
 
 [alternate_names]
@@ -269,11 +278,19 @@ systemd_haveunit() {
     test -e /lib/systemd/system/$1 || test -e /etc/systemd/system/$1
 }
 
+pyver() {
+    $1 -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor)"
+}
+
 pyvenv() {
-    python3 -m venv $1
-    . $1/bin/activate
-    python -m pip install -U pip setuptools wheel
-    python -m pip install -U pip-tools
+    local venv="$1" python="${2:-$PREFIX/bin/python3}"
+
+    ver=$(pyver $python)
+    export PIP_FIND_LINKS=/var/lib/wheels-${pyver}
+
+    $python -m venv $venv \
+    && $venv/bin/python -m pip install -U pip \
+    && $venv/bin/python -m pip install -U setuptools wheel pip-tools
 }
 
 file_size() {
@@ -452,11 +469,11 @@ main() {
         fi
     fi
 
-    INSTANCE_ID=$(curl -sSf http://169.254.169.254/latest/meta-data/instance-id)
-    AVZONE=$(curl -sSf http://169.254.169.254/latest/meta-data/placement/availability-zone)
-    INSTANCE_TYPE=$(curl -sSf http://169.254.169.254/latest/meta-data/instance-type)
-    LOCAL_IPV4=$(curl -sSf http://169.254.169.254/latest/meta-data/local-ipv4)
-    LOCAL_HOSTNAME=$(curl -sSf http://169.254.169.254/latest/meta-data/local-hostname)
+    INSTANCE_ID=$(imds /meta-data/instance-id)
+    AVZONE=$(imds /meta-data/placement/availability-zone)
+    INSTANCE_TYPE=$(imds /meta-data/instance-type)
+    LOCAL_IPV4=$(imds /meta-data/local-ipv4)
+    LOCAL_HOSTNAME=$(imds /meta-data/local-hostname)
     sed -i "/^${LOCAL_IPV4}/d; /${LOCAL_HOSTNAME}/d;" /etc/hosts
     echo "$LOCAL_IPV4	$LOCAL_HOSTNAME     $(hostname -s)" | tee -a /etc/hosts
 
@@ -628,9 +645,13 @@ main() {
     fi
 
     if [ $NODE_ID -eq 0 ]; then
-        ec2_attach_nic "$NIC" "$INSTANCE_ID"
+        if [ -n "$NIC" ]; then
+            ec2_attach_nic "$NIC" "$INSTANCE_ID"
+            PUBLIC_DNS_AND_IP="$(aws ec2 describe-network-interfaces --network-interface-ids $NIC --query 'NetworkInterfaces[].Association.[PublicDnsName,PublicIp]' --output text)"
+        else
+            PUBLIC_DNS_AND_IP="$(imds /meta-data/public-hostname) $(imds /meta-data/public-ipv4)"
+        fi
         test -d $XLRROOT/config || mkdir -p $XLRROOT/config
-        PUBLIC_DNS_AND_IP="$(aws ec2 describe-network-interfaces --network-interface-ids $NIC --query 'NetworkInterfaces[].Association.[PublicDnsName,PublicIp]' --output text)"
         if file_size $SSLCRTFILE 10 && file_size $SSLKEYFILE 10; then
             CRT_KEY=($XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.crt $XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.key)
             fix_multiline_cert < $SSLCRTFILE > "${CRT_KEY[0]}"
@@ -667,9 +688,11 @@ main() {
             echo $PYSITE > $PTHFILE
         fi
         chown xcalar:xcalar $PYSITE
+        REQ=$XLRROOT/config/requirements.txt
+        CON=$PREFIX/share/doc/
         if test -e $XLRROOT/config/requirements.txt; then
             VENV=$(mktemp -d -t venv.XXXXXX)
-            pyvenv $VENV
+            pyvenv $VENV $PREFIX/bin/python3
             $VENV/bin/python -m pip install -t $PYSITE -r $XLRROOT/config/requirements.txt
         fi
     fi

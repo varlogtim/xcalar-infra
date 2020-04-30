@@ -19,7 +19,7 @@ REQUIRES     = requirements.txt
 REQUIRES_IN  = requirements.in
 HOOKS        = .git/hooks/pre-commit
 PYTHON  ?= /opt/xcalar/bin/python3.6
-OSID := $(shell osid)
+OSID := $(shell osid 2>/dev/null || echo el7)
 
 PYVER := $(shell $(PYTHON) -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor))")
 WHEELS      ?= /infra/wheels/py$(PYVER)-$(OSID)

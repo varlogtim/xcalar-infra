@@ -1,6 +1,7 @@
 ---
-AWSTemplateFormatVersion: '2010-09-09'
-Description: Xcalar Cloud. This template deploys a Xcalar Cloud Cluster ({{ VerId }})
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Xcalar Cloud. This template deploys a Xcalar Cloud Cluster ({{ installer_tag }})
 Parameters:
   InstanceType:
     Type: String
@@ -220,12 +221,8 @@ Metadata:
 {%- endif %}
 Conditions:
   CreateNewS3: !Equals [!Ref ExistingS3, '']
-  NoInstances: !Equals [!Ref ClusterSize, 0]
-{%- if keepIp %}
-  KeepIp: !Equals [1, 1]
-{%- else %}
+  NoInstances: !Equals [!Ref ClusterSize, '0']
   KeepIp: !Not [!Equals [!Ref ClusterSize, '0']]
-{%- endif %}
   CreateInstances: !Not [!Equals [!Ref ClusterSize, '0']]
   CreateDNS: !Not [!Or [!Equals [!Ref HostedZoneName, ''], !Equals [!Ref CNAME, '']]]
   IsUsEast1: !Equals [!Ref 'AWS::Region', 'us-east-1']
@@ -233,7 +230,19 @@ Conditions:
   CreateNewShare: !Equals [!Ref ExistingShare, '']
 {%- endif %}
 Mappings:
-{%- if not keepIp %}
+  #  LookupTable:
+  #    'us-east-1':
+  #      Ec2Domain: 'compute-1.amazonaws.com'
+  #    'us-east-2':
+  #      Ec2Domain: 'us-east-2.compute.amazonaws.com'
+  #    'us-west-1':
+  #      Ec2Domain: 'us-west-1.compute.amazonaws.com'
+  #    'us-west-2':
+  #      Ec2Domain: 'us-west-2.compute.amazonaws.com'
+  #    Constants:
+  #      NullIp: '0.0.0.0'
+
+{%- if useLocalLut %}
   AccountLUT:
     '043829555035':
       AccountName: 'xcalar-test'
@@ -280,21 +289,29 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Properties:
       #TemplateURL: !Sub 'https://s3.${QSS3Region}.amazonaws.com/${QSS3BucketName}/${QSS3KeyPrefix}stepfun.json'
+{%- if forSam %}
+      TemplateURL: 'stepfun.json'
+{%- else %}
       TemplateURL: '{{ baseUrl }}/stepfun.json'
+{%- endif %}
+      #TemplateURL: ./stepfun.json
       Parameters:
         AdminUsername: !Ref AdminUsername
         AdminPassword: !Ref AdminPassword
         InstanceType: !Ref InstanceType
         EventBucket: !Ref WorkBucket
         EventPrefix: '.events/'
+        KinesisRoleArn: !GetAtt 'KinesisServiceRole.Arn'
         ExistingBucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
         WorkBucket: !Ref WorkBucket
         NotificationEmail: !Ref NotificationEmail
         BaseURL: '{{ baseUrl }}/'
         EfsSharedRoot: !Ref EfsSharedRoot
+        EfsMountTarget: !Ref EfsMountTarget
         LaunchTemplate: !Ref LaunchTemplate
         LaunchTemplateVersion: !GetAtt LaunchTemplate.LatestVersionNumber
         ParentStack: !Ref 'AWS::StackName'
+        Subnet: !Ref Subnet
 {%- if createVpc %}
   VpcId:
     Type: "AWS::EC2::VPC"
@@ -614,25 +631,12 @@ Resources:
       HostedZoneName: !Sub '${HostedZoneName}.'
       Name: !Sub '${CNAME}.${HostedZoneName}.'
       Type: CNAME
-      TTL: '60'
+      TTL: 60
       ResourceRecords:
-{%- if keepIp %}
         - !Sub
           - "ec2-${IpDash}.${Domain}."
-          - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
+          - IpDash: !If [KeepIp, !Join ['-', !Split [ '.', !Ref ClusterEIP ]], '0-0-0-0']
             Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
-{%- else %}
-        - !If
-          - KeepIp
-          - !Sub
-            - "ec2-${IpDash}.${Domain}."
-            - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
-              Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
-          - !FindInMap
-            - AccountLUT
-            - !Ref 'AWS::AccountId'
-            - Failover
-{% endif %}
   AssociateEIP:
     Type: AWS::EC2::EIPAssociation
     Condition: KeepIp
@@ -833,6 +837,11 @@ Resources:
               mode: '000644'
               owner: root
               group: root
+            /etc/profile.d/xcalar-env.sh:
+              content: |
+                set -a
+                source /var/lib/cloud/instance/ec2.env
+                set +a
             /etc/systemd/system/xcalar-xcmgmtd.service.d/env.conf:
               content: |
                 [Service]
@@ -1038,6 +1047,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - kinesisanalytics:DiscoverInputSchema
+                  - kinesisanalyticsv2:DiscoverInputSchema
                 Resource: '*'
               - Effect: Allow
                 Action:
@@ -1155,7 +1165,7 @@ Outputs:
     Value: !If
       - CreateDNS
       - !Join ["", ["https://",!Ref CNAME,".",!Ref HostedZoneName]]
-      - !Join ["", ["https://",!Ref ClusterEIP]]
+      - !Join ["", ["https://", !If [KeepIp, !Ref ClusterEIP, '0.0.0.0']]]
   EIP:
     Condition: KeepIp
     Description: Cluster ElasticIP
@@ -1171,12 +1181,15 @@ Outputs:
   S3Bucket:
     Description: User S3 Bucket
     Value: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
-  EfsSharedRoot:
-    Description: Xcalar Shared Root
-    Value: !Ref EfsSharedRoot
+  WorkBucket:
+    Description: Private S3 Bucket
+    Value: !Ref WorkBucket
 {%- if enableExistingShare %}
     Condition: CreateNewShare
 {%- endif %}
+  EfsSharedRoot:
+    Description: Xcalar Shared Root EFS
+    Value: !Ref EfsSharedRoot
   EfsMountTarget:
     Description: Xcalar Shared Root Mount Target
     Value: !Ref EfsMountTarget
@@ -1189,5 +1202,8 @@ Outputs:
   LaunchTemplate:
     Description: Launch template for cluster
     Value: !Ref LaunchTemplate
+  KinesisRoleArn:
+    Description: Role to use for kinesis
+    Value: !GetAtt 'KinesisServiceRole.Arn'
 
 # vim: ft=yaml

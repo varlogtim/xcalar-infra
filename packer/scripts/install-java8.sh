@@ -10,9 +10,9 @@ install_java8() {
     else
         unset JAVA_HOME
         yum remove -y java-1.7.0-openjdk-headless java-1.7.0-openjdk || true
-        yum install -y java-1.8.0-openjdk-devel
-        for dir in /usr/lib/jvm/java-1.8.0-openjdk /usr/lib/jvm/java-1.8.0 /usr/lib/jvm/java-1.8.0-openjdk.x86_64 /usr/java/latest; do
-            if test -e "$dir/bin/javac"; then
+        yum install -y java-1.8.0-openjdk-devel || true
+        for dir in /usr/lib/jvm/java-1.8.0-openjdk /usr/lib/jvm/java-1.8.0 /usr/lib/jvm/java-1.8.0-openjdk.x86_64 /usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64/{,jre} /usr/java/latest; do
+            if test -e "$dir/bin/java"; then
                 export JAVA_HOME=$dir
                 break
             fi

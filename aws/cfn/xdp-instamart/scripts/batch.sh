@@ -9,6 +9,14 @@ ec2_find_cluster() {
         --output text | sort -n | awk '{print $(NF)}'
 }
 
+mbfree() {
+    local mb
+    if ! mb=$(/bin/df -BM --output=size "$1" | tail -1 | tr -d ' M'); then
+        return 1
+    fi
+    echo "$mb"
+}
+
 
 set -a
 eval $(ec2-tags -s -i)
@@ -33,6 +41,12 @@ else
 fi
 XCE_LOGDIR=/var/log/xcalar
 
+XCE_XDBSERDES=/ephemeral/data
+MBSIZE=$(( $(mbfree $XCE_XDBSERDES) - 1000 ))
+
+mkdir -p $XCE_XDBSERDES/serdes
+chown xcalar:xcalar $XCE_XDBSERDES/serdes
+
 cat > /etc/xcalar/default.cfg <<EOF
 // ----------------------------------------------------------------------------
 // ----------THESE PARAMS CONTROL CLUSTER CONFIGURATION------------------------
@@ -49,6 +63,10 @@ cat > /etc/xcalar/default.cfg <<EOF
 
 Constants.XcalarRootCompletePath=${XLRROOT}
 Constants.XcalarLogCompletePath=${XCE_LOGDIR}
+
+Constants.XdbSerDesMaxDiskMB=${MBSIZE}
+Constants.XdbLocalSerDesPath=${XCE_XDBSERDES}/serdes
+Constants.XdbSerDesMode=2
 
 Thrift.Port=9090
 Thrift.Host=localhost

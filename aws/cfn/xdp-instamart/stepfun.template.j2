@@ -1,6 +1,7 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
+
 Description: Step function support for Xcalar Lambda Schedules
 Parameters:
   AdminUsername:
@@ -48,7 +49,43 @@ Parameters:
   EfsSharedRoot:
     Description: EFS to use for Xcalar Shared Roots
     Type: String
+  EfsMountTarget:
+    Description: EFS Mount Target
+    Type: String
+  KinesisRoleArn:
+    Description: Role for kinesis to assume
+    Type: String
+  Subnet:
+    Description: Subnet to launch into
+    Type: String
+
+Globals:
+  Function:
+    Runtime: python3.6
+    Timeout: 60
+    Handler: index.handler
+    Layers:
+      - {{ lambdalayer }}
+    Environment:
+      Variables:
+        StackName: !Ref 'AWS::StackName'
+        Region: !Ref 'AWS::Region'
+        StackId: !Ref 'AWS::StackId'
+        ParentStack: !Ref 'ParentStack'
+
 Resources:
+    #  LambdaLayer:
+    #    Type: AWS::Lambda::LayerVersion
+    #    Properties:
+    #      CompatibleRuntimes:
+    #        - python3.6
+    #        - python3.7
+    #      Content:
+    #        S3Bucket: {{ lambdabucket }}
+    #        S3Key: lambdav1/84761646ba6a6018c8dd10ce23dde123.zip
+    #        S3Key: {{ lambdakey }}
+    #      LicenseInfo: MIT
+
   SNSTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -101,7 +138,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: 'Allow'
             Principal:
@@ -122,12 +159,38 @@ Resources:
       LambdaArn: !GetAtt 'ScheduleUpdateFunction.Arn'
       Bucket: !Ref EventBucket
       Prefix: !Ref EventPrefix
+      Suffix: '.json'
 
+      #  SamScheduleManager:
+      #    Type: 'AWS::Serverless::Function'
+      #    Properties:
+      #      Handler: schedule.update_handler
+      #      CodeUri: ./lambda
+      #      Events:
+      #        BucketEvent1:
+      #          Type: S3
+      #          Properties:
+      #            Bucket: !Ref EventBucket
+      #            Filter:
+      #              S3Key:
+      #                Rules:
+      #                  - Name: prefix
+      #                    Value: !Ref EventPrefix
+      #                  - Name: suffix
+      #                    Value: '.json'
+      #            Events:
+      #              - 's3:ObjectCreated:*'
+      #              - 's3:ObjectRemoved:*'
+      #  SamScheduleManagerLogs:
+      #    Type: AWS::Logs::LogGroup
+      #    Properties:
+      #      LogGroupName: !Sub /aws/lambda/${SamScheduleManager}
+      #
   ScheduleUpdateRole:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
-        Version: 2012-10-17
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -143,7 +206,7 @@ Resources:
       Policies:
         - PolicyName: S3Access
           PolicyDocument:
-            Version: 2012-10-17
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -165,7 +228,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
-        Version: 2012-10-17
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -180,7 +243,7 @@ Resources:
       Policies:
         - PolicyName: StepAccess
           PolicyDocument:
-            Version: 2012-10-17
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -233,7 +296,6 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
-        - arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2FullAccess
         - arn:aws:iam::aws:policy/IAMFullAccess
         - arn:aws:iam::aws:policy/AmazonSSMFullAccess
@@ -246,6 +308,7 @@ Resources:
                 Action:
                   - 's3:*'
                   - "ssm:ListCommands"
+                  - "elasticfilesystem:DescribeMountTargets"
                 Resource: '*'
               - Effect: Allow
                 Action:
@@ -267,24 +330,18 @@ Resources:
               - Effect: "Allow"
                 Action:
                   - "ssm:SendCommand"
-                  - "elasticfilesystem:DescribeMountTargets"
-                Resource: "*"
-                #                Resource:
-                #  - "arn:aws:ec2:*:*:instance/*"
-#                Condition:
-#                  StringLike:
-#                    "ssm:resourceTag/aws:cloudformation:stack-id":
-#                      - !Ref ParentStack
+                Resource:
+                  - 'arn:aws:ec2:*:*:instance/*'
+                Condition:
+                  StringLike:
+                    "ssm:resourceTag/ClusterName":
+                      - !Sub 'cluster-${ParentStack}-*'
               - Effect: "Allow"
                 Action:
                   - s3:ListBucket
                 Resource:
                   - !Sub "arn:aws:s3:::${ExistingBucket}"
                   - !Sub "arn:aws:s3:::${WorkBucket}"
-              - Effect: "Allow"
-                Action:
-                  - s3:ListBucket
-                Resource:
                   - !Sub "arn:aws:s3:::${EventBucket}"
               - Effect: "Allow"
                 Action:
@@ -363,24 +420,30 @@ Resources:
     Properties:
       Code:
         S3Bucket: {{ lambdabucket }}
-        S3Key: xdp-instamart/5611ac0967b3366c.zip
+        S3Key: {{ lambdakey }}
       Handler: add_notification.lambda_handler
       Role: !GetAtt AddS3NotificationRole.Arn
-      #      Layers:
-      #        - {{ lambdalayer }}
+      Layers:
+        - {{ lambdalayer }}
       Runtime: python3.6
       Timeout: 60
+{% if logGroup %}
+  AddS3NotificationLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AddS3Notification}
+{% endif %}
 
   ScheduleUpdateFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
         S3Bucket: {{ lambdabucket }}
-        S3Key: xdp-instamart/5611ac0967b3366c.zip
+        S3Key: {{ lambdakey }}
       Handler: schedule.update_handler
       Role: !GetAtt ScheduleUpdateRole.Arn
-      #      Layers:
-      #        - {{ lambdalayer }}
+      Layers:
+        - {{ lambdalayer }}
       Runtime: python3.6
       Timeout: 100
       Environment:
@@ -388,21 +451,28 @@ Resources:
           StackName: !Ref 'AWS::StackName'
           Region: !Ref 'AWS::Region'
           StackId: !Ref 'AWS::StackId'
+          BaseURL: !Ref BaseURL
           ParentStack: !Ref ParentStack
           EventBucket: !Ref EventBucket
           EventPrefix: !Ref EventPrefix
           StateMachineArn: !Ref DataAppStateMachine
           EventRoleArn: !GetAtt ScheduleExecuteEventRole.Arn
+{% if logGroup %}
+  ScheduleUpdateFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ScheduleUpdateFunction}
+{% endif %}
 
   StepStartFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
         S3Bucket: {{ lambdabucket }}
-        S3Key: xdp-instamart/5611ac0967b3366c.zip
+        S3Key: {{ lambdakey }}
       Handler: schedule.startstep_handler
-      #      Layers:
-      #        - {{ lambdalayer }}
+      Layers:
+        - {{ lambdalayer }}
       Description: "Launches a statemachine"
       Environment:
         Variables:
@@ -413,30 +483,160 @@ Resources:
       Runtime: python3.6
       Timeout: 300
 
+{% if logGroup %}
+  StepStartFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${StepStartFunction}
+{% endif %}
+{% if samAsg %}
+  SamLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          setup:
+            - configure
+          reload:
+            - reconfigure
+        configure:
+          files:
+            /etc/default/xcalar:
+              content: !Sub |
+                AWS_DEFAULT_REGION=${AWS::Region}
+                AWS_REGION=${AWS::Region}
+                WORKBUCKET=${WorkBucket}
+                BASEURL=${BaseURL}
+                KINESISROLEARN=${KinesisRoleArn}
+              mode: '000644'
+              owner: root
+              group: root
+    Properties:
+        #PlacementGroup: !Ref 'PlacementGroup'
+      TerminationPolicies:
+        - NewestInstance
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !Ref LaunchTemplateVersion
+      MaxSize: '0'
+      VPCZoneIdentifier:
+        - !Ref 'Subnet'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node'
+          PropagateAtLaunch: true
+        - Key: FileSystemId
+          Value: !Ref EfsSharedRoot
+          PropagateAtLaunch: true
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: false
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
+      AutoScalingRollingUpdate:
+        WaitOnResourceSignals: false
+  SamClusterASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      #PlacementGroup: !Ref 'PlacementGroup'
+      TerminationPolicies:
+        - NewestInstance
+      LaunchTemplate:
+        LaunchTemplateId: !Ref SamLaunchTemplate
+        Version: !GetAtt SamLaunchTemplate.LatestVersionNumber
+      MinSize: !Ref 0
+      MaxSize: !Ref 0
+      DesiredCapacity: !Ref 0
+      VPCZoneIdentifier:
+        - !Ref 'Subnet'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node'
+          PropagateAtLaunch: true
+        - Key: FileSystemId
+{%- if enableExistingShare %}
+          Value: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
+{%- else %}
+          Value: !Ref EfsSharedRoot
+{%- endif %}
+          PropagateAtLaunch: true
+        - Key: MountTarget
+          Value: !Ref EfsMountTarget
+          PropagateAtLaunch: true
+{%- if ami %}
+{%- if ami.Version %}
+        - Key: Version
+          Value: '{{ ami.Version }}'
+          PropagateAtLaunch: true
+{%- endif %}
+{%- if ami.Build %}
+        - Key: Build
+          Value: '{{ ami.Build }}'
+          PropagateAtLaunch: true
+{%- endif %}
+{%- if ami.ImageBuild %}
+        - Key: ImageBuild
+          Value: '{{ ami.ImageBuild }}'
+          PropagateAtLaunch: true
+{%- endif %}
+{%- if ami.Product %}
+        - Key: Product
+          Value: '{{ ami.Product }}'
+          PropagateAtLaunch: true
+{%- endif %}
+{%- endif %}
+#    CreationPolicy:
+#      ResourceSignal:
+#        Count: !Ref ClusterSize
+#        Timeout: PT10M
+    # WillReplace: true, means a new ASG is stood up and the old one is replaced if the new stack comes up
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: false
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
+      AutoScalingRollingUpdate:
+        WaitOnResourceSignals: false
+{%- endif %}
+
   LaunchCluster:
     Type: "AWS::Lambda::Function"
     Properties:
       Code:
         S3Bucket: {{ lambdabucket }}
-        S3Key: xdp-instamart/5611ac0967b3366c.zip
+        S3Key: {{ lambdakey }}
       Handler: schedule.launchcluster_handler
-      #      Layers:
-      #        - {{ lambdalayer }}
+      Layers:
+        - {{ lambdalayer }}
       Description: "Creates cluster to perform DataApp processing"
       Environment:
         Variables:
           AdminUsername: !Ref AdminUsername
           AdminPassword: !Ref AdminPassword
           InstanceType: !Ref InstanceType
-          InstanceArn: !GetAtt DataAppProfile.Arn
+          WorkBucket: !Ref WorkBucket
+          StackName: !Ref 'AWS::StackName'
+          Region: !Ref 'AWS::Region'
+          StackId: !Ref 'AWS::StackId'
+          ParentStack: !Ref 'ParentStack'
           LaunchTemplate: !Ref LaunchTemplate
           LaunchTemplateVersion: !Ref LaunchTemplateVersion
+          KinesisRoleArn: !Ref KinesisRoleArn
+          Email: !Ref NotificationEmail
           BaseURL: !Ref BaseURL
           EfsSharedRoot: !Ref EfsSharedRoot
-          Email: !Ref NotificationEmail
+          EfsMountTarget: !Ref EfsMountTarget
+          Subnet: !Ref Subnet
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
       Timeout: 300
+{% if logGroup %}
+  LaunchClusterLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${LaunchCluster}
+{% endif %}
+
 
   CheckClusterStatus:
     Type: "AWS::Lambda::Function"
@@ -447,12 +647,12 @@ Resources:
           import boto3
           import json
 
-          client = boto3.client('ec2')
+          ssm = boto3.client('ssm')
 
           def lambda_handler(event, context):
               print(json.dumps(event,indent=4))
               instance_ids=event['InstanceIds']
-              current_status=checkInstanceStatus(instance_ids) # Hack
+              current_status=checkInstanceStatus(instance_ids)
               if current_status == 'running':
                   event['HasClusterStarted'] = 'YES'
               else:
@@ -460,17 +660,25 @@ Resources:
               return event
 
           def checkInstanceStatus(instance_ids):
-              status_resp = client.describe_instances(InstanceIds=instance_ids)
-              return status_resp['Reservations'][0]['Instances'][0]['State']['Name']
-
-      Description: "Checks whether the cluster is started or not"
-      Environment:
-        Variables:
-          InstanceType: !Ref InstanceType
+              response = ssm.describe_instance_information(InstanceInformationFilterList=[{'key':'InstanceIds','valueSet':instance_ids}])
+              respList = response.get('InstanceInformationList',[])
+              if not respList:
+                  return 'none'
+              status = [y['AssociationStatus'] == 'Success' for y in respList]
+              print(status)
+              return {True:'running', False:'pending'}[all(status)]
       Handler: index.lambda_handler
+      Description: "Checks whether the cluster is started or not"
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
-      Timeout: 300
+      Timeout: 60
+{% if logGroup %}
+  CheckClusterStatusLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CheckClusterStatus}
+{% endif %}
+
 
   RunSSMCommands:
     Type: "AWS::Lambda::Function"
@@ -487,14 +695,19 @@ Resources:
               client = boto3.client('ssm')
               ec2 = boto3.client('ec2')
               s3 = boto3.client('s3')
+              Bucket = os.environ['Bucket']
               BaseURL = os.environ['BaseURL']
               AdminPassword = os.environ['AdminPassword']
               AdminUsername = os.environ['AdminUsername']
+              KinesisRoleArn = os.environ['KinesisRoleArn']
+              Region = os.environ['Region']
               now = datetime.datetime.now()
-              instance_ids = event['InstanceIds']
+              instance_ids = event['InstanceIds'][:]
               Items = []
               print(instance_ids)
               print(ec2.describe_instances(InstanceIds=instance_ids))
+              #waiter = ec2.get_waiter('instance_status_ok')
+              #waiter.wait(InstanceIds=instance_ids)
               event['Commands'] = []
               script = f'{BaseURL}scripts/runner.sh'
               if 'Script' in event:
@@ -509,10 +722,11 @@ Resources:
                 DocumentName='AWS-RunShellScript',
                 Parameters={
                   'commands': [
+                    'until test -e /var/lib/cloud/instance/boot-finished; do sleep 5; done',
                     'systemctl start xcalar.service',
-                    f'curl {BaseURL}scripts/runner.sh -o /usr/bin/runner.sh',
+                    f'curl -fsSL {script} -o /usr/bin/runner.sh',
                     'chmod +x /usr/bin/runner.sh',
-                    f'/usr/bin/runner.sh --runas xcalar -- /bin/bash -c "{command}"'
+                    f"/usr/bin/runner.sh --runas xcalar -- /bin/bash -c '{command}'"
                   ]
                 }
               )
@@ -521,14 +735,23 @@ Resources:
       Description: "Send SSM Command to instance"
       Environment:
         Variables:
+          KinesisRoleArn: !Ref KinesisRoleArn
           Bucket: !Ref WorkBucket
           BaseURL: !Ref BaseURL
+          Region: !Ref 'AWS::Region'
           AdminUsername: !Ref AdminUsername
           AdminPassword: !Ref AdminPassword
       Handler: index.lambda_handler
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
       Timeout: 300
+{% if logGroup %}
+  RunSSMCommandsLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${RunSSMCommands}
+{% endif %}
+
 
   CheckSSMCommandStatus:
     Type: "AWS::Lambda::Function"
@@ -550,9 +773,9 @@ Resources:
                   if status == 'InProgress':
                       event['commandstatus'] =  "PENDING"
                   if status == 'Failed':
-                          event['commandstatus'] =  "FAILED"
+                      event['commandstatus'] =  "FAILED"
                   if status == 'Cancelled':
-                          event['commandstatus'] =  "FAILED"
+                      event['commandstatus'] =  "FAILED"
               # handle 3 scenarios: PENDING, SUCCESS, FAILED
               return event
 
@@ -570,12 +793,18 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
       Timeout: 300
+{% if logGroup %}
+  CheckSSMCommandStatusLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CheckSSMCommandStatus}
+{% endif %}
 
   TerminateEC2:
     Type: "AWS::Lambda::Function"
     Properties:
       Code:
-        ZipFile: !Sub |
+        ZipFile: |
           import sys, os
           import boto3
           import json
@@ -588,11 +817,11 @@ Resources:
                   return event
               if 'KeepCluster' in event:
                   if event['KeepCluster']:
-                      event['hasClusterTerminated'] = 'running'
+                      event['HasClusterTerminated'] = 'running'
                       return event
               instance_ids=event['InstanceIds']
               current_status=terminateInstance(instance_ids)
-              event['hasClusterTerminated'] = current_status
+              event['HasClusterTerminated'] = current_status
               waiter = client.get_waiter('instance_terminated')
               waiter.wait(
                   InstanceIds=instance_ids
@@ -611,6 +840,13 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
       Timeout: 300
+{% if logGroup %}
+  TerminateEC2Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${TerminateEC2}
+{% endif %}
+
 
       #DataAppDynamoDBTable:
       #  Type: AWS::DynamoDB::Table
@@ -665,7 +901,7 @@ Resources:
               },
               "Wait Cluster": {
                 "Type": "Wait",
-                "Seconds": 60,
+                "Seconds": 120,
                 "Next": "ClusterStartCheck"
               },
               "RunScripts": {
@@ -746,4 +982,10 @@ Resources:
             }
           }
       RoleArn: !GetAtt [ StatesExecutionRole, Arn ]
-# vim: ft=yaml
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-stepfun'
+        - Key: StackName
+          Value: !Ref 'AWS::StackName'
+
+# vim: ft=yaml.cloudformation

@@ -174,17 +174,35 @@ j2transform() {
 }
 
 dc2_parse_common() {
-    local cmd="$1"
+    local cmd="$1" key='' val=''
     shift
+    valid_parse_common_keys=(debug publishing product project release cloud osid image_id
+	installer installer_url installer_version installer_build_number installer_build_type installer_rc installer_xce_branch installer_xce_sha1
+    installer_xd_branch installer_xd_sha1 image_build_number installer_byjob docker_image release product license license_type installer_tag)
     case "$cmd" in
+        --*=*)
+            key="${cmd%%=*}"
+            key="${key#--}"
+            key="${key//-/_}"
+            val="${cmd#*=}"
+            if grep -q "$key" <<< "${valid_parse_common_keys[@]}"; then
+                eval "declare -rxg ${key^^}=${val}"
+            else
+                echo 0
+                return 1
+            fi
+            ;;
         --debug | -d)
             DEBUG=1
             KEEP=1
             ;;
         --publishing) PUBLISHING=True ;;
+        --product)
+            PRODUCT="$1"
+            echo 2
+            ;;
         --project | -p)
             PROJECT="$1"
-            #PROJDIR="$(cd $PROJECT && pwd || { cd $TEMPLATEDIR && pwd} )"
             echo 2
             ;;
         --release | -r)
@@ -199,12 +217,46 @@ dc2_parse_common() {
             OSID="$1"
             echo 2
             ;;
+        --installer_version)
+            INSTALLER_VERSION="$1"
+            VERSION="$1"
+            echo 2
+            ;;
+        --installer_build_number)
+            INSTALLER_BUILD_NUMBER="$1"
+            echo 2
+            ;;
+        --installer_rc)
+            INSTALLER_RC="$1"
+            echo 2
+            ;;
+        --installer_tag)
+            TAG="$1"
+            INSTALLER_TAG="$1"
+            echo 2
+            ;;
+        --image_build_number)
+            IMAGE_BUILD_NUMBER="$1"
+            echo 2
+            ;;
+        --var-file)
+            case "$1" in
+                *.yaml|*.yml)
+                    USER_VARS_FILES+=("$1")
+                    ;;
+                *)
+                    die "Filetype of $1 not yet supported"
+                    ;;
+            esac
+            echo 2
+            ;;
         --version | -V)
+            INSTALLER_VERSION="$1"
             VERSION="$1"
             echo 2
             ;;
         --environment | --env | -e)
-            ENV="$1"
+            ENVIRONMENT="$1"
             echo 2
             ;;
         --template)
@@ -220,7 +272,7 @@ dc2_parse_common() {
             NAME="$1"
             echo 2
             ;;
-        --image-id)
+        --image-id | --image_id)
             IMAGE_ID="$1"
             echo 2
             ;;
@@ -242,10 +294,11 @@ dc2_parse_common() {
 }
 
 dc2_deploy() {
+    local cmd shift_amount
     PARAMS="$TEMPLATEDIR"/params/$AWS_DEFAULT_REGION.yaml
     WAIT=1
     while [[ $# -gt 0 ]]; do
-        local cmd="$1" shift_amount
+        cmd="$1"
         if dc2_parse_common "$@" > $TMPDIR/shift.txt; then
             shift_amount=$(cat $TMPDIR/shift.txt)
             shift "${shift_amount:-1}"
@@ -279,6 +332,9 @@ dc2_deploy() {
             *) break ;;
         esac
     done
+    if [ -n "$INSTALLER_TAG" ] && [ -z "${TAG:-}" ]; then
+        TAG="$INSTALLER_TAG"
+    fi
 
     case "$MODE" in
         create)
@@ -320,9 +376,11 @@ dc2_deploy() {
 }
 
 dc2_upload() {
+    local cmd shift_amount
     FLAVORS="default"
+    USER_VARS_FILES=()
     while [[ $# -gt 0 ]]; do
-        local cmd="$1" shift_amount
+        cmd="$1"
         if dc2_parse_common "$@" > $TMPDIR/shift.txt; then
             shift_amount=$(cat $TMPDIR/shift.txt)
             shift "${shift_amount:-1}"
@@ -343,6 +401,10 @@ dc2_upload() {
                 J2DEFS+=("-D" "$1")
                 shift
                 ;;
+            --license)
+                LICENSE="$1"
+                shift
+                ;;
             --manifest)
                 MANIFEST="$1"
                 shift
@@ -355,6 +417,13 @@ dc2_upload() {
                 ;;
         esac
     done
+    if [ -n "$INSTALLER_TAG" ] && [ -z "${TAG:-}" ]; then
+        TAG="$INSTALLER_TAG"
+    fi
+    if [ -n "$INSTALLER_VERSION" ] && [ -z "${VERSION:-}" ]; then
+        VERSION="$INSTALLER_VERSION"
+    fi
+
 
     J2DEFS+=(-D "DEBUG=${DEBUG}")
     J2DEFS+=(-D "PUBLISHING=${PUBLISHING^}")
@@ -362,22 +431,24 @@ dc2_upload() {
     test -n "${PROJECT:-}" || die "Need to set --project"
     test -n "${VERSION:-}" || VERSION=$(cat $PROJECT/VERSION) || die "Need to set --version"
     PROJDIR="${TEMPLATEDIR}/${PROJECT}"
-    CONTEXT="${ENV}/${PROJECT}/${VERSION}"
+    CONTEXT="${ENVIRONMENT}/${PROJECT}/${TAG}"
     test -e "$PROJDIR" || die "$PROJDIR doesn't exist. You need to set $XLRINFRADIR/${CLOUD}/cfn as your working directory"
 
     GENDIR="$TMPDIR"/gen
     mkdir -p "$GENDIR"/scripts/
     for ii in "$PROJDIR"/scripts/*; do
         if [[ $ii =~ .j2$ ]]; then
-            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "${J2DEFS[@]}" "$ii" > $GENDIR/scripts/$(basename $ii .j2)
+            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml "${USER_VARS_FILES[@]}" | jinja2 "${J2DEFS[@]}" "$ii" > $GENDIR/scripts/$(basename $ii .j2)
         else
             cp $ii $GENDIR/scripts/
         fi
     done
     if test -e "$PROJDIR"/lambda; then
         mkdir -p "$GENDIR"/lambda
-        cp "$PROJDIR"/lambda/*.{py,txt} "$GENDIR"/lambda/
-        pip install -q -r "$PROJDIR"/lambda/requirements.txt -c "$PROJDIR"/lambda/constraints.txt -t "$GENDIR"/lambda
+        cp "$PROJDIR"/lambda/*.py "$GENDIR"/lambda/
+        if test -e "$PROJDIR"/lambda/requirements.txt; then
+            pip install -q -r "$PROJDIR"/lambda/requirements.txt -c "$PROJDIR"/lambda/constraints.txt -t "$GENDIR"/lambda
+        fi
         (cd "$GENDIR"/lambda && zip -q -9r "$GENDIR"/lambda.zip .)
         rm -rf "$GENDIR"/lambda
     fi
@@ -386,13 +457,13 @@ dc2_upload() {
         us-west-2) BUCKET=xcrepo ;;
         us-east-1) BUCKET=xcrepoe1 ;;
         *)
-            export AWS_DEFAULT_REGION=us-east-1
-            BUCKET=xcrepoe1
+            export AWS_DEFAULT_REGION=us-west-2
+            BUCKET=xcrepo
             ;;
     esac
 
     BUCKET_ENDPOINT="$(aws_s3_url s3://$BUCKET)"
-    TARGET=cfn/${CONTEXT}-${RELEASE}
+    TARGET=cfn/${CONTEXT}
     BASE_URL="${BUCKET_ENDPOINT}/${TARGET}"
     bootstrapUrl="${BASE_URL}/scripts/user-data.sh"
     bucketLocation=$(aws s3api get-bucket-location --bucket $BUCKET --query LocationConstraint --output text)
@@ -405,8 +476,14 @@ dc2_upload() {
     cat > "$TMPDIR"/vars/deploy.yaml <<- EOF
 	VERSION: '$VERSION'
 	PROJECT: '$PROJECT'
-	RELEASE: '$RELEASE'
-	ENV: $ENV
+	${RELEASE:+RELEASE: "'$RELEASE'"}
+	ENVIRONMENT: $ENVIRONMENT
+	TAG: '$TAG'
+	installer_tag: '$INSTALLER_TAG'
+	installer_version: '$INSTALLER_VERSION'
+	installer_build_number: '$INSTALLER_BUILD_NUMBER'
+	${IMAGE_BUILD_NUMBER:+image_build_number: "$IMAGE_BUILD_NUMBER"}
+	${INSTALLER_RC:+installer_rc: "$INSTALLER_RC"}
 	baseUrl: '$BASE_URL'
 	baseBucket: '${BUCKET}'
 	basePrefix: '${TARGET}/'
@@ -498,7 +575,7 @@ dc2_upload() {
                 die "Failed to validate ${GENDIR}/${TEMPLATEOUT}.json"
             fi
             if [ -n "${URL_FILE:-}" ]; then
-                echo "$templateUrl" >> "$URL_FILE"
+                echo "$templateUrl" > "$URL_FILE"
             fi
             quickUrl="$(aws_quickcreate "$templateUrl" my-${PROJECT})"
             quick_urls+=("$quickUrl")
@@ -551,7 +628,8 @@ dc2_cleanup() {
 
 dc2_defaults() {
     declare -g FIND_AMI=0 DRY=0 KEEP=0 DEBUG=${DEBUG:-0} CLOUD=aws MODE='create'
-    declare -g ENV=dev PUBLISHING=${PUBLISHING:-False}
+    declare -g ENVIRONMENT=dev PUBLISHING=${PUBLISHING:-False}
+    declare -g INSTALLER_RC="${INSTALLER_RC:-''}"
     declare -g TMPBASE="${TMPDIR:-/tmp}/$(basename $0 .sh)-$(id -u)" # EG /tmp/dc2-1000/
     export DEBUG PUBLISHING
 

@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 # --- helper functions for logs ---
 info() {
     log '[INFO] ' "$@"
@@ -44,7 +42,7 @@ escape_dq() {
 
 # --- main function
 main() {
-    log "Starting main with args: " $(quote "$@")
+    log "Starting main with args: " "$(quote "$@")"
     while [ $# -gt 0 ]; do
         local cmd="$1"
         case "$cmd" in
@@ -57,31 +55,37 @@ main() {
 
     if [ -z "$RUNDIR" ]; then
         if [ -n "$RUNAS" ]; then
-            RUNDIR="/var/tmp/runner-$(id -u $RUNAS)"
+            RUNDIR="/var/tmp/runner-$(id -u "$RUNAS")"
         else
             RUNDIR="/var/tmp/runner-$(id -u)"
         fi
     fi
     log "RUNDIR=$RUNDIR RUNAS=$RUNAS"
-    if test -e /opt/xcalar/etc/default/xcalar; then
-        set -a
-        .  /opt/xcalar/etc/default/xcalar
-        set +a
-    fi
-    export XLRDIR=/opt/xcalar
-    export PATH="$XLRDIR/bin:$PATH"
-
     mkdir -p "$RUNDIR"
+    cat > /etc/profile.d/xcalar-env.sh <<EOF
+set -a
+.  /etc/default/xcalar
+AWS_DEFAULT_REGION=\${AWS_DEFAULT_REGION:-us-west-2}
+XLRDIR=/opt/xcalar
+PATH=\$XLRDIR/bin:\$PATH
+set +a
+EOF
+    SCRIPT=$RUNDIR/script-$$.sh
+    cat > "$SCRIPT" <<EOF
+#!/bin/bash
+source /etc/profile.d/xcalar-env.sh
+$(quote "$@" | tr '\n' ' ')
+EOF
     cd "$RUNDIR" || fatal "Unable to chdir to $RUNDIR"
     if [ -n "$RUNAS" ]; then
         chown "$RUNAS" "$RUNDIR"
-        log "Runninig su-exec $RUNAS" $(quote "$@")
-        su-exec "$RUNAS" "$@"
+        log "Runninig su-exec $RUNAS $SCRIPT"
+        su-exec "$RUNAS" /bin/bash -x $SCRIPT 2>&1 | tee -a ${SCRIPT%.sh}.log
     else
-        log "Runninig " $(quote "$@")
-        "$@"
+        log "Runninig $SCRIPT"
+        /bin/bash -x $SCRIPT 2>&1 | tee -a ${SCRIPT%.sh}.log
     fi
-    rc=$?
+    rc=${PIPERESULT[0]}
     log "Got back rc=$rc"
     return $rc
 }

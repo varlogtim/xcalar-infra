@@ -5,26 +5,26 @@ variables:
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   baseos_owner: '559166403383'
   baseos: 'xdp-base'
-  build_id: '{{env `BUILD_ID`}}'
   build_number: '{{env `BUILD_NUMBER`}}'
+  image_build_number: '{{env `BUILD_NUMBER`}}'
+  description: Xcalar Data Platform
   destination_regions: '{{env `REGIONS`}}'
   device_name: /dev/xvda
-  disk_size: '16'
+  disk_size: '8'
   home: '{{env `HOME`}}'
   installer_build_number: '1'
   installer_url: '{{env `INSTALLER_URL`}}'
   bootstrap: '{{env `XLRINFRADIR`}}/aws/cfn/{{env `PROJECT`}}/scripts/user-data.sh'
   installer_version: '1.0'
   license: '{{env `LICENSE`}}'
-  product_desc: Xcalar Data Platform
   product: xdp-standard
   region: '{{env `AWS_DEFAULT_REGION`}}'
-  shared_with: '{{env `SHARED_WITH` }}'
+  shared_with: '{{env `SHARED_WITH`}}'
   ssh_username: ec2-user
   today: '{{isotime "20060102"}}'
   uid: '1000'
   release: '{{env `RELEASE`}}'
-  topsrc: '{{env `XLRINFRADIR`}}'
+  manifest: '{{template_dir}}/packer-manifest.json'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-amzn2
@@ -38,9 +38,10 @@ builders:
     source_ami_filter:
       filters:
         virtualization-type: hvm
+        architecture: 'x86_64'
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos` }}-{{split build_name "-" 2}}*'
+        name: '{{user `baseos`}}-{{split build_name "-" 2}}-*'
       owners: '{{user `baseos_owner`}}'
       most_recent: true
     instance_type: c5d.xlarge
@@ -53,77 +54,24 @@ builders:
     force_delete_snapshot: true
     shutdown_behavior: terminate
     ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
-    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
+    ami_description: '{{user `description`}} {{split build_name "-" 2 | upper}} ({{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
     run_tags:
-      Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
+      Name: 'packer-{{build_name}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
     snapshot_tags:
+      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
+      OSID: '{{split build_name "-" 2}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
-      ImageBuild: '{{user `build_number`}}'
+      ImageBuild: '{{user `image_build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
     tags:
+      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       BaseOS: '{{.SourceAMIName}}'
-      Version: '{{user `installer_version`}}'
-      Build: '{{user `installer_build_number`}}'
-      ImageBuild: '{{user `build_number`}}'
-      Release: '{{user `release`}}'
-      Product: '{{user `product`}}'
-    launch_block_device_mappings:
-      - device_name: '{{user `device_name`}}'
-        volume_size: '{{user `disk_size`}}'
-        volume_type: gp2
-        delete_on_termination: true
-    ami_block_device_mappings:
-      - device_name: /dev/sdb
-        virtual_name: ephemeral0
-      - device_name: /dev/sdc
-        virtual_name: ephemeral1
-  - type: amazon-ebs
-    name: amazon-ebs-amzn1
-    access_key: '{{user `aws_access_key`}}'
-    secret_key: '{{user `aws_secret_key`}}'
-    ssh_keypair_name: 'packer'
-    ssh_private_key_file: '{{template_dir}}/../ssh/id_packer.pem'
-    region: '{{user `region`}}'
-    ami_regions: '{{user `destination_regions`}}'
-    ami_users: '{{user `shared_with`}}'
-    source_ami_filter:
-      filters:
-        virtualization-type: hvm
-        root-device-type: ebs
-        block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}-{{split build_name "-" 2}}*'
-      owners: '{{user `baseos_owner`}}'
-      most_recent: true
-    instance_type: c5d.xlarge
-    iam_instance_profile: ec2-default
-    ssh_username: '{{user `ssh_username`}}'
-    ssh_pty: true
-    ena_support: true
-    ebs_optimized: true
-    force_deregister: true
-    force_delete_snapshot: true
-    shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
-    ami_description: '{{user `product_desc`}} ({{split build_name "-" 2 | upper}} {{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
-    run_tags:
-      Name: 'packer {{build_name}} - {{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
-    snapshot_tags:
-      SourceAMI: '{{.SourceAMI}}'
-      SourceAMIName: '{{.SourceAMIName}}'
-      Version: '{{user `installer_version`}}'
-      Build: '{{user `installer_build_number`}}'
-      ImageBuild: '{{user `build_number`}}'
-      Release: '{{user `release`}}'
-      Product: '{{user `product`}}'
-    tags:
-      SourceAMI: '{{.SourceAMI}}'
-      SourceAMIName: '{{.SourceAMIName}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       ImageBuild: '{{user `build_number`}}'
@@ -157,9 +105,6 @@ provisioners:
     source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
     destination: /tmp/genDefaultAdmin.sh
   - type: file
-    source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
-    destination: /tmp/genDefaultAdmin.sh
-  - type: file
     source: '{{ user `bootstrap` }}'
     destination: /tmp/bootstrap.sh
   - type: shell
@@ -173,7 +118,7 @@ provisioners:
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
       - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
       - mv /tmp/aws-discover-input-schema.sh /usr/bin/
-      - test -f /etc/profile.d/jdk.sh && rm -f /etc/profile.d/zjava.sh || true
+        #- test -f /etc/profile.d/jdk.sh && rm -vf /etc/profile.d/zjava.sh || true
   - type: shell
     environment_vars:
       - OSID={{split build_name "-" 2}}
@@ -183,13 +128,13 @@ provisioners:
       - '{{ template_dir }}/../scripts/finish.sh'
 post-processors:
   - type: manifest
+    output: '{{user `manifest`}}'
+    strip_path: true
     custom_data:
-      build_id: '{{user `build_id`}}'
       build_number: '{{user `build_number`}}'
       destination_regions: '{{user `destination_regions`}}'
       installer_build_number: '{{user `installer_build_number`}}'
       installer_url: '{{user `installer_url`}}'
-      bootstrap: '{{user `bootstrap`}}'
       installer_version: '{{user `installer_version`}}'
       license: '{{user `license`}}'
       product: '{{user `product`}}'

@@ -179,7 +179,7 @@ Resources:
         - python3.7
       Content:
         S3Bucket: !Ref S3LambdaBucket
-        S3Key: sharedlibs/e490b08ada204c6cc875c2ccbad7efc6.zip
+        S3Key: sharedlibs/96aa410e4c496d40aa40f070cd2453ae.zip
       Description: Shared libs for python3
       LayerName: sharedpy3
       LicenseInfo: Misc.

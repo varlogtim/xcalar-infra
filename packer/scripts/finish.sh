@@ -2,17 +2,20 @@
 
 set -x
 
-while  pgrep -af dracut; do
+while pgrep -af dracut; do
     sleep 10
 done
 
 if [ -e  /var/cache/yum ]; then
     yum clean all --enablerepo='*'
-    rm -rf /var/cache/yum/*
+    rm -rfv /var/cache/yum/* /var/tmp/yum*
 fi
 
 sed -i '/^proxy/d' /etc/yum.conf
 
+if command -v cloud-init >/dev/null; then
+    cloud-init clean || true
+fi
 
 truncate -s 0 /var/log/secure /var/log/messages /var/log/dmesg /var/log/audit/audit.log || true
 

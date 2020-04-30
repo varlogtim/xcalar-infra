@@ -1,24 +1,25 @@
 #!/bin/bash
 #
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091,SC2086
 
 . infra-sh-lib
 . aws-sh-lib
 
-DIR=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE=$DIR/amzn-base.yaml
-MANIFEST=$(basename $TEMPLATE .yaml)-manifest.json
+MANIFEST="$(basename "$TEMPLATE" .yaml)"-manifest.json
 while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
         -t|--template) TEMPLATE="$1"; shift;;
+        --installer) INSTALLER="$1"; shift;;
         *) die "Unknown parameter $cmd";;
     esac
 done
 
 chmod 0700 $XLRINFRADIR/packer/ssh
-chmod 0640 $XLRINFRADIR/packer/ssh/id_packer.pem
+chmod 0600 $XLRINFRADIR/packer/ssh/id_packer.pem
 
 if ! jq -r . < $TEMPLATE >/dev/null 2>&1; then
     if ! cfn-flip < ${TEMPLATE} > ${TEMPLATE%.*}.json; then
@@ -36,7 +37,12 @@ fi
 #exit
 
 aws_ssm_update_base() {
-    aws ssm put-parameter --tier Standard --type String --name /xcalar/cloud/images/xdp-base-latest/xdp-base-amzn2  --value ami-0331cc46cb5937bc5 --tags Key=Name,Value=xdp-base-amzn2-2.0.20191024.3-1-20191106 Key=OSID,Value=amzn2 Key=BuildNumber,Value=1 Key=Today,Value=20191106
+    aws ssm put-parameter --tier Standard --type String --name /xcalar/cloud/images/xdp-base-latest/xdp-base-amzn2  --value ami-0331cc46cb5937bc5 \
+        --tags \
+            Key=Name,Value=xdp-base-amzn2-2.0.20191024.3-1-20191106 \
+            Key=OSID,Value=amzn2 \
+            Key=BuildNumber,Value=${BUILD_NUMBER:-1} \
+            Key=Today,Value="$(date +%Y%m%d)"
 }
 
 aws_ssm_del_tags() {
@@ -54,7 +60,8 @@ aws_ssm_get_tags() {
     aws ssm list-tags-for-resource --resource-type Parameter --resource-id "$@"
 }
 
-export BUILD_NUMBER=${BUILD_NUMBER:-1}
+installer-version.sh "$INSTALLER" > installer-version.json
+export INSTALLER_URL="$(installer-url.sh -d s3 "$INSTALLER")"
 if ! packer.io build \
     -machine-readable \
     -timestamp-ui \
@@ -64,6 +71,8 @@ if ! packer.io build \
     -var destination_regions=${REGIONS:-us-west-2} \
     -var disk_size=${DISK_SIZE:-8} \
     -var manifest="$MANIFEST" \
+    -var installer_url="$INSTALLER_URL" \
+    -var-file installer-version.json \
     -parallel=true $TEMPLATE; then
     exit 1
 fi

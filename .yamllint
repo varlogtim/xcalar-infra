@@ -4,10 +4,12 @@ extends: default
 rules:
   # 80 chars should be enough, but don't fail if a line is longer
   line-length:
-    max: 100
+    max: 140
     level: warning
 
   # don't bother me with this rule
   indentation:
       indent-sequences: consistent
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']
 

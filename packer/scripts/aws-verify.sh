@@ -1,14 +1,22 @@
 #!/bin/bash
 
+# Instance meta-data service v2
+imds() {
+    if [ -z "$IMDSV2_TOKEN" ]; then
+        IMDSV2_TOKEN=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    fi
+    curl -fsS -H "X-aws-metadata-token: $IMDSV2_TOKEN" "http://169.254.169.254/latest/${1#/}"
+}
+
 aws_verify() {
        DOCUMENT=inst.json
        AWS=aws.pem
        SIGNATURE=sig.json
        PKCS7=pkcs7.pem
 
-       (echo "-----BEGIN PKCS7-----"; curl -s http://169.254.169.254/latest/dynamic/instance-identity/pkcs7 ; echo; echo "-----END PKCS7-----") > $PKCS7 \
-       && curl -s http://169.254.169.254/latest/dynamic/instance-identity/signature > $SIGNATURE \
-       && curl -s http://169.254.169.254/latest/dynamic/instance-identity/document > $DOCUMENT \
+       (echo "-----BEGIN PKCS7-----"; imds /dynamic/instance-identity/pkcs7 ; echo; echo "-----END PKCS7-----") > $PKCS7 \
+       && imds /dynamic/instance-identity/signature > $SIGNATURE \
+       && imds /dynamic/instance-identity/document > $DOCUMENT \
        || return 3
 	cat <<-EOF > $AWS
 	-----BEGIN CERTIFICATE-----
@@ -37,7 +45,7 @@ export TMPDIR=$(mktemp -d /tmp/ec2-cert.XXXXXX)
 chmod 0700 "$TMPDIR"
 cd $TMPDIR
 if aws_verify; then
-        #cd / && rm -rf $TMPDIR
+        cd / && rm -rf $TMPDIR
         exit 0
 fi
 echo >&2 "All intermediate files are in TMPDIR=$TMPDIR"

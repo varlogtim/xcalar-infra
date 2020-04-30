@@ -16,6 +16,7 @@ flake8
 git-review
 jinja2-cli[yaml]
 jupyterlab
+localstack
 notebook
 pip-tools
 pre-commit
@@ -27,10 +28,11 @@ python-consul
 PyYAML
 requests
 sceptre
-sentry-sdk==0.14.1
+sentry-sdk==0.14.3
 testinfra
 troposphere[policy]
 warrant
 yamllint
 yapf
 #pyls
+#python-language-server

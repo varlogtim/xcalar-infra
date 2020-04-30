@@ -2,7 +2,7 @@
 #
 # Collection of random shell functions
 #
-# shellcheck disable=SC1091,SC2015,SC2086,SC1090,SC2164
+# shellcheck disable=SC1091,SC2015,SC2086,SC1090,SC2164,SC2046,SC2162,SC2038
 
 if [ -z "$XLRINFRADIR" ]; then
     export XLRINFRADIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/".. && pwd)"
@@ -390,15 +390,34 @@ tmpdir_with_cleanup() {
 ## Docker registry API
 ##
 registry_repos() {
-    curl -s https://${REGISTRY:-$DEFAULT_REGISTRY}/v2/_catalog | jq -r '.repositories[]'
+    curl -s https://${REGISTRY:-$DEFAULT_REGISTRY}/v2/_catalog | jq -r '.repositories[]' 2>/dev/null
 }
 
 registry_repo_tags() {
     local repo
     for repo in $(registry_repos); do
-        curl -s https://${REGISTRY:-$DEFAULT_REGISTRY}/v2/${repo}/tags/list | jq -r .
-    done | jq -s -r '.'
+        curl -s https://${REGISTRY:-$DEFAULT_REGISTRY}/v2/"$repo"/tags/list | jq -r . 2>/dev/null
+    done | jq -s -r '.' 2>/dev/null
 }
+
+registry_repo_mf() {
+    local repo="$1" tag="$2"
+    local registry=${REGISTRY:-$DEFAULT_REGISTRY}
+    local v1compat
+    local scheme=https
+    if [[ $registry =~ localhost:5000 ]]; then
+        scheme=http
+    fi
+
+    if v1compat=$(set -o pipefail; curl -fLs ${scheme}://${registry}/v2/"$repo"/manifests/"$tag" | jq -r '.history[0].v1Compatibility'); then
+        if [ "${#v1compat}" -gt 0 ]; then
+            echo "${registry}"/"$repo":"$tag"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 
 ##
 ##
@@ -534,6 +553,7 @@ packer_manifest_all() {
     declare -A names=([amazon-ebs-amzn1]='AMZN1HVM' [amazon-ebs-amzn2]='AMZN2HVM')
     local name artifact_id region
     local tmpdir=$(mktemp -d -t packer.XXXXXX)
+    # shellcheck disable=SC2129,SC2207
     while read name artifact_id; do
         local region_split
         for region_split in ${artifact_id//,/ }; do
@@ -564,6 +584,8 @@ packer_manifest_all() {
 # us-west-2:
 #  amazon-ebs-amzn1: ami-0d3b49b78e43bc5b9
 #  amazon-ebs-amzn2: ami-004b056a4d647b2cf
+#
+# shellcheck disable=SC2207
 packer_manifest_to_yaml() {
     local tmp region builder builders
     tmp=$(mktemp -t packer.XXXXXX)

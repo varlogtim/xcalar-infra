@@ -4,7 +4,40 @@ set -ex
 
 env
 
+
+cloud_id() {
+    local dmi_id='/sys/class/dmi/id/sys_vendor'
+    local vendor cloud=
+
+    if [ -e "$dmi_id" ]; then
+        read -r vendor < "$dmi_id"
+        case "$vendor" in
+            Microsoft\ Corporation) cloud=azure;;
+            Amazon\ EC2) cloud=aws;;
+            Google) cloud=gce;;
+            #VMWare*) cloud=vmware;;
+            #oVirt*) cloud=ovirt;;
+        esac
+    fi
+    echo "$cloud"
+}
+
+imds() {
+    if [ -z "${IMDSV2_TOKEN}" ]; then
+        export IMDSV2_TOKEN=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    fi
+    curl -fsS -H "X-aws-metadata-token: $IMDSV2_TOKEN" "http://169.254.169.254/${1#/}"
+}
+
 get_meta_data() {
+    if [ -n "$CLOUD" ]; then
+        case "$CLOUD" in
+            aws) imds "$1";;
+            gce) curl -H "Metadata-Flavor:Google" -f -sL "http://169.254.169.254/$1";;
+            azure) curl -H 'Metadata:True' -f -sL "http://169.254.169.254/metadata/instance/$1?api-version=2018-02-01&format=text";;
+        esac
+        return $?
+    fi
     local http_code=
     http_code="$(curl -H "Metadata-Flavor:Google" -f -sL "http://169.254.169.254/$1" -w '%{http_code}\n' -o /dev/null)"
     if [ "$http_code" = 200 ]; then
@@ -19,19 +52,25 @@ get_meta_data() {
 get_cloud_cfg() {
     # Check for metadata service
     CLOUD='' INSTANCE_ID='' INSTANCE_TYPE=''
-    if INSTANCE_ID="$(get_meta_data latest/meta-data/instance-id)"; then
-        CLOUD=aws
-        INSTANCE_TYPE="$(get_meta_data latest/meta-data/instance-type)"
-    elif INSTANCE_ID="$(get_meta_data computeMetadata/v1/instance/id)"; then
-        CLOUD=gce
-        INSTANCE_TYPE="$(get_meta_data computeMetadata/v1/instance/machine-type)"
-        INSTANCE_TYPE="${INSTANCE_TYPE##*/}"
-    elif INSTANCE_ID="$(get_meta_data compute/vmId)"; then
-        CLOUD=azure
-        INSTANCE_TYPE="$(get_meta_data compute/vmSize)"
-    else
-        CLOUD= INSTANCE_ID= INSTANCE_TYPE=
-    fi
+    CLOUD=$(cloud_id)
+    case "$CLOUD" in
+        aws)
+            INSTANCE_ID="$(imds latest/meta-data/instance-id)";
+            INSTANCE_TYPE="$(imds latest/meta-data/instance-type)"
+            ;;
+        gce)
+            INSTANCE_ID="$(get_meta_data computeMetadata/v1/instance/id)"
+            INSTANCE_TYPE="$(get_meta_data computeMetadata/v1/instance/machine-type)"
+            INSTANCE_TYPE="${INSTANCE_TYPE##*/}"
+            ;;
+        azure)
+            INSTANCE_ID="$(get_meta_data compute/vmId)"
+            INSTANCE_TYPE="$(get_meta_data compute/vmSize)"
+            ;;
+        *)
+            CLOUD= INSTANCE_ID= INSTANCE_TYPE=
+            ;;
+    esac
     echo CLOUD=$CLOUD
     echo INSTANCE_ID=$INSTANCE_ID
     echo INSTANCE_TYPE=$INSTANCE_TYPE

@@ -11,10 +11,14 @@ MANIFEST=$OUTDIR/packer-manifest.json
 export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
 export PROJECT=${PROJECT:-xdp-awsmp}
 
-git clean -fxd aws packer azure
+if [ -n "$EXECUTOR_NUMBER" ]; then
+    git clean -fxd aws packer azure
+fi
 
 . infra-sh-lib
 . aws-sh-lib
+
+export VAULT_TOKEN=$($XLRINFRADIR/bin/vault-auth-puppet-cert.sh --print-token)
 
 if [ -n "$JENKINS_URL" ]; then
     if test -e .venv/bin/python2; then
@@ -34,14 +38,7 @@ source .venv/bin/activate || die "Failed to activate venv"
 
 test -d "$OUTDIR" || mkdir -p "$OUTDIR"
 
-do_packer() {
-    case "$BUILDER" in
-        amazon-*) CLOUD=aws; CLOUD_STORE=s3;;
-        arm-*|azure-*) CLOUD=azure; CLOUD_STORE=az;;
-        google*) CLOUD=google; CLOUD_STORE=gs;;
-        qemu*) CLOUD=qemu; CLOUD_STORE=;;
-    esac
-
+resolve_installer() {
     if [ -z "$INSTALLER_URL" ]; then
         if [ -d "$INSTALLER" ]; then
             echo "INSTALLER=$INSTALLER is a directory. Looking for an installer."
@@ -56,6 +53,25 @@ do_packer() {
             die "Failed to upload $INSTALLER to $CLOUD_STORE"
         fi
     fi
+    set -a
+    if [ -n "$INSTALLER" ]; then
+        eval "$(installer-version.sh --format=sh --image_build_number=$BUILD_NUMBER "$INSTALLER")"
+    elif [ -n "$INSTALLER_URL" ]; then
+        eval "$(installer-version.sh --format=sh --image_build_number=$BUILD_NUMBER "${INSTALLER_URL%%\?*}")"
+    fi
+    set +a
+}
+
+do_packer() {
+    case "$BUILDER" in
+        amazon-*) CLOUD=aws; CLOUD_STORE=s3;;
+        arm-*|azure-*) CLOUD=azure; CLOUD_STORE=az;;
+        google*) CLOUD=google; CLOUD_STORE=gs;;
+        qemu*) CLOUD=qemu; CLOUD_STORE=;;
+    esac
+
+    resolve_installer
+
     if [ -z "$LICENSE" ]; then
         if [ -z "$LICENSE_FILE" ]; then
             if build_is_rc "$INSTALLER"; then
@@ -75,10 +91,6 @@ do_packer() {
     cd $XLRINFRADIR/packer/aws
     #export INSTALLER_URL=$(installer-url.sh -d s3 $INSTALLER)
     #cfn-flip < $PACKERCONFIG > packer.json
-
-    INSTALLER_VERSION_BUILD=($(version_build_from_filename "$(filename_from_url "$INSTALLER_URL")"))
-    VERSION=${INSTALLER_VERSION_BUILD[0]}
-    RC=${INSTALLER_VERSION_BUILD[2]}
 
     unset INSTALLER
     export INSTALLER_URL
@@ -120,11 +132,17 @@ do_upload_template() {
     cd $XLRINFRADIR/aws/cfn
     local builder osid
     packer_manifest_all $MANIFEST > $OUTDIR/amis.yaml
+    if [ -z "$INSTALLER_TAG" ]; then
+        set -a
+        eval $(installer-version.sh --format=sh "$INSTALLER")
+        set +a
+    fi
     for builder in ${BUILDER//,/ }; do
         osid="${builder##*-}"
-        #if image_id="$(packer_ami_from_manifest ${builder} $MANIFEST)"; then
-        dc2 upload --project ${PROJECT} --manifest $MANIFEST --version ${VERSION} --release ${BUILD_NUMBER}${RELEASE:+.$RELEASE}-${osid} --url-file $OUTDIR/template-${builder}.url
-        #fi
+        dc2 upload --project ${PROJECT} --manifest $MANIFEST \
+            $(installer-version.sh --format=clieq "$INSTALLER") \
+            ${RELEASE:+--release ${RELEASE}} \
+            --url-file $OUTDIR/template-${builder}.url
     done
     )
 }
