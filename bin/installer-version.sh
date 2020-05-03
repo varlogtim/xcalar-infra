@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# shellcheck disable=SC2086,SC2207
+#
+# shellcheck disable=SC2086,SC2207,SC1091
 
 . infra-sh-lib
 
@@ -44,14 +45,17 @@ transform() {
 	${installer_xd_branch:+installer_xd_branch: "'$installer_xd_branch'"}
 	${installer_xd_sha1:+installer_xd_sha1: "'$installer_xd_sha1'"}
 	${image_build_number:+image_build_number: "'$image_build_number'"}
+	${installer_byjob:+installer_byjob: "$installer_byjob"}
 	${release:+release: $release}
 	${product:+product: $product}
+	${license:+license: "'$license'"}
 	${installer_tag:+installer_tag: "'$installer_tag'"}
 	EOF
     case "$FORMAT" in
         yaml|yml) cat "$JSON";;
         json) cat "$JSON";;
         cli) jq -r "to_entries|map(\"--\(.key) \(.value|tostring)\")|.[]" $JSON;;
+        hcvar) jq -r "to_entries|map(\"-var \(.key)=\(.value|tostring)\")|.[]" $JSON;;
         vars) jq -r "to_entries|map(\"--var \(.key)=\(.value|tostring)\")|.[]" $JSON;;
         sh) jq -r "to_entries|map(\"\(.key|ascii_upcase)=\(.value|tostring)\")|.[]" $JSON;;
         *) echo >&2 "ERROR: $0: Unknown format $FORMAT"; return 2;;
@@ -72,6 +76,7 @@ check_build_meta() {
     if full_link=$(readlink -f "$installer"); then
         full_dir="$(dirname $full_link)"
         sha_info="${full_dir}/../BUILD_SHA"
+        installer_byjob="$(grep -Eow 'byJob/([A-Za-z0-9_-]+)' <<< $full_link | sed -r 's@byJob/@@')"
         if test -e "${sha_info}"; then
             XCE=($(head -1 "$sha_info" | awk '{print $1 $2 $3}' | tr '():' ' '))
             XD=($(tail -1 "$sha_info" | awk '{print $1 $2 $3}' | tr '():' ' '))
@@ -79,6 +84,13 @@ check_build_meta() {
             installer_xce_sha1=${XCE[2]}
             installer_xd_branch=${XD[1]}
             installer_xd_sha1=${XD[2]}
+            if [ -z "$installer_rc" ]; then
+                if [[ "$installer_xce_branch" =~ RC([0-9]+) ]]; then
+                    installer_rc="${BASH_REMATCH[1]}"
+                elif [[ "$installer_xd_branch" =~ RC([0-9]+) ]]; then
+                    installer_rc="${BASH_REMATCH[1]}"
+                fi
+            fi
         fi
     fi
 }
@@ -86,8 +98,12 @@ check_build_meta() {
 usage() {
     cat <<-EOF
     usage: $0 [--format=(json|yml|sh)] [--image_build_number=#] ami-id or \
-            /path/to/installeraaa or directly use S3
+            /path/to/installer or directly use S3
 	EOF
+}
+
+load_license() {
+    vault kv get -format=json -field=data secret/xcalar_licenses/cloud | jq -r '{license:.}'
 }
 
 main() {
@@ -100,6 +116,8 @@ main() {
             -h|--help) usage; exit 0;;
             --format=*) FORMAT="${cmd#--format=}";;
             --format) FORMAT="$1"; shift;;
+            --license) LICENSE="$1"; shift;;
+            --license-file) LICENSE="$(cat "$1")"; shift;;
             --image_build_number=*) image_build_number="${cmd#--image_build_number=}";;
             --image_build_number) image_build_number="$1"; shift;;
             -*) die "Unknown command: $cmd";;
@@ -143,8 +161,30 @@ main() {
             *) die "Unknown command: $cmd";;
         esac
     done
+    if [ -z "$LICENSE_DATA" ]; then
+        for ii in license.json license-dev.json license-rc.json; do
+            if test -e $ii; then
+                LICENSE_DATA="$ii"
+                break
+            fi
+        done
+    fi
     if [ -n "$installer_rc" ]; then
-        installer_tag="${installer_version:+$installer_version}${installer_rc:+-RC${installer_rc}}${release:+-$release}"
+        key_type=rc
+    else
+        key_type=dev
+    fi
+
+    if [ -n "$LICENSE" ]; then
+        license="$LICENSE"
+    elif [ -e "$LICENSE_DATA" ]; then
+        license="$(jq -r .license.${key_type} < "$LICENSE_DATA" 2>/dev/null)"
+    else
+        license="$(load_license | jq -r .license.${key_type})"
+    fi
+
+    if [ -n "$installer_rc" ]; then
+        installer_tag="${installer_version:+$installer_version}${installer_build_number:+-$installer_build_number}${installer_rc:+-RC${installer_rc}}${release:+-$release}"
     else
         installer_tag="${installer_version:+$installer_version}${installer_build_number:+-$installer_build_number}${image_build_number:+-$image_build_number}${release:+-$release}"
     fi

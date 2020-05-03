@@ -9,21 +9,36 @@
 #
 #  $ dc2 installer -d s3 --upload /netstore/builds/ReleaseCandidates/xcalar-latest/prod
 #
-# shellcheck disable=SC1091,SC2086,SC2046,SC2155,SC2015
+# shellcheck disable=SC1091,SC2086,SC2046,SC2155,SC2015,SC2034
 
 . infra-sh-lib
 . aws-sh-lib
+
+DC=$(basename $0)
 
 set -euo pipefail
 
 dc2_help() {
     cat << EOF
-    usage: dc2 cmd
+    usage: dc2 [dc2-flags...] cmd [cmd-arguments ...]
 
-    $0 can upload and deploy Cloud resources
+    $DC can upload and deploy cluster resources locally or to cloud
 
-    Parameters:
-    cmd             One of deploy, upload
+    Deploy to container cluster:
+
+    run                 - Run a cluster
+    stop                - Stop
+    start               - Start
+    exec                - Run a command in a container
+    rm                  - Remove
+    ssh                 - SSH
+    load                - Load image
+
+    Deploy to cloud cluster:
+
+    deploy              - CloudFormation Stacks
+    upload              - CloudFormation Templates
+
 EOF
 }
 
@@ -162,8 +177,11 @@ dc2_parse_common() {
     local cmd="$1"
     shift
     case "$cmd" in
-        --debug | -d) DEBUG=1; KEEP=1;;
-        --publishing) PUBLISHING=True;;
+        --debug | -d)
+            DEBUG=1
+            KEEP=1
+            ;;
+        --publishing) PUBLISHING=True ;;
         --project | -p)
             PROJECT="$1"
             #PROJDIR="$(cd $PROJECT && pwd || { cd $TEMPLATEDIR && pwd} )"
@@ -235,7 +253,10 @@ dc2_deploy() {
         fi
         shift
         case "$cmd" in
-            --help | -h) dc2_deploy_help ; exit 0;;
+            --help | -h)
+                dc2_deploy_help
+                exit 0
+                ;;
             --mode)
                 MODE="$1"
                 shift
@@ -272,14 +293,23 @@ dc2_deploy() {
             fi
             ;;
         update)
+            local changeSet changeSetID
             changeSet="${NAME}-$(date +%Y%m%d%H%M%S)"
-            local changeSetID
-            if changeSetID="$(aws cloudformation create-change-set --stack-name "$NAME" --capabilities CAPABILITY_IAM --template-url "${templateUrl}" --parameters "$(cfn-flip < "$PARAMS" | jq -r '.Parameters')" \
-                --change-set-name $changeSet --query 'Id' --output text)"; then
+            if changeSetID="$(aws cloudformation \
+                create-change-set \
+                --stack-name "$NAME" \
+                --capabilities CAPABILITY_IAM \
+                --template-url "${templateUrl}" \
+                --parameters "$(cfn-flip < "$PARAMS" | jq -r '.Parameters')" \
+                --change-set-name $changeSet \
+                --query 'Id' \
+                --output text)"; then
                 until aws cloudformation describe-change-set --change-set-name "$changeSetID"; do
                     sleep 3
                 done
                 aws cloudformation execute-change-set --change-set-name "$changeSetID"
+            else
+                die "Failed to create change set"
             fi
             ;;
         *)
@@ -300,7 +330,10 @@ dc2_upload() {
         fi
         shift
         case "$cmd" in
-            --help | -h) dc2_upload_help ; exit 0;;
+            --help | -h)
+                dc2_upload_help
+                exit 0
+                ;;
             --find-ami) FIND_AMI=1 ;;
             --flavors)
                 FLAVORS="$1"
@@ -334,7 +367,6 @@ dc2_upload() {
 
     GENDIR="$TMPDIR"/gen
     mkdir -p "$GENDIR"/scripts/
-    #cd "$GENDIR" || die "Failed to cd to $GENDIR"
     for ii in "$PROJDIR"/scripts/*; do
         if [[ $ii =~ .j2$ ]]; then
             cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "${J2DEFS[@]}" "$ii" > $GENDIR/scripts/$(basename $ii .j2)
@@ -402,7 +434,7 @@ dc2_upload() {
     else
         ami_id=$(cat "$TMPDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | cfn-flip | jq -r '.ami_'"${AWS_DEFAULT_REGION//-/_}")
         debug "Found AMI: $ami_id"
-        if [ "$ami_id" = null ] || test -z "$ami_id" ; then
+        if [ "$ami_id" = null ] || test -z "$ami_id"; then
             xcalar_latest
             if ! ami_id=$(aws ec2 describe-images --owners self --filters \
                 Name=tag:Version,Values=${VERSION} \
@@ -541,7 +573,13 @@ dc2_main() {
     local cmd="${1:-}"
     shift
     case "$cmd" in
-        --help) dc2_help; exit 0;;
+        --help)
+            dc2_help
+            exit 0
+            ;;
+        run | start | stop | rm | ssh | exec | enter | load)
+            exec -a dc2 /usr/bin/env DC=dc2 dcc "$cmd" "$@"
+            ;;
         deploy)
             dc2_deploy "$@"
             ;;

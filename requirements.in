@@ -11,6 +11,7 @@ cookiecutter
 crcmod
 diceware
 docker
+e2j2
 flake8
 git-review
 jinja2-cli[yaml]

@@ -21,6 +21,4 @@ repos:
     name: Shfmt
     language: system
     types: [shell]
-    entry: bin/shfmt.sh
-    # entry: -i 4 -bn -s -sr -ci -w
-    #    args: ['-i','4','-bn','-s','-sr','-ci','-w']
+    entry: bin/shfmt_w.sh

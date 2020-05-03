@@ -1,0 +1,897 @@
+#!/bin/bash
+#
+# Easily run local Xcalar Clusters
+#
+# Quick start:
+# dcc run -n 3 -i registry.int.xcalar.com/xcalar/xcalar:2.0.5-4246
+#
+# Changes:
+#
+#   5/5/2020: Moved here from xcalar.git repo
+#
+# shellcheck disable=SC2206,SC2207,SC2164,SC2155
+# shellcheck disable=SC2154,SC2028,SC2029
+
+banner() {
+    cat << 'EOF'
+
+                  ____    ____     ____
+                 /\  _`\ /\  _`\  /\  _`\
+                 \ \ \/\ \ \ \/\_\\ \ \/\_\
+                  \ \ \ \ \ \ \/_/_\ \ \/_/_
+                   \ \ \_\ \ \ \L\ \\ \ \L\ \
+                    \ \____/\ \____/ \ \____/
+                     \/___/  \/___/   \/___/
+
+
+      ____    ____    ____    __       _____    __    __
+     /\  _`\ /\  _`\ /\  _`\ /\ \     /\  __`\ /\ \  /\ \
+     \ \ \/\ \ \ \L\_\ \ \L\ \ \ \    \ \ \/\ \\ `\`\\/'/
+      \ \ \ \ \ \  _\L\ \ ,__/\ \ \  __\ \ \ \ \`\ `\ /'
+       \ \ \_\ \ \ \L\ \ \ \/  \ \ \L\ \\ \ \_\ \ `\ \ \
+        \ \____/\ \____/\ \_\   \ \____/ \ \_____\  \ \_\
+         \/___/  \/___/  \/_/    \/___/   \/_____/   \/_/
+
+
+NAME:
+   dcc - Deploy container clusters
+
+USAGE:
+   dcc [global options] command [command options] [arguments...]
+
+EOF
+    #    cat <<EOF
+    #   cluster, r    operate a cluster
+    #   image, i      manage images
+    #   container, c  add a task to the list
+    #   help, h       Shows a list of commands or help for one command
+    #
+    #GLOBAL OPTIONS:
+    #   --config FILE  Load configuration from FILE
+    #   --help, -h     show help (default: false)
+    #
+    #EOF
+}
+
+set -e
+
+DC=${DC:-$(basename $0)}
+
+say() {
+    printf "%s\n" "$1" >&2
+}
+
+die() {
+    say "ERROR: $1"
+    exit 1
+}
+
+cmd_help() {
+    dc2_defaults
+    banner
+    printf 'COMMANDS: '
+    printf '%s ' "${ALLCMDS[*]}"
+    echo
+
+    cat << EOF | sed -n '/^'${1:-.}'/,/^$/p' | sed 's/^/\t/'
+
+run [-t|--tag TAG]
+    [--aws]
+    [--cf-stack-name STACK]
+    [-n|--nodes COUNT ($NODES)]
+    [-s|--share SHARE ($SHARE)]
+    [-i|--image-id IMAGE_ID ($IMAGE_ID)]
+    [--network NETWORK (${CLUSTER}net)]
+    [-c|--cluster CLUSTER ($CLUSTER)]
+    [-p|--port HOSTPORT ($HOSTPORT)]
+    [--config ($CONFIG)]
+    -
+    Run a local cluster of COUNT containers based on IMAGE_ID. The containers are
+    in their own network, names CLUSTER-0, CLUSTER-1 ...
+
+ls [--registry ($REGISTRY)] [--repo ($REPO)]
+    List remote images and tags
+
+pull [partial registry/repo:tag]
+    Pull an image from $REGISTRY/$REPO
+
+rm [--cluster CLUSTER ($CLUSTER)] [-f|--force]
+    Remove all containers of CLUSTER ($CLUSTER)
+
+clean [--cluster CLUSTER ($CLUSTER)] [-f|--force]
+    Remove all containers and volumes from CLUSTER ($CLUSTER)
+
+start [--cluster CLUSTER ($CLUSTER)]
+    Start a stopped cluster
+
+stop [--cluster CLUSTER ($CLUSTER)] [-f|--force]
+
+build [--installer INSTALLER] [--installer-url INSTALLER_URL]
+    Build a new image using specified installer
+
+ps [-c|--cluster cluster (${CLUSTER})]
+    List cluster container instances
+
+ssh [NAME]
+    SSH into the container named NAME. For the default CLUSTER ($CLUSTER), this would be
+
+cssh [-c|--cluster CLUSTER ($CLUSTER)] -- COMMAND
+    Run COMMAND across the entire cluster
+
+exec [node-id or name]
+    Enter or execute a command inside a container
+
+enter [node-id or name]
+    Enter or execute a command inside a container
+
+load FILE
+    Load image from FILE (usually a .tar.gz or tar.bz2).
+
+tour
+    A quick overview of features/commands offered by $DC
+
+EOF
+}
+
+cmd_tour() {
+    cat << EOF
+
+    Quickstart a 3 node cluster on your local machine of build 2.3.0 RC3
+
+    First look for the exact tag of that build using the 'dcc ls' command
+
+        $ dcc ls
+
+    Copy the the full tag (the part after the : colon in the image name), and
+    use the 'dcc run' command with '-n 3' to launch a 3 node cluster using that
+    image.
+
+        $ dcc run -t xcalar/xcalar:2.3.0-4286-RC3 -n 3
+        + Creating 3 node cluster from image registry.int.xcalar.com/xcalar/xcalar:2.3.0-4286-RC3 ...
+        -   xcalar-0 172.20.0.2
+        -   xcalar-1 172.20.0.3
+        -   xcalar-2 172.20.0.4
+        - Starting 3 containers ...Done!
+        - XD: https://yourmachine.int.xcalar.com:8443
+        Time: 00m:03s
+
+    That went by real fast let's tail the logs to make sure it looks ok,
+    pressing Ctrl-C when done.
+
+        $ dcc logs -f
+
+    Try browsing to the URL that got printed when you launched. Xcalar UI
+    should open, default username/pass is 'admin/admin'
+
+    You can enter the container, similar to ssh, but much faster without any
+    ssh keys. Open a shell into node 0.
+
+        $ dcc shell
+
+    While in the container, check out your shared root in /mnt/xcalar, and
+    other familiar config files in /etc/xcalar, /var/opt/xcalar, etc. It's
+    all there. Promise. Try 'sudo yum install -y htop' and running that.
+    You can contact the cluster members by their name while in a container,
+    try pinging them:
+
+        $ ping xcalar-1
+        $ ping xcalar-2
+
+    Type 'exit' to leave the container.
+
+    These are just regular plain docker containers, so you have the full
+    arsenal of docker cli at your disposal. Use docker ps to look at some
+    info on  your cluster.
+
+        $ docker ps --filter label=cluster=xcalar
+        CONTAINER ID        IMAGE                                                  COMMAND             CREATED             STATUS              PORTS                   NAMES
+        917f0c958298        registry.int.xcalar.com/xcalar/xcalar:2.3.0-4286-RC3   "/usr/sbin/init"    2 minutes ago       Up 2 minutes        443/tcp                 xcalar-2
+        89f14c8aa877        registry.int.xcalar.com/xcalar/xcalar:2.3.0-4286-RC3   "/usr/sbin/init"    2 minutes ago       Up 2 minutes        443/tcp                 xcalar-1
+        a184c13a006c        registry.int.xcalar.com/xcalar/xcalar:2.3.0-4286-RC3   "/usr/sbin/init"    2 minutes ago       Up 2 minutes        0.0.0.0:8443->443/tcp   xcalar-0
+
+    When you're done with the cluster, you can stop it or remove it.
+
+        $ dcc stop
+        $ dcc rm -f
+EOF
+}
+
+docker_container_mkip() {
+    local node_id="${1:-0}"
+    local cluster="${2:-$CLUSTER}"
+    echo "${SUBNET%.0}.$((node_id + 2))"
+}
+
+docker_container_ip() {
+    local node_id="${1:-0}" node
+    local cluster="${2:-$CLUSTER}"
+    if node=$(docker ps --filter "label=cluster=$cluster" --filter "label=node-id=$node_id" --format '{{.ID}}' 2> /dev/null); then
+        docker container inspect $node --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2> /dev/null
+    fi
+}
+
+docker_cluster_members() {
+    local cluster="${1:-$CLUSTER}"
+    if members="$(docker ps -a --filter "label=cluster=$cluster" --format '{{.Names}}')"; then
+        if [ -n "$members" ]; then
+            echo $members
+            return 0
+        fi
+        return 1
+    fi
+    return 1
+}
+
+docker_cluster_islocaldeploy() {
+    local node_id="${1:-0}"
+    local cluster="${2:-$CLUSTER}"
+    local node0 localdeploy
+    if node0=$(docker_cluster_node 0); then
+        if localdeploy=$(docker container inspect $node0 --format '{{ $k := index .Config.Labels "localdeploy"}}{{$k}}'); then
+            [ -n "$localdeploy" ] && return 0
+        fi
+    fi
+    return 1
+}
+
+docker_cluster_node() {
+    local node_id="$1" cluster="${2:-$CLUSTER}"
+
+    local -a nodes
+    if ! nodes=($(docker ps --filter "label=cluster=$cluster" ${node_id:+--filter "label=node-id=$node_id"} --format '{{.Names}}' 2> /dev/null)); then
+        say "Failed to get container for cluster=${cluster} node-id=$node_id"
+        return 2
+    fi
+    if [ "${#nodes[@]}" -eq 0 ]; then
+        return 1
+    fi
+    echo "${nodes[@]}"
+}
+
+get_config() {
+    local val
+    if val="$(git config -f "$CONFIG" --get "$1" 2> /dev/null)"; then
+        echo "$val"
+        return 0
+    elif [ -n "${2:-}" ]; then
+        echo "$2"
+        return 0
+    fi
+    return 1
+}
+
+set_config() {
+    git config -f "$CONFIG" "$@"
+}
+
+get_cluster_config() {
+    local var="$1"
+    shift
+    if ! get_config "${CLUSTER}.${var}" "$@"; then
+        get_config "main.${var}"
+    fi
+}
+
+set_cluster_config() {
+    local var="$1"
+    shift
+    set_config "${CLUSTER}.${var}" "$@"
+}
+
+mkconfig() {
+    local cluster="${1:-xcalar}"
+    local xnodes="${2:-1}" node_id xnodes_1
+    xnodes_1=$((xnodes - 1))
+    if [ -e "${TEMPLATE:-}" ]; then
+        cat "$TEMPLATE"
+    else
+        cat <<- EOF
+		// Generated by dcc
+		Constants.XcalarRootCompletePath=/mnt/xcalar
+		Constants.BufferCacheLazyMemLocking=true
+		Constants.SendSupportBundle=false
+		Constants.Cgroups=false
+		Constants.CollectStats=false
+		Thrift.Port=9090
+		Thrift.Host=localhost
+		// --- Start of auto-generated stuff ---
+		// Cluster management stuff. The following has been
+		// auto-generated by docker-cluster
+		EOF
+    fi
+    for node_id in $(seq 0 $xnodes_1); do
+        if [ "$node_id" = 0 ]; then
+            echo "Node.NumNodes=$xnodes"
+        fi
+        echo "Node.${node_id}.IpAddr=$(docker_container_mkip ${node_id})"
+        echo "Node.${node_id}.Port=5000"
+        echo "Node.${node_id}.ApiPort=18552"
+        echo "Node.${node_id}.MonitorPort=8000"
+    done
+}
+
+mkenv() {
+    local -a envlist=()
+    local ii kv key value
+    for ii in "$@"; do
+        value="${ii#*=}"
+        key="${ii%=${value}}"
+        if [ "$key" = "$value" ]; then
+            value="${!key}"
+        fi
+        envlist+=("$key=$value")
+        echo "${key}='${value}'"
+    done
+}
+
+# Returns $1*system-memory
+# pct_memory 50 in a 32g system would return 16g (in kilobytes)
+pct_memory() {
+    awk '/MemTotal/{printf "%.0f\n", $2*'$1'/100}' /proc/meminfo
+}
+
+volume_time() {
+    date -d "$(docker volume inspect ${1:-$SHARE} -f '{{.CreatedAt}}')" +%s 2>/dev/null
+}
+
+dc2_defaults() {
+    SYSTEMD_ARGS=(
+        --security-opt seccomp=unconfined
+        --ulimit core=-1:-1
+        --ulimit nofile=120000:120000
+        --ulimit nproc=140960:140960
+        --ulimit memlock=-1:-1
+        --ulimit stack=-1:-1
+        --cap-add sys_ptrace
+        --cap-add ipc_lock
+        --tmpfs /run
+        --tmpfs /run/lock
+        --stop-signal SIGRTMIN+3
+        -e container=docker
+        -v /sys/fs/cgroup:/sys/fs/cgroup:ro
+        -v /var/run/docker.sock:/var/run/docker.sock
+    )
+    DEFAULT_PATH=/opt/xcalar/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    VOLUMES=()
+    REGISTRY=${REGISTRY:-registry.int.xcalar.com}
+    REPO=${REPO:-xcalar/xcalar}
+    CLUSTER=${CLUSTER:-xcalar}
+    NETWORK="${NETWORK:-$(get_cluster_config network ${CLUSTER}net)}"
+    SUBNET="${SUBNET:-$(get_cluster_config subnet 172.20.0.0)}"
+    CIDR_BITS="${CIDR_BITS:-$(get_cluster_config cidr 24)}"
+    NODES="${NODES:-$(get_cluster_config nodes 3)}"
+    SHARE="${SHARE:-$(get_cluster_config share ${CLUSTER}_root)}"
+    IMAGE_ID="${IMAGE_ID:-$(get_cluster_config image registry.int.xcalar.com/xcalar/xcalar:latest)}"
+    HOSTPORT="${HOSTPORT:-$(get_cluster_config hostport 18443)}"
+    NODE_ID=${NODE_ID:-0}
+    STACK_NAME="${STACK_NAME:-''}"
+}
+
+parse_args() {
+    while [ $# -gt 0 ]; do
+        local cmd="$1"
+        shift
+        case "$cmd" in
+            [0-9]) NODE_ID="$cmd" ;;
+            -h | --help)
+                cmd_help "$@"
+                exit 0
+                ;;
+            -n | --nodes)
+                NODES=$1
+                shift
+                ;;
+            -s | --share)
+                SHARE=$1
+                shift
+                ;;
+            --network)
+                NETWORK=$1
+                shift
+                ;;
+            -i | --image-id)
+                IMAGE_ID="$1"
+                shift
+                ;;
+            --local) LOCALDEPLOY=1 ;;
+            --aws) AWS_PASSTHROUGH=1 ;;
+            --cf-stack-name)
+                STACK_NAME="$1"
+                shift
+                ;;
+            --subnet)
+                SUBNET="$1"
+                shift
+                ;;
+            --cidr)
+                CIDR_BITS="$1"
+                shift
+                ;;
+            -c | --cluster)
+                CLUSTER="$1"
+                shift
+                ;;
+            -p | --port)
+                HOSTPORT="$1"
+                shift
+                ;;
+            -f | --force) FORCE='-f' ;;
+            -v | --volume)
+                VOLUMES+=($1)
+                shift
+                ;;
+            -w | --workdir)
+                WORKDIR="$1"
+                shift
+                ;;
+            -u | --user)
+                CUSER="$1"
+                shift
+                ;;
+            --installer-url)
+                INSTALLER_URL="$1"
+                shift
+                ;;
+            -t | --tag)
+                IMAGE_TAG="$1"
+                shift
+                ;;
+            --template)
+                TEMPLATE="$1"
+                shift
+                ;;
+            --installer)
+                INSTALLER="$1"
+                shift
+                ;;
+            --registry)
+                REGISTRY="$1"
+                shift
+                ;;
+            --repo)
+                REPO="$1"
+                shift
+                ;;
+            --) break ;;
+            -*) die "Unknown argument: $cmd" ;;
+            *)
+                set -- "$cmd" "$@"
+                break
+                ;;
+        esac
+    done
+    if [ -z "${IMAGE_ID:-}" ]; then
+        if [ -n "${IMAGE_TAG:-}" ]; then
+            if [[ $IMAGE_TAG =~ ^([0-9\.]+) ]]; then
+                IMAGE_ID="${REGISTRY}/${REPO}:${IMAGE_TAG}"
+            elif [[ $IMAGE_TAG =~ : ]]; then
+                IMAGE_ID="${REGISTRY}/${IMAGE_TAG}"
+            else
+                IMAGE_ID="${IMAGE_TAG}"
+            fi
+        fi
+    fi
+    dc2_defaults
+}
+
+cmd_tags() {
+    parse_args "$@"
+    say "Tags for ${REGISTRY}/${REPO}:"
+    say ""
+    local tags ii
+    if tags="$(reg tags "${REGISTRY}/${REPO}" 2> /dev/null)"; then
+        for ii in $tags; do
+            echo -e "\t${ii}"
+        done
+    else
+        reg tags "${REGISTRY}/${REPO}"
+    fi
+}
+
+cmd_ps() {
+    parse_args "$@"
+    docker ps -a --filter label=cluster=${CLUSTER}
+}
+
+cmd_ls() {
+    parse_args "$@"
+
+    local tags tag
+    if tags=($(reg ls --skip-ping $REGISTRY 2> /dev/null | grep "^${REPO} " | tr ',' ' ' | tr ' ' '\n' | sed '/^$/d')); then
+        echo -e "Remote tags in $REGISTRY:\n"
+        repo="${tags[0]}"
+        tags=("${tags[@]:1}")
+        for tag in "${tags[@]}"; do
+            if [[ $tag =~ ^[0-9] ]]; then
+                echo -e "\t${repo}:${tag}"
+            fi
+        done | sort -Vr
+    fi
+    local images image
+    if images=($(docker images --filter reference="${REGISTRY}/${REPO}:*" --format '{{.Repository}}:{{.Tag}}')); then
+        if [ "${#images[@]}" -eq 0 ]; then
+            echo -e "\nNo local images\n"
+            return 1
+        fi
+        echo -e "\nLocal images matching ${REGISTRY}/${REPO}:\n"
+        (
+            for image in "${images[@]}"; do
+                (
+                    eval $(docker image inspect "$image" --format '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{println}}{{end}}' | grep -E '^(build|installer)_')
+                    echo -e "\t${image#$REGISTRY/}\t${installer_byjob+job:$installer_byjob }${installer_build_type+type:$installer_build_type }${installer_xce_branch+xce_branch:$installer_xce_branch }${installer_xd_branch:+xd_branch:$installer_xd_branch }"
+                )
+            done
+        ) | column -t
+    fi
+}
+
+cmd_stop() {
+    parse_args "$@"
+
+    #docker ps -a | grep ${CLUSTER}- | awk '{print $1}' | xargs -r docker stop
+    local names name
+    names=($(docker ps -a --filter label="cluster=$CLUSTER" --format '{{.Names}}'))
+    if [ "${#names[@]}" -gt 0 ]; then
+        for name in "${names[@]}"; do
+            local sts
+            if sts="$(docker container inspect $name --format '{{.State.Status}}')"; then
+                echo "- Node $name is $sts"
+                case "$sts" in
+                    created | paused | exited)
+                        echo -e "\t + Skipping $sts node $name"
+                        ;;
+                    running)
+                        echo -e "\t + Stopping $name"
+                        docker stop $name
+                        ;;
+                    *) echo -e "\t ! Skipping $name. Unknown state: $sts" ;;
+                esac
+            fi
+        done
+    else
+        say "- Cluster $CLUSTER has no members"
+    fi
+}
+
+cmd_start() {
+    parse_args "$@"
+    local names name
+    names=($(docker ps -a --filter label="cluster=$CLUSTER" --label='dcc' --format '{{.Names}}'))
+    if [ "${#names[@]}" -gt 0 ]; then
+        for name in "${names[@]}"; do
+            local sts
+            if sts="$(docker container inspect $name --format '{{.State.Status}}')"; then
+                echo "- Node $name is $sts"
+                case "$sts" in
+                    running)
+                        echo -e "\t + Running $name"
+                        ;;
+                    created | paused | exited)
+                        echo -e "\t + Starting $name"
+                        docker start $name > /dev/null
+                        ;;
+                    *)
+                        echo -e "\t ! Skipping $name. Unknown state: $sts"
+                        ;;
+                esac
+            fi
+        done
+    else
+        say "- Cluster $CLUSTER has no members"
+    fi
+}
+
+cmd_rm() {
+    parse_args "$@"
+    local -a names ids
+    ids=($(docker container ls -a --filter label=cluster=${CLUSTER} --format '{{.ID}}'))
+    names=($(docker container ls -a --filter label=cluster=${CLUSTER} --format '{{.Names}}'))
+    if [ "${#ids[@]}" -gt 0 ]; then
+        say "- Removing ${names[*]}"
+        docker rm ${FORCE} "${names[@]}" > /dev/null
+    else
+        say "- Cluster $CLUSTER has no members"
+    fi
+}
+
+cmd_logs() {
+    parse_args "$@"
+    local node0
+    if ! node0=$(docker_cluster_node $NODE_ID); then
+        say "Coudln't find node $NODE_ID. Is a cluster running?"
+        return 1
+    fi
+    docker exec -w /var/log/xcalar -it $node0 bash -c 'tail -F *.log *.out'
+    return 0
+}
+
+cmd_run() {
+    parse_args "$@"
+
+    local existing_cluster
+    if existing_cluster=$(docker_cluster_members $CLUSTER); then
+        say "There's already a running cluster called ${CLUSTER}!"
+        say "Members: $existing_cluster"
+        return 0
+    fi
+    local defaultCfg="${CONFDIR}/${CLUSTER}.default.cfg"
+    local defaultEnv="${CONFDIR}/${CLUSTER}.default.env"
+    local tmpFsPctOfPhysicalMem=$(get_cluster_config shm_pct 70)
+    local tmpFsSizeKb=$(pct_memory $tmpFsPctOfPhysicalMem)
+
+    if ! docker image inspect "$IMAGE_ID" > /dev/null 2>&1 || [[ $IMAGE_ID =~ :latest$ ]]; then
+        if ! docker pull $IMAGE_ID; then
+            die "Failed to pull $IMAGE_ID"
+        fi
+    fi
+    if ! docker run --rm --entrypoint=/bin/bash -u xcalar -v $SHARE:/mnt/xcalar $IMAGE_ID -c 'test -w /mnt/xcalar'; then
+        say "ERROR: Permissions on $SHARE are not allowing xcalar to write to it. Please remove $SHARE"
+        say ""
+        say "       docker volume rm $SHARE"
+        say ""
+        exit 1
+    fi
+    # One time setup per cluster
+    docker network inspect "$NETWORK" > /dev/null 2>&1 \
+        || docker network create --attachable --subnet "${SUBNET}/${CIDR_BITS}" -d bridge $NETWORK
+
+    say "+ Creating ${NODES} node cluster from image ${IMAGE_ID} ..."
+
+    AWS_SUPPORT=()
+    ENVS=()
+    if ((AWS_PASSTHROUGH)); then
+        vault-aws-credentials-provider.sh --ttl 12h -e 2> /dev/null | sed 's/^ //; /export /d' > $CONFDIR/aws.env.tmp \
+            && mv $CONFDIR/aws.env{.tmp,} || true
+        if test -e "$CONFDIR/aws.env"; then
+            set -a
+            source $CONFDIR/aws.env
+            set +a
+        fi
+        AWS_SUPPORT+=(-e WORKBUCKET -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2} -v $CONFDIR/aws:/home/xcalar/.aws:ro)
+        ENVS+=(WORKBUCKET AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN)
+    fi
+    if nc -w 0 0.0.0.0 $HOSTPORT; then
+        say "! WARNING: Desired port on host ($HOSTPORT) is already taken. Opening random port."
+        HTTPS_PORT_MAP="443"
+    else
+        HTTPS_PORT_MAP="${HOSTPORT}:443"
+    fi
+
+    DC_ARGS=(
+        -v ${SHARE}:/mnt/xcalar
+        --memory-swappiness=10
+        --shm-size=${tmpFsSizeKb%.*}k
+        --network $NETWORK
+        -e CLUSTER=$CLUSTER
+        -e XCE_NUMNODES=$NODES
+        -e PATH=$DEFAULT_PATH
+        -e XCE_CONFIG=/etc/xcalar/default.cfg)
+    ENVS+=(CLUSTER=$CLUSTER XCE_NUMNODES=$NODES PATH=$DEFAULT_PATH XCE_CONFIG=/etc/xcalar/default.cfg)
+    if [ -n "${VOLUMES:-}" ]; then
+        local vol
+        for vol in "${VOLUMES[@]}"; do
+            DC_ARGS+=(-v $vol)
+        done
+    fi
+    if ((LOCALDEPLOY)); then
+        DC_ARGS+=(
+            -e XLRDIR=$XLRDIR
+            -e PATH=${XLRDIR:+$XLRDIR/xcve/bin:$XLRDIR/bin:}$DEFAULT_PATH
+            -e XCE_CONFIG=${XCE_CONFIG:-$XLRDIR/src/data/test.cfg}
+        )
+        ENVS+=(XLRDIR=$XLRDIR PATH=${XLRDIR:+$XLRDIR/xcve/bin:$XLRDIR/bin:}$DEFAULT_PATH XCE_CONFIG=${XCE_CONFIG:-$XLRDIR/src/data/test.cfg})
+        REMAP_PROGS=($XLRDIR/bin/usrnode $XLRDIR/bin/childnode $XLRDIR/bin/xcmgmtd $XLRDIR/bin/xcmonitor)
+        for prog in "${REMAP_PROGS[@]}"; do
+            local link
+            link=$(readlink -f $prog)
+            if ! test -e $link; then
+                say "ERROR: $prog doesn't exist"
+                return 1
+            fi
+            DC_ARGS+=(-v $(readlink -f ${prog}):/opt/xcalar/bin/$(basename ${prog}):ro)
+        done
+        DC_ARGS+=(-v ${XLRGUIDIR}/xcalar-gui:/opt/xcalar/xcalar-gui)
+        DC_ARGS+=(-v ${XLRDIR}:${XLRDIR})
+        DC_ARGS+=(--label localdeploy="$XLRDIR")
+    fi
+    LABELS=(
+        --label image-id="${IMAGE_ID}"
+        --label nodes=${NODES}
+        --label cluster=${CLUSTER}
+    )
+    mkenv "${ENVS[@]}" > $defaultEnv
+    mkconfig $CLUSTER $NODES > $defaultCfg
+    DC_ARGS+=(-v $defaultEnv:/etc/default/xcalar:ro)
+    DC_ARGS+=(-v $defaultCfg:/etc/xcalar/default.cfg)
+    local -a cids=()
+    local cid node_id
+    for node_id in $(seq 0 $((NODES - 1))); do
+        local name
+        local ip_address
+        name=${CLUSTER}-${node_id}
+        ip_address=$(docker_container_mkip $node_id)
+        local NODE_ARGS=(--name ${name} --hostname ${name} --ip $ip_address -e XCE_NODEID=$node_id --label node-id=$node_id -p 22)
+        if [ $node_id -eq 0 ]; then
+            NODE_ARGS+=(-p $HTTPS_PORT_MAP -P)
+        fi
+        if ! cid=$(docker create "${NODE_ARGS[@]}" "${LABELS[@]}" "${AWS_SUPPORT[@]}" "${SYSTEMD_ARGS[@]}" "${DC_ARGS[@]}" -- $IMAGE_ID); then
+            say "Failed to create node $node_id"
+            return 1
+        fi
+        say "   - $name $(docker_container_mkip $node_id) ${cid:0:8}"
+        cids+=($cid)
+    done
+
+    printf '%s\n' " + Starting ${#cids[@]} containers ..." >&2
+    docker start "${cids[@]}" > /dev/null
+    local site sqldf
+    site="$(docker port ${cids[0]} 443 | sed 's@0.0.0.0@https://'${HOST:-$(hostname -f)}'@g')"
+    sqldf="$(docker port ${cids[0]} 10000 | sed 's@0.0.0.0@'${HOST:-$(hostname -f)}'@g')"
+    echo "XD: $site"
+    echo "SQL: $sqldf"
+    echo > $SSHCFG
+    for node_id in $(seq 0 $((NODES - 1))); do
+        local name=${CLUSTER}-${node_id}
+        local ip_address
+        ip_address="$(docker_container_mkip $node_id)"
+        local ssh_port
+        if ssh_port=$(docker port ${cids[$node_id]} 22); then
+            ssh_port="${ssh_port#*:}"
+            printf 'Host %s node%d\n\tHostname %s\n\tPort %s\n\n' $name $node_id $ip_address $ssh_port >> $SSHCFG
+        fi
+    done
+    cat >> $SSHCFG << EOF
+
+Host *
+    StrictHostKeyChecking   no
+    UserKnownHostsFile      /dev/null
+    User                    ${SSHUSER:-ec2-user}
+    IdentityFile            $SSHKEY
+    IdentitiesOnly          yes
+EOF
+}
+
+cmd_enter() {
+    [ $# -gt 0 ] || set -- 0 /bin/bash -l
+    local node_id=$1
+    shift
+    docker exec -ti ${CLUSTER:-xcalar}-${node_id:-0} "$@"
+}
+
+cmd_load() {
+    local file
+    for file in "$@"; do
+        say "Loading $file ..."
+        if [[ $file =~ .tar.bz2$ ]]; then
+            pbzip2 -dc "$file" | docker load || die "Failed to load $file"
+        elif [[ $file =~ .tar.gz$ ]]; then
+            pigz -dc "$file" | docker load || die "Failed to load $file"
+        elif [[ $file =~ .tar$ ]]; then
+            docker load < "$file" || die "Failed to load $file"
+        else
+            die "Don't know how to load $file. Use docker load."
+        fi
+        if [ $? -ne 0 ]; then
+            die "Failed to load $file"
+        fi
+    done
+}
+
+cmd_exec() {
+    parse_args "$@"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --)
+                shift
+                break
+                ;;
+        esac
+        shift
+    done
+    local node
+    node=$(docker_cluster_node $NODE_ID)
+    [ $# -gt 0 ] || set -- /bin/bash -l
+    docker exec -it ${CUSER:+-u $CUSER} ${WORKDIR:+-w $WORKDIR} $node "$@"
+}
+
+cmd_shell() {
+    parse_args "$@"
+    local node
+    node=$(docker_cluster_node $NODE_ID)
+    docker exec -it ${CUSER:+-u $CUSER} ${WORKDIR:+-w $WORKDIR} $node /bin/bash -l
+}
+
+cmd_ssh() {
+    parse_args "$@"
+    ssh -F "$SSHCFG" ${CLUSTER}-${NODE_ID}
+}
+
+cmd_build() {
+    parse_args "$@"
+    if [ -z "$INSTALLER" ] && [ -z "$INSTALLER_URL" ]; then
+        die "ERROR: Must specify either --installer or --installer-url"
+    fi
+    if [ -f "$INSTALLER" ] || [ -n "$INSTALLER_URL" ]; then
+        make -C $XLRINFRADIR/packer/docker \
+            INSTALLER="$INSTALLER" \
+            INSTALLER_URL="$INSTALLER_URL"
+        return $?
+    fi
+    die "ERROR: Must specify either --installer or --installer-url"
+    return 1
+}
+
+cmd_clean() {
+    parse_args "$@"
+    say "+ Removing cluster $CLUSTER"
+    local members
+    if members="$(docker_cluster_members)"; then
+        say " - Containers $members"
+        docker rm -f $members
+    fi
+    say " - Shared volume $SHARE"
+    docker volume rm $SHARE 2> /dev/null || true
+    return 0
+}
+
+init() {
+    CONFDIR="${CONFDIR:-$HOME/.config/dcc}"
+    if ! test -d "$CONFDIR"; then
+        mkdir -p "$CONFDIR"
+    fi
+    CONFIG="${CONFIG:-${CONFDIR}/main.ini}"
+    REGISTRY=${REGISTRY:-registry.int.xcalar.com}
+    REPO=${REPO:-xcalar/xcalar}
+    declare -a VOLUMES=()
+    NETSTORE_NFS=${NETSTORE_NFS:-/netstore}
+    NETSTORE_IP=${NETSTORE_IP:-10.10.2.136}
+    DNS1=${DNS1:-10.10.2.136}
+    FORCE=''
+    LOCALDEPLOY=0
+    AWS_PASSTHROUGH=0
+    SSHKEY=${SSHKEY:-$CONFDIR/ssh/id_xctest}
+    SSHCFG=${SSHCFG:-$CONFDIR/ssh/config}
+    touch $CONFIG
+
+    # Generate ssh config file
+    # shellcheck disable=SC2174
+    if ! test -r $SSHKEY && test -e $XLRINFRADIR/docker/ssh/id_xctest; then
+        mkdir -m 0700 -p $(dirname $SSHKEY)
+        cp $XLRINFRADIR/docker/ssh/id_xctest $SSHKEY
+        chmod 0400 $SSHKEY
+    fi
+}
+
+main() {
+    start_time=$(date +%s)
+    init
+    test $# -gt 0 || set -- help
+    if grep -q -- "$1" <<< "${ALLCMDS[@]}"; then
+        CMD="$1"
+        shift
+        if ! cmd_${CMD} "$@"; then
+            die "Failed to run $0 $CMD $*"
+        fi
+        now=$(date +%s)
+        dt=$((now - start_time))
+        say "Time: $(date -d@$dt +'%Mm:%Ss')"
+        exit
+    fi
+    case "$1" in
+        -*)
+            cmd_help >&2
+            die "No command specified"
+            ;;
+        *)
+            cmd_help >&2
+            die "Unknown subcommand \"$1\""
+            ;;
+    esac
+    say "date -d@$dt +'%Mm:%S'"
+}
+
+ALLCMDS=($(grep -Eow '^cmd_([a-z]+)' "${BASH_SOURCE[0]}" | sed 's/^cmd_//' | sort))
+main "$@"
+exit $?
+#__SCRIPT__ENDS__
+__PAYLOAD__STARTS__

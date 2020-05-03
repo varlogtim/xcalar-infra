@@ -1,0 +1,26 @@
+version: '3.7'
+
+volumes:
+  registry:
+  redis:
+
+services:
+  redis:
+    image: redis
+    volumes:
+      - 'redis:/data'
+    ports:
+      - '6379'
+
+  registry:
+    image: registry:2
+    container_name: registry
+    hostname: registry
+    depends_on:
+      - redis
+    volumes:
+      - './config.yml:/etc/docker/registry/config.yml:ro'
+      - 'registry:/var/lib/registry'
+    ports:
+      - '5000:5000'
+      - '5001:5001'
