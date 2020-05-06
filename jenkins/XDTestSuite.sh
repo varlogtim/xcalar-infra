@@ -81,7 +81,11 @@ collectFaildLogs() {
     fi
     cp $TmpCaddyLogs /var/log/xcalar/failedLogs/
 
-    pkill -F $TmpCaddyPid || true
+    if [ -x "${XLRDIR}/bin/caddy.sh" ]; then
+        CADDYHOME="$TmpCaddyDir" "$XLRDIR"/bin/caddy.sh stop
+    else
+        pkill -F $TmpCaddyPid || true
+    fi
 }
 
 onExit() {
@@ -448,22 +452,27 @@ echo "Starting Caddy"
 pkill caddy || true
 TmpCaddyDir=`mktemp -d -t Caddy.XXXXXX`
 TmpCaddy=$TmpCaddyDir/Caddyfile
-TmpCaddyLogs=$TmpCaddyDir/CaddyLogs.log
-TmpCaddyPid=$TmpCaddyDir/caddy.pid
 cp $XLRDIR/conf/Caddyfile "$TmpCaddy"
 sed -i -e 's!/var/www/xcalar-gui!'$XLRGUIDIR'/'$GUI_FOLDER'!g' "$TmpCaddy"
 # strip out the jwt settings for testing (for now) to allow unauthenticated access
 sed -i -e '/jwt {/,/}/d' "$TmpCaddy"
 sed -i 's@{\$XCE_LOGDIR}@'${TmpCaddyDir}'@' "$TmpCaddy"
 sed -i 's/log .*$/log stdout/; s/errors .*$/errors stderr/' "$TmpCaddy"
-echo "Caddy logs at $TmpCaddyLogs"
-cd $TmpCaddyDir
-caddy -pidfile $TmpCaddyPid >"$TmpCaddyLogs" 2>&1 </dev/null &
-cd - >/dev/null
-caddyPid=$!
-echo "Caddy pid $caddyPid running in $TmpCaddyDir. Pidfile=$TmpCaddyPid ($(cat $TmpCaddyPid))"
-sleep 5
 
+if [ -x "${XLRDIR}/bin/caddy.sh" ]; then
+    CADDYHOME="$TmpCaddyDir" "$XLRDIR"/bin/caddy.sh start -c "$TmpCaddy" -p 8443
+    TmpCaddyLogs="$TmpCaddyDir/caddy*.log"
+else
+    TmpCaddyLogs=$TmpCaddyDir/CaddyLogs.log
+    TmpCaddyPid=$TmpCaddyDir/caddy.pid
+    echo "Caddy logs at $TmpCaddyLogs"
+    cd $TmpCaddyDir
+    caddy -pidfile $TmpCaddyPid -https-port 8443 >"$TmpCaddyLogs" 2>&1 </dev/null &
+    cd - >/dev/null
+    caddyPid=$!
+    echo "Caddy pid $caddyPid running in $TmpCaddyDir. Pidfile=$TmpCaddyPid ($(cat $TmpCaddyPid))"
+fi
+sleep 5
 
 if [ $JOB_NAME = "XDEndToEndTest" ]; then
     cd $XLRGUIDIR/assets/dev/e2eTest
@@ -513,8 +522,13 @@ elif [ $JOB_NAME = "XDFuncTest" ]; then
 fi
 
 
-pkill -F $TmpCaddyPid | true
-kill -TERM $caddyPid || true
+if [ -x "${XLRDIR}/bin/caddy.sh" ]; then
+    CADDYHOME="$TmpCaddyDir" "$XLRDIR"/bin/caddy.sh stop
+else
+    pkill -F $TmpCaddyPid || true
+    kill -TERM $caddyPid || true
+fi
+sudo unlink /var/www/xcalar-gui || true
 
 if [ "$useXc2" == "true" ]; then
     xc2 cluster stop
