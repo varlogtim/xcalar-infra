@@ -18,7 +18,7 @@ UUID := $(shell uuidgen)
 CHANGE_SET = mychange-$(UUID)
 NAME := $(shell id -un)
 STACK_NAME = $(NAME)-instamart
-BASEURL := $(shell baseurl.sh `img2json.sh --format=cli $(AMI_ID)` --env $(ENVIRONMENT) --project $(PROJECT))
+BASEURL := $(shell baseurl.sh `installer-version.sh --format=cli $(AMI_ID)` --env $(ENVIRONMENT) --project $(PROJECT))
 
 all: check
 
@@ -70,7 +70,7 @@ lambda.zip: lambda/schedule.py lambda/add_notification.py lambda/requirements.tx
 upload: lambda.zip
 	MD5=`md5sum $< | cut -c1-16`; for region in us-west-2 us-east-1 us-east-2 us-west-1; do aws s3 cp $(S3FLAGS) $< s3://$(LAMBDA_BUCKET)-$${region}/$(PROJECT)/$${MD5}.zip; done \
         && sed -i 's@S3Key: xdp.*$$@S3Key: $(PROJECT)/'$${MD5}'.zip@' stepfun.template.j2
-	dc2 upload --debug --keep --project $(PROJECT) --env $(ENVIRONMENT) --manifest $(XLRINFRADIR)/output/packer-manifest.json `img2json.sh --format=cli $(AMI_ID)` --url-file $(URL)
+	dc2 upload --debug --keep --project $(PROJECT) --env $(ENVIRONMENT) --manifest $(XLRINFRADIR)/output/packer-manifest.json `installer-version.sh --format=cli $(AMI_ID)` --url-file $(URL)
 
 STACK_CHANGE = --stack-name $(STACK_NAME) --change-set-name $(CHANGE_SET)
 create: check upload
