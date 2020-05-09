@@ -205,10 +205,10 @@ restartXcalar() {
         startMsg="usrnode --nodeId"
         statusCmd="systemctl status xcalar-usrnode.service"
     fi
+    clusterSsh "$cluster" "sudo systemctl start xcalar" 2>&1
     local host
     for host in "${clusterHosts[@]}"; do
-        nodeSsh "$cluster" "$host" "sudo systemctl start xcalar" 2>&1
-        local ret=$?
+        local ret=1
         local numRetries=3600
         local try=0
         while [ $ret -ne 0 -a "$try" -lt "$numRetries" ]; do
@@ -218,12 +218,13 @@ restartXcalar() {
             try=$(( $try + 1 ))
         done
         if [ $ret -eq 0 ]; then
-            echo "All nodes ready"
+            echo "Node $host ready"
         else
             echo "Error while waiting for node $ii to come up"
             return 1
         fi
     done
+    echo "All nodes ready"
     set -e
 }
 
