@@ -47,8 +47,16 @@ pip() {
      trace $VIRTUAL_ENV/bin/python -m pip "$@"
 }
 
+newvenv() {
+    /opt/xcalar/bin/python3.6 -m venv $1 >&2 \
+    && . $1/bin/activate >&2 \
+    && $1/bin/python -m pip install -U pip >&2 \
+    && $1/bin/python -m pip install -U setuptools wheel pip-tools >&2 \
+    && echo "$1"
+}
+
+
 do_bundle() {
-    deactivate 2> /dev/null || true
     ARGS=()
     if [ $# -eq 0 ]; then
         if test -e requirements.txt; then
@@ -58,15 +66,14 @@ do_bundle() {
             ARGS+=(-c constraints.txt);
         fi
     fi
-    if test -d /netstore/infra; then
-        ARGS+=(--find-links file:///netstore/infra/wheels --trusted-host netstore)
+    if test -d /netstore/infra/wheels; then
+        ARGS+=(--find-links http://netstore.int.xcalar.com/infra/wheels/index.html --find-links file:///netstore/infra/wheels --trusted-host netstore --trusted-host netstore.int.xcalar.com)
     fi
 
     deactivate 2>/dev/null || true
-    VIRTUAL_ENV=$TMPDIR/venv
-    /opt/xcalar/bin/python3.6 -m venv $VIRTUAL_ENV --clear
-    pip install -U pip setuptools wheel
-    pip wheel -w "$WHEELS" "${ARGS[@]}" pip setuptools wheel
+    VENV=$TMPDIR/venv
+    newvenv "$VENV"
+    . $VENV/bin/activate
     pip wheel -w "$WHEELS" "${ARGS[@]}" "$@"
 }
 
@@ -96,8 +103,6 @@ main() {
     mkdir -p $TMPDIR/wheels $TMPDIR/cache
     rm -rf $TMPDIR/venv
 
-    req='requirements.txt'
-    con='constraints.txt'
     output='pip-bundler.tar.gz'
     while [ $# -gt 0 ]; do
         local cmd="$1"
@@ -116,6 +121,29 @@ main() {
                ;;
         esac
     done
+    output="$(readlink -f $output)"
+    if [ -z "${req:-}" ]; then
+        if test -e "requirements.txt"; then
+            req=requirements.txt
+        elif test -e "requirements.in"; then
+            req=requirements.in
+        else
+            die "Must provide -r requirements.txt or .in"
+        fi
+    fi
+    if [[ $req =~ .in$ ]]; then
+        (
+        VENV=$(mktemp -d -t venv.XXXXXX)
+        newvenv $VENV
+        . $VENV/bin/activate
+        pip-compile -o $(basename $req .in)_constraints.txt $req
+        rm -rf $VENV
+        )
+    fi
+
+    if [ -z "${con:-}" ]; then
+        test -e "constraints.txt" && con=constraints.txt || con=''
+    fi
 
     if [ $((BUNDLE + INSTALL)) != 1 ]; then
         die 2 "Must specify 'bundle' or 'INSTALL'"
@@ -132,17 +160,27 @@ main() {
     elif ((BUNDLE)); then
         PACKAGES=$TMPDIR/packages
         WHEELS=$TMPDIR/wheels
-        mkdir -p "$PACKAGES" "$WHEELS"
+        rm -rf "$WHEELS" "$PACKAGES"
+        mkdir -p "$WHEELS"
         info "Building packages from $req ..."
         #----
         cp ${BASH_SOURCE[0]} $TMPDIR/install.sh
         sort $req > $TMPDIR/requirements.txt
-        if [ -e "$con" ]; then cp $con $TMPDIR/constraints.txt; fi
-        do_bundle -r $TMPDIR/requirements.txt -c ${TMPDIR}/constraints.txt
+        if [ -e "$con" ]; then
+            cp $con $TMPDIR/constraints.txt
+        fi
+        echo >&2 "Bundling via $* -r $TMPDIR/requirements.txt ${con:+-c ${TMPDIR}/constraints.txt}"
+        do_bundle "$@" -r $TMPDIR/requirements.txt ${con:+-c ${TMPDIR}/constraints.txt}
         echo >&2 "Creating $output ..."
-        tar caf "$output" --owner=root --group=root -C "${TMPDIR}" install.sh requirements.txt constraints.txt wheels
+        rm -vf "${output}"
+        if [[ $output =~ .zip$ ]]; then
+            (cd $TMPDIR && zip -7r "${output}" install.sh requirements.txt ${con:+constraints.txt} wheels)
+        else
+            tar caf "$output" --owner=root --group=root -C "${TMPDIR}" install.sh requirements.txt ${con:+constraints.txt} wheels
+        fi
     fi
 }
+
 
 main "$@"
 exit
