@@ -102,7 +102,7 @@ class XDUnitTestCoverageAggregator(JenkinsAggregatorBase):
         self.artifacts_root = cfg.get("XD_UNIT_TEST_ARTIFACTS_ROOT")
         super().__init__(job_name=job_name)
 
-    def update_build(self, *, bnum, jbi, log):
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Return coverage info for a specific build.
         """
@@ -166,7 +166,7 @@ class XDUnitTestCoverageData(object):
         "/ts/components/sql/workspace/SQLWorkSpace.js"]}
 
 
-    def __init__(self, *, jenkins_host):
+    def __init__(self):
 
         self.logger = logging.getLogger(__name__)
         cfg = EnvConfiguration(XDUnitTestCoverageData.ENV_PARAMS)
@@ -175,7 +175,7 @@ class XDUnitTestCoverageData(object):
         # XXXrs - This is clunky!
         # XXXrs - This should NOT communicate directly to the DB, but
         #         should go through a REST client
-        db = JenkinsMongoDB(jenkins_host=jenkins_host).jenkins_db()
+        db = JenkinsMongoDB().jenkins_db()
         self.data = JenkinsJobDataCollection(job_name=job_name, db=db)
         self.meta = JenkinsJobMetaCollection(job_name=job_name, db=db)
 
@@ -281,7 +281,7 @@ if __name__ == '__main__':
     parser.add_argument("--bnum", help="build number", required=True)
     args = parser.parse_args()
 
-    data = XDUnitTestCoverageData(jenkins_host="jenkins.int.xcalar.com") # XXXrs
+    data = XDUnitTestCoverageData()
     for fname in data.filenames(bnum=args.bnum, group_name="Critical Files"):
         coverage = data.coverage(bnum=args.bnum, filename=fname)
         if coverage is not None:

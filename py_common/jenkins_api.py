@@ -63,10 +63,10 @@ class JenkinsApiError(Exception):
     pass
 
 class JenkinsREST(object):
-    def __init__(self, *, jenkins_host):
+    def __init__(self, *, host):
         self.logger = logging.getLogger(__name__)
-        self.jenkins_host = jenkins_host
-        self.url_root="https://{}".format(jenkins_host)
+        self.host = host
+        self.url_root="https://{}".format(host)
 
     def cmd(self, *, uri):
         url = "{}{}".format(self.url_root, uri)
@@ -107,22 +107,37 @@ class JenkinsBuildInfo(object):
     repo_from_branch_key_pat = re.compile(r"\A(.*)_GIT_BRANCH\Z")
     commit_sha_pat = re.compile(r"\A[0-9a-f]{40}\Z")
 
-    def __init__(self, *, job_name, build_number, japi):
+    def __init__(self, *, job_name, build_number, japi, test_data=None):
         self.logger = logging.getLogger(__name__)
         self.job_name = job_name
         self.build_number = build_number
         self.japi = japi
+        self.test_data = test_data
         self.load()
 
     def load(self):
-        self.data = self.japi.get_build_data(
+        if self.test_data:
+            self.logger.info("test_data: {}".format(self.test_data))
+        try:
+            self.data = self.japi.get_build_data(
                                 job_name = self.job_name,
                                 build_number = self.build_number)
+            if not self.data:
+                self.logger.info("no build data returned, using test data")
+                self.data = self.test_data
+        except Exception as e:
+            if not self.test_data:
+                raise e from None
+            self.logger.info("exception getting build data, using test data")
+            self.data = self.test_data
+
         if not self.data:
             err = "no data for job: {} build: {}"\
                   .format(self.job_name, self.build_number)
             self.logger.error(err)
             raise JenkinsApiError(err)
+
+        self.logger.debug("self.data: {}".format(self.data))
 
     def is_done(self):
         """
@@ -225,10 +240,10 @@ class JenkinsBuildInfo(object):
 
 
 class JenkinsApi(object):
-    def __init__(self, *, jenkins_host):
+    def __init__(self, *, host):
         self.logger = logging.getLogger(__name__)
-        self.jenkins_host = jenkins_host
-        self.rest = JenkinsREST(jenkins_host=jenkins_host)
+        self.host = host
+        self.rest = JenkinsREST(host=host)
         self.job_info_cache = {}
         self.build_info_cache = {}
 
@@ -277,7 +292,7 @@ class JenkinsApi(object):
             return None
         return json.loads(text)
 
-    def get_build_info(self, *, job_name, build_number):
+    def get_build_info(self, *, job_name, build_number, test_data=None):
         """
         Return JenkinsBuildInfo instance.  Uses REST API.
         and refresh the cache.
@@ -289,7 +304,8 @@ class JenkinsApi(object):
             return jbi
         jbi = JenkinsBuildInfo(job_name=job_name,
                                build_number=build_number,
-                               japi=self)
+                               japi=self,
+                               test_data=test_data)
         self.build_info_cache[key] = jbi
         self.logger.debug("return info: {}".format(jbi))
         return jbi
@@ -308,7 +324,7 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    japi = JenkinsApi(jenkins_host=cfg.get('JENKINS_HOST'))
+    japi = JenkinsApi(host=cfg.get('JENKINS_HOST'))
 
     jobs = japi.list_jobs()
     print("All jobs: {}".format(jobs))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2019 Xcalar, Inc. All rights reserved.
+# Copyright 2019-2020 Xcalar, Inc. All rights reserved.
 #
 # No use, or distribution, of this source code is permitted in any form or
 # means without a valid, written license agreement with Xcalar, Inc.
@@ -455,7 +455,7 @@ class ClangCoverageAggregator(JenkinsAggregatorBase):
         self.artifacts_root = artifacts_root
         super().__init__(job_name=job_name)
 
-    def update_build(self, *, bnum, jbi, log):
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Read the coverage.json file and convert to our preferred index form,
         filtering for only files of interest (plus totals).

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2019 Xcalar, Inc. All rights reserved.
+# Copyright 2019-2020 Xcalar, Inc. All rights reserved.
 #
 # No use, or distribution, of this source code is permitted in any form or
 # means without a valid, written license agreement with Xcalar, Inc.
@@ -221,10 +221,29 @@ class MongoDBKeepAliveLock(object):
             raise MongoDBKALockUnlockFail(err)
 
 
+class JenkinsMongoDBMissingNameError(Exception):
+    pass
+
+
 class JenkinsMongoDB(object):
 
-    def __init__(self, *, jenkins_host):
-        self._db_name = "{}".format(jenkins_host).replace('.', '_')
+    ENV_CONFIG = {'JENKINS_HOST':    {'required': False},
+                  'JENKINS_DB_NAME': {'required': False}}
+
+    def __init__(self):
+        cfg = EnvConfiguration(JenkinsMongoDB.ENV_CONFIG)
+        # Explicitly pass a DB name to override the default based
+        # on the Jenkins hostname.  Useful for test/debug.
+        db_name = cfg.get('JENKINS_DB_NAME')
+        if db_name is None:
+            # Default DB name is the Jenkins host name
+            db_name = cfg.get('JENKINS_HOST')
+        if db_name is None:
+            raise JenkinsMongoDBMissingNameError("no JENKINS_DB_NAME or JENKINS_HOST")
+
+        # If we're using a host name, it's gonna have dots, so
+        # replace with underscore to make a safe MongoDB name.
+        self._db_name = "{}".format(db_name).replace('.', '_')
         self._db = None
 
     def jenkins_db(self):

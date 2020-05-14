@@ -75,17 +75,6 @@ class JenkinsAllJobIndex(object):
             except DuplicateKeyError as e:
                 self.logger.error("builds_by_time duplicate {}".format(job_entry))
 
-            if built_on is not None:
-                coll = self.jmdb.builds_by_time_collection(time_ms=start_time_ms)
-                coll.create_index([('job_name', pymongo.ASCENDING),
-                                   ('build_number', pymongo.ASCENDING)],
-                                  unique=True)
-                try:
-                    coll.insert(job_entry)
-                except DuplicateKeyError as e:
-                    self.logger.error("host {} _builds_by_time duplicate {}"
-                                      .format(built_on, job_entry))
-
         # Downstream Jobs
         coll = self.jmdb.downstream_jobs()
         down_key = "{}:{}".format(job_name, bnum)
@@ -452,7 +441,7 @@ class JenkinsAggregatorBase(ABC):
         self.send_log_to_update = send_log_to_update
 
     @abstractmethod
-    def update_build(self, *, bnum, jbi, log):
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Aggregate and return build-related data and meta-data.
         Every aggregator must implement the update_build() method.
@@ -478,22 +467,16 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
     def __init__(self, *, jenkins_host, job_name):
         super().__init__(job_name=job_name)
         self.logger = logging.getLogger(__name__)
-        self.japi = JenkinsApi(jenkins_host=jenkins_host)
-        self.jbi_by_bnum = {}
+        self.japi = JenkinsApi(host=jenkins_host)
 
-    def build_info(self, *, bnum):
-        jbi = self.jbi_by_bnum.get(bnum, None)
-        if jbi:
-            return jbi
-        jbi = self.japi.get_build_info(job_name = self.job_name,
-                                       build_number = bnum)
-        self.jbi_by_bnum[bnum] = jbi
-        return jbi
-
-    def update_build(self, *, bnum, jbi, log):
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
 
         self.logger.debug("start bnum: {}".format(bnum))
         rtn = {}
+        if jbi is None:
+            self.logger.error("no build info passed, so return empty")
+            return rtn
+
         try:
             # This is the "standard" set of job data.
             # Note that the JenkinsAllJobIndex class counts
@@ -507,7 +490,7 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
             upstream = jbi.upstream()
             if upstream:
                 rtn['upstream'] = upstream
-            self.jbi = jbi
+
         except Exception as e:
             self.logger.exception("failed to get build info")
             raise JenkinsAggregatorDataUpdateTemporaryError("try again") from None
@@ -535,7 +518,7 @@ class JenkinsPostprocessorBase(ABC):
         self.job_name = job_name
 
     @abstractmethod
-    def update_job(self):
+    def update_job(self, *, test_mode=False):
         """
         Post-process and return any result data structure.
         Every post-processor must implement the update_job method.
@@ -560,8 +543,8 @@ class JenkinsJobPostprocessor(JenkinsPostprocessorBase):
     def __init__(self, *, jenkins_host, job_name):
         super().__init__(name="default_postprocessor", job_name=job_name)
         self.logger = logging.getLogger(__name__)
-        self.japi = JenkinsApi(jenkins_host=jenkins_host)
-        self.jmdb = JenkinsMongoDB(jenkins_host=jenkins_host)
+        self.japi = JenkinsApi(host=jenkins_host)
+        self.jmdb = JenkinsMongoDB()
         self.alljob = JenkinsAllJobIndex(jmdb=self.jmdb)
 
     def _job_stats(self, *, builds):
@@ -596,7 +579,10 @@ class JenkinsJobPostprocessor(JenkinsPostprocessorBase):
         rtn['pass_pct'] = (pass_cnt/(pass_cnt+fail_cnt))*100
         return rtn
 
-    def update_job(self):
+    def update_job(self, *, test_mode=False):
+        """
+        N.B. test_mode is ignored
+        """
         self.logger.info("start job_name: {}".format(self.job_name))
         bch = {} # build count history
         pph = {} # pass percentage history
@@ -689,8 +675,7 @@ class PostprocessorPlugins(Plugins):
 if __name__ == '__main__':
     print("Compile check A-OK!")
 
-    cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
-                            'JENKINS_HOST': {'default': 'jenkins.int.xcalar.com'}})
+    cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 
     # It's log, it's log... :)
     logging.basicConfig(
@@ -699,7 +684,7 @@ if __name__ == '__main__':
                     handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    jmdb = JenkinsMongoDB(jenkins_host=cfg.get('JENKINS_HOST'))
+    jmdb = JenkinsMongoDB()
     logger.info('jmdb: {}'.format(jmdb))
     alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
     logging.info(alljob_idx)

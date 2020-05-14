@@ -320,7 +320,7 @@ class SqlPerfResultsAggregator(JenkinsAggregatorBase):
         self.artifacts_root = cfg.get('SQL_PERF_ARTIFACTS_ROOT')
         super().__init__(job_name=job_name)
 
-    def update_build(self, *, bnum, jbi, log):
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
         try:
             dir_path=os.path.join(self.artifacts_root, self.job_name, bnum)
             results = SqlPerfResults(bnum=bnum, dir_path=dir_path)
@@ -357,8 +357,7 @@ class SqlPerfResultsAggregator(JenkinsAggregatorBase):
 
 class SqlPerfResultsData(object):
 
-    ENV_PARAMS = {"SQL_PERF_JOB_NAME": {"default": "SqlScaleTest"},
-                  "JENKINS_HOST": {"required": True}}
+    ENV_PARAMS = {"SQL_PERF_JOB_NAME": {"default": "SqlScaleTest"}}
 
     def __init__(self):
         """
@@ -370,7 +369,7 @@ class SqlPerfResultsData(object):
         self.logger = logging.getLogger(__name__)
         cfg = EnvConfiguration(SqlPerfResultsData.ENV_PARAMS)
         self.job_name = cfg.get("SQL_PERF_JOB_NAME")
-        jdb = JenkinsMongoDB(jenkins_host=cfg.get("JENKINS_HOST")).jenkins_db()
+        jdb = JenkinsMongoDB().jenkins_db()
         self.data = JenkinsJobDataCollection(job_name=self.job_name, db=jdb)
         self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=jdb)
         self.results_cache = {}

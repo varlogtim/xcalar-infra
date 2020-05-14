@@ -45,7 +45,7 @@ cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
 jenkins_host = cfg.get('JENKINS_HOST')
-jmdb = JenkinsMongoDB(jenkins_host=jenkins_host)
+jmdb = JenkinsMongoDB()
 jdb = jmdb.jenkins_db()
 
 methods=['GET']

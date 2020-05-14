@@ -7,8 +7,8 @@ COPY sql_perf/grafana/requirements.txt /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Environment configuration override as needed...
-ENV LOG_LEVEL=INFO
-ENV JENKINS_HOST=jenkins.int.xcalar.com
+ENV LOG_LEVEL="INFO"
+ENV JENKINS_HOST="jenkins.int.xcalar.com"
 
 # Flask app needs to be in main.py for NGINX container
 COPY sql_perf/grafana/sql_perf_datasource.py /app/main.py

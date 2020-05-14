@@ -8,6 +8,11 @@
 # regarding the use and redistribution of this software.
 
 import logging
+import os
+import sys
+
+if __name__ == '__main__':
+    sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
 
@@ -33,7 +38,7 @@ class ExampleAggregator(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
 
 
-    def update_build(self, *, bnum, jbi, log):
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Aggregate and return build-related data and meta-data.
         Every aggregator must implement the update_build() method.
