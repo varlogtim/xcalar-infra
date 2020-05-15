@@ -19,6 +19,7 @@ jupyterlab
 notebook
 pip-tools
 pre-commit
+#ptvsd
 pylint
 pytest
 pytest-benchmark

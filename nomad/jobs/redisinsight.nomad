@@ -23,7 +23,9 @@ job "redisinsight" {
 
       config {
         image       = "redislabs/redisinsight:latest"
+        force_pull  = true
         dns_servers = ["10.10.2.136"]
+
         port_map {
           http = 8001
         }
@@ -52,4 +54,3 @@ job "redisinsight" {
     }
   }
 }
-
