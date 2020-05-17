@@ -5,6 +5,7 @@
 *.img
 *.tmp
 .venv
+.shadow
 .direnv
 packer_cache/
 box/

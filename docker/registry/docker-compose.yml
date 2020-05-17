@@ -11,6 +11,10 @@ networks:
 services:
   redis:
     image: redis:6
+    restart: unless-stopped
+    networks:
+      xcalarnet:
+        ipv4_address: 172.20.0.250
     networks:
       - xcalarnet
     volumes:
@@ -20,8 +24,12 @@ services:
 
   registry:
     image: registry:2
+    restart: unless-stopped
     container_name: registry
     hostname: registry
+    networks:
+      xcalarnet:
+        ipv4_address: 172.20.0.249
     depends_on:
       - redis
     networks:

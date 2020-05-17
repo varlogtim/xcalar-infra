@@ -312,7 +312,7 @@ mkconfig() {
 
 mkenv() {
     local -a envlist=()
-    local ii kv key value
+    local ii key value
     for ii in "$@"; do
         value="${ii#*=}"
         key="${ii%=${value}}"
@@ -352,7 +352,6 @@ dc2_defaults() {
         -v /var/run/docker.sock:/var/run/docker.sock
     )
     DEFAULT_PATH=/opt/xcalar/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    VOLUMES=()
     REGISTRY=${REGISTRY:-registry.int.xcalar.com}
     REPO=${REPO:-xcalar/xcalar}
     CLUSTER=${CLUSTER:-xcalar}
@@ -372,6 +371,8 @@ parse_args() {
         local cmd="$1"
         shift
         case "$cmd" in
+            xcalar-[0-9]) NODE_ID="${cmd#xcalar-}";;
+            $CLUSTER-[0-9]) NODE_ID="${cmd#${CLUSTER}-}";;
             [0-9]) NODE_ID="$cmd" ;;
             -h | --help)
                 cmd_help "$@"
@@ -511,7 +512,7 @@ cmd_ls() {
     if images=($(docker images --filter reference="${REGISTRY}/${REPO}:*" --format '{{.Repository}}:{{.Tag}}')); then
         if [ "${#images[@]}" -eq 0 ]; then
             echo -e "\nNo local images\n"
-            return 1
+            return 0
         fi
         echo -e "\nLocal images matching ${REGISTRY}/${REPO}:\n"
         (
@@ -531,23 +532,28 @@ cmd_stop() {
     #docker ps -a | grep ${CLUSTER}- | awk '{print $1}' | xargs -r docker stop
     local names name
     names=($(docker ps -a --filter label="cluster=$CLUSTER" --format '{{.Names}}'))
-    if [ "${#names[@]}" -gt 0 ]; then
+    if [ $? -eq 0 ] && [ "${#names[@]}" -gt 0 ]; then
+        local -a stop=()
         for name in "${names[@]}"; do
             local sts
             if sts="$(docker container inspect $name --format '{{.State.Status}}')"; then
-                echo "- Node $name is $sts"
                 case "$sts" in
                     created | paused | exited)
-                        echo -e "\t + Skipping $sts node $name"
+                        echo "! Skipping $node as it is in $sts state"
                         ;;
                     running)
-                        echo -e "\t + Stopping $name"
-                        docker stop $name
+                        stop+=($name)
                         ;;
-                    *) echo -e "\t ! Skipping $name. Unknown state: $sts" ;;
+                    *) echo "! Skipping $name. Unknown state: $sts" ;;
                 esac
             fi
         done
+        if [ "${#stop[@]}" -gt 0 ]; then
+            say "- Stopping ${stop[*]} ..."
+            docker stop "${stop[@]}"
+        else
+            say "- All members already stopped"
+        fi
     else
         say "- Cluster $CLUSTER has no members"
     fi
@@ -556,8 +562,9 @@ cmd_stop() {
 cmd_start() {
     parse_args "$@"
     local names name
-    names=($(docker ps -a --filter label="cluster=$CLUSTER" --label='dcc' --format '{{.Names}}'))
+    names=($(docker ps -a --filter label="cluster=$CLUSTER" --format '{{.Names}}'))
     if [ "${#names[@]}" -gt 0 ]; then
+        local -a start=()
         for name in "${names[@]}"; do
             local sts
             if sts="$(docker container inspect $name --format '{{.State.Status}}')"; then
@@ -567,8 +574,7 @@ cmd_start() {
                         echo -e "\t + Running $name"
                         ;;
                     created | paused | exited)
-                        echo -e "\t + Starting $name"
-                        docker start $name > /dev/null
+                        start+=($name)
                         ;;
                     *)
                         echo -e "\t ! Skipping $name. Unknown state: $sts"
@@ -576,6 +582,10 @@ cmd_start() {
                 esac
             fi
         done
+        if [ "${#start[@]}" -gt 0 ]; then
+            say "- Starting ${start[*]} ..."
+            docker start "${start[@]}"
+        fi
     else
         say "- Cluster $CLUSTER has no members"
     fi
@@ -624,33 +634,49 @@ cmd_run() {
             die "Failed to pull $IMAGE_ID"
         fi
     fi
-    if ! docker run --rm --entrypoint=/bin/bash -u xcalar -v $SHARE:/mnt/xcalar $IMAGE_ID -c 'test -w /mnt/xcalar'; then
-        say "ERROR: Permissions on $SHARE are not allowing xcalar to write to it. Please remove $SHARE"
-        say ""
-        say "       docker volume rm $SHARE"
-        say ""
-        exit 1
+    if docker volume inspect "$SHARE" >/dev/null 2>&1; then
+        if ! docker run --rm --entrypoint=/bin/bash -u xcalar -v $SHARE:/mnt/xcalar $IMAGE_ID -c 'test -w /mnt/xcalar' >/dev/null; then
+            say "ERROR: Permissions on $SHARE are not allowing xcalar to write to it. Please remove $SHARE"
+            say ""
+            say "       docker volume rm $SHARE"
+            say ""
+            die "Bad permissions on xcalar shared root volume"
+        fi
+    else
+        if ! docker volume create --label cluster=$CLUSTER --label purpose=xcalar_shared_root $SHARE >/dev/null; then
+            die "Failed to create volume $SHARE"
+        fi
     fi
     # One time setup per cluster
-    docker network inspect "$NETWORK" > /dev/null 2>&1 \
-        || docker network create --attachable --subnet "${SUBNET}/${CIDR_BITS}" -d bridge $NETWORK
+    if ! docker network inspect "$NETWORK" > /dev/null 2>&1; then
+        if ! docker network create --attachable --label cluster=$CLUSTER --subnet "${SUBNET}/${CIDR_BITS}" --gateway ${SUBNET%.0}.1 -d bridge "${NETWORK}"; then
+            die "Unable to create network $NETWORK (${SUBNET}/${CIDR_BITS})"
+        fi
+    fi
+    if ! SUBNET_CIDR=$(docker network inspect $NETWORK --format '{{json .}}' | jq -r '.IPAM.Config[0].Subnet'); then
+        die "Unable to query network $NETWORK (${SUBNET}/${CIDR_BITS})"
+    fi
+
+    CIDR_BITS="${SUBNET_CIDR#*/}"
+    SUBNET="${SUBNET_CIDR%/*}"
 
     say "+ Creating ${NODES} node cluster from image ${IMAGE_ID} ..."
 
     AWS_SUPPORT=()
     ENVS=()
     if ((AWS_PASSTHROUGH)); then
-        vault-aws-credentials-provider.sh --ttl 12h -e 2> /dev/null | sed 's/^ //; /export /d' > $CONFDIR/aws.env.tmp \
-            && mv $CONFDIR/aws.env{.tmp,} || true
+        if vault-aws-credentials-provider.sh --ttl 12h -e 2> /dev/null | sed 's/^ //; /export /d' > $CONFDIR/aws.env.tmp; then
+            mv $CONFDIR/aws.env{.tmp,}
+        fi
         if test -e "$CONFDIR/aws.env"; then
             set -a
             source $CONFDIR/aws.env
             set +a
         fi
-        AWS_SUPPORT+=(-e WORKBUCKET -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2} -v $CONFDIR/aws:/home/xcalar/.aws:ro)
+        AWS_SUPPORT+=(-e WORKBUCKET -e AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2} -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN)
         ENVS+=(WORKBUCKET AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN)
     fi
-    if nc -w 0 0.0.0.0 $HOSTPORT; then
+    if nc -w 1 0.0.0.0 $HOSTPORT; then
         say "! WARNING: Desired port on host ($HOSTPORT) is already taken. Opening random port."
         HTTPS_PORT_MAP="443"
     else
@@ -704,10 +730,8 @@ cmd_run() {
     DC_ARGS+=(-v $defaultEnv:/etc/default/xcalar:ro)
     DC_ARGS+=(-v $defaultCfg:/etc/xcalar/default.cfg)
     local -a cids=()
-    local cid node_id
+    local cid node_id name ip_address
     for node_id in $(seq 0 $((NODES - 1))); do
-        local name
-        local ip_address
         name=${CLUSTER}-${node_id}
         ip_address=$(docker_container_mkip $node_id)
         local NODE_ARGS=(--name ${name} --hostname ${name} --ip $ip_address -e XCE_NODEID=$node_id --label node-id=$node_id -p 22)
@@ -727,18 +751,15 @@ cmd_run() {
     local site sqldf
     site="$(docker port ${cids[0]} 443 2>/dev/null | sed 's@0.0.0.0@https://'${HOST:-$(hostname -f)}'@g')"
     sqldf="$(docker port ${cids[0]} 10000 2>/dev/null | sed 's@0.0.0.0@'${HOST:-$(hostname -f)}'@g')"
-    echo "XD: $site"
-    echo "SQL: $sqldf"
-    echo > $SSHCFG
+    if [ -n "$site" ]; then echo "XD: $site"; else echo "WARNING: No port for XD exposed on node0!"; fi
+    if [ -n "$sqldf" ]; then echo "SQL: $sqldf"; else echo "WARNING: No port for SqlDf on node0!"; fi
+    : > $SSHCFG
+    chmod 0600 $SSHCFG
     for node_id in $(seq 0 $((NODES - 1))); do
-        local name=${CLUSTER}-${node_id}
-        local ip_address
+        name=${CLUSTER}-${node_id}
         ip_address="$(docker_container_mkip $node_id)"
-        local ssh_port
-        if ssh_port=$(docker port ${cids[$node_id]} 22); then
-            ssh_port="${ssh_port#*:}"
-            printf 'Host %s node%d\n\tHostname %s\n\tPort %s\n\n' $name $node_id $ip_address $ssh_port >> $SSHCFG
-        fi
+        local ssh_port=22
+        printf 'Host %s node%d\n\tHostname %s\n\tPort %s\n\n' $name $node_id $ip_address $ssh_port >> $SSHCFG
     done
     cat >> $SSHCFG << EOF
 
@@ -747,6 +768,7 @@ Host *
     UserKnownHostsFile      /dev/null
     User                    ${SSHUSER:-ec2-user}
     IdentityFile            $SSHKEY
+    ForwardAgent            yes
     IdentitiesOnly          yes
 EOF
 }
@@ -770,9 +792,6 @@ cmd_load() {
             docker load < "$file" || die "Failed to load $file"
         else
             die "Don't know how to load $file. Use docker load."
-        fi
-        if [ $? -ne 0 ]; then
-            die "Failed to load $file"
         fi
     done
 }
@@ -803,6 +822,7 @@ cmd_shell() {
 
 cmd_ssh() {
     parse_args "$@"
+    docker exec -u 0 ${CLUSTER}-${NODE_ID} bash -c 'systemctl start sshd.service' || true
     ssh -F "$SSHCFG" ${CLUSTER}-${NODE_ID}
 }
 
@@ -842,7 +862,7 @@ init() {
     CONFIG="${CONFIG:-${CONFDIR}/main.ini}"
     REGISTRY=${REGISTRY:-registry.int.xcalar.com}
     REPO=${REPO:-xcalar/xcalar}
-    declare -a VOLUMES=()
+    VOLUMES=()
     NETSTORE_NFS=${NETSTORE_NFS:-/netstore}
     NETSTORE_IP=${NETSTORE_IP:-10.10.2.136}
     DNS1=${DNS1:-10.10.2.136}
@@ -851,14 +871,15 @@ init() {
     AWS_PASSTHROUGH=0
     SSHKEY=${SSHKEY:-$CONFDIR/ssh/id_xctest}
     SSHCFG=${SSHCFG:-$CONFDIR/ssh/config}
-    touch $CONFIG
-
+    mkdir -m 0700 -p $(dirname $SSHKEY)
+    chmod 0700 $(dirname $SSHKEY)
+    touch $SSHCFG
+    chmod 0600 $SSHCFG
     # Generate ssh config file
     # shellcheck disable=SC2174
     if ! test -r $SSHKEY && test -e $XLRINFRADIR/docker/ssh/id_xctest; then
-        mkdir -m 0700 -p $(dirname $SSHKEY)
         cp $XLRINFRADIR/docker/ssh/id_xctest $SSHKEY
-        chmod 0400 $SSHKEY
+        chmod 0600 $SSHKEY
     fi
 }
 

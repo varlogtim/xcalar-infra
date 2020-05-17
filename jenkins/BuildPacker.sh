@@ -19,7 +19,7 @@ export LICENSE_DATA=$PWD/license.json
 for BUILDER in ${BUILDERS//,/ }; do
     DIR=$(dirname ${XLRINFRADIR}/${PACKERCONFIG}) && \
     cd $DIR && \
-    make $BUILDER "INSTALLER=$INSTALLER" "INSTALLER_URL=$INSTALLER_URL"
+    make $BUILDER "INSTALLER=$INSTALLER" "INSTALLER_URL=$INSTALLER_URL" "REGISTRY=${REGISTRY:-registry.int.xcalar.com}"
 done
 )
 exit $?
