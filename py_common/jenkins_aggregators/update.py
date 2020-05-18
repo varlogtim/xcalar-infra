@@ -133,7 +133,9 @@ class JenkinsJobAggregators(object):
             # by build number so that multiple builds can have different
             # "fake" data) or defined below as a static blob.
             fake_data = {'building': False,
-                         'actions': [],
+                         "actions": [ {"parameters": [{"name": "XCE_GIT_BRANCH", "value": "trunk"},
+                                                      {"name": "XD_GIT_BRANCH", "value": "trunk"},
+                                                      {"name": "INFRA_GIT_BRANCH", "value": "master"}]}],
                          'builtOn': 'fakehost.somecompany.com',
                          'timestamp': int((time.time()*1000))-3600,
                          'duration': 600,
