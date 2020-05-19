@@ -4,9 +4,15 @@ volumes:
   registry:
   redis:
 
+networks:
+  xcalarnet:
+    external: true
+
 services:
   redis:
-    image: redis
+    image: redis:6
+    networks:
+      - xcalarnet
     volumes:
       - 'redis:/data'
     ports:
@@ -18,6 +24,8 @@ services:
     hostname: registry
     depends_on:
       - redis
+    networks:
+      - xcalarnet
     volumes:
       - './config.yml:/etc/docker/registry/config.yml:ro'
       - 'registry:/var/lib/registry'

@@ -725,8 +725,8 @@ cmd_run() {
     printf '%s\n' " + Starting ${#cids[@]} containers ..." >&2
     docker start "${cids[@]}" > /dev/null
     local site sqldf
-    site="$(docker port ${cids[0]} 443 | sed 's@0.0.0.0@https://'${HOST:-$(hostname -f)}'@g')"
-    sqldf="$(docker port ${cids[0]} 10000 | sed 's@0.0.0.0@'${HOST:-$(hostname -f)}'@g')"
+    site="$(docker port ${cids[0]} 443 2>/dev/null | sed 's@0.0.0.0@https://'${HOST:-$(hostname -f)}'@g')"
+    sqldf="$(docker port ${cids[0]} 10000 2>/dev/null | sed 's@0.0.0.0@'${HOST:-$(hostname -f)}'@g')"
     echo "XD: $site"
     echo "SQL: $sqldf"
     echo > $SSHCFG
