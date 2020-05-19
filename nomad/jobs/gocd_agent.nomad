@@ -12,8 +12,8 @@ job "gocd_agent" {
 
     restart {
       attempts = 10
-      interval = "5m"
-      delay    = "25s"
+      interval = "3m"
+      delay    = "15s"
       mode     = "delay"
     }
 
@@ -25,7 +25,7 @@ job "gocd_agent" {
       driver = "docker"
 
       config {
-        image = "gocd/gocd-agent-centos-7:v19.12.0"
+        image = "gocd/gocd-agent-centos-7:v20.3.0"
 
         #args = [ "-e", ]
 
@@ -42,7 +42,8 @@ job "gocd_agent" {
         destination = "secret/gocd.env"
 
         data = <<EOT
-GO_SERVER_URL="https://gocd.service.consul/go"
+{{ range service "gocd" }}
+GO_SERVER_URL = http://{{ .Address }}:{{ .Port }}{{ end }}/go
 EOT
       }
 
@@ -56,9 +57,12 @@ EOT
       }
 
       env {
-        "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v3.0.0-222/docker-elastic-agents-3.0.0-222.jar"
-        "GO_SERVER_URL"                             = "https://gocd.service.consul/go"
+        "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v3.1.0-248-exp/docker-elastic-agents-3.1.0-248.jar"
+        "AGENT_BOOTSTRAPPER_ARGS"                   = "-sslVerificationMode NONE"
+
+
       }
+
     }
   }
 }

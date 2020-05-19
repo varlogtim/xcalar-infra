@@ -82,7 +82,6 @@ markupsafe==1.1.1         # via jinja2
 mccabe==0.6.1             # via flake8, pylint
 mistune==0.8.4            # via nbconvert
 more-itertools==8.2.0     # via pytest
-msrest==0.6.11            # via azure-storage-blob, azure-storage-queue
 msrest==0.6.13            # via azure-storage-blob, azure-storage-queue
 munch==2.5.0              # via e2j2
 nbconvert==5.6.1          # via notebook
@@ -125,7 +124,7 @@ pyyaml==5.3.1             # via -r requirements.in, ansible, aws-sam-cli, awscli
 pyzmq==19.0.1             # via jupyter-client, notebook
 regex==2020.5.7           # via dateparser
 requests-oauthlib==1.3.0  # via msrest
-requests==2.22.0          # via -r requirements.in, ansible-modules-hashivault, aws-sam-cli, azure-core, azure-storage-common, cookiecutter, docker, git-review, hvac, jupyterlab-server, msrest, python-consul, requests-oauthlib, warrant
+requests==2.23.0          # via -r requirements.in, ansible-modules-hashivault, aws-sam-cli, azure-core, azure-storage-common, cookiecutter, docker, git-review, hvac, jupyterlab-server, msrest, python-consul, requests-oauthlib, warrant
 rfc3987==1.3.8            # via e2j2
 rsa==3.4.2                # via awscli
 s3transfer==0.3.3         # via awscli, boto3

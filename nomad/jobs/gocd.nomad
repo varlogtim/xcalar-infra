@@ -80,7 +80,7 @@ job "gocd" {
       driver = "docker"
 
       config {
-        image = "gocd/gocd-server:v19.12.0"
+        image = "gocd/gocd-server:v20.3.0"
 
         dns_search_domains = ["int.xcalar.com"]
         dns_servers        = ["${NOMAD_IP_ui}:8600", "10.10.2.136", "10.10.6.32"]
