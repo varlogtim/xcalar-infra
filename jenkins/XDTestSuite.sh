@@ -137,7 +137,7 @@ storeXDUnitTestCodeCoverage() {
 
 runExpServerIntegrationTest() {
     set +e
-
+    xc2 cluster stop # Stop the one node cluster that was started for GerritExpServerTest, to let pytest start a cluster on its own.
     currentDir=$PWD
     local retval=0
 
@@ -151,6 +151,7 @@ runExpServerIntegrationTest() {
         local ret=$?
         if [ $ret -ne "0" ]; then
             retval=1
+            break
         fi
     done
 
