@@ -173,16 +173,17 @@ def _results_table(*, target_name):
     """
     Target name specifes query.
     Format:
-        <test_group>:<build_num_1>:<build_num_2>:<ubm_name>
+        <test_group>:<build_num_1>:<build_num_2>:<metric_name>
     """
 
     try:
-        tgroup, bnum1, bnum2 = target_name.split(':')
+        tgroup, bnum1, bnum2, mname = target_name.split(':')
     except Exception:
         abort(404, Exception('incomprehensible target_name: {}'.
               format(target_name)))
 
-    logger.info("tgroup {} bnum1 {} bnum2 {}".format(tgroup, bnum1, bnum2))
+    logger.info("tgroup {} bnum1 {} bnum2 {} mname {}"
+                .format(tgroup, bnum1, bnum2, mname))
 
     rows = []
     columns = [
@@ -200,10 +201,12 @@ def _results_table(*, target_name):
         # Grafana doesn't aggregate into tables, so we have to roll our own...
         b1vals = ubm_perf_results_data.ubm_vals(test_group=tgroup, bnum=bnum1,
                                                 ubmname=ubmname)
+        logger.debug("{} in build {} vals {}".format(ubmname, bnum1, b1vals))
         b1mean = statistics.mean(b1vals)
 
         b2vals = ubm_perf_results_data.ubm_vals(test_group=tgroup, bnum=bnum2,
                                                 ubmname=ubmname)
+        logger.debug("{} in build {} vals {}".format(ubmname, bnum2, b2vals))
         b2mean = statistics.mean(b2vals)
 
         delta_pct = 0
