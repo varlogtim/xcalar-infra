@@ -93,7 +93,9 @@ EOF
 
 log() {
     echo "[$(date +%FT%T%z) $USER@$HOSTNAME $PROG $$] $*" >> $LOG
-    say "[$(date +%FT%T%z) $USER@$HOSTNAME $PROG] $*"
+    if ! test -t 2; then
+        say "[$(date +%FT%T%z) $USER@$HOSTNAME $PROG] $*"
+    fi
 }
 
 say() {
