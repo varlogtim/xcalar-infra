@@ -83,7 +83,7 @@ job "gocd" {
         image = "gocd/gocd-server:v20.3.0"
 
         dns_search_domains = ["int.xcalar.com"]
-        dns_servers        = ["${NOMAD_IP_ui}:8600", "10.10.2.136", "10.10.6.32"]
+        dns_servers        = ["10.10.2.136", "10.10.6.32"]
 
         port_map {
           ui = 8153
@@ -99,10 +99,8 @@ job "gocd" {
       }
 
       env {
-        "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v0.8.0/docker-elastic-agents-0.8.0.jar"
-
-        #"GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents-plugin/releases/download/v3.0.0-238-exp/docker-elastic-agents-3.0.0-238.jar"
-        "GOCD_SERVER_JVM_OPTS" = "-Xms500m -Xmx2g -Djava.awt.headless=true"
+        "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v3.1.0-248-exp/docker-elastic-agents-3.1.0-248.jar"
+        "GOCD_SERVER_JVM_OPTS"                      = "-Xms500m -Xmx2g -Djava.awt.headless=true"
       }
 
       resources {

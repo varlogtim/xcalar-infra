@@ -30,8 +30,9 @@ job "gocd_agent" {
         #args = [ "-e", ]
 
         dns_search_domains = ["int.xcalar.com"]
-        dns_servers        = ["${NOMAD_IP_cnc}:8600", "10.10.2.136", "10.10.6.32"]
+        dns_servers        = ["10.10.2.136", "10.10.6.32"]
         volumes = [
+          "/netstore:/netstore",
           "./local:/godata",
           "/var/run/docker.sock:/var/run/docker.sock",
         ]
@@ -39,11 +40,11 @@ job "gocd_agent" {
 
       template {
         env         = true
-        destination = "secret/gocd.env"
+        destination = "secrets/gocd.env"
 
         data = <<EOT
 {{ range service "gocd" }}
-GO_SERVER_URL = http://{{ .Address }}:{{ .Port }}{{ end }}/go
+GO_SERVER_URL=https://{{ .Address }}{{ end }}:8154/go
 EOT
       }
 
@@ -59,10 +60,7 @@ EOT
       env {
         "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v3.1.0-248-exp/docker-elastic-agents-3.1.0-248.jar"
         "AGENT_BOOTSTRAPPER_ARGS"                   = "-sslVerificationMode NONE"
-
-
       }
-
     }
   }
 }
