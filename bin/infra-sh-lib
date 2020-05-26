@@ -9,7 +9,7 @@ if [ -z "$XLRINFRADIR" ]; then
     export PATH="$XLRINFRADIR/bin:$PATH"
 fi
 
-export REGISTRY="${REGISTRY:-registry.int.xcalar.com}"
+export DEFAULT_REGISTRY="${DEFAULT_REGISTRY:-registry.int.xcalar.com}"
 
 # When a script is sourced, you can use this function to get the caller / origin
 env_script_file() {
@@ -390,13 +390,13 @@ tmpdir_with_cleanup() {
 ## Docker registry API
 ##
 registry_repos() {
-    curl -s https://${REGISTRY}/v2/_catalog | jq -r '.repositories[]'
+    curl -s https://${REGISTRY:-$DEFAULT_REGISTRY}/v2/_catalog | jq -r '.repositories[]'
 }
 
 registry_repo_tags() {
     local repo
     for repo in $(registry_repos); do
-        curl -s https://${REGISTRY}/v2/${repo}/tags/list | jq -r .
+        curl -s https://${REGISTRY:-$DEFAULT_REGISTRY}/v2/${repo}/tags/list | jq -r .
     done | jq -s -r '.'
 }
 

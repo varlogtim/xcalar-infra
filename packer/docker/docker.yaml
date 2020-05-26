@@ -1,3 +1,8 @@
+#@yaml/text-templated-strings
+---
+#@ load("@ytt:overlay", "overlay")
+#@ load("docker.lib.yml", "docker_builder")
+
 variables:
   baseos: 'centos:7.8.2003'
   build_id: '{{env `BUILD_ID`}}'
@@ -15,15 +20,16 @@ variables:
   installer_xce_sha1: ''
   installer_xd_branch: ''
   installer_xd_sha1: ''
-  installer_byjob: 'BuildTrunk'
+  installer_byjob: ''
   installer_rc: ''
   installer_tag: '{{env `INSTALLER_TAG`}}'
-  image_build_number: '{{env `BUILD_NUMBER`}}'
+  image_build_number: ''
   xlrdir: '{{env `XLRDIR`}}'
   xlrinfradir: '{{env `XLRINFRADIR`}}'
   bootstrap: '{{env `XLRINFRADIR`}}/aws/cfn/{{env `PROJECT`}}/scripts/user-data.sh'
   license: '{{env `LICENSE`}}'
   product_desc: Xcalar Data Platform
+  product: 'xdp-standard'
   project: '{{env `PROJECT`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
   shared_with: '{{env `SHARED_WITH` }}'
@@ -43,130 +49,16 @@ variables:
   admin_password: 'admin'
   admin_email: 'info@xcalar.com'
   base_image: 'centos:7.8.2003'
+  xcalar_image: '{{user `registry`}}/xcalar/base:{{user `installer_version`}}'
   http_proxy: '{{env `http_proxy`}}'
-  no_proxy: 'localhost,.localdomain,127.0.0.1,10.10.2.136,172.,netstore,cacher'
+  no_proxy: 'localhost,.localdomain,127.0.0.1,10.10.2.136,172.,netstore,cacher,.int.xcalar.com'
   image: '{{user `registry`}}/xcalar/base:{{user `installer_version`}}'
 builders:
-  - name: docker-base-el7
-    type: docker
-    image: '{{user `base_image`}}'
-    commit: true
-    exec_user: root
-    run_command: #@ run_command
-      - --security-opt
-      - seccomp=unconfined
-      - --cap-add
-      - sys_ptrace
-      - --ulimit=core=0:0
-      - --ulimit=nofile=128000:128000
-      - --ulimit=nproc=140960:140960
-      - --ulimit=memlock=-1:-1
-      - --ulimit=stack=-1:-1
-      - --shm-size={{user `shm_size`}}
-      - --memory-swappiness=10
-      - --tmpfs=/run
-      - --tmpfs=/run/lock
-      - -d
-      - -it
-      - --dns
-      - '{{user `dns1`}}'
-      - --add-host
-      - 'netstore:{{user `netstore_ip`}}'
-      - -e
-      - container=docker
-      - --
-      - '{{.Image}}'
-    volumes:
-      "/netstore": "/netstore"
-      "/sys/fs/cgroup": "/sys/fs/cgroup:ro"
-    changes:
-    - 'USER root'
-    - 'WORKDIR /'
-    - 'LABEL xcalar_uid={{user `xcalar_uid`}}'
-    - 'LABEL xcalar_username={{user `xcalar_username`}}'
-    - 'LABEL ssh_uid={{user `ssh_uid`}}'
-    - 'LABEL ssh_username={{user `ssh_username`}}'
-    - 'LABEL build_name={{ build_name }}'
-    - 'LABEL build_type={{ build_type }}'
-    - 'LABEL build_date={{user `today`}}'
-    - 'LABEL build_number={{user `build_number`}}'
-    - 'LABEL installer_version={{user `installer_version`}}'
-    - 'LABEL installer_build_number={{user `installer_build_number`}}'
-    - 'LABEL installer_build_type={{user `installer_build_type`}}'
-    - 'LABEL installer_xce_branch={{user `installer_xce_branch`}}'
-    - 'LABEL installer_xce_sha1={{user `installer_xce_sha1`}}'
-    - 'LABEL installer_xd_branch={{user `installer_xd_branch`}}'
-    - 'LABEL installer_xd_sha1={{user `installer_xd_sha1`}}'
-    - 'LABEL installer_byjob={{user `installer_byjob`}}'
-    - 'LABEL installer_rc={{user `installer_rc`}}'
-    - 'LABEL installer_tag={{user `installer_tag`}}'
-    - 'ENV container=docker'
-    - 'ENTRYPOINT []'
-    - 'CMD ["/usr/sbin/init"]'
-  - name: docker-xcalar-el7
-    type: docker
-    image: '{{user `image`}}'
-    commit: true
-    exec_user: root
-    run_command:
-      - --security-opt
-      - seccomp=unconfined
-      - --cap-add
-      - sys_ptrace
-      - --ulimit=core=-1:-1
-      - --ulimit=nofile=128000:128000
-      - --ulimit=nproc=140960:140960
-      - --ulimit=memlock=-1:-1
-      - --ulimit=stack=-1:-1
-      - --shm-size={{user `shm_size`}}
-      - --memory-swappiness=10
-      - --tmpfs=/run
-      - --tmpfs=/run/lock
-      - -d
-      - -it
-      - --dns
-      - '{{user `dns1`}}'
-      - --add-host
-      - 'netstore:{{user `netstore_ip`}}'
-      - -e
-      - container=docker
-      - --
-      - '{{.Image}}'
-    volumes:
-      "/netstore": "/netstore"
-      "/bin/true": "/is_container:ro"
-      "/sys/fs/cgroup": "/sys/fs/cgroup:ro"
-    changes:
-    - 'USER root'
-    - 'WORKDIR /'
-    - 'LABEL xcalar_uid={{user `xcalar_uid`}}'
-    - 'LABEL xcalar_username={{user `xcalar_username`}}'
-    - 'LABEL ssh_uid={{user `ssh_uid`}}'
-    - 'LABEL ssh_username={{user `ssh_username`}}'
-    - 'LABEL build_name={{ build_name }}'
-    - 'LABEL build_type={{ build_type }}'
-    - 'LABEL build_date={{user `today`}}'
-    - 'LABEL build_number={{user `build_number`}}'
-    - 'LABEL installer_version={{user `installer_version`}}'
-    - 'LABEL installer_build_number={{user `installer_build_number`}}'
-    - 'LABEL installer_build_type={{user `installer_build_type`}}'
-    - 'LABEL installer_xce_branch={{user `installer_xce_branch`}}'
-    - 'LABEL installer_xce_sha1={{user `installer_xce_sha1`}}'
-    - 'LABEL installer_xd_branch={{user `installer_xd_branch`}}'
-    - 'LABEL installer_xd_sha1={{user `installer_xd_sha1`}}'
-    - 'LABEL installer_byjob={{user `installer_byjob`}}'
-    - 'LABEL installer_rc={{user `installer_rc`}}'
-    - 'LABEL installer_tag={{user `installer_tag`}}'
-    - 'ENV container=docker'
-    - 'ENTRYPOINT ["/docker-entrypoint.sh"]'
-    - 'CMD ["/usr/sbin/init"]'
-    - 'EXPOSE 443 10000 22'
-    - 'ENV PATH=/opt/xcalar/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-    - 'ENV XLRDIR=/opt/xcalar'
-    - 'VOLUME ["/mnt/xcalar"]'
-###############
-# Provisioners
-##############
+  - #@ docker_builder(name="base",builder="docker",osid="el7")
+  - #@ docker_builder(name="xcalar",builder="docker",osid="el7")
+#!##############
+#! Provisioners
+#!#############
 provisioners:
   - type: file
     source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
@@ -174,12 +66,12 @@ provisioners:
   - type: file
     source: '{{ template_dir }}/../scripts/fix-docker-systemd.sh'
     destination: '/usr/bin/fix-docker-systemd.sh'
-  #### BASE ONLY #######
-  # As an optimization, we build the base image with a regular installer then
-  # remove only the xcalar.rpm containing the bits that change the most.
-  # Subsequent builds of docker-xcalar-el7 will only have to install that one
-  # (or few) rpms, reducing the size of child images. This means quicker/smaller
-  # downloads for dev/test
+  #!### BASE ONLY #######
+  #! As an optimization, we build the base image with a regular installer then
+  #! remove only the xcalar.rpm containing the bits that change the most.
+  #! Subsequent builds of docker-xcalar-el7 will only have to install that one
+  #! (or few) rpms, reducing the size of child images. This means quicker/smaller
+  #! downloads for dev/test
   - type: shell
     only: [docker-base-el7]
     environment_vars:
@@ -224,7 +116,7 @@ provisioners:
       - chmod 0440 /etc/sudoers.d/99-sudo
       - rm -rf /var/cache/yum* /var/tmp/yum* $TMPDIR
       - exit 0
-  #### XCALAR ONLY #######
+  #!### XCALAR ONLY #######
   - type: shell
     only: [docker-xcalar-el7]
     environment_vars:
@@ -239,11 +131,9 @@ provisioners:
       - mkdir -m 1777 -p $TMPDIR
       - chmod +x /tmp/genDefaultAdmin.sh
       - chown root:root /tmp/genDefaultAdmin.sh
-      - bash -x /usr/bin/fix-docker-systemd.sh
-      - systemctl mask tuned.service
-      ## installer-start
+      #!# installer-start
       - /bin/bash '{{user `installer`}}' --nostart --startonboot
-      ## installer-done
+      #!# installer-done
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
       - echo "{{user `license`}}" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
       - mkdir -p /var/opt/xcalar/config /mnt
@@ -254,9 +144,15 @@ provisioners:
       - chown -R xcalar:xcalar /var/opt/xcalar /etc/xcalar /mnt/xcalar
       - yum clean all --enablerepo='*'
       - rm -rf /var/tmp/yum* /var/cache/yum/* $TMPDIR
-      - echo -e '[Service]\nEnvironmentFile=/etc/sysconfig/dcc\n' > /tmp/99-dcc.conf
+      - echo -e '[Service]\nEnvironmentFile=/etc/sysconfig/dcc\nUnsetEnvironment=PYTHONHOME' > /tmp/99-dcc.conf
       - touch /etc/sysconfig/dcc
-      - for ii in /etc/systemd/system/xcalar-{usrnode,caddy}.d; do mkdir -p $ii; cp /tmp/99-dcc.conf $ii/; done
+      - mkdir -p /var/lib/cloud/instances/nocloud
+      - ln -sfn /var/lib/cloud/instances/nocloud /var/lib/cloud/instance
+      - printf '%s\n%s\n%s\n' 'set -a' 'source /etc/sysconfig/dcc' 'set +a' > /etc/profile.d/xcalar-env.sh
+      - if ! test -x /usr/bin/java; then ln -sfn /opt/xcalar/lib/java8/jre/bin/java /usr/bin/; fi
+      - for ii in /etc/systemd/system/xcalar-{sqldf,usrnode,caddy}.service.d; do mkdir -p $ii; cp /tmp/99-dcc.conf $ii/; done
+      - rm -fv /etc/ssh/ssh_host_*
+      - systemctl enable sshd.service
   - type: file
     only: [docker-xcalar-el7]
     source: '{{ template_dir }}/docker-entrypoint.sh'
@@ -272,25 +168,27 @@ provisioners:
   - type: file
     only: [docker-xcalar-el7]
     source: '{{ user `xlrdir`}}/conf/localhost.crt'
-    destination: /mnt/xcalar/config/
+    destination: /etc/xcalar/
   - type: file
     only: [docker-xcalar-el7]
     source: '{{ user `xlrdir`}}/conf/localhost.key'
-    destination: /mnt/xcalar/config/
+    destination: /etc/xcalar/
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     only: [docker-xcalar-el7]
     inline:
-      - sed --follow-symlinks -r -i.bak 's@tls .*$@tls /mnt/xcalar/config/localhost.crt /mnt/xcalar/config/localhost.key@' /etc/xcalar/Caddyfile
-      - chown 'root:xcalar' /mnt/xcalar/config/localhost.*
-      - chmod 0640 /mnt/xcalar/config/localhost.key
-      - chmod 0644 /mnt/xcalar/config/localhost.crt
-      - chmod 0700 /mnt/xcalar/config
+      - sed --follow-symlinks -r -i.bak 's@tls .*$@tls /etc/xcalar/localhost.crt /etc/xcalar/localhost.key@' /etc/xcalar/Caddyfile
+      - chown 'root:xcalar' /etc/xcalar/localhost.*
+      - chmod 0640 /etc/xcalar/localhost.key
+      - chmod 0644 /etc/xcalar/localhost.crt
+      - mkdir -p /ephemeral/data/serdes
+      - chmod 1777 /ephemeral/data
+      - chown xcalar:xcalar /ephemeral/data/serdes
       - chown root:root /docker-entrypoint.sh
 
-###############
-# Post Processors
-##############
+#!##############
+#! Post Processors
+#!#############
 post-processors:
   - - type: docker-tag
       repository: '{{user `registry`}}/{{user `repository`}}'
@@ -318,13 +216,13 @@ post-processors:
       shm_size: '{{user `shm_size`}}'
       registry: '{{user `registry`}}'
       repository: '{{user `repository`}}'
-#  - type: shell-local
-#    execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
-#    inline:
-#      - mkdir -m 1777
+#!  - type: shell-local
+#!    execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
+#!    inline:
+#!      - mkdir -m 1777
 
-#  - - type: docker-save
-#      path: "packer_{{build_name}}-{{user `installer_tag`}}.tar"
-#    - type: compress
-#      compression_level: 7
-#      output: "packer_{{build_name}}-{{user `installer_tag`}}.tar.gz"
+#!  - - type: docker-save
+#!      path: "packer_{{build_name}}-{{user `installer_tag`}}.tar"
+#!    - type: compress
+#!      compression_level: 7
+#!      output: "packer_{{build_name}}-{{user `installer_tag`}}.tar.gz"
