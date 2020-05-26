@@ -12,7 +12,13 @@ mkdir -p "$RESULTS_PATH"
 
 set +e
 
-# launch 3-node cluster
+# build first
+
+cmBuild clean
+cmBuild config prod
+cmBuild qa
+
+# then, launch 3-node cluster
 # eventually, 'dcc' should be invoked (each node in its own  container)
 
 export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/data/test.cfg}"
