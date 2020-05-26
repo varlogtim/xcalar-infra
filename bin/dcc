@@ -12,6 +12,8 @@
 # shellcheck disable=SC2206,SC2207,SC2164,SC2155
 # shellcheck disable=SC2154,SC2028,SC2029
 
+set -e
+
 banner() {
     cat << 'EOF'
 
@@ -52,8 +54,6 @@ EOF
     #
     #EOF
 }
-
-set -e
 
 DC=${DC:-$(basename $0)}
 
@@ -508,22 +508,26 @@ cmd_ls() {
             fi
         done | sort -Vr
     fi
-    local images image
-    if images=($(docker images --filter reference="${REGISTRY}/${REPO}:*" --format '{{.Repository}}:{{.Tag}}')); then
-        if [ "${#images[@]}" -eq 0 ]; then
-            echo -e "\nNo local images\n"
-            return 0
+    local images image reg
+    for reg in $REGISTRY localhost:5000; do
+        if images=($(docker images --filter reference="${reg}/${REPO}:*" --format '{{.Repository}}:{{.Tag}}')); then
+            if [ "${#images[@]}" -eq 0 ]; then
+                if [ "$reg" != localhost:5000 ]; then
+                    echo -e "\nNo local images in $reg\n"
+                fi
+                return 0
+            fi
+            echo -e "\nLocal images matching ${reg}/${REPO}:\n"
+            (
+                for image in "${images[@]}"; do
+                    (
+                        eval $(docker image inspect "$image" --format '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{println}}{{end}}' | grep -E '^(build|installer)_')
+                        echo -e "\t${image#$reg/}\t${installer_byjob+job:$installer_byjob }${installer_build_type+type:$installer_build_type }${installer_xce_branch+xce_branch:$installer_xce_branch }${installer_xd_branch:+xd_branch:$installer_xd_branch }"
+                    )
+                done
+            ) | column -t
         fi
-        echo -e "\nLocal images matching ${REGISTRY}/${REPO}:\n"
-        (
-            for image in "${images[@]}"; do
-                (
-                    eval $(docker image inspect "$image" --format '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{println}}{{end}}' | grep -E '^(build|installer)_')
-                    echo -e "\t${image#$REGISTRY/}\t${installer_byjob+job:$installer_byjob }${installer_build_type+type:$installer_build_type }${installer_xce_branch+xce_branch:$installer_xce_branch }${installer_xd_branch:+xd_branch:$installer_xd_branch }"
-                )
-            done
-        ) | column -t
-    fi
+    done
 }
 
 cmd_stop() {
@@ -701,11 +705,12 @@ cmd_run() {
     fi
     if ((LOCALDEPLOY)); then
         DC_ARGS+=(
-            -e XLRDIR=$XLRDIR
-            -e PATH=${XLRDIR:+$XLRDIR/xcve/bin:$XLRDIR/bin:}$DEFAULT_PATH
-            -e XCE_CONFIG=${XCE_CONFIG:-$XLRDIR/src/data/test.cfg}
+            -e XLRDIR=/opt/xcalar
+            -e JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk
+            -e PATH=$XLRDIR/bin:$DEFAULT_PATH
+            -e XCE_CONFIG=/etc/xcalar/default.cfg
         )
-        ENVS+=(XLRDIR=$XLRDIR PATH=${XLRDIR:+$XLRDIR/xcve/bin:$XLRDIR/bin:}$DEFAULT_PATH XCE_CONFIG=${XCE_CONFIG:-$XLRDIR/src/data/test.cfg})
+        ENVS+=(XLRDIR=/opt/xcalar PATH=$XLRDIR/bin:$DEFAULT_PATH XCE_CONFIG=/etc/xcalar/default.cfg JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk)
         REMAP_PROGS=($XLRDIR/bin/usrnode $XLRDIR/bin/childnode $XLRDIR/bin/xcmgmtd $XLRDIR/bin/xcmonitor)
         for prog in "${REMAP_PROGS[@]}"; do
             local link
@@ -859,8 +864,9 @@ init() {
     if ! test -d "$CONFDIR"; then
         mkdir -p "$CONFDIR"
     fi
+    DEFAULT_REGISTRY=${DEFAULT_REGISTRY:-registry.int.xcalar.com}
     CONFIG="${CONFIG:-${CONFDIR}/main.ini}"
-    REGISTRY=${REGISTRY:-registry.int.xcalar.com}
+    REGISTRY=${REGISTRY:-$DEFAULT_REGISTRY}
     REPO=${REPO:-xcalar/xcalar}
     VOLUMES=()
     NETSTORE_NFS=${NETSTORE_NFS:-/netstore}
@@ -895,7 +901,9 @@ main() {
         fi
         now=$(date +%s)
         dt=$((now - start_time))
-        say "Time: $(date -d@$dt +'%Mm:%Ss')"
+        if [ $dt -gt 3 ]; then
+            say "Time: $(date -d@$dt +'%Mm:%Ss')"
+        fi
         exit
     fi
     case "$1" in
@@ -908,7 +916,6 @@ main() {
             die "Unknown subcommand \"$1\""
             ;;
     esac
-    say "date -d@$dt +'%Mm:%S'"
 }
 
 ALLCMDS=($(grep -Eow '^cmd_([a-z]+)' "${BASH_SOURCE[0]}" | sed 's/^cmd_//' | sort))
