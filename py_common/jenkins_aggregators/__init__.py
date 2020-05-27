@@ -189,7 +189,11 @@ class JenkinsHostDataCollection(object):
     """
     def __init__(self, *, host_name, db):
         self.logger = logging.getLogger(__name__)
+        self.host_name = host_name
         self.coll = db.collection("host_{}".format(host_name))
+        self.coll.create_index([('job_name', pymongo.ASCENDING),
+                               ('build_number', pymongo.ASCENDING)],
+                               unique=True)
 
     def _no_data(self, *, doc):
         return not doc or 'NODATA' in doc
@@ -207,7 +211,10 @@ class JenkinsHostDataCollection(object):
         store['start_time_ms'] = data['start_time_ms']
         store['duration_ms'] = data['duration_ms']
         store['result'] = data['result']
-        self.coll.insert(store)
+        try:
+            self.coll.insert(store)
+        except DuplicateKeyError as e:
+            self.logger.error("host_{} duplicate {}".format(self.host_name, store))
 
 class JenkinsJobMetaCollection(object):
     """
@@ -264,14 +271,6 @@ class JenkinsJobMetaCollection(object):
             self.coll.find_one_and_update({'_id': key},
                                           {'$addToSet': {'builds': bnum}},
                                            upsert = True)
-
-        # _add_to_meta_list is a list of key/val pairs.  The key will define a document,
-        # and the val will be appended to the 'values' list in that document.
-        add_to_meta_list = data.pop('_add_to_meta_list', [])
-        for key,val in add_to_meta_list:
-            self.coll.find_one_and_update({'_id': key},
-                                          {'$push': {'values': val}},
-                                          upsert = True)
 
         # _add_to_meta_set is a list of key/val pairs.  The key will define a document,
         # and the val will be added to the 'values' set in that document iff it is not
