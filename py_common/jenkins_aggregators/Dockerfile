@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p ./sql_perf
 COPY sql_perf ./sql_perf/
 
+RUN mkdir -p ./ubm_perf
+COPY ubm_perf ./ubm_perf/
+
 RUN mkdir -p ./coverage
 COPY coverage ./coverage/
 

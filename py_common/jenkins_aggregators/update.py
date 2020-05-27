@@ -32,7 +32,7 @@ from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryEr
 from py_common.jenkins_aggregators import AggregatorPlugins
 from py_common.jenkins_aggregators import PostprocessorPlugins
 from py_common.jenkins_api import JenkinsApi
-from py_common.mongo import JenkinsMongoDB, MongoDBKeepAliveLock
+from py_common.mongo import JenkinsMongoDB, MongoDBKeepAliveLock, MongoDBKALockTimeout
 from py_common.sorts import nat_sort
 
 
