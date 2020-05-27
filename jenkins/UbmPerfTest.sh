@@ -1,4 +1,6 @@
 #!/bin/bash -x
+# Params:
+#   DATA_SIZE - size of data loaded before running rest of the UBM operators
 
 source $XLRDIR/doc/env/xc_aliases
 export XLRGUIDIR="${XLRGUIDIR:-$XLRDIR/xcalar-gui}"
@@ -53,7 +55,7 @@ fi
 # different iterations
 
 exitCode=1
-$XLRDIR/scripts/performance/operator_perf.py --action=all --no-stats --size=75GB --notes="jenkins run" --results-output-dir=$RESULTS_PATH --iter-num=0
+$XLRDIR/scripts/performance/operator_perf.py --action=all --no-stats --size=$DATA_SIZE --notes="jenkins run" --results-output-dir=$RESULTS_PATH --iter-num=0
 exitCode=$?
 
 xc2 cluster stop
