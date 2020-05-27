@@ -1,10 +1,8 @@
 #!/bin/bash -x
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-if test -z "$XLRINFRADIR"; then
-	export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
-fi
+source $XLRDIR/doc/env/xc_aliases
+export XLRGUIDIR="${XLRGUIDIR:-$XLRDIR/xcalar-gui}"
+export XLRINFRADIR="${XLRINFRADIR:-$XLRDIR/xcalar-infra}"
 
 export NETSTORE_JENKINS="${NETSTORE_JENKINS:-/netstore/qa/jenkins}"
 RESULTS_PATH="${NETSTORE_JENKINS}/${JOB_NAME}/${BUILD_ID}"
@@ -12,8 +10,22 @@ mkdir -p "$RESULTS_PATH"
 
 set +e
 
-# build first
+# Build xcalar-gui so that expServer will run
+# export XLRGUIDIR=$PWD/xcalar-gui
+echo "Building XD"
+(cd $XLRGUIDIR && make trunk)
 
+# Clean up existing running cluster if any
+sudo pkill -9 usrnode || true
+sudo pkill -9 childnode || true
+sudo pkill -9 xcmonitor || true
+sudo pkill -9 xcmgmtd || true
+xclean
+
+# build XCE now
+
+echo "Building XCE"
+cd $XLRDIR
 cmBuild clean
 cmBuild config prod
 cmBuild qa
