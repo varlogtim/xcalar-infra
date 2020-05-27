@@ -10,11 +10,6 @@ mkdir -p "$RESULTS_PATH"
 
 set +e
 
-# Build xcalar-gui so that expServer will run
-# export XLRGUIDIR=$PWD/xcalar-gui
-echo "Building XD"
-(cd $XLRGUIDIR && make trunk)
-
 # Clean up existing running cluster if any
 sudo pkill -9 usrnode || true
 sudo pkill -9 childnode || true
@@ -28,7 +23,12 @@ echo "Building XCE"
 cd $XLRDIR
 cmBuild clean
 cmBuild config prod
-cmBuild qa
+cmBuild xce
+
+# Build xcalar-gui so that expServer will run
+# export XLRGUIDIR=$PWD/xcalar-gui
+echo "Building XD"
+(cd $XLRGUIDIR && make trunk)
 
 # then, launch 3-node cluster
 # eventually, 'dcc' should be invoked (each node in its own  container)
