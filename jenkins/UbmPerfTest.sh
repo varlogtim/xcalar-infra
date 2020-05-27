@@ -53,7 +53,7 @@ fi
 # different iterations
 
 exitCode=1
-$XLRDIR/scripts/performance/operator_perf.py --action=all --no-stats --size=1MB --notes="jenkins run" --results-output-dir=$RESULTS_PATH --iter-num=0
+$XLRDIR/scripts/performance/operator_perf.py --action=all --no-stats --size=100GB --notes="jenkins run" --results-output-dir=$RESULTS_PATH --iter-num=0
 exitCode=$?
 
 xc2 cluster stop
