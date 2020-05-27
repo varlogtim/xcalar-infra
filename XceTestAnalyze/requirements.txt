@@ -1,0 +1,15 @@
+beautifulsoup4==4.9.1
+certifi==2020.4.5.1
+chardet==3.0.4
+HTMLParser==0.0.2
+idna==2.9
+jenkins==1.0.2
+multi-key-dict==2.0.3
+mysql-connector-python==8.0.20
+pbr==5.4.5
+protobuf==3.12.1
+python-jenkins==1.7.0
+requests==2.23.0
+six==1.14.0
+soupsieve==2.0.1
+urllib3==1.25.9
