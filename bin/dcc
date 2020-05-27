@@ -408,7 +408,7 @@ check_bridge() {
 cmd_doctor() {
     parse_args "$@"
     cmd_rm -f "$@"
-    check_brdige "$SUBNET"
+    check_bridge "$SUBNET"
     docker volume ls -q --filter=label=cluster=$CLUSTER | xargs -r docker volume rm
     docker network rm ${NETWORK}
 }
