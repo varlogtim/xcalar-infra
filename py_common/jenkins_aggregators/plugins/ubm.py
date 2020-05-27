@@ -9,7 +9,7 @@
 
 AGGREGATOR_PLUGINS = [{'module_path': 'ubm_perf',
                        'class_name': 'UbmPerfResultsAggregator',
-                       'job_names': ['UbmTest']}]
+                       'job_names': ['UbmPerfTest']}]
 
 # In-line "unit test"
 if __name__ == '__main__':

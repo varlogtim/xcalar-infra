@@ -292,6 +292,7 @@ class UbmPerfResultsAggregator(JenkinsAggregatorBase):
     def update_build(self, *, bnum, jbi, log, test_mode=False):
         try:
             dir_path = os.path.join(self.artifacts_root, self.job_name, bnum)
+            self.logger.debug("path is {}".format(dir_path))
             results = UbmPerfResults(bnum=bnum, dir_path=dir_path)
         except UbmTestNoResultsError:
             return None
@@ -318,7 +319,7 @@ class UbmPerfResultsAggregator(JenkinsAggregatorBase):
 
 class UbmPerfResultsData(object):
 
-    ENV_PARAMS = {"UBM_PERF_JOB_NAME": {"default": "UbmTest"}}
+    ENV_PARAMS = {"UBM_PERF_JOB_NAME": {"default": "UbmPerfTest"}}
 
     def __init__(self):
         """
@@ -506,7 +507,7 @@ if __name__ == '__main__':
     parser.add_argument("--bnum", help="build number", required=True)
     args = parser.parse_args()
 
-    dir_path = os.path.join("/netstore/qa/jenkins/UbmTest", args.bnum)
+    dir_path = os.path.join("/netstore/qa/jenkins/UbmPerfTest", args.bnum)
 
     logging.basicConfig(level=logging.INFO,
                         format="'%(asctime)s - %(threadName)s -"
