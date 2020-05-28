@@ -51,7 +51,12 @@ if [ $sedCode -ne 0 ]; then
 fi
 export XCE_CONFIG=$XCE_NEWCONFIG
 
-xc2 cluster start --num-nodes 3
+# This is a perf eval test, so num-nodes=1 wouldn't be sufficient to cover
+# the inter-node paths, and no point in having more than 2 nodes fighting
+# for resources on the one-host multi-node cluster.
+# XXX: Eventually, we should configure/allow multi-host clusters in the
+# test automation infra
+xc2 cluster start --num-nodes 2
 exitCode=$?
 if [ $exitCode -ne 0 ]; then
     echo "failed to start the cluster"
