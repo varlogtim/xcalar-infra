@@ -13,7 +13,7 @@ PACKER_BIN ?= packer.io
 REGISTRY ?= localhost:5000
 YAMLLIBS = $(wildcard lib/*.yml.lib)  # YAML libraries.. that's a thing now
 ARGS = -var-file=vars/ssh.json \
-	   -var http_proxy="$(http_proxy)" -var no_proxy="$(no_proxy) \
+	   -var http_proxy="$(http_proxy)" -var no_proxy="$(no_proxy)" \
 	   -var installer="$(INSTALLER)" -var-file=$(INSTALLER_VARS) \
 	   -var registry=$(REGISTRY)
 
