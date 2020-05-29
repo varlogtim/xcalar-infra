@@ -1,7 +1,7 @@
 Push new container to the registry:
 
     docker tag ubm-perf-grafana-datasource registry.service.consul/xcalar-qa/ubm-perf-grafana-datasource
-    docker push
+    docker push registry.service.consul/xcalar-qa/ubm-perf-grafana-datasource
 
 Do the nomad stuff:
     Job file here:
@@ -9,6 +9,7 @@ Do the nomad stuff:
     Make any adjustments
 
     Tell nomad to pick up new containers:
+        export NOMAD_ADDR=http://nomad.service.consul:4646/
         nomad job plan ubm-perf-grafana-datasource.nomad
         nomad job run <whatever the above tells you to do>
 
