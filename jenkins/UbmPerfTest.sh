@@ -11,6 +11,21 @@ export NETSTORE_JENKINS="${NETSTORE_JENKINS:-/netstore/qa/jenkins}"
 RESULTS_PATH="${NETSTORE_JENKINS}/${JOB_NAME}/${BUILD_ID}"
 mkdir -p "$RESULTS_PATH"
 
+onExit() {
+    local retval=$?
+    set +e
+    if [ $retval = 0 ]; then
+	    exit 0
+    else
+	    genBuildArtifacts
+	    echo "Build artifacts copied to ${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
+    fi
+    exit $retval
+}
+
+
+trap onExit EXIT SIGINT SIGTERM
+
 set +e
 
 # Clean up existing running cluster if any
