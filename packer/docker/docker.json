@@ -411,32 +411,34 @@
       },
       "docker-push"
     ],
-    {
-      "type": "manifest",
-      "output": "docker-manifest.json",
-      "custom_data": [
-        {
-          "build_number": "{{user `build_number`}}",
-          "installer_version": "{{user `installer_version`}}",
-          "installer_rc": "{{user `installer_rc`}}",
-          "installer_build_number": "{{user `installer_build_number`}}",
-          "installer_url": "{{user `installer_url`}}",
-          "installer_tag": "{{user `installer_tag`}}",
-          "installer": "{{user `installer`}}",
-          "bootstrap": "{{user `bootstrap`}}",
-          "project": "{{user `project`}}",
-          "today": "{{user `today`}}",
-          "ssh_uid": "{{user `ssh_uid`}}",
-          "xcalar_uid": "{{user `xcalar_uid`}}",
-          "ssh_username": "{{user `ssh_username`}}",
-          "ssh_pubkey": "{{user `ssh_pubkey`}}",
-          "release": "{{user `release`}}",
-          "shm_size": "{{user `shm_size`}}",
-          "registry": "{{user `registry`}}",
-          "repository": "{{user `repository`}}",
-          "xcalar_volume_version": "{{user `xcalar_volume_version`}}"
-        }
-      ]
-    }
+    [
+      {
+        "type": "manifest",
+        "output": "docker-manifest.json",
+        "custom_data": [
+          {
+            "build_number": "{{user `build_number`}}",
+            "installer_version": "{{user `installer_version`}}",
+            "installer_rc": "{{user `installer_rc`}}",
+            "installer_build_number": "{{user `installer_build_number`}}",
+            "installer_url": "{{user `installer_url`}}",
+            "installer_tag": "{{user `installer_tag`}}",
+            "installer": "{{user `installer`}}",
+            "bootstrap": "{{user `bootstrap`}}",
+            "project": "{{user `project`}}",
+            "today": "{{user `today`}}",
+            "ssh_uid": "{{user `ssh_uid`}}",
+            "xcalar_uid": "{{user `xcalar_uid`}}",
+            "ssh_username": "{{user `ssh_username`}}",
+            "ssh_pubkey": "{{user `ssh_pubkey`}}",
+            "release": "{{user `release`}}",
+            "shm_size": "{{user `shm_size`}}",
+            "registry": "{{user `registry`}}",
+            "repository": "{{user `repository`}}",
+            "xcalar_volume_version": "{{user `xcalar_volume_version`}}"
+          }
+        ]
+      }
+    ]
   ]
 }

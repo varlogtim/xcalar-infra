@@ -41,7 +41,7 @@
 # }
 
 FILE=""
-PROG="$(basename $0 .sh)"
+PROG="$(basename "$0" .sh)"
 VAULTCACHE_BASE="$HOME/.cache/$PROG"
 LOG="$VAULTCACHE_BASE/log.txt"
 TTL=4h
@@ -555,6 +555,11 @@ main() {
         echo >&2 "ERROR: $(basename $0) encountered this error:"
         echo >&2
         echo >&2 " --> " "$errors"
+        echo >&2 ""
+        echo >&2 ""
+        echo >&2 " Please run $0 --check to make sure you have vault setup properly"
+        echo >&2 ""
+
         if [[ "$errors" =~ 'no handler for route' ]]; then
             echo >&2
             echo >&2 "      Are you sure '${AWSPATH%%/*}' is a valid AWS alias for an account?"

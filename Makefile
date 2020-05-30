@@ -18,10 +18,10 @@ PIP_FLAGS   ?= -q
 REQUIRES     = requirements.txt
 REQUIRES_IN  = requirements.in
 HOOKS        = .git/hooks/pre-commit
-PYTHON  ?= /opt/xcalar/bin/python3.6
-OSID := $(shell osid 2>/dev/null || echo el7)
-
-PYVER := $(shell $(PYTHON) -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor))")
+PYTHON      ?= /opt/xcalar/bin/python3.6
+OSID        := $(shell osid 2>/dev/null || echo el7)
+TOUCH        = /usr/bin/touch
+PYVER		:= $(shell $(PYTHON) -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor))")
 WHEELS      ?= /infra/wheels/py$(PYVER)-$(OSID)
 
 TOUCH ?= /usr/bin/touch
@@ -38,12 +38,12 @@ $(HOOKS): scripts/hooks/pre-commit.sh
 
 venv: .updated
 
-.updated: $(VENV) requirements.txt
+.updated: $(VENV)/bin/pip-compile requirements.txt
 	@echo "Syncing virtualenv in $(VENV) with packages in $(REQUIRES) ..."
 	@$(VENV)/bin/python -m pip install -U pip
 	@$(VENV)/bin/python -m pip install -U setuptools
-	@$(VENV)/bin/python -m pip install -c requirements.txt wheel pip-tools
-	@$(VENV)/bin/pip install --no-index --trusted-host $(NETSTORE_HOST) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) -r $(REQUIRES)
+	@$(VENV)/bin/python -m pip install -c $(REQUIRES) wheel pip-tools
+	@$(VENV)/bin/python -m pip install --no-index --trusted-host $(NETSTORE_HOST) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) --find-links http://$(NETSTORE_IP)/infra/wheels/index.html -r $(REQUIRES)
 	@$(TOUCH) $@
 
 recompile: $(VENV)/bin/pip-compile
@@ -60,7 +60,8 @@ $(VENV):
 
 $(VENV)/bin/pip-compile: $(VENV)
 	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -U pip
-	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -U setuptools wheel pip-tools
+	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -U setuptools
+	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -c requirements.txt wheel pip-tools
 	@$(TOUCH) $@
 
 clean:

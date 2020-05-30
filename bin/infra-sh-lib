@@ -40,17 +40,36 @@ debug() {
 
 traceon() {
     set -x
-    export PS4='# $(date +%FT%T%z) ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
+    export PS4='# ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
+}
+
+info() {
+    if test -t 2; then
+        GREEN='\e[32m'
+        RESET='\e[0m'
+        echo >&2 -e "${GREEN}[INFO]${RESET} " "$@"
+    else
+        echo >&2 '[INFO] ' "$@"
+    fi
 }
 
 warn() {
     if test -t 2; then
         YELLOW='\e[33m'
         RESET='\e[0m'
-        echo -ne "${YELLOW}WARNING${RESET}: " >&2
-        say "$1"
+        echo >&2 -e "${YELLOW}[WARN]${RESET} " "$@"
     else
-        say "WARNING: $1"
+        echo >&2 '[WARN] ' "$@"
+    fi
+}
+
+error() {
+    if test -t 2; then
+        RED='\e[31m'
+        RESET='\e[0m'
+        echo >&2 -e "${RED}[ERROR]${RESET} " "$@"
+    else
+        echo >&2 '[ERROR] ' "$@"
     fi
 }
 
@@ -64,17 +83,6 @@ gpgcrypt() {
     rc=${PIPESTATUS[1]}
     rm -rf $tmpdir
     return $rc
-}
-
-error() {
-    if test -t 2; then
-        RED='\e[31m'
-        RESET='\e[0m'
-        echo -ne "${RED}ERROR${RESET}: " >&2
-        say "$1"
-    else
-        say "ERROR: $1"
-    fi
 }
 
 resource() {
@@ -134,7 +142,7 @@ file_age() {
 # $1 'key="value"' $2 json document
 json_set() {
     local tmp="${2}.$$"
-    jq -r "$1" "$2" > "$tmp" && mv "$tmp" "$2" && return 0 || return 1
+    jq -r "$1" "$2" >"$tmp" && mv "$tmp" "$2" && return 0 || return 1
 }
 
 json_param() {
@@ -167,7 +175,7 @@ json_parameters_merge() {
 
 ## Generic helpers
 have_command() {
-    command -v "$1" > /dev/null
+    command -v "$1" >/dev/null
 }
 
 preflight() {
@@ -187,7 +195,7 @@ safe_curl() {
 check_url() {
     local code
     if code=$(curl "$@" -L -s -r 0-255 -o /dev/null -w '%{http_code}\n'); then
-        if [[ "$code" =~ ^20 ]]; then
+        if [[ $code =~ ^20 ]]; then
             return 0
         fi
         return 1
@@ -322,9 +330,12 @@ consul_node_meta_hosts() {
     local name="${filter##*=}"
     name="${name//-/_}"
 
-    consul catalog nodes "$filter" | \
-        tail -n+2 | \
-        (echo "[${name}]"; awk '{printf("%s  ansible_host=%s\n", $1, $3)}')
+    consul catalog nodes "$filter" \
+        | tail -n+2 \
+        | (
+            echo "[${name}]"
+            awk '{printf("%s  ansible_host=%s\n", $1, $3)}'
+        )
 }
 
 consul_session() {
@@ -344,7 +355,10 @@ consul_session() {
 # -H 10.10.3.101 -p 28846
 consul_resolve_service() {
     local PORT_HOST HOST PORT
-    PORT_HOST=($(set -o pipefail; dig SRV $1 +short | cut -d' ' -f3-4)) \
+    PORT_HOST=($(
+        set -o pipefail
+        dig SRV $1 +short | cut -d' ' -f3-4
+    )) \
         && HOST=$(dig A ${PORT_HOST[1]} +short) \
         && PORT=${PORT_HOST[0]} \
         && printf -- "${2:-%s %s}\n" $HOST $PORT
@@ -397,7 +411,6 @@ tmpdir_with_cleanup() {
     trap "rm -rf $TMPDIR" EXIT
 }
 
-
 ##
 ## Docker registry API
 ##
@@ -421,7 +434,10 @@ registry_repo_mf() {
         scheme=http
     fi
 
-    if v1compat=$(set -o pipefail; curl -fLs ${scheme}://${registry}/v2/"$repo"/manifests/"$tag" | jq -r '.history[0].v1Compatibility'); then
+    if v1compat=$(
+        set -o pipefail
+        curl -fLs ${scheme}://${registry}/v2/"$repo"/manifests/"$tag" | jq -r '.history[0].v1Compatibility'
+    ); then
         if [ "${#v1compat}" -gt 0 ]; then
             echo "${registry}"/"$repo":"$tag"
             return 0
@@ -429,7 +445,6 @@ registry_repo_mf() {
     fi
     return 1
 }
-
 
 ##
 ##
@@ -488,7 +503,6 @@ interface_ip() {
     return 1
 }
 
-
 download_hashitool() {
     local tool="$1"
     local version="$2"
@@ -496,9 +510,9 @@ download_hashitool() {
         echo >&2 "$tool already exists"
         return 1
     fi
-    curl -fsSL "http://repo.xcalar.net/deps/${tool}_${version}_linux_amd64.zip" -o ${tool}-$$.zip >&2 && \
-    unzip -o -q ${tool}-$$.zip >&2 && \
-    rm -vf ${tool}-$$.zip
+    curl -fsSL "http://repo.xcalar.net/deps/${tool}_${version}_linux_amd64.zip" -o ${tool}-$$.zip >&2 \
+        && unzip -o -q ${tool}-$$.zip >&2 \
+        && rm -vf ${tool}-$$.zip
 }
 
 download_packer() {
@@ -509,11 +523,11 @@ download_packer() {
     fi
     mkdir -p $(dirname $PACKER)
     (
-    cd $(dirname $PACKER)
-    rm -f packer
-    download_hashitool packer $PACKER_VERSION
-    mv packer $PACKER
-    ln -sfn packer-${PACKER_VERSION} packer
+        cd $(dirname $PACKER)
+        rm -f packer
+        download_hashitool packer $PACKER_VERSION
+        mv packer $PACKER
+        ln -sfn packer-${PACKER_VERSION} packer
     )
     if [ "$($PACKER --version)" != "$PACKER_VERSION" ]; then
         echo "$PACKER version is $($PACKER --version)"
@@ -528,11 +542,11 @@ packer_query_manifest() {
     local manifest=${2:-packer-manifest.json}
     local uuid="$3"
     if [ -z "$uuid" ]; then
-        if ! uuid=$(jq -r ".last_run_uuid" < $manifest); then
+        if ! uuid=$(jq -r ".last_run_uuid" <$manifest); then
             return 1
         fi
     fi
-    jq -r '.builds[]|select(.name == "'$builder'")|select(.packer_run_uuid == "'$uuid'") .artifact_id' < $manifest
+    jq -r '.builds[]|select(.name == "'$builder'")|select(.packer_run_uuid == "'$uuid'") .artifact_id' <$manifest
 }
 
 packer_ami_from_manifest() {
@@ -558,11 +572,11 @@ packer_manifest_all() {
     local uuid="${2:-}"
 
     if [ -z "${uuid:-}" ]; then
-        if ! uuid=$(jq -r ".last_run_uuid" < $manifest); then
+        if ! uuid=$(jq -r ".last_run_uuid" <$manifest); then
             return 1
         fi
     fi
-    declare -A names=([amazon-ebs-amzn1]='AMZN1HVM' [amazon-ebs-amzn2]='AMZN2HVM')
+    declare -A names=([amazon - ebs - amzn1]='AMZN1HVM' [amazon - ebs - amzn2]='AMZN2HVM')
     local name artifact_id region
     local tmpdir=$(mktemp -d -t packer.XXXXXX)
     # shellcheck disable=SC2129,SC2207
@@ -571,14 +585,14 @@ packer_manifest_all() {
         for region_split in ${artifact_id//,/ }; do
             region="${region_split%:*}"
             local ami_id="${region_split#*:}"
-            echo "$region" >> $tmpdir/regions
-            echo "${names[$name]}: $ami_id" >> "$tmpdir/$region"
+            echo "$region" >>$tmpdir/regions
+            echo "${names[$name]}: $ami_id" >>"$tmpdir/$region"
             local concat_ami_id="ami_${region//-/_}_${names[$name]%HVM}"
-            echo "${concat_ami_id,,}: ${ami_id}" >> $tmpdir/allamis.yaml
-            echo "ami_${region//-/_}: ${ami_id}" >> $tmpdir/allamis.yaml
-            echo "ami_id: ${ami_id}" >> $tmpdir/allamis.yaml
+            echo "${concat_ami_id,,}: ${ami_id}" >>$tmpdir/allamis.yaml
+            echo "ami_${region//-/_}: ${ami_id}" >>$tmpdir/allamis.yaml
+            echo "ami_id: ${ami_id}" >>$tmpdir/allamis.yaml
         done
-    done < <(jq -r '.builds[]|select(.packer_run_uuid == "'$uuid'")|[.name,.artifact_id]|@tsv' < $manifest)
+    done < <(jq -r '.builds[]|select(.packer_run_uuid == "'$uuid'")|[.name,.artifact_id]|@tsv' <$manifest)
     echo "images:"
     for region in $(sort $tmpdir/regions | uniq); do
         echo "  $region:"
@@ -601,7 +615,7 @@ packer_manifest_all() {
 packer_manifest_to_yaml() {
     local tmp region builder builders
     tmp=$(mktemp -t packer.XXXXXX)
-    cat - > $tmp
+    cat - >$tmp
     builders=($(awk '{print $1}' $tmp | sort | uniq))
     for region in us-east-1 us-west-2; do
         grep -q "$region:" $tmp || continue
@@ -618,8 +632,8 @@ filename_from_url() {
 
 version_build_from_filename() {
     local vbf rc
-    vbf="$(grep -Eow '([0-9\.]+)-([0-9a-z]+)' <<< "$1" | tr '-' ' ' | sed 's/[a-z]//g')"
-    rc=$(grep -Eow '(RC[0-9]+)' <<< "$1")
+    vbf="$(grep -Eow '([0-9\.]+)-([0-9a-z]+)' <<<"$1" | tr '-' ' ' | sed 's/[a-z]//g')"
+    rc=$(grep -Eow '(RC[0-9]+)' <<<"$1")
     if [ -n "$vbf" ]; then
         echo $vbf $rc
         return 0
@@ -636,19 +650,19 @@ version_build_from_filename2() {
 
 build_type_from_installer_path() {
     case "$1" in
-        */prod/*) echo "prod";;
-        */debug/*) echo "debug";;
-        *) echo "unknown";;
+        */prod/*) echo "prod" ;;
+        */debug/*) echo "debug" ;;
+        *) echo "unknown" ;;
     esac
 }
 
 build_is_rc() {
-    if [[ "$1" =~ /ReleaseCandidates/ ]]; then
+    if [[ $1 =~ /ReleaseCandidates/ ]]; then
         return 0
     fi
     return 1
 }
 
 dimages_list() {
-    docker images --format '{{.Size}}\t{{.ID}}\t{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}} {{.CreatedSince}}'   | sort -h | column -t
+    docker images --format '{{.Size}}\t{{.ID}}\t{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}} {{.CreatedSince}}' | sort -h | column -t
 }

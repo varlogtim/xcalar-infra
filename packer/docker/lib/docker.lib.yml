@@ -78,3 +78,12 @@ changes:
   - 'LABEL xcalar_volume_version={{user `xcalar_volume_version`}}'
 #@ end
 #@ end
+
+#@ def docker_push(repository,tag):
+  - type: docker-tag
+    repository: (@= repository @)
+    tag: (@= tag @)
+    keep_input_artifact: true
+  - docker-push
+#@ end
+

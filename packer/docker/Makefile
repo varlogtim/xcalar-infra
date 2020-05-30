@@ -1,4 +1,4 @@
-.PHONY: default docker-base-el7 docker-xcalar-el7
+.PHONY: default docker-base-el7 docker-xcalar-el7 test
 SHELL = /bin/bash
 
 -include local.mk
@@ -11,7 +11,7 @@ PACKER_LOG := 1
 PACKER_LOG_PATH := packer.log
 PACKER_BIN ?= packer.io
 REGISTRY ?= localhost:5000
-YAMLLIBS = $(wildcard lib/*.yml.lib)  # YAML libraries.. that's a thing now
+YAMLLIBS = $(wildcard lib/*.lib.yml)  # YAML libraries.. that's a thing now
 ARGS = -var-file=vars/ssh.json \
 	   -var http_proxy="$(http_proxy)" -var no_proxy="$(no_proxy)" \
 	   -var installer="$(INSTALLER)" -var-file=$(INSTALLER_VARS) \
@@ -25,12 +25,16 @@ export PROJECT PACKER_LOG PACKER_LOG_PATH CHECKPOINT_DISABLE=1 PACKER_NO_COLOR
 
 default: docker-xcalar-el7
 
-%.json: %.yaml lib/docker.lib.yml
-	ytt $(patsubst %,-f %,$^) | cfn-flip | jq -r . > $@.tmp && mv $@.tmp $@
+%.json: %.yaml $(YAMLLIBS)
+	set -o pipefail; ytt $(patsubst %,-f %,$^) | cfn-flip | jq -r . > $@.tmp && mv $@.tmp $@
 
 .PHONY: $(INSTALLER_VARS)
 $(INSTALLER_VARS):
 	installer-version.sh --format=json "$(INSTALLER)" > $@.tmp && mv $@.tmp $@
+
+test: test.json
+	packer.io validate $<
+	packer.io build $<
 
 docker-xcalar-el7: docker.json $(INSTALLER_VARS)
 	packer.io validate $(ARGS) -only=$@ $<
