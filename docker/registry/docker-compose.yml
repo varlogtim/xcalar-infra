@@ -19,6 +19,9 @@ services:
     networks:
       dbnet:
         ipv4_address: 172.21.0.247
+    environment:
+      POSTGRES_PASSWORD: Welcome1
+      POSTGRES_USER: root
     volumes:
       - 'postgres:/var/lib/postgresql/data'
 
