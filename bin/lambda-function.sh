@@ -23,9 +23,11 @@ usage() {
 
 main() {
     BUCKET_PREFIX="${BUCKET_PREFIX:-sharedinf-lambdabucket-559166403383}"
+    BUCKETS=()
     REGIONS="${REGIONS:-$AWS_DEFAULT_REGION}"
     PREFIX=''
     SUFFIX=''
+    KEY=''
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -35,8 +37,9 @@ main() {
             --all-regions) REGIONS='us-west-2 us-west-1 us-east-1 us-east-2';;
             --copy-to-regions) REGIONS="$1"; shift;;
             --prefix)
-                [ -z "$1" ] || PREFIX="${1%/}/"
+                [ -z "$2" ] || PREFIX="${1%/}/"
                 shift;;
+            --key) KEY="$1"; shift;;
             --file) FILE="$1"; shift;;
             --suffix) SUFFIX="$1"; shift;;
             -h|--help) usage; exit 0;;
@@ -46,14 +49,15 @@ main() {
     if ! test -e "$FILE"; then
         die "Must specify an input file"
     fi
-    REGIONS="${REGIONS//,/ }"
+    REGIONS=(${REGIONS//,/ })
 
     MD5="$(md5sum < "$FILE" | cut -d' ' -f1)"
-    KEY="${PREFIX}${MD5}${SUFFIX}"
+    if [ -z "${KEY}" ]; then
+        KEY="${PREFIX}${MD5}${SUFFIX}"
+    fi
 
     if [ -z "${BUCKETS[*]}" ]; then
-        BUCKETS=()
-        for region in ${REGIONS}; do
+        for region in "${REGIONS[@]}"; do
             BUCKETS+=(${BUCKET_PREFIX}-${region})
         done
     fi
@@ -75,4 +79,3 @@ main() {
 }
 
 main "$@"
-

@@ -53,14 +53,14 @@ def launchcluster_handler(event, context):
     StackName = os.environ['StackName']
     ParentStack = os.environ['ParentStack']
     #InstanceProfileArn = envsafe('InstanceProfileArn')
-    ClusterName = '-'.join([event['ClusterBase'], uid])
+    ClusterName = '-'.join(['cluster', ParentStack, uid])
     ClusterSize = int(event['ClusterSize'])
     LaunchTemplate = os.environ['LaunchTemplate']
     LaunchTemplateVersion = os.environ['LaunchTemplateVersion']
     BaseURL = os.environ['BaseURL']
     EfsSharedRoot = os.environ['EfsSharedRoot']
     Email = os.environ['Email']
-    Script = event.get('Script',f'{BaseURL}scripts/runner.sh')
+    Script = event.get('Script', f'{BaseURL}scripts/runner.sh')
     #url = requests.get(f'{BaseURL}scripts/batch.sh')
     userData = f'''\
 #!/bin/bash
@@ -72,6 +72,7 @@ BASEURL={BaseURL}
 PARENTSTACK={ParentStack}
 STACKNAME={StackName}
 CLUSTERNAME={ClusterName}
+FILESYSTEMID=${EfsSharedRoot}
 EOF
 
 cat > /etc/profile.d/xcalar-env.sh <<EOF
@@ -126,7 +127,7 @@ exit $?
         UserData=userData
     )
     event['InstanceIds'] = [instance['InstanceId'] for instance in response['Instances']]
-    if event.get('WaitForInstances',False):
+    if event.get('WaitForInstances', False):
         for instance_id in event['InstanceIds']:
             instance = boto3.resource('ec2').Instance(instance_id)
             instance.wait_until_running()

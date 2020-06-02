@@ -1,3 +1,4 @@
+---
 instance_default: m5d.2xlarge
 instance_types:
   - c5d.xlarge

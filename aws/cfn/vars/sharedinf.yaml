@@ -1,2 +1,0 @@
-lambdabucket: '!Sub "sharedinf-lambdabucket-559166403383-${AWS::Region}"'
-lambdalayer: '!Sub "arn:aws:lambda:${AWS::Region}:559166403383:layer:instamart:5"'

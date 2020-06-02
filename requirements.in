@@ -24,6 +24,7 @@ pre-commit
 pylint
 pytest
 pytest-benchmark
+pytest-tap
 python-consul
 PyYAML
 requests

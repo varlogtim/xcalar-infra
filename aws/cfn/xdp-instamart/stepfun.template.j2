@@ -58,34 +58,28 @@ Parameters:
   Subnet:
     Description: Subnet to launch into
     Type: String
-
+Mappings:
+  SourceCode:
+{%- for region in ['us-west-2','us-west-1','us-east-1','us-east-2'] %}
+    {{region}}:
+      S3Bucket: '{{ lambda[region]["lambdabucket"] }}'
+      KeyPrefix: '{{ lambdakey }}'
+      Layer: '{{ lambda[region]["lambdalayer"] }}'
+{%- endfor %}
 Globals:
   Function:
     Runtime: python3.6
     Timeout: 60
     Handler: index.handler
     Layers:
-      - {{ lambdalayer }}
+      - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
     Environment:
       Variables:
         StackName: !Ref 'AWS::StackName'
         Region: !Ref 'AWS::Region'
         StackId: !Ref 'AWS::StackId'
         ParentStack: !Ref 'ParentStack'
-
 Resources:
-    #  LambdaLayer:
-    #    Type: AWS::Lambda::LayerVersion
-    #    Properties:
-    #      CompatibleRuntimes:
-    #        - python3.6
-    #        - python3.7
-    #      Content:
-    #        S3Bucket: {{ lambdabucket }}
-    #        S3Key: lambdav1/84761646ba6a6018c8dd10ce23dde123.zip
-    #        S3Key: {{ lambdakey }}
-    #      LicenseInfo: MIT
-
   SNSTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -419,12 +413,12 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        S3Bucket: {{ lambdabucket }}
-        S3Key: {{ lambdakey }}
+        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket ]
+        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
       Handler: add_notification.lambda_handler
       Role: !GetAtt AddS3NotificationRole.Arn
       Layers:
-        - {{ lambdalayer }}
+        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
       Runtime: python3.6
       Timeout: 60
 {% if logGroup %}
@@ -438,12 +432,12 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        S3Bucket: {{ lambdabucket }}
-        S3Key: {{ lambdakey }}
+        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket]
+        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
       Handler: schedule.update_handler
       Role: !GetAtt ScheduleUpdateRole.Arn
       Layers:
-        - {{ lambdalayer }}
+        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
       Runtime: python3.6
       Timeout: 100
       Environment:
@@ -468,11 +462,11 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        S3Bucket: {{ lambdabucket }}
-        S3Key: {{ lambdakey }}
+        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket]
+        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
       Handler: schedule.startstep_handler
       Layers:
-        - {{ lambdalayer }}
+        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
       Description: "Launches a statemachine"
       Environment:
         Variables:
@@ -483,13 +477,13 @@ Resources:
       Runtime: python3.6
       Timeout: 300
 
-{% if logGroup %}
+{%- if logGroup %}
   StepStartFunctionLogs:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${StepStartFunction}
-{% endif %}
-{% if samAsg %}
+{%- endif %}
+{%- if samAsg %}
   SamLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Metadata:
@@ -603,11 +597,11 @@ Resources:
     Type: "AWS::Lambda::Function"
     Properties:
       Code:
-        S3Bucket: {{ lambdabucket }}
-        S3Key: {{ lambdakey }}
+        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket]
+        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
       Handler: schedule.launchcluster_handler
       Layers:
-        - {{ lambdalayer }}
+        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
       Description: "Creates cluster to perform DataApp processing"
       Environment:
         Variables:
@@ -690,11 +684,10 @@ Resources:
           import json
           import datetime
           import base64
+          import shlex
           def lambda_handler(event, context):
               print(json.dumps(event))
-              client = boto3.client('ssm')
-              ec2 = boto3.client('ec2')
-              s3 = boto3.client('s3')
+              ssm = boto3.client('ssm')
               Bucket = os.environ['Bucket']
               BaseURL = os.environ['BaseURL']
               AdminPassword = os.environ['AdminPassword']
@@ -704,29 +697,27 @@ Resources:
               now = datetime.datetime.now()
               instance_ids = event['InstanceIds'][:]
               Items = []
-              print(instance_ids)
-              print(ec2.describe_instances(InstanceIds=instance_ids))
-              #waiter = ec2.get_waiter('instance_status_ok')
-              #waiter.wait(InstanceIds=instance_ids)
               event['Commands'] = []
-              script = f'{BaseURL}scripts/runner.sh'
-              if 'Script' in event:
-                  script = event['Script']
+              runnerUrl = f'{BaseURL}scripts/runner.sh'
+              scriptUrl = ''
+              if 'ScriptUrl' in event:
+                  scriptUrl = event['ScriptUrl']
               command = event['Command']
               command = command.replace('%Y',str(now.year)).replace('%m',str(now.month)).replace('%d',str(now.day))
               command = command.replace('%H',str(now.hour)).replace('%M',str(now.minute)).replace('%S',str(now.second))
-              if command.lstrip(' ').startswith('xc2'):
-                  command = f'xc2 login --username {AdminUsername} --password {AdminPassword} && ' + command
-              response = client.send_command(
+              login_command = f'xc2 login --username {AdminUsername} --password {AdminPassword}'
+              target_command = '/opt/xcalar/bin/python3 -c "from xcalar.external.client import Client; name=\\"Private S3\\"; envi=\\"s3environ\\"; Client(bypass_proxy=True).add_data_target(name, envi,{})"'
+              final_command = login_command + ' && ' + target_command + '; ' + command
+              response = ssm.send_command(
                 InstanceIds=[instance_ids[0]],
                 DocumentName='AWS-RunShellScript',
                 Parameters={
                   'commands': [
                     'until test -e /var/lib/cloud/instance/boot-finished; do sleep 5; done',
                     'systemctl start xcalar.service',
-                    f'curl -fsSL {script} -o /usr/bin/runner.sh',
-                    'chmod +x /usr/bin/runner.sh',
-                    f"/usr/bin/runner.sh --runas xcalar -- /bin/bash -c '{command}'"
+                    f'if [ "{scriptUrl}" != "" ]; then curl -fsSL "{scriptUrl}" -o /usr/local/bin/user-script; chmod +x /usr/local/bin/user-script; /usr/local/bin/user-script; fi',
+                    f'if [ "{runnerUrl}" != "" ]; then curl -fsSL "{runnerUrl}" -o /usr/local/bin/runner.sh; chmod +x /usr/local/bin/runner.sh; fi',
+                    'runner.sh --runas xcalar -- /bin/bash -c {}'.format(shlex.quote(final_command))
                   ]
                 }
               )

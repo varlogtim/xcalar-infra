@@ -79,10 +79,10 @@ EOF
     cd "$RUNDIR" || fatal "Unable to chdir to $RUNDIR"
     if [ -n "$RUNAS" ]; then
         chown "$RUNAS" "$RUNDIR"
-        log "Runninig su-exec $RUNAS $SCRIPT"
+        log "Running su-exec $RUNAS $SCRIPT"
         su-exec "$RUNAS" /bin/bash -x $SCRIPT 2>&1 | tee -a ${SCRIPT%.sh}.log
     else
-        log "Runninig $SCRIPT"
+        log "Running $SCRIPT"
         /bin/bash -x $SCRIPT 2>&1 | tee -a ${SCRIPT%.sh}.log
     fi
     rc=${PIPERESULT[0]}

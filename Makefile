@@ -36,7 +36,7 @@ $(HOOKS): scripts/hooks/pre-commit.sh
 
 venv: .updated
 
-.updated: requirements.txt
+.updated: $(VENV) requirements.txt
 	@echo "Syncing virtualenv in $(VENV) with packages in $(REQUIRES) ..."
 	@$(VENV)/bin/pip install --no-index --trusted-host $(NETSTORE_HOST) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) -r $(REQUIRES)
 	@/usr/bin/touch $@

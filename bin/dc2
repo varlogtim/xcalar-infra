@@ -217,6 +217,9 @@ dc2_parse_common() {
             OSID="$1"
             echo 2
             ;;
+        --installer)
+            INSTALLER="$1"
+            ;;
         --installer_version)
             INSTALLER_VERSION="$1"
             VERSION="$1"
@@ -332,7 +335,7 @@ dc2_deploy() {
             *) break ;;
         esac
     done
-    if [ -n "$INSTALLER_TAG" ] && [ -z "${TAG:-}" ]; then
+    if [ -n "${INSTALLER_TAG:-}" ] && [ -z "${TAG:-}" ]; then
         TAG="$INSTALLER_TAG"
     fi
 
@@ -417,7 +420,7 @@ dc2_upload() {
                 ;;
         esac
     done
-    if [ -n "$INSTALLER_TAG" ] && [ -z "${TAG:-}" ]; then
+    if [ -n "${INSTALLER_TAG:-}" ] && [ -z "${TAG:-}" ]; then
         TAG="$INSTALLER_TAG"
     fi
     if [ -n "$INSTALLER_VERSION" ] && [ -z "${VERSION:-}" ]; then
