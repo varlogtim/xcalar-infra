@@ -236,7 +236,7 @@
         "chown -R $SSH_UID:$SSH_UID $SSH_HOME",
         "rm -fv $(ls /etc/yum.repos.d/CentOS-*.repo | grep -vE '(CentOS-Base|kernel)')",
         "yum update -y",
-        "yum install -y curl ca-certificates systemd-sysv systemd systemd-libs which audit cronie rsyslog initscripts pam openssh-server sudo sysvinit-tools",
+        "yum install -y curl ca-certificates systemd-sysv systemd systemd-libs which audit cronie rsyslog initscripts pam openssh-server sudo sysvinit-tools openssh-clients",
         "bash -x /usr/bin/fix-docker-systemd.sh",
         "bash '{{user `installer`}}' -x $TMPDIR/installer",
         "yum localinstall -y $TMPDIR/installer/xcalar-install/unibuild/*.rpm $TMPDIR/installer/xcalar-install/${OSID}/*.rpm",
@@ -289,7 +289,8 @@
         "if ! test -x /usr/bin/java; then ln -sfn /opt/xcalar/lib/java8/jre/bin/java /usr/bin/; fi",
         "for ii in /etc/systemd/system/xcalar-{sqldf,usrnode,caddy}.service.d; do mkdir -p $ii; cp /tmp/99-dcc.conf $ii/; done",
         "rm -fv /etc/ssh/ssh_host_*",
-        "systemctl enable sshd.service"
+        "systemctl enable sshd.service",
+        "/bin/true > /etc/machine-id"
       ]
     },
     {
