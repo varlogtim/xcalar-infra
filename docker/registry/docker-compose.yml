@@ -2,7 +2,11 @@ version: '3.7'
 
 volumes:
   registry:
+    external: true
   redis:
+    external: true
+  postgres:
+    external: true
 
 networks:
   dbnet:
