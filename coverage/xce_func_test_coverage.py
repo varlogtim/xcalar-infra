@@ -159,16 +159,16 @@ class XCEFuncTestCoverageData(object):
         return None
 
 if __name__ == '__main__':
-    print("Compile check A-OK!")
+    """
+    Useful little utility to emit csv coverage for critical files from given build.
+    """
 
-    logging.basicConfig(level=logging.INFO,
+    cfg = EnvConfiguration({"LOG_LEVEL": {"default": logging.ERROR}})
+    logging.basicConfig(level=cfg.get("LOG_LEVEL"),
                         format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
-    """
-    Useful little utility to emit csv coverage for critical files from given build.
-    """
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--bnum", help="build number", required=True)
@@ -178,6 +178,6 @@ if __name__ == '__main__':
     for fname in data.filenames(bnum=args.bnum, group_name="Critical Files"):
         coverage = data.coverage(bnum=args.bnum, filename=fname)
         if coverage is not None:
-            print("{0},{1:.2f}".format(fname, data.coverage(bnum=args.bnum, filename=fname)))
+            print("{0}: {1:.2f}".format(fname, data.coverage(bnum=args.bnum, filename=fname)))
         else:
-            print("{0},None".format(fname))
+            print("{0}: None".format(fname))

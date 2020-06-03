@@ -456,6 +456,9 @@ class ClangCoverageAggregator(JenkinsAggregatorBase):
         super().__init__(job_name=job_name)
 
     def update_build(self, *, bnum, jbi, log, test_mode=False):
+
+        coverage_dir = ClangCoverageDir(coverage_dir=os.path.join(self.artifacts_root, bnum))
+        coverage_dir.process()
         """
         Read the coverage.json file and convert to our preferred index form,
         filtering for only files of interest (plus totals).
