@@ -7,6 +7,7 @@
     "disk_size": "16",
     "home": "{{env `HOME`}}",
     "docker_version": "19.03.8",
+    "guardrails_version": "0.0.1-1",
     "installer_url": "{{env `INSTALLER_URL`}}",
     "installer": "{{env `INSTALLER`}}",
     "installer_version": "",
@@ -247,6 +248,10 @@
         "yum install -y curl ca-certificates systemd-sysv systemd systemd-libs which audit cronie rsyslog initscripts pam openssh-server sudo sysvinit-tools openssh-clients",
         "yum localinstall -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm",
         "yum install -y curl ca-certificates systemd-sysv systemd systemd-libs which audit cronie rsyslog initscripts pam openssh-server sudo sysvinit-tools openssh-clients",
+        "mkdir -p /tmp/guardrails",
+        "curl -kfsS 'https://repo.xcalar.net/rpm-deps/common/x86_64/Packages/xcalar-guardrails-{{user `guardrails_version`}}.x86_64.rpm' -o /tmp/guardrails/xcalar-guardrails.x86-64.rpm",
+        "yum localinstall -y /tmp/guardrails/xcalar-guardrails.x86-64.rpm",
+        "rm -rf /tmp/guardrails",
         "bash -x /usr/bin/fix-docker-systemd.sh",
         "bash '{{user `installer`}}' -x $TMPDIR/installer",
         "yum localinstall -y $TMPDIR/installer/xcalar-install/unibuild/*.rpm $TMPDIR/installer/xcalar-install/${OSID}/*.rpm",
@@ -369,6 +374,14 @@
       ],
       "source": "{{ user `xlrdir`}}/conf/localhost.key",
       "destination": "/etc/xcalar/"
+    },
+    {
+      "type": "file",
+      "only": [
+        "docker-xcalar-el7"
+      ],
+      "source": "{{ user `xlrdir`}}/bin/gdb",
+      "destination": "/usr/local/share/"
     },
     {
       "type": "shell",

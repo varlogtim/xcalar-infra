@@ -450,6 +450,7 @@ dc2_defaults() {
     IMAGE_ID="${IMAGE_ID:-$(get_cluster_config image registry.int.xcalar.com/xcalar/xcalar:latest)}"
     HOSTPORT="${HOSTPORT:-$(get_cluster_config hostport 18443)}"
     NODE_ID=${NODE_ID:-0}
+    XCE_USE_GUARDRAILS=${XCE_USE_GUARDRAILS:-0}
     STACK_NAME="${STACK_NAME:-$CLUSTER}"
     if ! test -e "$CONFDIR/${CLUSTER}-uuid.txt"; then
         uuidgen >"$CONFDIR/${CLUSTER}-uuid.txt"
@@ -558,6 +559,9 @@ parse_args() {
             --repo)
                 REPO="$1"
                 shift
+                ;;
+            --guardrails)
+                XCE_USE_GUARDRAILS=1
                 ;;
             --) break ;;
             -*) die "Unknown argument: $cmd" ;;
@@ -885,7 +889,7 @@ cmd_run() {
         -e PATH=$DEFAULT_PATH
     )
 
-    ENVS+=(CLUSTER=$CLUSTER XCE_NUMNODES=$NODES PATH=$DEFAULT_PATH)
+    ENVS+=(CLUSTER=$CLUSTER XCE_NUMNODES=$NODES PATH=$DEFAULT_PATH XCE_USE_GUARDRAILS=$XCE_USE_GUARDRAILS)
     if [ -n "${VOLUMES:-}" ]; then
         local vol
         for vol in "${VOLUMES[@]}"; do
@@ -909,6 +913,7 @@ cmd_run() {
         done
         DC_ARGS+=(-v ${XLRGUIDIR}/xcalar-gui:/opt/xcalar/xcalar-gui)
         DC_ARGS+=(-v ${XLRDIR}/scripts:/opt/xcalar/scripts)
+        DC_ARGS+=(-v ${XLRDIR}/bin/gdb:/usr/local/share/xcalar/gdb)
         DC_ARGS+=(-v ${XLRDIR}:${XLRDIR})
         DC_ARGS+=(--label localdeploy="$XLRDIR")
         DC_ARGS+=(-e XLRDIR -e XLRGUIDIR)
