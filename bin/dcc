@@ -290,6 +290,12 @@ set_cluster_config() {
     set_config "${CLUSTER}.${var}" "$@"
 }
 
+jq_not_null() {
+    if [ -z "$1" ] || [ "$1" == null ]; then
+        return 1
+    fi
+    echo "$1"
+}
 
 mkec2env() {
     cat <<-EOF
@@ -369,7 +375,7 @@ mks3config() {
     {
      "s3buckets":{
         "S3Bucket":{
-            "bucket":"${BUCKET}",
+            "bucket":"${BUCKET:-xcfield}",
             "prefix":"",
             "event_prefix":"",
             "existing":true
@@ -439,7 +445,6 @@ dc2_defaults() {
     CIDR_BITS="${CIDR_BITS:-$(get_cluster_config cidr 16)}"
     NODES="${NODES:-$(get_cluster_config nodes 3)}"
     SHARE="${SHARE:-$(get_cluster_config share ${CLUSTER}_root)}"
-    SERDES="${SERDES:-$(get_cluster_config serdes ${CLUSTER}_serdes)}"
     IMAGE_ID="${IMAGE_ID:-$(get_cluster_config image registry.int.xcalar.com/xcalar/xcalar:latest)}"
     HOSTPORT="${HOSTPORT:-$(get_cluster_config hostport 18443)}"
     NODE_ID=${NODE_ID:-0}
@@ -461,6 +466,14 @@ parse_args() {
             -h | --help)
                 cmd_help "$@"
                 exit 0
+                ;;
+            --maxmem)
+                MAXMEM="$1"
+                shift
+                ;;
+            --numcpu)
+                NUMCPU="$1"
+                shift
                 ;;
             --pull)
                 PULL=1
@@ -694,7 +707,7 @@ cmd_rm() {
     names=($(docker container ls -a --filter label=cluster=${CLUSTER} --format '{{.Names}}'))
     if [ "${#ids[@]}" -gt 0 ]; then
         say "- Removing ${names[*]}"
-        docker rm ${FORCE} "${names[@]}" > /dev/null
+        docker rm -v ${FORCE} "${names[@]}" > /dev/null
     else
         say "- Cluster $CLUSTER has no members"
     fi
@@ -711,39 +724,55 @@ cmd_logs() {
     return 0
 }
 
+docker_image_volume_version() {
+    jq_not_null $(docker image inspect ${1:-$IMAGE_ID} --format='{{json .}}' | jq -r '.Config.Labels.xcalar_volume_version' 2>/dev/null)
+}
+
+docker_volume_version() {
+    jq_not_null $(docker volume inspect ${1:-$SHARE} --format='{{json .}}' | jq -r .Labels.xcalar_volume_version 2>/dev/null)
+}
+
+#shellcheck disable=SC2181
 preflight_check() {
     if ((PULL)) || ! docker image inspect "$IMAGE_ID" > /dev/null 2>&1 || [[ $IMAGE_ID =~ :latest$ ]]; then
         if ! docker pull $IMAGE_ID; then
             die "Failed to pull $IMAGE_ID"
         fi
     fi
-    if docker volume inspect "$SHARE" >/dev/null 2>&1; then
-        if ! docker run --rm --entrypoint=/bin/bash -u xcalar -v $SHARE:/mnt/xcalar -- $IMAGE_ID -c 'test -w /mnt/xcalar' >/dev/null; then
-            error "Permissions on $SHARE are not allowing xcalar to write to it. Please remove $SHARE"
+    local share_name image_volume_version
+    image_volume_version="$(docker_image_volume_version $IMAGE_ID)"
+    share_name=$(docker volume ls --filter label=cluster=$CLUSTER --filter label=purpose=xcalar_shared_root --format='{{.Name}}' 2>/dev/null)
+    if [ $? -eq 0 ] && [ -n "$share_name" ]; then
+        local volume_version
+        volume_version="$(docker_volume_version $share_name)"
+        if [ "$image_volume_version" != "$volume_version" ]; then
+            error "Version mismatch of image share volume ($image_volume_version) and your existing share $share_name${volume_version:+ ($volume_version)}. Please remove $share_name"
             say ""
-            say "       docker volume rm $SHARE"
-            say "       docker volume rm $SERDES"
+            say "       docker volume rm -f $share_name"
             say ""
-            die "Bad permissions on xcalar shared root volume"
+            die "Volume version"
+        fi
+        if ! docker run --rm --entrypoint=/bin/bash -u xcalar -v $share_name:/mnt/xcalar -- $IMAGE_ID -c 'test -w /mnt/xcalar' >/dev/null; then
+            error "Permissions on $share_name are not allowing xcalar to write to it. Please remove $share_name"
+            say ""
+            say "       docker volume rm -f $share_name"
+            say ""
+            die "Volume permissions"
         fi
     else
-        if ! docker volume create --label cluster=$CLUSTER --label purpose=xcalar_shared_root $SHARE >/dev/null; then
+        docker volume rm -f $SHARE >/dev/null 2>&1 || true
+        if ! docker volume create --label cluster=$CLUSTER --label purpose=xcalar_shared_root ${image_volume_version:+--label xcalar_volume_version=$image_volume_version} $SHARE >/dev/null; then
             die "Failed to create volume $SHARE"
-        fi
-    fi
-    if ! docker volume inspect "$SERDES" >/dev/null 2>&1; then
-        if ! docker volume create --label cluster=$CLUSTER --label purpose=xcalar_serdes $SERDES >/dev/null; then
-            die "Failed to create volume $SERDES"
         fi
     fi
     # One time setup per cluster
     if ! docker network inspect "$NETWORK" > /dev/null 2>&1; then
         if ! docker network create --attachable --label cluster=$CLUSTER --subnet "${SUBNET}/${CIDR_BITS}" --gateway ${SUBNET%.0}.1 -d bridge "${NETWORK}"; then
-            die "Unable to create network $NETWORK (${SUBNET}/${CIDR_BITS})"
+            die "Unable to create network $NETWORK (${SUBNET}/${CIDR_BITS}), try $DC doctor"
         fi
     fi
     if ! SUBNET_CIDR=$(docker network inspect $NETWORK --format '{{json .}}' | jq -r '.IPAM.Config[0].Subnet'); then
-        die "Unable to query network $NETWORK (${SUBNET}/${CIDR_BITS})"
+        die "Unable to query network $NETWORK (${SUBNET}/${CIDR_BITS}), try $DC doctor"
     fi
 
     CIDR_BITS_NEW="${SUBNET_CIDR#*/}"
@@ -777,6 +806,12 @@ cmd_run() {
 
     AWS_SUPPORT=()
     ENVS=()
+    if [ -n "$MAXMEM" ]; then
+        ENVS+=(MAXMEM=$MAXMEM)
+    fi
+    if [ -n "$NUMCPU" ]; then
+        ENVS+=(NUMCPU=$NUMCPU)
+    fi
     if ((AWS_PASSTHROUGH)); then
         if vault-aws-credentials-provider.sh --ttl 12h -e 2> /dev/null | sed 's/^ //; /export /d' > $CONFDIR/aws.env.tmp; then
             mv $CONFDIR/aws.env{.tmp,}
@@ -799,7 +834,6 @@ cmd_run() {
     DC_ARGS=(
         -v ${XLRINFRADIR}/packer/docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
         -v ${SHARE}:/mnt/xcalar
-        -v ${SERDES}:/ephemeral/data
         --memory-swappiness=10
         --shm-size=${tmpFsSizeKb%.*}k
         --network $NETWORK
@@ -833,6 +867,7 @@ cmd_run() {
         DC_ARGS+=(-v ${XLRGUIDIR}/xcalar-gui:/opt/xcalar/xcalar-gui)
         DC_ARGS+=(-v ${XLRDIR}:${XLRDIR})
         DC_ARGS+=(--label localdeploy="$XLRDIR")
+        DC_ARGS+=(-e XLRDIR -e XLRGUIDIR)
     fi
     LABELS=(
         --label image-id="${IMAGE_ID}"
@@ -843,6 +878,7 @@ cmd_run() {
     mkconfig $CLUSTER $NODES > $defaultCfg
     DC_ARGS+=(-v $defaultEnv:/etc/default/xcalar:ro)
     DC_ARGS+=(-v $defaultCfg:/etc/xcalar/default.cfg)
+    DC_ARGS+=(--env-file $defaultEnv)
     local -a cids=()
     local cid node_id name ip_address
     for node_id in $(seq 0 $((NODES - 1))); do
@@ -961,12 +997,10 @@ cmd_clean() {
     local members
     if members="$(docker_cluster_members)"; then
         say " - Containers $members"
-        docker rm -f $members
+        docker rm -v -f $members
     fi
     say " - Shared volume $SHARE"
-    docker volume rm $SHARE 2> /dev/null || true
-    say " - SerDes volume $SHARE"
-    docker volume rm $SERDES 2> /dev/null || true
+    docker volume rm -f $SHARE 2> /dev/null || true
     return 0
 }
 

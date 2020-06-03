@@ -11,6 +11,8 @@ run_command:
   - seccomp=unconfined
   - --cap-add
   - sys_ptrace
+  - --cap-add
+  - ipc_lock
   - --ulimit=core=0:0
   - --ulimit=nofile=128000:128000
   - --ulimit=nproc=140960:140960
@@ -73,5 +75,6 @@ changes:
   - 'VOLUME ["/mnt/xcalar"]'
   - 'VOLUME ["/ephemeral/data"]'
   - 'LABEL image_build_number={{user `image_build_number`}}'
+  - 'LABEL xcalar_volume_version={{user `xcalar_volume_version`}}'
 #@ end
 #@ end

@@ -3,7 +3,7 @@ SHELL = /bin/bash
 
 -include local.mk
 
-INSTALLER ?= /netstore/builds/byJob/BuildTrunk/xcalar-latest-2.3.0-installer-prod
+INSTALLER ?= /netstore/builds/byJob/BuildTrunk/xcalar-latest-installer-prod
 INSTALLER_VARS = installer_vars.json
 INSTALLER_VERSION = $(shell jq -r .installer_version $(INSTALLER_VARS))
 PROJECT ?= xdp-instamart
@@ -26,11 +26,11 @@ export PROJECT PACKER_LOG PACKER_LOG_PATH CHECKPOINT_DISABLE=1 PACKER_NO_COLOR
 default: docker-xcalar-el7
 
 %.json: %.yaml lib/docker.lib.yml
-	ytt $(patsubst %,-f %,$^) | cfn-flip | jq -r . > $@
+	ytt $(patsubst %,-f %,$^) | cfn-flip | jq -r . > $@.tmp && mv $@.tmp $@
 
 .PHONY: $(INSTALLER_VARS)
 $(INSTALLER_VARS):
-	installer-version.sh --format=json "$(INSTALLER)" > $@
+	installer-version.sh --format=json "$(INSTALLER)" > $@.tmp && mv $@.tmp $@
 
 docker-xcalar-el7: docker.json $(INSTALLER_VARS)
 	packer.io validate $(ARGS) -only=$@ $<

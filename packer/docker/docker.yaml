@@ -39,6 +39,7 @@ variables:
   today: '{{isotime "20060102"}}'
   xcalar_uid: '1000'
   xcalar_username: 'xcalar'
+  xcalar_password: 'Welcome1'
   release: '{{env `RELEASE`}}'
   shm_size: '16g'
   registry: 'localhost:5000'
@@ -50,6 +51,7 @@ variables:
   admin_email: 'info@xcalar.com'
   base_image: 'centos:7.8.2003'
   xcalar_image: '{{user `registry`}}/xcalar/base:{{user `installer_version`}}'
+  xcalar_volume_version: 'v2'
   http_proxy: '{{env `http_proxy`}}'
   no_proxy: 'localhost,.localdomain,127.0.0.1,10.10.2.136,172.,netstore,cacher,.int.xcalar.com'
   image: '{{user `registry`}}/xcalar/base:{{user `installer_version`}}'
@@ -87,8 +89,9 @@ provisioners:
       - SSH_UID={{user `ssh_uid`}}
       - SSH_USER={{user `ssh_username`}}
       - SSH_HOME=/home/{{user `ssh_username`}}
-    execute_command: '{{.Vars}} bash -eux ''{{.Path}}'''
+    execute_command: '{{.Vars}} bash ''{{.Path}}'''
     inline:
+      - set -ex
       - mkdir -m 1777 -p $TMPDIR
       - groupmod -g 991 $(awk -F ':' '/999/{print $1}' /etc/group) || true
       - groupadd -r -g 999 docker
@@ -103,6 +106,8 @@ provisioners:
       - rm -fv $(ls /etc/yum.repos.d/CentOS-*.repo | grep -vE '(CentOS-Base|kernel)')
       - yum update -y
       - yum install -y curl ca-certificates systemd-sysv systemd systemd-libs which audit cronie rsyslog initscripts pam openssh-server sudo sysvinit-tools openssh-clients
+      - yum localinstall -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
+      - yum install -y curl ca-certificates systemd-sysv systemd systemd-libs which audit cronie rsyslog initscripts pam openssh-server sudo sysvinit-tools openssh-clients
       - bash -x /usr/bin/fix-docker-systemd.sh
       - bash '{{user `installer`}}' -x $TMPDIR/installer
       - yum localinstall -y $TMPDIR/installer/xcalar-install/unibuild/*.rpm $TMPDIR/installer/xcalar-install/${OSID}/*.rpm
@@ -110,10 +115,10 @@ provisioners:
       - curl -fsSL 'https://download.docker.com/linux/static/stable/x86_64/docker-{{user `docker_version`}}.tgz' | tar zxvf - --strip-components=1 -C /usr/bin docker/docker
       - rm -rvf /etc/xcalar /var/opt/xcalar $TMPDIR/installer
       - rm -fv /etc/default/xcalar
-      - yum clean all --enablerepo='*'
       - mkdir -p -m 0750 /etc/sudoers.d
       - echo '%sudo ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/99-sudo
       - chmod 0440 /etc/sudoers.d/99-sudo
+      - yum clean all --enablerepo='*'
       - rm -rf /var/cache/yum* /var/tmp/yum* $TMPDIR
       - exit 0
   #!### XCALAR ONLY #######
@@ -125,32 +130,59 @@ provisioners:
       - container=docker
       - no_proxy={{user `no_proxy`}}
       - http_proxy={{user `http_proxy`}}
+      - XCE_USER={{user `xcalar_username`}}
+      - XCE_USER_HOME=/home/{{user `xcalar_username`}}
       - TMPDIR=/tmp/installer
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     inline:
+      - set -ex
       - mkdir -m 1777 -p $TMPDIR
+      #!# installer-start
+      - echo "========= install xcalar ========="
+      - /bin/bash '{{user `installer`}}' --nostart --startonboot
+      - source /opt/xcalar/etc/default/xcalar
+      #!# installer-done
+      - echo "========= setup default admin user ========="
       - chmod +x /tmp/genDefaultAdmin.sh
       - chown root:root /tmp/genDefaultAdmin.sh
-      #!# installer-start
-      - /bin/bash '{{user `installer`}}' --nostart --startonboot
-      #!# installer-done
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
-      - echo "{{user `license`}}" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
       - mkdir -p /var/opt/xcalar/config /mnt
       - chmod 0700 /var/opt/xcalar/config
       - /opt/xcalar/scripts/genDefaultAdmin.sh -e '{{user `admin_email`}}' --username '{{user `admin_user`}}' --password '{{user `admin_password`}}' > /var/opt/xcalar/config/defaultAdmin.json
       - chmod 0600 /var/opt/xcalar/config/defaultAdmin.json
+      - echo "========= seed shared root ========="
       - cp -a /var/opt/xcalar /mnt/
+      - echo "========= install license ========="
+      - if [ -n "{{user `license`}}" ]; then echo "{{user `license`}}" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key; fi
+      - echo "========= user pip packages ========="
+      - echo '/mnt/xcalar/pysite' > /opt/xcalar/lib/python3.6/site-packages/mnt-xcalar-pysite.pth
+      - mkdir -p /mnt/xcalar/pysite
+      - touch /mnt/xcalar/pysite/requirements.in /mnt/xcalar/pysite/requirements.txt
       - chown -R xcalar:xcalar /var/opt/xcalar /etc/xcalar /mnt/xcalar
-      - yum clean all --enablerepo='*'
-      - rm -rf /var/tmp/yum* /var/cache/yum/* $TMPDIR
+      - echo '{{user `xcalar_volume_version`}}' > /mnt/xcalar/.version
+      - echo "========= service environment fixes ========="
+      - sed -i '/PYTHONHOME/d' /etc/default/xcalar /opt/xcalar/etc/default/xcalar
       - echo -e '[Service]\nEnvironmentFile=/etc/sysconfig/dcc\nUnsetEnvironment=PYTHONHOME' > /tmp/99-dcc.conf
       - touch /etc/sysconfig/dcc
       - mkdir -p /var/lib/cloud/instances/nocloud
       - ln -sfn /var/lib/cloud/instances/nocloud /var/lib/cloud/instance
       - printf '%s\n%s\n%s\n' 'set -a' 'source /etc/sysconfig/dcc' 'set +a' > /etc/profile.d/xcalar-env.sh
-      - if ! test -x /usr/bin/java; then ln -sfn /opt/xcalar/lib/java8/jre/bin/java /usr/bin/; fi
       - for ii in /etc/systemd/system/xcalar-{sqldf,usrnode,caddy}.service.d; do mkdir -p $ii; cp /tmp/99-dcc.conf $ii/; done
+      - echo "========= install java symlink ========="
+      - if ! test -x /usr/bin/java; then ln -sfn /opt/xcalar/lib/java8/jre/bin/java /usr/bin/; fi
+      - echo "========= xcalar shell ssh setup ========="
+      - mkdir -p -m 0700 ${XCE_USER_HOME}/.ssh
+      - ssh-keygen -o -a 10 -t ed25519 -N "" -f ${XCE_USER_HOME}/.ssh/id_ed25519 -C "xcalar user"
+      - cp ${XCE_USER_HOME}/.ssh/id_ed25519.pub ${XCE_USER_HOME}/.ssh/authorized_keys
+      - echo -e 'Host *\n\tUserKnownHostsFile /dev/null\n\tStrictHostKeyChecking no\n' > ${XCE_USER_HOME}/.ssh/config
+      - chmod 0600 ${XCE_USER_HOME}/.ssh/authorized_keys ${XCE_USER_HOME}/.ssh/config
+      - chmod 0750 ${XCE_USER_HOME}
+      - echo "${XCE_USER}:{{user `xcalar_password`}}" | chpasswd -m
+      - chown -R ${XCE_USER}:${XCE_USER} ${XCE_USER_HOME}
+      - echo "========= clean up ========="
+      - yum clean all --enablerepo='*'
+      - rm -rf /var/tmp/yum* /var/cache/yum/* $TMPDIR
+      - echo "========= unconfig ========="
       - rm -fv /etc/ssh/ssh_host_*
       - systemctl enable sshd.service
       - /bin/true > /etc/machine-id
@@ -217,6 +249,8 @@ post-processors:
       shm_size: '{{user `shm_size`}}'
       registry: '{{user `registry`}}'
       repository: '{{user `repository`}}'
+      xcalar_volume_version: '{{user `xcalar_volume_version`}}'
+
 #!  - type: shell-local
 #!    execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
 #!    inline:
