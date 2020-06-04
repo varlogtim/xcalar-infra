@@ -11,6 +11,10 @@ AGGREGATOR_PLUGINS = [{'module_path': 'ubm_perf',
                        'class_name': 'UbmPerfResultsAggregator',
                        'job_names': ['UbmPerfTest']}]
 
+POSTPROCESSOR_PLUGINS = [{'module_path': 'ubm_perf',
+                          'class_name': 'UbmPerfPostprocessor',
+                          'job_names': ['UbmPerfTest']}]
+
 # In-line "unit test"
 if __name__ == '__main__':
     print("Compile check A-OK!")

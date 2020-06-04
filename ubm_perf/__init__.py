@@ -17,14 +17,17 @@ import os
 import pytz
 import re
 import sys
+import statistics
 
 if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
+from py_common.jenkins_aggregators import JenkinsPostprocessorBase
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
 from py_common.jenkins_aggregators import JenkinsJobMetaCollection
+from py_common.jenkins_aggregators import JenkinsAlert
 from py_common.mongo import MongoDB, JenkinsMongoDB
 from py_common.sorts import nat_sort
 
@@ -44,6 +47,18 @@ from py_common.sorts import nat_sort
 # test group name = ubmTest
 
 UbmTestGroupName = "ubmTest"
+
+# Number of prior runs, over which to calculate stats to decide if the current
+# build has regressed or not
+UbmNumPrevRuns = 3
+
+# Regression detection threshold - number of std-deviations difference between
+# historical and current mean times:
+# i.e. for any benchmark,
+#  if new_mean >= RegDetThr * historical_old_mean
+#      then new_mean is flagged as having regressed
+#  where historical_old_mean is the mean over the prior UbmNumPrevRuns runs
+RegDetThr = 2
 
 
 class UbmPerfIter(object):
@@ -464,6 +479,111 @@ class UbmPerfResultsData(object):
         except Exception:
             self.logger.exception("exception finding ubm values")
             return []
+
+
+# Post-processor for Ubm called after each build/run (via update_job method)
+# NOTE: test_mode is ignored. For now, the ubm module's update_job checks
+# for regression and alerts if a regression is detected.
+#
+# The mean time reported for a ubm in the current build/run, is considered a
+# regression if it exceeds the mean of the previous UbmNumPrevRuns runs by N
+# std deviations.
+#
+# More functionality may be added to update_job over time.
+
+class UbmPerfPostprocessor(JenkinsPostprocessorBase):
+    ENV_PARAMS = {"JENKINS_HOST": {'default': 'jenkins.int.xcalar.com'}}
+
+    def __init__(self, *, job_name):
+        super().__init__(name=UbmTestGroupName, job_name=job_name)
+        self.logger = logging.getLogger(__name__)
+        self.jmdb = JenkinsMongoDB()
+        self.ubm_perf_results_data = UbmPerfResultsData()
+        self.tgroups = self.ubm_perf_results_data.test_groups()
+        # XXX: Restrict To address for now, replace with the appropriate
+        # email alias, when confident of results
+        self.jalert = JenkinsAlert(to_address="dshah@xcalar.com")
+        cfg = EnvConfiguration(UbmPerfPostprocessor.ENV_PARAMS)
+        self.urlprefix = "https://{}/job/{}/".format(cfg.get('JENKINS_HOST'),
+                                                     self.job_name)
+        self.alert_template =\
+            "Regression(s) detected in following XCE benchmarks:\n{}\n\n" \
+            "Please see console output at {} for more details"
+        self.alert_email_subject = "Regression in XCE benchmarks!!"
+
+    def update_job(self, *, test_mode=False):
+        self.logger.info("start postprocess for: {}".format(self.job_name))
+        self.logger.debug("tgroups {}".format(self.tgroups))
+
+        # for each test group, calculate avg/stddev for each benchmark over
+        # the previous UbmNumPrevRuns runs
+        for tg in self.tgroups:
+            self.logger.debug("tg {}".format(str(tg)))
+            self.xcevs = self.\
+                ubm_perf_results_data.xce_versions(test_group=tg)
+            self.builds = self.ubm_perf_results_data.\
+                find_builds(test_group=tg, xce_versions=self.xcevs,
+                            reverse=False)
+            self.num_builds = len(self.builds)
+            self.logger.debug("builds {}".format(self.builds))
+
+            # calculate avg over last UbmNumPrevRuns runs
+            begin_build_offset = self.num_builds - UbmNumPrevRuns - 1
+            end_build_offset = begin_build_offset + UbmNumPrevRuns
+            curr_bnum = self.builds[self.num_builds - 1]
+
+            # self.ubm_oldstats- dictionary (key ubm, value list of prev times)
+            # e.g. { 'load' : [x,y,z], 'sort': [a,b,c], ... }
+            # in which x, y, z are previously recorded mean times for 'load'
+            self.ubm_oldstats = {}
+            # for each historical build, accumulate into per-ubm list of times
+            for bnum in self.builds[begin_build_offset:end_build_offset]:
+                self.logger.debug("prev build {}".format(bnum))
+                self.ubm_vals = self.ubm_perf_results_data\
+                    .results(test_group=tg, bnum=bnum)['ubm_vals']
+                for ubm in self.ubm_vals:
+                    # each ubm may have multiple times for a build; use mean
+                    ubmMean = statistics.mean(self.ubm_vals[ubm])
+                    # accumulate ubmMean into the self.ubm_oldstats dict
+                    self.ubm_oldstats.setdefault(ubm, {})\
+                        .setdefault('old_times', []).append(ubmMean)
+
+            self.logger.debug("ubm_oldstats -> {}".format(self.ubm_oldstats))
+
+            for ubm in self.ubm_oldstats:
+                self.ubm_oldstats[ubm]['old_mean'] =\
+                    statistics.mean(self.ubm_oldstats[ubm]['old_times'])
+                self.ubm_oldstats[ubm]['old_stdev'] =\
+                    statistics.stdev(self.ubm_oldstats[ubm]['old_times'])
+
+            self.logger.debug("ubm_oldstats -> {}".format(self.ubm_oldstats))
+
+            # Now get the latest ubm data for build curr_bnum
+            self.curr_results = self.ubm_perf_results_data.results(
+                test_group=tg, bnum=curr_bnum)
+            self.curr_ubmvals = self.curr_results['ubm_vals']
+
+            # For each ubm, check if there's a regression, building up a
+            # dictionary of regressions in 'ubm_regressions'
+            ubm_regressions = {}
+            for ubm in self.curr_ubmvals:
+                self.new_mean = statistics.mean(self.curr_ubmvals[ubm])
+                if self.new_mean >= self.ubm_oldstats[ubm]['old_mean'] + \
+                   RegDetThr * self.ubm_oldstats[ubm]['old_stdev']:
+                    # There's a regression! Add the stats to regressions dict
+                    ubm_regressions[ubm] = self.ubm_oldstats[ubm]
+                    ubm_regressions[ubm]['new_times'] = self.curr_ubmvals[ubm]
+                    ubm_regressions[ubm]['new_mean'] = self.new_mean
+
+            # If the list of regressions is not empty, send an alert
+            if len(ubm_regressions) > 0:
+                self.regs_json = json.dumps(ubm_regressions, indent=4)
+                self.url = self.urlprefix + "{}".format(curr_bnum)
+                self.alert_message = self.alert_template.format(
+                        self.regs_json, self.url)
+                self.logger.info(self.alert_message)
+                self.jalert.send_alert(subject=self.alert_email_subject,
+                                       body=self.alert_message)
 
 
 """
