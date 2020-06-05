@@ -337,6 +337,18 @@ consul_session() {
         | jq -r .ID
 }
 
+# consul_resolve_service takes a service name and resolves it to an IP + PORT
+# number. Optionally it can take a printf format specifier
+#
+# consul_resolve_service postgres.service.consul "-H %s -p %s"
+# -H 10.10.3.101 -p 28846
+consul_resolve_service() {
+    local PORT_HOST HOST PORT
+    PORT_HOST=($(set -o pipefail; dig SRV $1 +short | cut -d' ' -f3-4)) \
+        && HOST=$(dig A ${PORT_HOST[1]} +short) \
+        && PORT=${PORT_HOST[0]} \
+        && printf -- "${2:-%s %s}\n" $HOST $PORT
+}
 
 acquire_lock() {
     local session_id=$1 task_name=$2 result
