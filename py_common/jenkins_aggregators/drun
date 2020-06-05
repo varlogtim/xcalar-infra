@@ -1,2 +1,5 @@
 #!/bin/bash
-exec docker run --init --rm --name jenkins-aggregators-update --hostname jenkins-aggregators-update -v /netstore:/netstore jenkins-aggregators-update
+#
+# See Dockerfile for notes about /opt/clang5
+#
+exec docker run --init --rm --name jenkins-aggregators-update --hostname jenkins-aggregators-update -v /netstore:/netstore -v /opt/clang5:/opt/clang5 jenkins-aggregators-update

@@ -6,6 +6,12 @@ MAINTAINER Robert Stephens <rstephens@xcalar.com>
 ENV LOG_LEVEL="INFO"
 ENV JENKINS_HOST="jenkins.int.xcalar.com"
 
+# Must mount /opt/clang5 to container when run
+# Caveat: Don't be over-specific and mount /opt/clang5/bin, or
+#         some requirements will not be visible to the tools.
+ENV CLANG_LLVM_COV_PATH="/opt/clang5/bin/llvm-cov"
+ENV CLANG_LLVM_PROFDATA_PATH="/opt/clang5/bin/llvm-profdata"
+
 WORKDIR /usr/src/app
 
 # Context is set to xcalar-infra/ by dbuild
@@ -23,6 +29,5 @@ COPY coverage ./coverage/
 
 RUN mkdir -p ./py_common
 COPY py_common ./py_common/
-
 
 CMD ["./py_common/jenkins_aggregators/update.py"]
