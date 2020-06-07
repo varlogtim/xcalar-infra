@@ -82,6 +82,7 @@ elif test -f /etc/os-release; then
                 14) CODENAME=trusty ;;
                 16) CODENAME=xenial ;;
                 18) CODENAME=bionic ;;
+                20) CODENAME=focal ;;
                 *) die 2 "Unknown Ubuntu OS: $CODENAME";;
             esac
             ;;
@@ -171,7 +172,7 @@ if $CHECK_HOSTNAME; then
     fi
 fi
 
-if ! test -e $PUPPETCONF ||
+if ! test -e $PUPPETCONF; then
     mkdir -p $(dirname $PUPPETCONF)
     touch $PUPPETCONF
 fi
@@ -192,11 +193,8 @@ fi
 
 export PATH=/opt/puppetlabs/bin:$PATH
 
-initpath="$(readlink -f $(tr '\0' '\n' </proc/1/cmdline | head -1))"
-initbin="$(basename $initpath)"
-
 echo >&2 "Setting puppet service to start on boot"
-if [ "$initbin" = systemd ]; then
+if test -d /run/systemd; then
     systemctl enable puppet
 else
     if test -x /sbin/chkconfig; then
