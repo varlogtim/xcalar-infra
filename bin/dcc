@@ -337,7 +337,6 @@ mkconfig() {
 		Constants.BufferCacheLazyMemLocking=true
 		Constants.SendSupportBundle=false
 		Constants.Cgroups=false
-		Constants.CollectStats=false
 		Thrift.Port=9090
 		Thrift.Host=localhost
 		// --- Start of auto-generated stuff ---
@@ -812,6 +811,7 @@ cmd_run() {
     if [ -n "$NUMCPU" ]; then
         ENVS+=(NUMCPU=$NUMCPU)
     fi
+    ENVS+=(CLUSTER_SAME_PHYSICAL_NODE="true")
     if ((AWS_PASSTHROUGH)); then
         if vault-aws-credentials-provider.sh --ttl 12h -e 2> /dev/null | sed 's/^ //; /export /d' > $CONFDIR/aws.env.tmp; then
             mv $CONFDIR/aws.env{.tmp,}
