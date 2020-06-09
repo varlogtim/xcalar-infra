@@ -865,6 +865,7 @@ cmd_run() {
             DC_ARGS+=(-v $(readlink -f ${prog}):/opt/xcalar/bin/$(basename ${prog}):ro)
         done
         DC_ARGS+=(-v ${XLRGUIDIR}/xcalar-gui:/opt/xcalar/xcalar-gui)
+        DC_ARGS+=(-v ${XLRDIR}/scripts:/opt/xcalar/scripts)
         DC_ARGS+=(-v ${XLRDIR}:${XLRDIR})
         DC_ARGS+=(--label localdeploy="$XLRDIR")
         DC_ARGS+=(-e XLRDIR -e XLRGUIDIR)
