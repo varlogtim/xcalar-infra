@@ -10,7 +10,7 @@ help:
 	@echo 'sync      - download then upload files'
 	@echo 'download  - download repo files'
 	@echo 'upload    - upload repo files (WARNING: files not in source are deleted!)'
-	@echo 'release   - generate and upload new release packages'
+	@echo 'release-all   - generate and upload new release packages'
 
 
 download:
@@ -58,7 +58,13 @@ xcalar-release-bionic.deb: xcalar-release/after-install.sh xcalar-release/usr/sh
 	fpm -s dir -t deb -f --name xcalar-release --package $@ --version 1.0 --iteration $(ITERATION) --deb-no-default-config-files --vendor 'Xcalar, Inc.' --description 'Xcalar APT Repo' --after-install xcalar-release/after-install.sh -C xcalar-release etc usr
 
 xcalar-release-el.rpm: xcalar-release-el/etc/yum.repos.d/xcalar.repo xcalar-release-el/etc/yum.repos.d/xcalar-deps.repo xcalar-release-el/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar
-	fpm -s dir -t rpm --f --name xcalar-release --package $@ --version 1.0 --iteration $(ITERATION) --vendor 'Xcalar, Inc.' --description 'Xcalar YUM Repo' -C xcalar-release-el etc
+	fpm -s dir -t rpm -f --name xcalar-release --package $@ --version 1.0 --iteration $(ITERATION) --vendor 'Xcalar, Inc.' --description 'Xcalar YUM Repo' -C xcalar-release-el etc
+
+%.rpm: %/etc/yum.repos.d/xcalar.repo %/etc/yum.repos.d/xcalar-deps.repo %/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar
+	fpm -s dir -t rpm -f --name xcalar-release --package $@ --version 1.0 --iteration $(ITERATION) --vendor 'Xcalar, Inc.' --description 'Xcalar YUM Repo' -C `basename $@ .rpm` .
+
+#xcalar-release-amzn2.rpm: xcalar-release-amzn2/etc/yum.repos.d/xcalar.repo xcalar-release-amzn2/etc/yum.repos.d/xcalar-deps.repo xcalar-release-amzn2/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar
+#	fpm -s dir -t rpm -f --name xcalar-release --package $@ --version 1.0 --iteration $(ITERATION) --vendor 'Xcalar, Inc.' --description 'Xcalar YUM Repo' -C xcalar-release-amzn2 etc
 
 xcalar-rhel-mirror.rpm: xcalar-rhel-mirror/etc/yum.repos.d/xcalar-rhel-mirror.repo xcalar-rhel-mirror/etc/pki/rpm-gpg/RPM-GPG-KEY-Xcalar-RHEL-Mirror
 	fpm -s dir -t rpm -f --name xcalar-rhel-mirror --package $@ --version 1.0 --iteration $(ITERATION) --vendor 'Xcalar, Inc.' --description 'Xcalar RHEL Mirror Repo' -C xcalar-rhel-mirror etc
