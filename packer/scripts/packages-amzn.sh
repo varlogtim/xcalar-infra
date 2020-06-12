@@ -65,6 +65,33 @@ install_gdb8() {
     done
 }
 
+
+install_node_exporter() {
+    cat > /etc/systemd/system/node_exporter.service<<'EOF'
+[Unit]
+Description=Prometheus Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Restart=on-failure
+RestartSec=1
+
+Environment="EXCLUDES=--no-collector.hwmon --no-collector.zfs --no-collector.bonding --no-collector.bcache --no-collector.arp --no-collector.edac --no-collector.infiniband --no-collector.ipvs --no-collector.mdadm --no-collector.nfs --no-collector.nfsd --no-collector.wifi --no-collector.conntrack --no-collector.timex"
+Environment="OPTIONS=--collector.textfile.directory /var/lib/node_exporter/textfile_collector"
+EnvironmentFile=-/etc/sysconfig/node_exporter
+ExecStart=/usr/sbin/node_exporter $OPTIONS $EXCLUDES
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    mkdir -p /var/lib/node_exporter/textfile_collector
+    systemctl daemon-reload
+    systemctl enable node_exporter
+}
+
 fix_networking() {
     (
         cat > /etc/sysconfig/network <<- EOF
@@ -100,91 +127,97 @@ install_sysdig() {
     curl -s https://s3.amazonaws.com/download.draios.com/stable/install-sysdig | bash
 }
 
-install_osid
-install_lego
-install_ssm_agent
-#fix_networking
+main() {
+    install_osid
+    install_lego
+    install_ssm_agent
+    #fix_networking
 
-echo 'exclude=kernel-debug* *.i?86 *.i686' >> /etc/yum.conf
-yum upgrade -y
-yum install -y "https://storage.googleapis.com/repo.xcalar.net/xcalar-release-${OSID}.rpm" || true
-yum clean all --enablerepo='*'
-yum erase -y 'ntp*' || true
-yum install -y --enablerepo='xcalar*' --enablerepo=epel \
-    chrony aws-cfn-bootstrap amazon-efs-utils ec2-net-utils ec2-utils \
-    deltarpm curl wget tar gzip htop fuse jq nfs-utils iftop iperf3 sysstat python2-pip \
-    lvm2 util-linux bash-completion nvme-cli nvmetcli libcgroup at python-devel \
-    libnfs-utils stunnel pigz
+    echo 'exclude=kernel-debug* *.i?86 *.i686' >> /etc/yum.conf
 
-yum install -y --enablerepo='xcalar*' --enablerepo='epel' --disableplugin=priorities \
-    ec2tools ephemeral-disk tmux ccache restic lifecycled consul node_exporter \
-    freetds xcalar-node10 opthaproxy2 su-exec tini \
-    nomad
+    yum update -y || true
+    yum upgrade -y || true
+    yum install -y "https://storage.googleapis.com/repo.xcalar.net/xcalar-release-${OSID}.rpm" || true
+    yum clean all --enablerepo='*'
+    yum erase -y 'ntp*' || true
+    yum install -y --disablerepo='xcalar*' --enablerepo='epel' \
+        chrony aws-cfn-bootstrap amazon-efs-utils ec2-net-utils ec2-utils \
+        deltarpm curl wget tar gzip htop fuse jq nfs-utils iftop iperf3 sysstat python2-pip \
+        lvm2 util-linux bash-completion nvme-cli nvmetcli libcgroup at python-devel \
+        libnfs-utils stunnel pigz bash-completion-extras freetds
 
-yum remove -y python26 python-pip || true
+    yum install -y --enablerepo='xcalar-deps-common' --enablerepo='epel' \
+        ec2tools ephemeral-disk tmux ccache restic lifecycled consul consul-template node_exporter \
+        xcalar-node10 opthaproxy2 su-exec tini nomad vault
 
-sed -r -i 's/^#?LV_SWAP_SIZE=.*$/LV_SWAP_SIZE=MEMSIZE2X/; s/^#?LV_DATA_EXTENTS=.*$/LV_DATA_EXTENTS=100%FREE/; s/^#?ENABLE_SWAP=.*/ENABLE_SWAP=1/' /etc/sysconfig/ephemeral-disk
-ephemeral-disk || true
+    yum remove -y python26 python-pip || true
 
-yum groupinstall -y 'Development tools'
+    sed -r -i 's/^#?LV_SWAP_SIZE=.*$/LV_SWAP_SIZE=MEMSIZE2X/; s/^#?LV_DATA_EXTENTS=.*$/LV_DATA_EXTENTS=100%FREE/; s/^#?ENABLE_SWAP=.*/ENABLE_SWAP=1/' /etc/sysconfig/ephemeral-disk
+    ephemeral-disk || true
 
-lsblk
-blkid
+    yum groupinstall -y 'Development tools'
 
-echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin' > /etc/profile.d/path.sh
-. /etc/profile.d/path.sh
+    lsblk
+    blkid
 
-case "$OSID" in
-    amzn1)
-        service chronyd start
-        service atd start
-        echo manual | tee /etc/init/consul.override
-        echo manual | tee /etc/init/node_exporter.override
-        echo manual | tee /etc/init/lifecycled.override
+    echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin' > /etc/profile.d/path.sh
+    . /etc/profile.d/path.sh
 
-        mkdir -p /run
-        echo 'tmpfs  /run   tmpfs   defaults    0   0' >> /etc/fstab
+    case "$OSID" in
+        amzn1)
+            service chronyd start
+            service atd start
+            echo manual | tee /etc/init/consul.override
+            echo manual | tee /etc/init/lifecycled.override
 
-        chkconfig chronyd on
-        chkconfig atd on
-        fix_uids
-        hash -r
-        pip-2.7 --no-cache-dir install -U ansible
-        install_gdb8
-        ;;
-    amzn2)
-        systemctl enable --now chronyd
-        systemctl enable --now atd
-        systemctl disable update-motd.service || true
-        systemctl mask update-motd.service || true
-        #chkconfig network off || true
-        #systemctl mask network.service || true
-        amazon-linux-extras install -y ansible2=2.8 kernel-ng vim
-        yum install -y libcgroup-tools
-        systemctl set-default multi-user.target
-        #yum install -y NetworkManager
-        #systemctl enable --now NetworkManager.service
-        ;;
-esac
+            mkdir -p /run
+            echo 'tmpfs  /run   tmpfs   defaults    0   0' >> /etc/fstab
 
-install_aws_deps
-install_sysdig
-fix_cloud_init
+            chkconfig chronyd on
+            chkconfig atd on
+            fix_uids
+            hash -r
+            pip-2.7 --no-cache-dir install -U ansible
+            install_gdb8
+            ;;
+        amzn2)
+            systemctl enable --now chronyd
+            systemctl enable --now atd
+            systemctl disable update-motd.service || true
+            systemctl mask update-motd.service || true
+            #chkconfig network off || true
+            #systemctl mask network.service || true
+            install_node_exporter
+            systemctl enable node_exporter
+            amazon-linux-extras install -y ansible2=latest kernel-ng vim=latest BCC=latest
+            yum install -y libcgroup-tools gdb || true
+            systemctl set-default multi-user.target
+            #yum install -y NetworkManager
+            #systemctl enable --now NetworkManager.service
+            ;;
+    esac
 
-mkdir -p /etc/ansible
-curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg \
-    | sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg
+    install_aws_deps
+    install_sysdig
+    fix_cloud_init
 
-for svc in xcalar puppet collectd consul node_exporter lifecycled update-motd; do
-    if [ "$OSID" = amzn1 ]; then
-        if test -e /etc/init/${svc}.conf; then
-            echo manual > /etc/init/${svc}.override
+    mkdir -p /etc/ansible
+    curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg \
+        | sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg
+
+    for svc in xcalar puppet collectd consul nomad vault lifecycled update-motd; do
+        if [ "$OSID" = amzn1 ]; then
+            if test -e /etc/init/${svc}.conf; then
+                echo manual > /etc/init/${svc}.override
+            else
+                chkconfig ${svc} off || true
+            fi
         else
-            chkconfig ${svc} off || true
+            systemctl disable ${svc} || true
         fi
-    else
-        systemctl disable ${svc} || true
-    fi
-done
+    done
+    return 0
+}
 
-exit 0
+main "$@"
+exit

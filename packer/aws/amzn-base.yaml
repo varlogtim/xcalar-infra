@@ -6,11 +6,11 @@ variables:
   baseos_owner: '137112412989'
   baseos: 'amzn2-ami'
   build_number: '{{env `BUILD_NUMBER`}}'
-  image_build_number: '{{env `BUILD_NUMBER`}}'
+  image_build_number: '{{env `IMAGE_BUILD_NUMBER`}}'
   description: Xcalar Base Image
   destination_regions: '{{env `REGIONS`}}'
   device_name: /dev/xvda
-  disk_size: '8'
+  disk_size: '10'
   home: '{{env `HOME`}}'
   installer_build_number: '1'
   installer: '{{env `INSTALLER`}}'
@@ -30,6 +30,10 @@ builders:
     name: amazon-ebs-amzn2
     access_key: '{{user `aws_access_key`}}'
     secret_key: '{{user `aws_secret_key`}}'
+    #vault_aws_engine:
+    #  name: "packer"
+    #  engine_name: aws-xcalar
+    #  ttl: "3600s"
     ssh_keypair_name: 'packer'
     ssh_private_key_file: '{{template_dir}}/../ssh/id_packer.pem'
     region: '{{user `region`}}'
@@ -54,15 +58,15 @@ builders:
     force_delete_snapshot: true
     shutdown_behavior: terminate
     ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_tag`}}-{{user `today`}}'
-    ami_description: '{{user `description`}} {{split build_name "-" 2 | upper}} ({{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
+    ami_description: '{{user `description`}} {{split build_name "-" 2 | upper}} ({{user `installer_version`}}-{{user `installer_build_number`}} ({{user `today`}}))'
     run_tags:
-      Name: 'packer-{{build_name}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
+      Name: 'packer-{{build_name}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}'
     snapshot_tags:
       Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
-      Version: '{{user `installer_version`}}'
+      Version: '{{split .SourceAMIName "-" 3}}'
       Build: '{{user `installer_build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
@@ -71,8 +75,9 @@ builders:
       Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
+      SourceAMIVersion: '{{split .SourceAMIName "-" 3}}'
       OSID: '{{split build_name "-" 2}}'
-      Version: '{{split .SourceAMIName "-" 3}}'
+      Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
@@ -91,8 +96,9 @@ provisioners:
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     expect_disconnect: true
     inline:
+      - ln -sfn /usr/bin/python2.7 /usr/bin/python2
+      - yum update -y --exclude kernel
       - amazon-linux-extras install -y kernel-ng
-      - yum update -y
       - reboot -h now
   - type: shell
     pause_before: "1m"
@@ -108,6 +114,7 @@ provisioners:
       - '{{ template_dir }}/../scripts/packages-amzn.sh'
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
       - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
+      - '{{ template_dir }}/../scripts/install-docker.sh'
   - type: file
     source: '{{ template_dir }}/../scripts/aws-verify.sh'
     destination: /tmp/aws-verify.sh
@@ -137,14 +144,12 @@ post-processors:
     output: '{{user `manifest`}}'
     strip_path: true
     custom_data:
-      build_number: '{{user `build_number`}}'
       destination_regions: '{{user `destination_regions`}}'
       installer_build_number: '{{user `installer_build_number`}}'
       installer_url: '{{user `installer_url`}}'
       installer_version: '{{user `installer_version`}}'
       license: '{{user `license`}}'
       product: '{{user `product`}}'
-      project: '{{user `project`}}'
       release: '{{user `release`}}'
       region: '{{user `region`}}'
       shared_with: '{{user `shared_with`}}'

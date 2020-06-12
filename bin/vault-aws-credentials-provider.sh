@@ -159,7 +159,7 @@ if [[ $OSTYPE =~ darwin ]]; then
         greadlink "$@"
     }
     sha256sum() {
-        shasum -a 256 "$@"
+        shasum -a 256
     }
 else
     please_install() {
@@ -360,7 +360,7 @@ iso2unix() {
 }
 
 unix2iso() {
-    date -u -d @$1 +%FT%T.000Z
+    date -u -d @$1 +%FT%TZ
 }
 
 json_value() {
@@ -407,23 +407,11 @@ vault2aws() {
         ttl=''
     fi
     if [ -z "$ttl" ] || [ "${ttl:0:1}" = 0 ]; then
-        jq -r '
-        {
-            Version: 1,
-            AccessKeyId: .data.access_key,
-            SecretAccessKey: .data.secret_key,
-            SessionToken: .data.security_token
-        }' $1
+        jq -M -c -r '{ Version: 1, AccessKeyId: .data.access_key, SecretAccessKey: .data.secret_key }   ' $1
     else
         if expiration=$(expiration_json "$1"); then
-            jq -r '
-            {
-                Version: 1,
-                AccessKeyId: .data.access_key,
-                SecretAccessKey: .data.secret_key,
-                SessionToken: .data.security_token,
-                Expiration: "'$(unix2iso $expiration)'"
-            }' $1
+            local u2i=$(unix2iso $expiration)
+            jq -M -c -r '{ Version: 1, AccessKeyId: .data.access_key, SecretAccessKey: .data.secret_key, SessionToken: .data.security_token, Expiration: "'$u2i'"}   ' $1
         fi
     fi
 }
@@ -510,7 +498,7 @@ main() {
     if $CLEAN; then
         : "${VAULTCACHE_BASE?VAULTCACHE_BASE must be set}"
         say "Clearing cached vault data in $VAULTCACHE_BASE .."
-        rm -r -- "${VAULTCACHE_BASE}/*"
+        rm -r -- "${VAULTCACHE_BASE:?}/*"
         exit $?
     fi
     ACCOUNT="${ACCOUNT#aws-}"

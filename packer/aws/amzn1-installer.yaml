@@ -6,7 +6,7 @@ variables:
   baseos_owner: '559166403383'
   baseos: 'xdp-base'
   build_number: '{{env `BUILD_NUMBER`}}'
-  image_build_number: '{{env `BUILD_NUMBER`}}'
+  image_build_number: '{{env `IMAGE_BUILD_NUMBER`}}'
   description: Xcalar Data Platform
   destination_regions: '{{env `REGIONS`}}'
   device_name: /dev/xvda
@@ -30,6 +30,10 @@ builders:
     name: amazon-ebs-amzn2
     access_key: '{{user `aws_access_key`}}'
     secret_key: '{{user `aws_secret_key`}}'
+    #vault_aws_engine:
+    #  name: "packer"
+    #  engine_name: aws-xcalar
+    #  ttl: "3600s"
     ssh_keypair_name: 'packer'
     ssh_private_key_file: '{{template_dir}}/../ssh/id_packer.pem'
     region: '{{user `region`}}'
@@ -71,10 +75,10 @@ builders:
       Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
-      BaseOS: '{{.SourceAMIName}}'
+      OSID: '{{split build_name "-" 2}}'
       Version: '{{user `installer_version`}}'
       Build: '{{user `installer_build_number`}}'
-      ImageBuild: '{{user `build_number`}}'
+      ImageBuild: '{{user `image_build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
     launch_block_device_mappings:
@@ -112,8 +116,6 @@ provisioners:
     inline:
       - chmod +x /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh /tmp/aws-discover-input-schema.sh
       - chown root:root /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh /tmp/aws-discover-input-schema.sh
-      - yum remove -y python26 || true
-      - yum install su-exec --enablerepo='xcalar*' -y
       - ln -sfn /usr/bin/python2.7 /usr/bin/python2
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
       - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/

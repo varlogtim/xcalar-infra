@@ -60,27 +60,38 @@ aws_ssm_get_tags() {
     aws ssm list-tags-for-resource --resource-type Parameter --resource-id "$@"
 }
 
-installer-version.sh "$INSTALLER" > installer-version.json
-export INSTALLER_URL="$(installer-url.sh -d s3 "$INSTALLER")"
+if ! installer-version.sh "$INSTALLER" > installer-version.json; then
+    die "Failed to get installer info"
+fi
+if [ -z "$INSTALLER_URL" ]; then
+    if  ! INSTALLER_URL="$(installer-url.sh -d s3 "$INSTALLER")"; then
+        die "Failed to get installer url for $INSTALLER"
+    fi
+fi
+
+INSTALLER_URL="${INSTALLER_URL%\?*}"
+
+# eval $(vault-aws-credentials-provider.sh -e)
+
 if ! packer.io build \
     -machine-readable \
     -timestamp-ui \
     -only=amazon-ebs-amzn2 \
     -var base_owner='137112412989' \
     -var region=${AWS_DEFAULT_REGION:-us-west-2} \
-    -var destination_regions=${REGIONS:-us-west-2} \
-    -var disk_size=${DISK_SIZE:-8} \
+    -var destination_regions=${REGIONS:-us-west-2,us-east-1} \
+    -var disk_size=${DISK_SIZE:-10} \
     -var manifest="$MANIFEST" \
+    -var installer="$INSTALLER" \
     -var installer_url="$INSTALLER_URL" \
     -var-file installer-version.json \
     -parallel=true $TEMPLATE; then
     exit 1
 fi
 
-#ami_amzn1=$(packer_ami_from_manifest amazon-ebs-amzn1 $MANIFEST)
-ami_amzn2=$(packer_ami_from_manifest amazon-ebs-amzn2 $MANIFEST)
-#echo "ami_amzn1: $ami_amzn1"
-echo "ami_amzn2: $ami_amzn2"
-
-exit $?
-
+if ami_amzn2=$(packer_ami_from_manifest amazon-ebs-amzn2 $MANIFEST); then
+    #echo "ami_amzn1: $ami_amzn1"
+    echo "ami_amzn2: $ami_amzn2"
+    exit 0
+fi
+exit 1

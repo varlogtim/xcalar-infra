@@ -39,6 +39,9 @@ history -c
 export HISTSIZE=0
 export HISTFILESIZE=0
 
+lsblk
+df -h
+
 rm -rfv /tmp/*
 
 if test -e /usr/sbin/waagent; then
