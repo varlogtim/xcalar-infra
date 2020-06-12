@@ -1,2 +1,2 @@
 #!/bin/sh
-shfmt -i 4 -bn -s -sr -ci -w "$@"
+shfmt -i 4 -bn -s -ci -w "$@"
