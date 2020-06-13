@@ -2,7 +2,7 @@
 
 set -e
 
-git clean -fxd
+git clean -fxd -e "xcve"
 
 export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$HOME/google-cloud-sdk/bin:$PATH"
