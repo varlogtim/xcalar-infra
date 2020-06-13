@@ -24,6 +24,8 @@ OSID := $(shell osid 2>/dev/null || echo el7)
 PYVER := $(shell $(PYTHON) -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor))")
 WHEELS      ?= /infra/wheels/py$(PYVER)-$(OSID)
 
+TOUCH ?= /usr/bin/touch
+
 default: venv
 
 all: venv
@@ -38,8 +40,11 @@ venv: .updated
 
 .updated: $(VENV) requirements.txt
 	@echo "Syncing virtualenv in $(VENV) with packages in $(REQUIRES) ..."
+	@$(VENV)/bin/python -m pip install -U pip
+	@$(VENV)/bin/python -m pip install -U setuptools
+	@$(VENV)/bin/python -m pip install -c requirements.txt wheel pip-tools
 	@$(VENV)/bin/pip install --no-index --trusted-host $(NETSTORE_HOST) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) -r $(REQUIRES)
-	@/usr/bin/touch $@
+	@$(TOUCH) $@
 
 recompile: $(VENV)/bin/pip-compile
 	$(VENV)/bin/pip-compile -v
@@ -51,12 +56,12 @@ $(VENV):
 	@echo "Creating new virtualenv in $@ ..."
 	@mkdir -p $@
 	@deactivate 2>/dev/null || true; $(PYTHON) -m venv --prompt=$(shell basename $(current_dir)) $@
-	@touch $(VENV)
+	@$(TOUCH) $@
 
 $(VENV)/bin/pip-compile: $(VENV)
 	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -U pip
 	@deactivate 2>/dev/null || true; $(VENV)/bin/python -m pip install $(PIP_FLAGS) -U setuptools wheel pip-tools
-	@/usr/bin/touch $@
+	@$(TOUCH) $@
 
 clean:
 	@echo Removing $(VENV) ...
