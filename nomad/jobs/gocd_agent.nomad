@@ -25,7 +25,7 @@ job "gocd_agent" {
       driver = "docker"
 
       config {
-        image = "gocd/gocd-agent-centos-7:v20.3.0"
+        image = "gocd/gocd-agent-centos-7:v20.4.0"
 
         #args = [ "-e", ]
 
@@ -44,7 +44,7 @@ job "gocd_agent" {
 
         data = <<EOT
 {{ range service "gocd" }}
-GO_SERVER_URL=https://{{ .Address }}{{ end }}:8154/go
+GO_SERVER_URL=http://{{ .Address }}{{ end }}:8153/go
 EOT
       }
 

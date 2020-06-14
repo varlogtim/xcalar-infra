@@ -48,7 +48,7 @@ job "nexus" {
       driver = "docker"
 
       config {
-        image      = "sonatype/nexus3"
+        image      = "sonatype/nexus3:3.24.0"
         force_pull = true
 
         volumes = [
@@ -81,8 +81,8 @@ EOD
         cpu    = 4000
 
         network {
-          port "ui_port"{}
-          port "registry_port"{}
+          port "ui_port" {}
+          port "registry_port" {}
         }
       }
 

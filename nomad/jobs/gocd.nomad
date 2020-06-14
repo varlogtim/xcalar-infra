@@ -80,14 +80,13 @@ job "gocd" {
       driver = "docker"
 
       config {
-        image = "gocd/gocd-server:v20.3.0"
+        image = "gocd/gocd-server:v20.4.0"
 
         dns_search_domains = ["int.xcalar.com"]
         dns_servers        = ["10.10.2.136", "10.10.6.32"]
 
         port_map {
           ui = 8153
-          db = 8154
         }
 
         volumes = [
@@ -110,10 +109,6 @@ job "gocd" {
         network {
           port "ui" {
             static = "8153"
-          }
-
-          port "db" {
-            static = "8154"
           }
         }
       }
