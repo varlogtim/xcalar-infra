@@ -57,14 +57,6 @@ export http_proxy=
 sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
 gitsha=$(gitSha "$cluster")
-rc=$?
-err_code="$(echo "$gitsha"| grep -i 'error')"
-
-if [ "$rc" != 0 ] || [ -n "$err_code" ]; then
-    echo "$gitsha"
-    genSupport "$cluster"
-    exit 1
-fi
 
 echo "1..$NUM_ITERATIONS" | tee "$TAP"
 set +e
