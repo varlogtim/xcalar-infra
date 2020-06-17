@@ -25,6 +25,7 @@ variables:
   uid: '1000'
   release: '{{env `RELEASE`}}'
   manifest: '{{template_dir}}/packer-manifest.json'
+  pip_bundle_url: 'http://repo.xcalar.net/deps/pip-bundle/pip-bundle-20200616.tar.gz'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-amzn2
@@ -106,6 +107,7 @@ provisioners:
       - OSID={{split build_name "-" 2}}
       - CLOUD=aws
       - INSTALLER_URL={{user `installer_url`}}
+      - PIP_BUNDLE_URL={{user `pip_bundle_url`}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
       - '{{ template_dir }}/../scripts/start.sh'
@@ -113,6 +115,7 @@ provisioners:
       - '{{ template_dir }}/../scripts/install-java8.sh'
       - '{{ template_dir }}/../scripts/packages-amzn.sh'
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
+      - '{{ template_dir }}/../scripts/install-pip-bundle.sh'
       - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
       - '{{ template_dir }}/../scripts/install-docker.sh'
   - type: file

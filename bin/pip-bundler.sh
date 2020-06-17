@@ -44,17 +44,17 @@ die() {
 }
 
 pip() {
-     trace $VIRTUAL_ENV/bin/python -m pip "$@"
+     trace ${PY3:-python3} -m pip "$@"
 }
 
 newvenv() {
     /opt/xcalar/bin/python3.6 -m venv $1 >&2 \
     && . $1/bin/activate >&2 \
+    && hash -r \
     && $1/bin/python -m pip install -U pip >&2 \
     && $1/bin/python -m pip install -U setuptools wheel pip-tools >&2 \
     && echo "$1"
 }
-
 
 do_bundle() {
     ARGS=()
@@ -74,11 +74,12 @@ do_bundle() {
     VENV=$TMPDIR/venv
     newvenv "$VENV"
     . $VENV/bin/activate
+    hash -r
     pip wheel -w "$WHEELS" "${ARGS[@]}" "$@"
 }
 
 do_install() {
-    pip install --no-index --no-cache-dir --find-links file://${DIR}/wheels/ "$@"
+    ${PIP} install --no-index --no-cache-dir --find-links file://${DIR}/wheels/ "$@"
 }
 
 sha256() {
@@ -88,6 +89,11 @@ sha256() {
         shasum -a 256 | cut -d' ' -f1
     fi
 }
+
+usage() {
+    echo "usage: $1 [install|bundle] [--python /path/to/py3] [--pip /path/to/pip3] bartender.zip [regular pip-options]"
+}
+
 
 main() {
     local output=''
@@ -103,7 +109,13 @@ main() {
     mkdir -p $TMPDIR/wheels $TMPDIR/cache
     rm -rf $TMPDIR/venv
 
+
+    export PATH=$PATH:/opt/xcalar/bin
+    hash -r
+    PY3="$(which python3.6)"
+    PIP="$(which pip3)"
     output='pip-bundler.tar.gz'
+    install_target=''
     while [ $# -gt 0 ]; do
         local cmd="$1"
         shift
@@ -114,21 +126,27 @@ main() {
             -r | --requirements) req="$1"; shift ;;
             -c | --constraints) con="$1"; shift;;
             -i | --install) install_links="$1"; shift;;
+            -t | --target) install_target="$1"; shift;;
             -o | --output) output="$1"; shift ;;
+            --pip) PIP="$1"; shift;;
+            -p | --python) PY3="$1"; shift;;
             --) break;;
             *) usage >&2
                die 2 "Unknown command: $cmd"
                ;;
         esac
     done
-    output="$(readlink -f $output)"
+    if [ -n "$output" ]; then
+        output="$(readlink -f $output)"
+    fi
+
     if [ -z "${req:-}" ]; then
         if test -e "requirements.txt"; then
             req=requirements.txt
         elif test -e "requirements.in"; then
             req=requirements.in
         else
-            die "Must provide -r requirements.txt or .in"
+            die 2 "Must provide -r requirements.txt or .in"
         fi
     fi
     if [[ $req =~ .in$ ]]; then
@@ -150,13 +168,28 @@ main() {
     fi
 
     if ((INSTALL)); then
-        if [ -n "${VIRTUAL_ENV:-}" ] || [ $(id -u) -eq 0 ]; then
+        if [ -n "$install_target" ]; then
+            deactivate 2>/dev/null || true
+            USER_INSTALL="-t $install_target"
+            if ! test -d "$install_target"; then
+                mkdir -p "$install_target" || die 2 "Failed to create $install_target"
+            fi
+            cp requirements.txt constraints.txt $install_target
+            PIP=${PIP:-/opt/xcalar/bin/pip3}
+            PIP_ARGS=(-t $install_target --no-index --no-cache-dir --find-links file://${DIR}/wheels/ ${con:+-c $con})
+            $PIP install "${PIP_ARGS[@]}" -U setuptools \
+            && $PIP install "${PIP_ARGS[@]}" ${req:+-r $req} \
+            && exit 0
+            exit 1
+        elif [ -n "${VIRTUAL_ENV:-}" ] || [ $(id -u) -eq 0 ]; then
             USER_INSTALL=''
         else
             USER_INSTALL='--user'
         fi
-        do_install $USER_INSTALL -U pip -c ${con}
-        do_install $USER_INSTALL -r ${req} -c ${con} virtualenv
+        do_install $USER_INSTALL -U pip
+        do_install $USER_INSTALL -U setuptools
+        do_install $USER_INSTALL -U wheel -c ${con}
+        do_install $USER_INSTALL -r ${req} -c ${con}
     elif ((BUNDLE)); then
         PACKAGES=$TMPDIR/packages
         WHEELS=$TMPDIR/wheels
