@@ -32,6 +32,32 @@ az_setup() {
     az_export_all
 }
 
+if [ "$AZCLI_USE_DOCKER" = true ]; then
+az() {
+    local ARGS=()
+    if [ -S "$SSH_AUTH_SOCK" ]; then
+        ARGS+=(-e SSH_AUTH_SOCK -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK)
+    fi
+    if [ -e "$HOME"/.azure ]; then
+        ARGS+=(-v $HOME/.azure:/root/.azure)
+    fi
+    if [ -e "$HOME"/.ssh ]; then
+        ARGS+=(-v ${HOME}/.ssh:/root/.ssh)
+    fi
+    if [ -e "$WORKSPACE" ]; then
+        ARGS+=(-e $WORKSPACE -v "$WORKSPACE":"$WORKSPACE":ro)
+    fi
+    if [ -e "$XLRINFRADIR" ]; then
+        ARGS+=(-e XLRINFRADIR)
+        if [ -z "$WORKSPACE" ] || [[ "${XLRINFRADIR#$WORKSPACE/}" =~ ^/ ]]; then
+            ARGS+=(-v "$XLRINFRADIR":"$XLRINFRADIR":ro)
+        fi
+    fi
+    ARGS+=(-e AZURE_SUBSCRIPTION_ID -e AZURE_CLIENT_ID -e AZURE_CLIENT_SECRET -e AZURE_TENANT_ID)
+    docker run --rm "${ARGS[@]}" mcr.microsoft.com/azure-cli az "$@"
+}
+export -f az
+fi
 
 az_login() {
     (
@@ -935,7 +961,7 @@ az_rg_scheduled_shutdown() {
     local vm0="${vms[0]}"
     vm0="${vm0##*/}"
 
-    az group deployment create --handle-extended-json-format \
+    az deployment group create \
         -n scheduledShutdown-${group}-${now} \
         -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json \
         --parameters \
@@ -968,7 +994,11 @@ az_privdns_hosts_list() {
     local subnet="${2-10.11}"
     local rc
     az vm list-ip-addresses -o table | grep "${subnet//./\\.}" |  tr -s ' ' \
-        | awk  '{printf "%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1 }'
+        | awk  '
+            NF==3{printf "%s\t\t\t%s-pip.'$dnsname'\t%s-pip.'$shortdns'\n%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1,$(NF-1),$1,$1 }
+            NF==2{printf "%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1 }
+            ' \
+        | sed 's/rg-vm[0-9]-pip/pip/g; s/vm[0-9]-pip/pip/g;'
     rc="${PIPERESULT[0]}"
     return $rc
 }
