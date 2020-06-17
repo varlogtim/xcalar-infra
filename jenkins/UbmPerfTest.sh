@@ -48,23 +48,10 @@ cmBuild xce
 echo "Building XD"
 (cd $XLRGUIDIR && make trunk)
 
-# then, launch 3-node cluster
+# then, launch 2-node cluster
 # eventually, 'dcc' should be invoked (each node in its own  container)
 
-# modify cluster config to accommodate large data sizes by letting XdbSerDesMaxDiskMB be
-# unlimited (i.e. set to 0) since this will run on bare-metal labelled machines, with
-# sufficient memory and swap (e.g. bare-metal machines node4,5.9 have 251GB RAM, 190G+
-# swap) - without this, the test may fail with out of resources and disallow perf
-# measurements for large data sizes
-
-export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/data/test.cfg}"
-sed 's/^[ \t]*Constants.XdbSerDesMaxDiskMB.*/Constants.XdbSerDesMaxDiskMB=0/' < "${XCE_CONFIG}" > "${XCE_NEWCONFIG}"
-sedCode=$?
-if [ $sedCode -ne 0 ]; then
-    echo "failed to modify cluster config"
-    exit $sedCode
-fi
-export XCE_CONFIG=$XCE_NEWCONFIG
+export XCE_CONFIG="${XCE_CONFIG:-$XLRDIR/src/data/ubm-perf-test.cfg}"
 
 # This is a perf eval test, so num-nodes=1 wouldn't be sufficient to cover
 # the inter-node paths, and no point in having more than 2 nodes fighting
