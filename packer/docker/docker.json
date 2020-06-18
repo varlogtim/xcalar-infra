@@ -381,7 +381,7 @@
         "docker-xcalar-el7"
       ],
       "source": "{{ user `xlrdir`}}/bin/gdb",
-      "destination": "/usr/local/share/"
+      "destination": "/usr/local/share/xcalar/"
     },
     {
       "type": "shell",

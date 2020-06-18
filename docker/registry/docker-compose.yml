@@ -9,28 +9,27 @@ volumes:
     external: true
 
 networks:
-  dbnet:
+  xcalarnet:
     external: true
 
 services:
-  postgres:
-    image: postgres:12
-    restart: unless-stopped
-    networks:
-      dbnet:
-        ipv4_address: 172.21.0.247
-    environment:
-      POSTGRES_PASSWORD: Welcome1
-      POSTGRES_USER: root
-    volumes:
-      - 'postgres:/var/lib/postgresql/data'
-
+    #  postgres:
+    #    image: postgres:12
+    #    restart: unless-stopped
+    #    networks:
+    #      xcalarnet:
+    #        ipv4_address: 172.21.0.247
+    #    environment:
+    #      POSTGRES_PASSWORD: Welcome1
+    #      POSTGRES_USER: root
+    #    volumes:
+    #      - 'postgres:/var/lib/postgresql/data'
   redis:
     image: redis:6
     restart: unless-stopped
     networks:
-      dbnet:
-        ipv4_address: 172.21.0.249
+      xcalarnet:
+        ipv4_address: 172.20.0.249
     volumes:
       - 'redis:/data'
     ports:
@@ -42,8 +41,8 @@ services:
     container_name: registry
     hostname: registry
     networks:
-      dbnet:
-        ipv4_address: 172.21.0.248
+      xcalarnet:
+        ipv4_address: 172.20.0.248
     depends_on:
       - redis
     volumes:
