@@ -907,7 +907,6 @@ dcc_cmd_run() {
         DC_ARGS+=(-v ${XLRGUIDIR}/xcalar-gui:/opt/xcalar/xcalar-gui)
         DC_ARGS+=(-v ${XLRDIR}:${XLRDIR})
         DC_ARGS+=(-v ${XLRDIR}/scripts:/opt/xcalar/scripts)
-        DC_ARGS+=(-v ${XLRDIR}/bin/gdb:/usr/local/share/xcalar/gdb)
         DC_ARGS+=(--label localdeploy="$XLRDIR")
         ENVS+=(XLRDIR=/opt/xcalar XLRDIROVL=$XLRDIR VIRTUAL_ENV=$XLRDIR/xcve PATH=$XLRDIR/xcve/bin:$XLRDIR/bin:$DEFAULT_PATH)
     else
