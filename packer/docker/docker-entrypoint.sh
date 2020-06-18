@@ -41,13 +41,13 @@ if test -e "$XLRDIROVL"; then
     done
 fi
 if test -e "$XLRDIROVL"/bin/usrnode; then
-    sed -i.bak -r 's@^PATH="(.*)"$@PATH="'$XLRDIROVL'/xcve/bin:'$XLRDIROVL'/bin:\1"@' /opt/xcalar/bin/usrnode-service.sh
+    sed -i.bak -r 's@^PATH="(.*)"$@PATH="'"$XLRDIROVL"'/xcve/bin:'"$XLRDIROVL"'/bin:\1"@' /opt/xcalar/bin/usrnode-service.sh
 fi
 
 SERVICES="xcalar-sqldf.service xcalar-jupyter.service xcalar-usrnode.service xcalar-caddy.service xcalar-expserver@.service xcalar-terminal.service"
 for SVC in $SERVICES; do
-    mkdir -p /etc/systemd/system/${SVC}.d || continue
-    cat >/etc/systemd/system/${SVC}.d/99-dcc.conf <<EOF
+    mkdir -p "/etc/systemd/system/${SVC}.d" || continue
+    cat >"/etc/systemd/system/${SVC}.d/99-dcc.conf" <<EOF
 [Service]
 EnvironmentFile=/etc/sysconfig/dcc
 ${ENV_FILE:+Environment=ENV_FILE=$ENV_FILE}
