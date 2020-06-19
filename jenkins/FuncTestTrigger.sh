@@ -5,12 +5,15 @@ touch /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME
 export INSTALL_OUTPUT_DIR=`pwd`/xcalar-install
 export XLRDIR=$INSTALL_OUTPUT_DIR/opt/xcalar
 export XLRGUIDIR=$XLRDIR/xcalar-gui
+export XLRINFRADIR="${XLRINFRADIR:-$XLRDIR/xcalar-infra}"
 export XCE_PUBSIGNKEYFILE=$INSTALL_OUTPUT_DIR/etc/xcalar/EcdsaPub.key
 
 export PATH=$XLRDIR/bin:$PATH
 export XCE_CONFIG=$INSTALL_OUTPUT_DIR/etc/xcalar/default.cfg
 export XCE_USER=`id -un`
 export XCE_GROUP=`id -gn`
+
+. $XLRDIR/bin/jenkins/jenkinsUtils.sh
 
 TestsToRun=($TestCases)
 TAP="AllTests.tap"
@@ -45,59 +48,6 @@ funcstatsd () {
         echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.numFail:1|c" | nc -4 -w 5 -u $GRAPHITE 8125
         echo "prod.tests.${gitsha}.functests.${name}.${hostname//./_}.status:1|g" | nc -4 -w 5 -u $GRAPHITE 8125
     fi
-}
-
-genBuildArtifacts() {
-    # drive on for any errors
-    set +e
-
-    mkdir -p ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-    mkdir -p `pwd`/tmpdir
-
-    find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2>/dev/null | xargs cp --parents -rt `pwd`/tmpdir/
-
-    PIDS=()
-    for dir in tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
-        if [ -d $dir ]; then
-            if [ "$dir" = "/var/log/xcalar" ]; then
-                tar -cf var_log_xcalar.tar.bz2 --use-compress-prog=pbzip2 $dir &
-            elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
-                tar -cf xcalar_dataflows.tar.bz2 --use-compress-prog=pbzip2 $dir &
-            else
-                tar -cf $dir.tar.bz2 --use-compress-prog=pbzip2 $dir &
-            fi
-            PIDS+=($!)
-        fi
-    done
-
-    wait "${PIDS[@]}"
-    ret=$?
-    if [ $ret -ne 0 ]; then
-        echo >&2 "ERROR($ret): tar failed"
-    fi
-
-    for dir in tmpdir /var/log/xcalar /var/opt/xcalar/dataflows; do
-        if [ "$dir" = "/var/log/xcalar" ]; then
-            cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-            rm var_log_xcalar.tar.bz2
-            rm $dir/*
-        elif [ "$dir" = "/var/opt/xcalar/dataflows" ]; then
-            cp xcalar_dataflows.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-            rm xcalar_dataflows.tar.bz2
-        else
-            if [ -f $dir.tar.bz2 ]; then
-                cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-                rm $dir.tar.bz2
-                if [ -d $dir ]; then
-                    rm -r $dir/*
-                fi
-            fi
-        fi
-    done
-
-    echo >&2 "Build artifacts copied to ${NETSTORE}/${JOB_NAME}/${BUILD_ID}"
-
-    rm /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME
 }
 
 trap "genBuildArtifacts" EXIT

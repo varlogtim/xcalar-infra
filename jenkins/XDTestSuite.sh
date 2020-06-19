@@ -3,74 +3,12 @@ export XLRINFRADIR="${XLRINFRADIR:-$XLRDIR/xcalar-infra}"
 export XLRGUIDIR="${XLRGUIDIR:-$XLRDIR/xcalar-gui}"
 export XCE_LICENSEDIR=$XLRDIR/src/data
 export XCE_LICENSEFILE=${XCE_LICENSEDIR}/XcalarLic.key
+
+. $XLRDIR/bin/jenkins/jenkinsUtils.sh
+
 NUM_USERS=${NUM_USERS:-$(shuf -i 2-3 -n 1)}
 TEST_DRIVER_PORT="5909"
 NETSTORE="/netstore/qa/jenkins"
-
-genBuildArtifacts() {
-    mkdir -p ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-    mkdir -p $XLRDIR/tmpdir
-
-    # Find core files, dump backtrace & bzip core files into core.tar.bz2
-    gdbcore.sh -c core.tar.bz2 $XLRDIR /var/log/xcalar /var/tmp/xcalar-root 2> /dev/null
-
-    if [ -f core.tar.bz2 ]; then
-        corefound=1
-    else
-        corefound=0
-    fi
-
-    find /tmp ! -path /tmp -newer /tmp/${JOB_NAME}_${BUILD_ID}_START_TIME 2> /dev/null | xargs cp --parents -rt $XLRDIR/tmpdir/
-
-    taropts="--warning=no-file-changed --warning=no-file-ignored --use-compress-prog=pbzip2"
-    PIDS=()
-    dirList=(tmpdir /var/log/xcalar /var/opt/xcalar/kvs)
-    for dir in ${dirList[*]}; do
-        if [ -d $dir ]; then
-            case "$dir" in
-                "/var/log/xcalar")
-                    tar -cf var_log_xcalar.tar.bz2 $taropts $dir > /dev/null 2>&1 & ;;
-                "/var/opt/xcalar/kvs")
-                    tar -cf var_opt_xcalar_kvs.tar.bz2 $taropts $dir > /dev/null 2>&1 & ;;
-                *)
-                    tar -cf $dir.tar.bz2 $taropts $dir > /dev/null 2>&1 & ;;
-            esac
-            PIDS+=($!)
-        fi
-    done
-
-    wait "${PIDS[@]}"
-    local ret=$?
-    if [ $ret -ne 0 ]; then
-        echo "tar returned non-zero value"
-    fi
-
-    for dir in core ${dirList[*]}; do
-        case "$dir" in
-            "/var/log/xcalar")
-                cp var_log_xcalar.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-                rm var_log_xcalar.tar.bz2
-                rm $dir/* 2> /dev/null
-                ;;
-            "/var/opt/xcalar/kvs")
-                cp var_opt_xcalar_kvs.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-                rm var_opt_xcalar_kvs.tar.bz2
-                rm $dir/* 2> /dev/null
-                ;;
-            *)
-                if [ -f $dir.tar.bz2 ]; then
-                    cp $dir.tar.bz2 ${NETSTORE}/${JOB_NAME}/${BUILD_ID}
-                    rm $dir.tar.bz2
-                    if [ -d $dir ]; then
-                        rm -r $dir/* 2> /dev/null
-                    fi
-                fi
-                ;;
-        esac
-    done
-
-    return $corefound
-}
 
 collectFaildLogs() {
     mkdir -p /var/log/xcalar/failedLogs || true
