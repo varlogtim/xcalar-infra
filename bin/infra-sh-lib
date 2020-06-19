@@ -576,7 +576,7 @@ packer_manifest_all() {
             return 1
         fi
     fi
-    declare -A names=([amazon - ebs - amzn1]='AMZN1HVM' [amazon - ebs - amzn2]='AMZN2HVM')
+    declare -A names=(['amazon-ebs-amzn1']='AMZN1HVM' ['amazon-ebs-amzn2']='AMZN2HVM')
     local name artifact_id region
     local tmpdir=$(mktemp -d -t packer.XXXXXX)
     # shellcheck disable=SC2129,SC2207
