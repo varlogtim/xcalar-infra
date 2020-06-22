@@ -354,6 +354,18 @@ class UbmPerfResultsData(object):
         self.data = JenkinsJobDataCollection(job_name=self.job_name, db=jdb)
         self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=jdb)
         self.results_cache = {}
+        self.jresults_cache = {}
+
+    def job_result(self, bnum):
+        cache_key = '{}'.format(bnum)
+        if cache_key in self.jresults_cache:
+            return self.jresults_cache[cache_key]
+        doc = self.data.get_data(bnum=bnum)
+        data = None
+        if doc:
+            data = doc.get('result')
+        self.jresults_cache[cache_key] = data
+        return data
 
     def test_groups(self):
         doc = self.meta.coll.find_one({'_id': 'test_groups'})
@@ -519,6 +531,14 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
         self.alert_email_subject = "Regression in XCE benchmarks!!"
         self.alljob = JenkinsAllJobIndex(jmdb=self.jmdb)
 
+    def get_delta(self, x1, x2):
+        if x1 == x2:
+            return 0
+        try:
+            return ((x2 - x1) / x1) * 100.0
+        except ZeroDivisionError:
+            return 0
+
     # Given a test_group and data from several builds for this test_group,
     # return a nested dict with outer key=ubm and value=inner dict with the
     # inner dict having 3 keys:
@@ -540,10 +560,10 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             b_job_name = bld.get('job_name', None)
             if not b_job_name or b_job_name != self.job_name:
                 continue
-            result = bld.get('result', None)
-            if not result or result != 'SUCCESS':
-                continue
             bnum = bld.get('build_number')
+            job_result = self.ubm_perf_results_data.job_result(bnum=bnum)
+            if not job_result or job_result != 'SUCCESS':
+                continue
             ubm_vals = self.ubm_perf_results_data\
                 .results(test_group=test_group, bnum=bnum)['ubm_vals']
             for ubm in ubm_vals:
@@ -560,6 +580,12 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             if len(ubm_val_list[ubm]) > 1:
                 rtn.setdefault(ubm, {})['stdev'] =\
                     statistics.stdev(ubm_val_list[ubm])
+            ubm_min = min(ubm_val_list[ubm])
+            ubm_max = max(ubm_val_list[ubm])
+            rtn.setdefault(ubm, {})['min'] = ubm_min
+            rtn.setdefault(ubm, {})['max'] = ubm_max
+            rtn.setdefault(ubm, {})['min_max_delta_pct'] =\
+                self.get_delta(ubm_min, ubm_max)
         return rtn
 
     # 'update_job' has two main goals:
@@ -605,10 +631,12 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                 bdict = {'job_name': self.job_name, "build_number": b}
                 prev_N_builds.append(bdict)
 
+            self.logger.info("prev_N_builds -> {}".format(prev_N_builds))
+
             ubm_prevNstats = self._ubm_stats(test_group=tg,
                                              builds=prev_N_builds)
 
-            self.logger.debug("ubm_prevNstats -> {}".format(ubm_prevNstats))
+            self.logger.info("ubm_prevNstats -> {}".format(ubm_prevNstats))
 
             # Now get the latest ubm data for build curr_bnum
             curr_results = self.ubm_perf_results_data.results(
@@ -657,6 +685,7 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                            {'label': 'prev_7d', 'start': now-(day_ms*14), 'end': now-(day_ms*7)-1},
                            {'label': 'last_30d', 'start': now-(day_ms*30), 'end': now},
                            {'label': 'prev_30d', 'start': now-(day_ms*60), 'end': now-(day_ms*30)-1},
+                           {'label': 'last_60d', 'start': now-(day_ms*60), 'end': now},
                            {'label': '{}_prev_30d'.format(UbmNumPrevRuns), 'start': now-(day_ms*60),
                             'end': now-(day_ms*(60-UbmNumPrevRuns))}]
 
