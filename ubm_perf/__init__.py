@@ -540,6 +540,9 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             b_job_name = bld.get('job_name', None)
             if not b_job_name or b_job_name != self.job_name:
                 continue
+            result = bld.get('result', None)
+            if not result or result != 'SUCCESS':
+                continue
             bnum = bld.get('build_number')
             ubm_vals = self.ubm_perf_results_data\
                 .results(test_group=test_group, bnum=bnum)['ubm_vals']
