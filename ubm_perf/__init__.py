@@ -546,6 +546,9 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
     #     build_cnt (number of builds in which ubm was executed)
     #     avg_s (average time in secs for ubm duration over build_cnt runs)
     #     stdev (std deviation for ubm duration over build_cnt runs)
+    #     min (min value over build_cnt runs)
+    #     max (max value over build_cnt runs)
+    #     min_max_delta_pct (percent by which max is greater than min)
     #
     def _ubm_stats(self, *, test_group, builds):
         self.logger.info("start")
@@ -564,8 +567,11 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             job_result = self.ubm_perf_results_data.job_result(bnum=bnum)
             if not job_result or job_result != 'SUCCESS':
                 continue
-            ubm_vals = self.ubm_perf_results_data\
-                .results(test_group=test_group, bnum=bnum)['ubm_vals']
+            ubm_vals = {}
+            ubm_results = {}
+            ubm_results = self.ubm_perf_results_data\
+                .results(test_group=test_group, bnum=bnum)
+            ubm_vals = ubm_results.get('ubm_vals', {})
             for ubm in ubm_vals:
                 ubm_mean = statistics.mean(ubm_vals[ubm])
                 ubm_val_list.setdefault(ubm, []).append(ubm_mean)
