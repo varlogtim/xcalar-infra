@@ -53,7 +53,10 @@ from py_common.sorts import nat_sort
 UbmTestGroupName = "ubmTest"
 
 # Number of prior runs, over which to calculate stats to decide if the current
-# build has regressed or not
+# build has regressed or not.
+# XXX: This number should actually be dependent on the ubm - some may have
+# very low variance, some high - for the latter, the sample size probably
+# needs to be higher than that needed for low variance ubms
 UbmNumPrevRuns = 3
 
 # Regression detection threshold - number of std-deviations difference between
@@ -62,7 +65,7 @@ UbmNumPrevRuns = 3
 #  if new_mean >= RegDetThr * historical_old_mean
 #      then new_mean is flagged as having regressed
 #  where historical_old_mean is the mean over the prior UbmNumPrevRuns runs
-RegDetThr = 2
+RegDetThr = 3
 
 
 class UbmPerfIter(object):
@@ -531,6 +534,12 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
         self.alert_email_subject = "Regression in XCE benchmarks!!"
         self.alljob = JenkinsAllJobIndex(jmdb=self.jmdb)
 
+    def get_cv(self, stdev, mean):
+        try:
+            return ((stdev / mean) * 100.0)
+        except ZeroDivisionError:
+            return 0
+
     def get_delta(self, x1, x2):
         if x1 == x2:
             return 0
@@ -581,11 +590,11 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             self.logger.debug("ubm {} val_list {}".format(ubm,
                                                           ubm_val_list[ubm]))
             rtn.setdefault(ubm, {})['build_cnt'] = len(ubm_val_list[ubm])
-            rtn.setdefault(ubm, {})['avg_s'] =\
-                statistics.mean(ubm_val_list[ubm])
+            mean = statistics.mean(ubm_val_list[ubm])
+            rtn.setdefault(ubm, {})['avg_s'] = mean
             if len(ubm_val_list[ubm]) > 1:
-                rtn.setdefault(ubm, {})['stdev'] =\
-                    statistics.stdev(ubm_val_list[ubm])
+                stdev = statistics.stdev(ubm_val_list[ubm])
+                rtn.setdefault(ubm, {})['cv_pct'] = self.get_cv(stdev, mean)
             ubm_min = min(ubm_val_list[ubm])
             ubm_max = max(ubm_val_list[ubm])
             rtn.setdefault(ubm, {})['min'] = ubm_min
@@ -689,6 +698,7 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                 now = int(time.time()*1000)
                 periods = [{'label': 'last_24h', 'start': now-day_ms, 'end': now},
                            {'label': 'prev_24h', 'start': now-(day_ms*2), 'end': now-day_ms-1},
+                           {'label': 'last_4d', 'start': now-(day_ms*4), 'end':now  },
                            {'label': 'last_7d', 'start': now-(day_ms*7), 'end':now  },
                            {'label': 'prev_7d', 'start': now-(day_ms*14), 'end': now-(day_ms*7)-1},
                            {'label': 'last_30d', 'start': now-(day_ms*30), 'end': now},
