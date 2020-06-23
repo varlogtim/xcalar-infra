@@ -658,6 +658,8 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                 test_group=tg, bnum=curr_bnum)
             curr_ubmvals = curr_results['ubm_vals']
 
+            self.logger.info("curr_ubmvals -> {}".format(curr_ubmvals))
+
             # For each ubm, check if there's a regression as compared to the
             # most recent UbmNumPrevRuns builds, building up a dictionary of
             # regressions in 'ubm_prevN_regr'
@@ -668,7 +670,11 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                     continue
                 new_mean[ubm] = statistics.mean(curr_ubmvals[ubm])
                 old_mean = ubm_prevNstats[ubm]['avg_s']
-                old_sdev = ubm_prevNstats[ubm].get('stdev')
+                old_cv_pct = ubm_prevNstats[ubm].get('cv_pct')
+                if old_cv_pct:
+                    old_sdev = (old_cv_pct / 100.0) * old_mean
+                else:
+                    old_sdev = None
                 if old_sdev is not None and new_mean[ubm] >= old_mean +\
                    RegDetThr * old_sdev:
                     # There's a regression! Add the stats to regressions dict
@@ -760,13 +766,16 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                         continue
                     oldest_Nrun_mean = ubm_all_period_stats[ubm]['avg_s'].\
                         get('N_prev_30d')
-                    ubm_stdev_dict = ubm_all_period_stats[ubm].get('stdev')
-                    if ubm_stdev_dict is None:
+                    ubm_cv_pct_dict = ubm_all_period_stats[ubm].get('cv_pct')
+                    if oldest_Nrun_mean is None or ubm_cv_pct_dict is None:
                         continue
-                    oldest_Nrun_stdev = ubm_stdev_dict.get('N_prev_30d')
+                    oldest_Nrun_cvpct = ubm_cv_pct_dict.get('N_prev_30d')
+                    if oldest_Nrun_cvpct is None:
+                        continue
+                    oldest_Nrun_stdev = (oldest_Nrun_cvpct / 100.0) *\
+                        oldest_Nrun_mean
 
-                    if oldest_Nrun_mean is not None and \
-                       new_mean[ubm] >= oldest_Nrun_mean + \
+                    if new_mean[ubm] >= oldest_Nrun_mean + \
                        RegDetThr * oldest_Nrun_stdev:
                         oldest_Nrun_regr[ubm] = {}
                         oldest_Nrun_regr[ubm]['oldest_mean'] =\
