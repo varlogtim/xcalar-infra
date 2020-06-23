@@ -526,7 +526,7 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
         self.urlprefix = "https://{}/job/{}/".format(cfg.get('JENKINS_HOST'),
                                                      self.job_name)
         self.alert_template =\
-            "Regression(s) detected in following XCE benchmarks:\n{}\n\n" \
+            "Regression(s) detected in XCE benchmarks in build {}:\n{}\n\n" \
             "Please see console output at {} for more details"
         self.alert_email_subject = "Regression in XCE benchmarks!!"
         self.alljob = JenkinsAllJobIndex(jmdb=self.jmdb)
@@ -655,6 +655,8 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             ubm_prevN_regr = {}
             new_mean = {}
             for ubm in curr_ubmvals:
+                if not ubm_prevNstats.get(ubm):
+                    continue
                 new_mean[ubm] = statistics.mean(curr_ubmvals[ubm])
                 old_mean = ubm_prevNstats[ubm]['avg_s']
                 old_sdev = ubm_prevNstats[ubm].get('stdev')
@@ -739,22 +741,31 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
 
                 # now compute regression vs a N run group that's 60d old using
                 # the ubm_all_period_stats{} dict to get this window
-                oldest_Nrun_mean = ubm_all_period_stats[ubm]['avg_s'].\
-                    get('N_prev_30d')
-                oldest_Nrun_stdev = ubm_all_period_stats[ubm]['stdev'].\
-                    get('N_prev_30d')
 
                 # Check for regression against the oldest UbmNumPrevRuns
                 # run, and accumulate into oldest_Nrun_regr if any found
                 oldest_Nrun_regr = {}
-                if oldest_Nrun_mean is not None and \
-                   new_mean[ubm] >= oldest_Nrun_mean + \
-                   RegDetThr * oldest_Nrun_stdev:
-                    oldest_Nrun_regr[ubm] = {}
-                    oldest_Nrun_regr[ubm]['oldest_mean'] = oldest_Nrun_mean
-                    oldest_Nrun_regr[ubm]['oldest_stdev'] = oldest_Nrun_stdev
-                    oldest_Nrun_regr[ubm]['new_times'] = curr_ubmvals[ubm]
-                    oldest_Nrun_regr[ubm]['new_mean'] = new_mean[ubm]
+                for ubm in curr_ubmvals:
+                    if not ubm_all_period_stats.get(ubm):
+                        continue
+                    oldest_Nrun_mean = ubm_all_period_stats[ubm]['avg_s'].\
+                        get('N_prev_30d')
+                    ubm_stdev_dict = ubm_all_period_stats[ubm].get('stdev')
+                    if ubm_stdev_dict is None:
+                        continue
+                    oldest_Nrun_stdev = ubm_stdev_dict.get('N_prev_30d')
+
+                    if oldest_Nrun_mean is not None and \
+                       new_mean[ubm] >= oldest_Nrun_mean + \
+                       RegDetThr * oldest_Nrun_stdev:
+                        oldest_Nrun_regr[ubm] = {}
+                        oldest_Nrun_regr[ubm]['oldest_mean'] =\
+                            oldest_Nrun_mean
+                        oldest_Nrun_regr[ubm]['oldest_stdev'] =\
+                            oldest_Nrun_stdev
+                        oldest_Nrun_regr[ubm]['new_times'] = curr_ubmvals[ubm]
+                        oldest_Nrun_regr[ubm]['new_mean'] = new_mean[ubm]
+
             except Exception as e:
                 self.logger.exception("update_job exception")
                 return None
@@ -777,8 +788,8 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                             oldest_Nrun_regr
                 regs_json = json.dumps(ubm_prev_and_oldest_regr, indent=4)
                 url = self.urlprefix + "{}".format(curr_bnum)
-                alert_message = self.alert_template.format(
-                        regs_json, url)
+                alert_message = self.alert_template.format(curr_bnum,
+                                                           regs_json, url)
                 self.logger.info(alert_message)
                 self.jalert.send_alert(subject=self.alert_email_subject,
                                        body=alert_message)
