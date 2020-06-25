@@ -922,8 +922,6 @@ dcc_cmd_run() {
         --label cluster=${CLUSTER}
         --label owner=dcc
     )
-    mkenv "${ENVS[@]}" >$ENV_FILE
-    mkconfig $CLUSTER $NODES >$DEFAULTCFG
     DC_ARGS+=(-v $ENV_FILE:/etc/default/xcalar:ro)
     DC_ARGS+=(-v $DEFAULTCFG:/etc/xcalar/default.cfg)
     DC_ARGS+=(--env-file $ENV_FILE)
@@ -940,13 +938,15 @@ dcc_cmd_run() {
         # map entire CONFDIR into container and add meminfo path to MEMINFO env variable
         mv ${MEMINFO}.tmp ${MEMINFO}
         ENVS+=(CLUSTER_SAME_PHYSICAL_NODE=true)
-        ENVS+=(MEMINFO)
+        ENVS+=(MEMINFO=${MEMINFO})
         info "Meminfo file ($MEMINFO) has been created for this cluster."
     fi
     if [ -n "$NUMCPU" ]; then
         info "Limiting to $NUMCPU cpus"
         DC_ARGS+=(--cpus $NUMCPU)
     fi
+    mkenv "${ENVS[@]}" >$ENV_FILE
+    mkconfig $CLUSTER $NODES >$DEFAULTCFG
 
     local -a cids=()
     local cid node_id name ip_address
