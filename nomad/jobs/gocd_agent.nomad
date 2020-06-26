@@ -48,6 +48,16 @@ GO_SERVER_URL=http://{{ .Address }}{{ end }}:8153/go
 EOT
       }
 
+      template {
+        destination = "local/gitconfig"
+        data        = <<EOT
+[url "https://xcalar.visualstudio.com/xcalar/_git/xcalar-idl"]
+	insteadOf = ssh://gerrit.int.xcalar.com:29418/xcalar/xcalar-idl
+[url "https://xcalar.visualstudio.com/xcalar/_git/xcalar-gui"]
+	insteadOf = ssh://gerrit.int.xcalar.com:29418/xcalar/xcalar-gui.git
+EOT
+      }
+
       resources {
         cpu    = 1000
         memory = 1000
@@ -60,6 +70,8 @@ EOT
       env {
         "GOCD_PLUGIN_INSTALL_docker-elastic-agents" = "https://github.com/gocd-contrib/docker-elastic-agents/releases/download/v3.1.0-248-exp/docker-elastic-agents-3.1.0-248.jar"
         "AGENT_BOOTSTRAPPER_ARGS"                   = "-sslVerificationMode NONE"
+        "GIT_SSL_NO_VERIFY"                         = "true"
+        "GIT_CONFIG"                                = "/godata/gitconfig"
       }
     }
   }
