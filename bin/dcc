@@ -43,17 +43,7 @@ USAGE:
    dcc [global options] command [command options] [arguments...]
 
 EOF
-    #    cat <<EOF
-    #   cluster, r    operate a cluster
-    #   image, i      manage images
-    #   container, c  add a task to the list
-    #   help, h       Shows a list of commands or help for one command
-    #
-    #GLOBAL OPTIONS:
-    #   --config FILE  Load configuration from FILE
-    #   --help, -h     show help (default: false)
-    #
-    #EOF
+
 }
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -849,28 +839,6 @@ dcc_cmd_run() {
 
     say "+ Creating ${NODES} node cluster from image ${IMAGE_ID} ..."
 
-    ENVS=()
-
-    ENVS+=(CONFDIR CLUSTDIR)
-
-    if ((AWS_PASSTHROUGH)); then
-        if vault-aws-credentials-provider.sh --ttl 12h -e 2>/dev/null | sed 's/^ //; /export /d' >$CLUSTDIR/aws.env.tmp; then
-            mv $CLUSTDIR/aws.env{.tmp,}
-        fi
-        if test -e "$CLUSTDIR/aws.env"; then
-            set -a
-            source $CLUSTDIR/aws.env
-            set +a
-        fi
-        ENVS+=(WORKBUCKET AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN)
-    fi
-    if [ $HOSTPORT -lt 1024 ] || nc -w 1 0.0.0.0 $HOSTPORT; then
-        say "! WARNING: Desired port on host ($HOSTPORT) is unavailable. Opening random port."
-        HTTPS_PORT_MAP="443"
-    else
-        HTTPS_PORT_MAP="${HOSTPORT}:443"
-    fi
-
     DC_ARGS=(
         -v ${XLRINFRADIR}/packer/docker/docker-entrypoint.sh:/docker-entrypoint.sh:ro
         -v ${SHARE}:/mnt/xcalar
@@ -880,6 +848,29 @@ dcc_cmd_run() {
         --dns $DNS2
         --network $NETWORK
     )
+
+    ENVS=()
+
+    ENVS+=(CONFDIR CLUSTDIR)
+
+    if ((AWS_PASSTHROUGH)); then
+        if vault-aws-credentials-provider.sh --ttl 12h -e 2>/dev/null | sed 's/^ //; /export /d' >$CLUSTDIR/aws.env.tmp; then
+            mv $CLUSTDIR/aws.env{.tmp,}
+        fi
+        if test -e "$CLUSTDIR"/aws.env; then
+            DC_ARGS+=(--env-file "$CLUSTDIR"/aws.env)
+            set -a
+            source "$CLUSTDIR"/aws.env
+            set +a
+        fi
+        ENVS+=(WORKBUCKET)
+    fi
+    if [ $HOSTPORT -lt 1024 ] || nc -w 1 0.0.0.0 $HOSTPORT; then
+        say "! WARNING: Desired port on host ($HOSTPORT) is unavailable. Opening random port."
+        HTTPS_PORT_MAP="443"
+    else
+        HTTPS_PORT_MAP="${HOSTPORT}:443"
+    fi
 
     ENVS+=(CLUSTER XCE_NUMNODES=$NODES XCE_USE_GUARDRAILS)
     if [ -n "${VOLUMES:-}" ]; then
@@ -908,7 +899,7 @@ dcc_cmd_run() {
         DC_ARGS+=(-v ${XLRDIR}:${XLRDIR})
         DC_ARGS+=(-v ${XLRDIR}/scripts:/opt/xcalar/scripts)
         DC_ARGS+=(--label localdeploy="$XLRDIR")
-        ENVS+=(XLRDIR=/opt/xcalar XLRDIROVL=$XLRDIR VIRTUAL_ENV=$XLRDIR/xcve PATH=$XLRDIR/xcve/bin:$XLRDIR/bin:$DEFAULT_PATH)
+        ENVS+=(XLRDIR XLRDIROVL=$XLRDIR VIRTUAL_ENV=$XLRDIR/xcve PATH=$XLRDIR/xcve/bin:$XLRDIR/bin:$DEFAULT_PATH)
     else
         ENVS+=(XLRDIR=/opt/xcalar PATH=$DEFAULT_PATH)
     fi
@@ -1156,8 +1147,8 @@ dcc_defaults() {
         --ulimit nproc=140960:140960
         --ulimit memlock=-1:-1
         --ulimit stack=-1:-1
-        --cap-add sys_ptrace
-        --cap-add ipc_lock
+        --cap-add CAP_SYS_PTRACE
+        --cap-add CAP_IPC_LOCK
         --tmpfs /run
         --tmpfs /run/lock
         --stop-signal 'SIGRTMIN+3'
@@ -1168,13 +1159,13 @@ dcc_defaults() {
     DEFAULT_PATH=/opt/xcalar/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/xcalar/lib/java8/jre/bin
     REGISTRY=${REGISTRY:-registry.int.xcalar.com}
     REPO=${REPO:-xcalar/xcalar}
-    NETWORK="${NETWORK:-$(get_cluster_config network ${CLUSTER}net)}"
-    SUBNET="${SUBNET:-$(get_cluster_config subnet 172.20.0.0)}"
-    CIDR_BITS="${CIDR_BITS:-$(get_cluster_config cidr 16)}"
-    NODES="${NODES:-$(get_cluster_config nodes 3)}"
-    SHARE="${SHARE:-$(get_cluster_config share ${CLUSTER}_root)}"
-    IMAGE_ID="${IMAGE_ID:-$(get_cluster_config image-id registry.int.xcalar.com/xcalar/xcalar:latest)}"
-    HOSTPORT="${HOSTPORT:-$(get_cluster_config hostport 18443)}"
+    NETWORK="${NETWORK:-$(getconf network ${CLUSTER}net)}"
+    SUBNET="${SUBNET:-$(getconf subnet 172.20.0.0)}"
+    CIDR_BITS="${CIDR_BITS:-$(getconf cidr-bits 16)}"
+    NODES="${NODES:-$(getconf nodes 3)}"
+    SHARE="${SHARE:-$(getconf share ${CLUSTER}_root)}"
+    IMAGE_ID="${IMAGE_ID:-$(getconf image-id registry.int.xcalar.com/xcalar/xcalar:latest)}"
+    HOSTPORT="${HOSTPORT:-$(getconf hostport 18443)}"
     NODE_ID=${NODE_ID:-0}
     XCE_USE_GUARDRAILS=${XCE_USE_GUARDRAILS:-0}
     SERDESMAXDISKMB=${SERDESMAXDISKMB:-2000}
@@ -1213,15 +1204,15 @@ old_dcc_defaults() {
     HOSTPORT="$(getconf hostport)"
     NODE_ID=${NODE_ID:-0}
     STACK_NAME="${STACK_NAME:-$CLUSTER}"
-    if ! CLUSTER_UUID=$(get_cluster_config uuid); then
+    if ! CLUSTER_UUID=$(getconf uuid); then
         CLUSTER_UUID="$(uuidgen)"
         git config -f $CONFIG ${CLUSTER}.uuid $CLUSTER_UUID
     fi
 }
 
 persist_arg() {
-    VALID_PARAMS=(maxmem)
-    if ! grep -q "$1" <<<"${VALID_PARAMS[@]}"; then
+    VALID_PARAMS=(cluster maxmem)
+    if ! grep -Eow -q "$1" <<<"${VALID_PARAMS[@]}"; then
         return 1
     fi
     case "$1" in
@@ -1230,8 +1221,10 @@ persist_arg() {
             CLUSTER="$2"
             CLUSTDIR="${CONFDIR}/${CLUSTER}"
             mkdir -p "$CLUSTDIR"
+            CLCONFIG="${CLUSTDIR}/main.ini"
             ;;
         *)
+            git config -f $CLCONFIG "$(echo "$1" | tr '[:lower:]' '[:upper:]')" "$2"
             eval "$(echo "$1" | tr '[:lower:]' '[:upper:]')"="$2"
             ;;
     esac
@@ -1247,9 +1240,7 @@ parse_args() {
                 local flag="${cmd#--}"
                 flag="${flag%%=*}"
                 if ! persist_arg "$flag" "$value"; then
-                    warn "$flag is not a valid flag"
-                else
-                    eval "$(echo "$flag" | tr '[:lower:]' '[:upper:]')"="$value"
+                    :
                 fi
                 ;;
 
