@@ -28,7 +28,6 @@ from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.jenkins_aggregators import JenkinsPostprocessorBase
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
 from py_common.jenkins_aggregators import JenkinsJobMetaCollection
-from py_common.jenkins_aggregators import JenkinsAlert
 from py_common.jenkins_aggregators import JenkinsAllJobIndex
 from py_common.mongo import MongoDB, JenkinsMongoDB
 from py_common.sorts import nat_sort
@@ -66,6 +65,14 @@ UbmNumPrevRuns = 3
 #      then new_mean is flagged as having regressed
 #  where historical_old_mean is the mean over the prior UbmNumPrevRuns runs
 RegDetThr = 3
+
+# File name in which a regression alert message to be emailed, may be stored
+# at the end of an update post-processor method.
+# NOTE: This file name is referenced  by the JenkinsAggregatorsUpdate job (to
+# check for its existence and trigger the email containing this file) - so if
+# you change this file name, you must change the name in the job's config too
+
+RegressionAlertFileName = "regression-alert.txt"
 
 
 class UbmPerfIter(object):
@@ -514,6 +521,9 @@ class UbmPerfResultsData(object):
 
 class UbmPerfPostprocessor(JenkinsPostprocessorBase):
     ENV_PARAMS = {"JENKINS_HOST": {'default': 'jenkins.int.xcalar.com'}}
+    ENV_PARAMS = {"JENKINS_HOST": {'default': 'jenkins.int.xcalar.com'},
+                  "UBM_PERF_ARTIFACTS_ROOT":
+                  {"default": "/netstore/qa/jenkins"}}
 
     def __init__(self, *, job_name):
         pp_name = "{}_postprocessor".format(UbmTestGroupName)
@@ -524,10 +534,12 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
         self.tgroups = self.ubm_perf_results_data.test_groups()
         # XXX: Restrict To address for now, replace with the appropriate
         # email alias, when confident of results
-        self.jalert = JenkinsAlert(to_address="dshah@xcalar.com")
         cfg = EnvConfiguration(UbmPerfPostprocessor.ENV_PARAMS)
         self.urlprefix = "https://{}/job/{}/".format(cfg.get('JENKINS_HOST'),
                                                      self.job_name)
+        self.regr_file = "{}/{}/{}".\
+            format(cfg.get('UBM_PERF_ARTIFACTS_ROOT'), self.job_name,
+                   RegressionAlertFileName)
         self.alert_template =\
             "Regression(s) detected in XCE benchmarks in build {}:\n{}\n\n" \
             "Please see console output at {} for more details"
@@ -789,7 +801,21 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                 self.logger.exception("update_job exception")
                 return None
 
-            # If the list of regressions is not empty, send an alert
+            # If the list of regressions is not empty, write out an alert
+            # file to be emailed from Jenkins
+            #
+            # first, remove a previously created regression-alert file, if any
+
+            self.logger.info("regression alert file {}".
+                             format(self.regr_file))
+            if os.path.exists(self.regr_file):
+                try:
+                    os.remove(self.regr_file)
+                except Exception as e:
+                    self.logger.exception("can't remove regression alert "
+                                          "file {}".format(self.regr_file))
+                    pass
+
             if len(ubm_prevN_regr) > 0 or len(oldest_Nrun_regr) > 0:
                 recent_regr_key =\
                     'regr_over_{}_latest_runs'.format(UbmNumPrevRuns)
@@ -810,8 +836,22 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                 alert_message = self.alert_template.format(curr_bnum,
                                                            regs_json, url)
                 self.logger.info(alert_message)
-                self.jalert.send_alert(subject=self.alert_email_subject,
-                                       body=alert_message)
+
+                # Write out the alert to a file. In the
+                # JenkinsAggregatorsUpdate job's config:
+                # Post-Build Actions -> Editable Email Notification ->
+                #    Advanced Settings -> Pre-Send Script
+                # there's a Groovy script which checks explicitly for this
+                # file. The Email notification is configured to always send
+                # an email (except if the script cancels it).
+                #
+                # So, the script will check for the alerts file, and if it
+                # exists, will replace the email body with the contents of
+                # the alert file. If the file does not exist, it will cancel
+                # the sending of an email.
+
+                with open(self.regr_file, 'wb') as rf:
+                    rf.write(alert_message.encode())
 
             uaps_json = json.dumps(ubm_all_period_stats, indent=4)
             self.logger.debug("ubm_all_period_stats {}".format(uaps_json))

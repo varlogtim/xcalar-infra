@@ -673,31 +673,6 @@ class PostprocessorPlugins(Plugins):
         super().__init__(pi_label="POSTPROCESSOR_PLUGINS")
 
 
-#
-# Use this to send an alert email using send_alert() which takes two strings:
-# 	subject -> subject line for email
-# 	body -> body of the email message
-#
-# The email From address is fixed (in self.sender_email) to simplify the
-# interface. The To address is supplied when the caller inits the class
-# (since different users may want different receivers for the alert(s))
-#
-class JenkinsAlert():
-    def __init__(self, *, to_address):
-        self.sender_email = "jenkins@xcalar.com"
-        self.receiver_email = to_address
-
-    def send_alert(self, *, subject, body):
-        self.server = smtplib.SMTP('localhost')
-        self.msg = EmailMessage()
-        self.msg['Subject'] = subject
-        self.msg['From'] = self.sender_email
-        self.msg['To'] = self.receiver_email
-        self.msg.set_content(body)
-        self.server.send_message(self.msg)
-        self.server.quit()
-
-
 # In-line "unit test"
 if __name__ == '__main__':
     print("Compile check A-OK!")
