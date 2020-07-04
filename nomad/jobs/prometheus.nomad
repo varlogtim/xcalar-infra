@@ -409,14 +409,12 @@ EOT
       }
 
       service {
-        name = "pushgateway-ui"
+        name = "pushgateway"
         port = "pushgateway_ui"
 
         tags = [
-          "urlprefix-pushgateway-ui.nomad:9999/",
-          "urlprefix-pushgateway-ui.service.consul:9999/",
-          "urlprefix-pushgateway.service.consul:9999/",
           "urlprefix-pushgateway.service.consul:443/",
+          "urlprefix-pushgateway.nomad:9999/",
         ]
 
         check {
@@ -526,6 +524,8 @@ scrape_configs:
       format:
         - prometheus
     metrics_path: /metrics
+    scrape_interval: 1m
+    scrape_timeout: 20s
     honor_labels: true
     static_configs:
       - targets:
