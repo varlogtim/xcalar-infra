@@ -21,7 +21,7 @@ if __name__ == '__main__':
         password = getpass()
 
     job_name = args.job_name
-    jenkins = jenkins_fetcher('http://jenkins.int.xcalar.com' , user, password)
+    jenkins = jenkins_fetcher('http://jenkins.int.xcalar.com', 'mchan', 'Welc{0}me1;')
 
     # ======================
     # start range
@@ -35,7 +35,6 @@ if __name__ == '__main__':
         timestamp = info['test_timestamp']
         slave = info['builtOn']
         insert_info(info)
-
         # --------------
         # 2.featch log
         # --------------
@@ -57,7 +56,9 @@ if __name__ == '__main__':
                 pass
                 if line:
                     parser.feed(line)
-
+            elif 'S CALL     ' in line.upper():     # slowest 10 test durations
+                # '<span class="timestamp"><b>07:22:31</b> </span>179.79s call     test_operators.py::TestOperators::testAddManyColumns'
+                parser.feed(line)
             else:
                 pass
 
@@ -66,4 +67,5 @@ if __name__ == '__main__':
         # --------------------
         result = parser.get_result()
         insert(result)
+
 

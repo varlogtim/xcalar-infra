@@ -129,6 +129,10 @@ class MyHTMLParser(HTMLParser):
                     self.RESULT.append(tuple(parsed))
                     print(f'--- {parsed}')
 
+                else:
+                    self.last_time_record = self.result[1]
+                    pass
+
                 # else:
                 #     #
                 #     current_time = self.last_time_record if self.result[1].isspace() else self.result[1]
@@ -177,6 +181,7 @@ class MyHTMLParser(HTMLParser):
                     self.last_time_record = current_time
                     self.RESULT.append(tuple(parsed))
                 else:
+                    self.last_time_record = self.result[1]
                     pass
 
             elif 's call     ' in data:     # slowest 10 test durations
@@ -194,6 +199,7 @@ class MyHTMLParser(HTMLParser):
                 self.RESULT.append(tuple(parsed))
                 print(f'+++ {parsed}')
             else:
+                self.last_time_record = self.result[1]
                 pass
 
         self.result = []

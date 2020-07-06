@@ -70,7 +70,7 @@ class jenkins_fetcher(object):
 
 
 if __name__ == '__main__':
-    jenkins = jenkins_fetcher('http://jenkins.int.xcalar.com', 'your_name', 'your_password' )
+    jenkins = jenkins_fetcher('http://jenkins.int.xcalar.com', 'mchan', 'Welc{0}me1;' )
     # print( jenkins.fetch_job_build_info('XCETest', '45001') )
     # print( jenkins.fetch_slave('XCETest', '45001') )
 
