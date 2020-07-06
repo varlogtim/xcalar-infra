@@ -131,8 +131,9 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image      = "grafana/grafana:master"
-        force_pull = true
+        #image      = "grafana/grafana:7.0.5"
+        image      = "grafana/grafana:7.0.4"
+        force_pull = false
 
         port_map {
           grafana_ui = 3000
