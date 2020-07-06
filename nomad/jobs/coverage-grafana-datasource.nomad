@@ -11,6 +11,7 @@ job "coverage-grafana-datasource" {
 
       config {
         image = "registry.service.consul/xcalar-qa/coverage-grafana-datasource:latest"
+        force_pull = true
 
         port_map {
           http = 80

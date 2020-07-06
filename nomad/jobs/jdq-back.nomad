@@ -11,6 +11,7 @@ job "jdq-back" {
 
       config {
         image = "registry.service.consul/xcalar-qa/jdq-back:latest"
+        force_pull = true
 
         port_map {
           http = 80

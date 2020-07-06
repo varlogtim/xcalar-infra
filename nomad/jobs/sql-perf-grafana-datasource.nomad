@@ -11,6 +11,7 @@ job "sql-perf-grafana-datasource" {
 
       config {
         image = "registry.service.consul/xcalar-qa/sql-perf-grafana-datasource:latest"
+        force_pull = true
 
         port_map {
           http = 80

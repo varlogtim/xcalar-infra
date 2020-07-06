@@ -11,6 +11,7 @@ job "jdq-grafana-datasource" {
 
       config {
         image = "registry.service.consul/xcalar-qa/jdq-grafana-datasource:latest"
+        force_pull = true
 
         port_map {
           http = 80
