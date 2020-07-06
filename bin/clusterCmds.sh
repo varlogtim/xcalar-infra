@@ -304,8 +304,12 @@ gitSha() {
         exit 1
     fi
     local version
-    version=$(cloudXccli "$1" -c version)
-    echo "$version" | head -n1 | cut -d\  -f3 | cut -d- -f5
+    if version=$(cloudXccli "$1" -c version) ; then
+        echo "$version" | head -n1 | cut -d\  -f3 | cut -d- -f5
+    else
+        echo "Exiting the test as Cluster is not up" >&2
+        exit 1
+    fi
 }
 
 cloudXccli() {
