@@ -378,9 +378,7 @@ class BSTAResultsAggregator(SqlPerfResultsAggregator):
 
 class SqlPerfResultsData(object):
 
-    ENV_PARAMS = {"SQL_PERF_JOB_NAME": {"default": "SqlScaleTest"}}
-
-    def __init__(self):
+    def __init__(self, *, job_name):
         """
         Initializer
 
@@ -388,8 +386,7 @@ class SqlPerfResultsData(object):
             SQL_PERF_JOB_NAME:  Jenkins job name.
         """
         self.logger = logging.getLogger(__name__)
-        cfg = EnvConfiguration(SqlPerfResultsData.ENV_PARAMS)
-        self.job_name = cfg.get("SQL_PERF_JOB_NAME")
+        self.job_name = job_name
         jdb = JenkinsMongoDB().jenkins_db()
         self.data = JenkinsJobDataCollection(job_name=self.job_name, db=jdb)
         self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=jdb)

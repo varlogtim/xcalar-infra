@@ -20,8 +20,9 @@ import time
 sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.env_configuration import EnvConfiguration
-config = EnvConfiguration({"LOG_LEVEL": {"default": logging.INFO}})
-
+cfg = EnvConfiguration({"LOG_LEVEL": {"default": logging.INFO},
+                        "SQL_SCALE_JOB_NAME": {"default": "SqlScaleTest"},
+                        "PRECHECKIN_VERIFY_JOB_NAME": {"default": "BuildSqldfTestAggreagate"}})
 from sql_perf import SqlPerfResults, SqlPerfResultsData
 from sql_perf.comparison_pdf import SqlPerfComparisonPdf
 
@@ -30,12 +31,15 @@ from flask_cors import CORS, cross_origin
 
 # It's log, it's log... :)
 logging.basicConfig(
-                level=config.get("LOG_LEVEL"),
+                level=cfg.get("LOG_LEVEL"),
                 format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                 handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
-sql_perf_results_data = SqlPerfResultsData()
+source_to_results = {
+    'sql-scale': SqlPerfResultsData(job_name=cfg.get("SQL_SCALE_JOB_NAME")),
+    'precheckin-verify': SqlPerfResultsData(job_name=cfg.get("PRECHECKIN_VERIFY_JOB_NAME"))}
+
 sql_perf_pdf = SqlPerfComparisonPdf()
 
 app = Flask(__name__)
@@ -75,44 +79,54 @@ def find_metrics():
     if not target:
         return jsonify(values) # XXXrs - exception?
 
-    if target == 'test_group':
-        values = sql_perf_results_data.test_groups()
+    if target == 'source':
+        values = list(source_to_results.keys())
 
-    # <test_group>:xce_versions
+    # <source>:test_group
+    elif ':test_group' in target:
+        source,rest = target.split(':')
+        results_data = source_to_results[source]
+        values = results_data.test_groups()
+
+    # <source>:<test_group>:xce_versions
     if 'xce_versions' in target:
-        tgroup,rest = target.split(':')
-        values = sql_perf_results_data.xce_versions(test_group=tgroup)
+        source,tgroup,rest = target.split(':')
+        results_data = source_to_results[source]
+        values = results_data.xce_versions(test_group=tgroup)
 
-    # <test_group>:<xce_vers>:build1
+    # <source>:<test_group>:<xce_vers>:build1
     elif ':build1' in target:
         # Build1 list will be all builds available matching the Xcalar version(s).
         # Once selected, the remaining metrics will be queried in context of the
         # selected build (comparable builds will have matching test type).
-        tgroup,xce_vers,rest = target.split(':')
+        source,tgroup,xce_vers,rest = target.split(':')
+        results_data = source_to_results[source]
         xce_versions = _parse_multi(xce_vers)
         logger.info("finding builds for tgroup {} xce_versions {}"
                     .format(tgroup, xce_versions))
-        values = sql_perf_results_data.find_builds(test_group=tgroup,
-                                                   xce_versions=_parse_multi(xce_vers),
-                                                   reverse=True)
+        values = results_data.find_builds(test_group=tgroup,
+                                          xce_versions=_parse_multi(xce_vers),
+                                          reverse=True)
 
-    # <test_group>:<xce_vers>:<bnum1>:build2
+    # <source>:<test_group>:<xce_vers>:<bnum1>:build2
     elif ':build2' in target:
         # Build2 list will be all builds available matching the Xcalar version(s)
         # and of same test type as build1 (suitable for comparison).
-        tgroup,xce_vers,bnum1,rest = target.split(':')
-        test_type = sql_perf_results_data.test_type(test_group=tgroup, bnum=bnum1)
+        source,tgroup,xce_vers,bnum1,rest = target.split(':')
+        results_data = source_to_results[source]
+        test_type = results_data.test_type(test_group=tgroup, bnum=bnum1)
         # Only display choices where test type (hash of test parameters)
         # is the same as the "base" build (since otherwise comparison is misleading).
-        values = sql_perf_results_data.find_builds(test_group=tgroup,
-                                                   test_type=test_type,
-                                                   xce_versions=_parse_multi(xce_vers),
-                                                   reverse=True)
-    # <test_group>:<bnum1>:query
+        values = results_data.find_builds(test_group=tgroup,
+                                          test_type=test_type,
+                                          xce_versions=_parse_multi(xce_vers),
+                                          reverse=True)
+    # <source>:<test_group>:<bnum1>:query
     elif ':query' in target:
         # Return list of all supported query names (as determined by selected build1).
-        tgroup,bnum1,rest = target.split(':')
-        values = sql_perf_results_data.query_names(test_group=tgroup, bnum=bnum1)
+        source,tgroup,bnum1,rest = target.split(':')
+        results_data = source_to_results[source]
+        values = results_data.query_names(test_group=tgroup, bnum=bnum1)
 
     # metric
     elif 'metric' in target:
@@ -128,13 +142,15 @@ def _config_table(*, target_name):
     """
     Target name specifes query.
     Format:
-        <test_group>:<bnum>:configparams
+        <source>:<test_group>:<bnum>:configparams
     """
     try:
-        tgroup,bnum,rest = target_name.split(':')
+        source,tgroup,bnum,rest = target_name.split(':')
     except Exception as e:
         abort(404, Exception('incomprehensible target_name: {}'.format(target_name)))
-    config_params = sql_perf_results_data.config_params(test_group=tgroup, bnum=bnum)
+
+    results_data = source_to_results[source]
+    config_params = results_data.config_params(test_group=tgroup, bnum=bnum)
     columns = [
         {"text":"Number of Users", "type":"string"},
         {"text":"Notes", "type":"string"},
@@ -153,11 +169,11 @@ def _results_table(*, target_name):
     """
     Target name specifes query.
     Format:
-        <test_group>:<build_num_1>:<build_num_2>:<metric_name>
+        <source>:<test_group>:<build_num_1>:<build_num_2>:<metric_name>
     """
 
     try:
-        tgroup,bnum1,bnum2,mname = target_name.split(':')
+        source,tgroup,bnum1,bnum2,mname = target_name.split(':')
     except Exception as e:
         abort(404, Exception('incomprehensible target_name: {}'.format(target_name)))
 
@@ -182,14 +198,15 @@ def _results_table(*, target_name):
 
     # Query names are a component of test_type, so all tests of matching
     # type will have identical sets of query names.
-    for qname in sql_perf_results_data.query_names(test_group=tgroup, bnum=bnum1):
+    results_data = source_to_results[source]
+    for qname in results_data.query_names(test_group=tgroup, bnum=bnum1):
         # Grafana doesn't aggregate into tables, so we have to roll our own...
-        b1vals = sql_perf_results_data.query_vals(test_group=tgroup, bnum=bnum1,
-                                                  qname=qname, mname=mname)
+        b1vals = results_data.query_vals(test_group=tgroup, bnum=bnum1,
+                                         qname=qname, mname=mname)
         b1mean = statistics.mean(b1vals)
 
-        b2vals = sql_perf_results_data.query_vals(test_group=tgroup, bnum=bnum2,
-                                                  qname=qname, mname=mname)
+        b2vals = results_data.query_vals(test_group=tgroup, bnum=bnum2,
+                                         qname=qname, mname=mname)
         b2mean = statistics.mean(b2vals)
 
         delta_pct = 0
@@ -205,10 +222,11 @@ def _results_table(*, target_name):
     return results
 
 
-def _get_datapoints(*, tgroup, bnum, qname, mname, request_ts_ms=None):
+def _get_datapoints(*, source, tgroup, bnum, qname, mname, request_ts_ms=None):
         logger.debug("start")
+        results_data = source_to_results[source]
         try:
-            data = sql_perf_results_data.results(test_group=tgroup, bnum=bnum)
+            data = results_data.results(test_group=tgroup, bnum=bnum)
         except Exception as e:
             logger.exception("failed to load data")
             abort(404, Exception('failed to load data'))
@@ -217,18 +235,17 @@ def _get_datapoints(*, tgroup, bnum, qname, mname, request_ts_ms=None):
         else:
             ts_ms = data['start_ts_ms']
         logger.debug("get values")
-        qvals = sql_perf_results_data.query_vals(test_group=tgroup, bnum=bnum,
-                                                 qname=qname, mname=mname)
+        qvals = results_data.query_vals(test_group=tgroup, bnum=bnum,
+                                        qname=qname, mname=mname)
         logger.debug("qvals: {}".format(qvals))
         return [[qv,ts_ms] for qv in qvals]
 
 
-# XXXrs --- NOT USED ----------------------------vvvvvvvvvvvvvvvvvvvvvvvvvvvv
-def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
+def _timeserie_results(*, target, request_ts_ms):
     """
     Target name specifies query.
     Format:
-        <test_group>:<xce_versions>:<build_num>:<query_names>:<metric_name>:<mode>
+        <source>:<test_group>:<xce_versions>:<build_num>:<query_names>:<metric_name>:<mode>
     """
 
     logger.info("start")
@@ -240,7 +257,7 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
         logger.exception(err)
         abort(404, ValueError(err))
     try:
-        tgroup,xver,bnum,qname,mname,mode = target_name.split(':')
+        source,tgroup,xver,bnum,qname,mname,mode = target_name.split(':')
     except Exception as e:
         err = 'incomprehensible target name: {}'.format(target_name)
         logger.exception(err)
@@ -256,8 +273,8 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
         only want results from build indicated by bnum
         xce_versions is ignored
         """
-        data = _get_datapoints(tgroup=tgroup, bnum=bnum,
-                               qname=qname, mname=mname,
+        data = _get_datapoints(source=source, tgroup=tgroup,
+                               bnum=bnum, qname=qname, mname=mname,
                                request_ts_ms=request_ts_ms)
         if not data:
             return []
@@ -270,19 +287,18 @@ def _timeserie_results(*, target, request_ts_ms, from_ts_ms = 0, to_ts_ms = 0):
     qname is allowed to be multi e.g. "(q1|q2|q3...)"
     """
     results = []
-    test_type = sql_perf_results_data.test_type(test_group=tgroup, bnum=bnum)
-    builds = sql_perf_results_data.find_builds(test_group=tgroup,
-                                               first_bnum=bnum,
-                                               xce_versions=_parse_multi(xver),
-                                               test_type=test_type)
-                                               #start_ts_ms=from_ts_ms,
-                                               #end_ts_ms=to_ts_ms)
+    results_data = source_to_results[source]
+    test_type = results_data.test_type(test_group=tgroup, bnum=bnum)
+    builds = results_data.find_builds(test_group=tgroup,
+                                      first_bnum=bnum,
+                                      xce_versions=_parse_multi(xver),
+                                      test_type=test_type)
 
     qnames = _parse_multi(qname)
     for bnum in builds:
         for qname in qnames:
-            data = _get_datapoints(tgroup=tgroup, bnum=bnum,
-                                   qname=qname, mname=mname,
+            data = _get_datapoints(source=source, tgroup=tgroup,
+                                   bnum=bnum, qname=qname, mname=mname,
                                    request_ts_ms=request_ts_ms)
             if not data:
                 continue
