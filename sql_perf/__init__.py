@@ -181,11 +181,7 @@ class SqlPerfResults(object):
     with a particular build.
     """
 
-    # N.B.: Second match group expected to be iteration number
-    file_pats = [re.compile(r"(.*)-(\d+)_tpc(.*)Test\.json\Z"),
-                 re.compile(r"(.*)-(\d+)-xcalar_tpc(.*)Test\.json\Z")]
-
-    def __init__(self, *, bnum, dir_path):
+    def __init__(self, *, bnum, dir_path, file_pats):
         """
         Initializer
 
@@ -197,6 +193,7 @@ class SqlPerfResults(object):
         self.build_num = bnum
         self.logger.info("start bnum {} dir_path {}".format(bnum, dir_path))
         self.iters_by_group = {}
+        self.file_pats = file_pats
 
         if not os.path.exists(dir_path):
             raise SqlPerfNoResultsError("directory does not exist: {}".format(dir_path))
@@ -204,17 +201,24 @@ class SqlPerfResults(object):
         # Load each of the iteration files...
         for name in os.listdir(dir_path):
             path = os.path.join(dir_path, name)
-            self.logger.debug("path: {}".format(path))
+            self.logger.info("path: {}".format(path))
             m = None
-            for pat in SqlPerfResults.file_pats:
+            for pat in self.file_pats:
                 m = pat.match(name)
-                if m:
-                    break
+                if not m:
+                    self.logger.info("skipping: {}".format(path))
+                    continue
+                break
             else:
-                self.logger.debug("skipping: {}".format(path))
                 continue
+
             try:
-                inum = m.group(2) # N.B.: Second match group expected to be iteration number
+                inum = m.group(1) # N.B.: First match group expected to be iteration number
+            except IndexError:
+                self.logger.info("no iteration number, using 0")
+                inum = "0"
+
+            try:
                 spi = SqlPerfIter(bnum=bnum, inum=inum, path=path)
                 self.iters_by_group.setdefault(spi.test_group, {})[inum] = spi
             except Exception as e:
@@ -308,22 +312,22 @@ class SqlPerfResults(object):
                         'query_vals': self.query_vals(test_group = tg)}
         return data
 
-
 class SqlPerfResultsAggregator(JenkinsAggregatorBase):
 
     ENV_PARAMS = {"SQL_PERF_ARTIFACTS_ROOT": {"default": "/netstore/qa/jenkins"}}
 
-    def __init__(self, *, job_name):
+    def __init__(self, *, job_name, file_pats):
 
         self.logger = logging.getLogger(__name__)
         cfg = EnvConfiguration(SqlPerfResultsAggregator.ENV_PARAMS)
         self.artifacts_root = cfg.get('SQL_PERF_ARTIFACTS_ROOT')
+        self.file_pats = file_pats
         super().__init__(job_name=job_name)
 
     def update_build(self, *, bnum, jbi, log, test_mode=False):
         try:
             dir_path=os.path.join(self.artifacts_root, self.job_name, bnum)
-            results = SqlPerfResults(bnum=bnum, dir_path=dir_path)
+            results = SqlPerfResults(bnum=bnum, dir_path=dir_path, file_pats=self.file_pats)
         except SqlPerfNoResultsError as e:
             return None
         data = results.index_data()
@@ -353,6 +357,23 @@ class SqlPerfResultsAggregator(JenkinsAggregatorBase):
         if atms:
             data['_add_to_meta_set'] = atms
         return data
+
+
+class SSTResultsAggregator(SqlPerfResultsAggregator):
+
+     # N.B.: First match group expected to be iteration number
+     file_pats = [re.compile(r".*-(\d+)_tpc(.*)Test\.json\Z"),
+                  re.compile(r".*-(\d+)-xcalar_tpc.*Test\.json\Z")]
+
+     def __init__(self, *, job_name):
+         super().__init__(job_name=job_name, file_pats=SSTResultsAggregator.file_pats)
+
+class BSTAResultsAggregator(SqlPerfResultsAggregator):
+
+     file_pats = [re.compile(r"\Aprecheckin_verify_tpchTest.json\Z")]
+
+     def __init__(self, *, job_name):
+         super().__init__(job_name=job_name, file_pats=BSTAResultsAggregator.file_pats)
 
 
 class SqlPerfResultsData(object):

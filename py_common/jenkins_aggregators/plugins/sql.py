@@ -8,8 +8,11 @@
 # regarding the use and redistribution of this software.
 
 AGGREGATOR_PLUGINS = [{'module_path': 'sql_perf',
-                       'class_name': 'SqlPerfResultsAggregator',
-                       'job_names': ['SqlScaleTest']}]
+                       'class_name': 'SSTResultsAggregator',
+                       'job_names': ['SqlScaleTest']},
+                      {'module_path': 'sql_perf',
+                       'class_name': 'BSTAResultsAggregator',
+                       'job_names': ['BuildSqldfTestAggreagate']}]
 
 # In-line "unit test"
 if __name__ == '__main__':
