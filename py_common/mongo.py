@@ -317,6 +317,21 @@ class JenkinsMongoDB(object):
             return []
         return doc.get('job_list', [])
 
+    def active_hosts(self, *, host_list=None):
+        coll = self.jenkins_db().collection('_jenkins_meta')
+        if host_list is not None:
+            if not isinstance(host_list, list):
+                raise ValueError("host_list must be a list")
+            doc = coll.find_one_and_update({'_id': 'active'}, {'$set':{'host_list': host_list}},
+                                           upsert=True, return_document = ReturnDocument.AFTER)
+        else:
+            doc = coll.find_one({'_id': 'active'})
+
+        if not doc:
+            return []
+        return doc.get('host_list', [])
+
+
     def all_job_update_ts(self, *, ts=None):
         coll = self.jenkins_db().collection('_jenkins_meta')
         if ts is not None:

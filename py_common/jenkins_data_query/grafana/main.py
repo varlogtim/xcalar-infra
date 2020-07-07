@@ -195,6 +195,9 @@ def _timeserie_results(*, target, from_ms, to_ms):
 
 def _all_jobs_table(*, from_ms, to_ms):
 
+    # Only show info for active jobs...
+    active_jobs = jdq_client.job_names()
+
     resp = jdq_client.builds_by_time(start_time_ms=from_ms, end_time_ms=to_ms)
     job_info = {}
     job_info_empty = {'pass_cnt':0,
@@ -207,6 +210,9 @@ def _all_jobs_table(*, from_ms, to_ms):
 
     for bld in resp['builds']:
         job_name = bld.get('job_name')
+        if job_name not in active_jobs:
+            continue
+
         jinfo = job_info.setdefault(job_name, copy.deepcopy(job_info_empty))
 
         result = bld.get('result', 'MISSING')
@@ -413,35 +419,6 @@ def _job_table(*, job_names, parameter_names, from_ms, to_ms):
             rows.append(vals)
     return [{"columns": columns, "rows": rows, "type" : "table"}]
 
-def _host_table(*, host_name, from_ms, to_ms):
-
-    # XXXrs - WORKING HERE
-    rows = []
-    columns = [
-        {"text":"Job Name", "type":"string"},
-        {"text":"Build No.", "type":"string"},
-        {"text":"Start Time", "type":"time"},
-        {"text":"Duration (s)", "type":"time"},
-        {"text":"Result", "type":"string"}
-    ]
-    query = {'$and': [{'start_time_ms':{'$gt': from_ms}},
-                      {'start_time_ms':{'$lt': to_ms}}]}
-
-    resp = jdq_client.find_builds(job_name = job_name,
-                                  query = query,
-                                  verbose = True)
-
-    for bnum,item in resp.items():
-        duration_s = int(item.get('duration_ms', 0)/1000)
-        vals = [int(bnum),
-                item.get('start_time_ms', 0),
-                duration_s,
-                item.get('built_on', 'unknown'),
-                _map_result(item.get('result'))]
-        for name in parameter_names:
-            vals.append(item.get('parameters', {}).get(name, "N/A"))
-        rows.append(vals)
-    return [{"columns": columns, "rows": rows, "type" : "table"}]
 
 @app.route('/query', methods=methods)
 @cross_origin(max_age=600)

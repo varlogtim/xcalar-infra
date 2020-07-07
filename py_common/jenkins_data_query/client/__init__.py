@@ -39,7 +39,7 @@ class JDQClient(object):
 
     def job_names(self):
         """
-        Returns list of all known job names.
+        Returns list of all active job names.
         """
         resp = self._cmd(uri = '/jenkins_jobs')
         names = []
@@ -49,7 +49,7 @@ class JDQClient(object):
 
     def job_info(self):
         """
-        Returns interesting information about all known jobs.
+        Returns interesting information about all active jobs.
         """
         def _sortkey(x):
             return x['job_name']
@@ -65,7 +65,7 @@ class JDQClient(object):
 
     def host_names(self):
         """
-        Returns list of all known host names.
+        Returns list of all active host names.
         """
         resp = self._cmd(uri = '/jenkins_hosts')
         names = []

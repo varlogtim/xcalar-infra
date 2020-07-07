@@ -353,11 +353,14 @@ try:
         job_list = job_list.split(',')
     else:
         logger.info("no job list, fetching all known jobs")
-        job_list = JenkinsApi(host=jenkins_host).list_jobs()
+        japi = JenkinsApi(host=jenkins_host)
+        job_list = japi.list_jobs()
 
-        # Update the active jobs list in the DB
+        # Update the active jobs and active hosts lists in the DB
         logger.info("updating active jobs list in DB")
         jmdb.active_jobs(job_list=job_list)
+        logger.info("updating active hosts list in DB")
+        jmdb.active_hosts(host_list=japi.list_hosts())
 
         # Since we're doing the full list, see if we need to force
         # a default update of job stats.  A force update will ensure the

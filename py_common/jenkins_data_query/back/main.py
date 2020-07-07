@@ -61,13 +61,7 @@ def test_connection():
 @cross_origin()
 def jenkins_jobs():
     jobs = []
-    for job_name in jdb.db.collection_names():
-        if not job_name.startswith('job_') or job_name.endswith('_meta'):
-            continue
-        job_name=job_name[4:]
-        # XXXrs - shouldn't be in DB!
-        if not job_name or job_name == "None":
-            continue
+    for job_name in jmdb.active_jobs():
         jjmc = JenkinsJobMetaCollection(job_name=job_name, db=jdb)
         jobs.append({'job_name': job_name,
                      'job_url': "http://{}/job/{}".format(jenkins_host, job_name),
@@ -78,13 +72,7 @@ def jenkins_jobs():
 @cross_origin()
 def jenkins_hosts():
     hosts = []
-    for host_name in jdb.db.collection_names():
-        if not host_name.startswith('host_'):
-            continue
-        host_name=host_name[5:]
-        # XXXrs - shouldn't be in DB.
-        if not len(host_name) or host_name == "None":
-            continue
+    for host_name in jmdb.active_hosts():
         hosts.append({'host_name': host_name,
                       'host_url': "http://{}/computer/{}".format(jenkins_host, host_name)})
     return make_response(jsonify({'hosts': hosts}))

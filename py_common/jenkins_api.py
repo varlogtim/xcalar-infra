@@ -10,6 +10,7 @@
 import json
 import logging
 import os
+from pprint import pformat
 import re
 import requests
 import subprocess
@@ -259,6 +260,18 @@ class JenkinsApi(object):
                 jobs.append(name)
         return jobs
 
+    def list_hosts(self):
+        hosts = []
+        text = self.rest.cmd(uri="/computer/api/json")
+        if not text:
+            return hosts
+        data = json.loads(text)
+        for host in data.get('computer', []):
+            name = host.get('displayName', None)
+            if name:
+                hosts.append(name)
+        return hosts
+
     def get_job_data(self, *, job_name):
         """
         Return dictionary of available build data from REST_API.
@@ -312,7 +325,6 @@ class JenkinsApi(object):
 
 
 if __name__ == '__main__':
-    from pprint import pformat
     print("Compile check A-OK!")
 
     cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
@@ -325,9 +337,12 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
 
     japi = JenkinsApi(host=cfg.get('JENKINS_HOST'))
-
+    hosts = japi.list_hosts()
+    print("All hosts: {}".format(hosts))
     jobs = japi.list_jobs()
     print("All jobs: {}".format(jobs))
+
+    """
     jji = japi.get_job_info(job_name="SqlScaleTest")
     print(jji)
     last_build = jji.last_build_number()
@@ -360,3 +375,4 @@ if __name__ == '__main__':
             print("build {} done: {}".format(bnum, jbi.is_done()))
         except Exception as e:
             print("Exception: {}".format(e))
+    """
