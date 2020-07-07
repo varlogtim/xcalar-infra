@@ -241,10 +241,11 @@ class JenkinsJobAggregators(object):
         self.logger.debug("end")
         return True
 
-    def _postprocess_job(self, *, test_mode=False):
+    def _postprocess_job(self, *, test_mode=False, default_only=False):
         postprocessors = [JenkinsJobPostprocessor(jenkins_host=self.jenkins_host, job_name=self.job_name)]
-        if self.postprocessor_plugins:
-            postprocessors.extend(self.postprocessor_plugins)
+        if not default_only:
+            if self.postprocessor_plugins:
+                postprocessors.extend(self.postprocessor_plugins)
         for pproc in postprocessors:
             try:
                 data = pproc.update_job(test_mode=test_mode)
@@ -253,7 +254,9 @@ class JenkinsJobAggregators(object):
                 self.logger.exception("exception post-processing job: {}"
                                       .format(self.job_name))
 
-    def _do_updates(self, *, builds, test_mode=False, test_data_path=None):
+    def _do_updates(self, *, builds, test_mode=False,
+                                     test_data_path=None,
+                                     force_default_job_update=False):
         self.logger.info("builds: {}".format(builds))
         self.logger.info("test_mode: {}".format(test_mode))
         self.logger.info("test_data_path: {}".format(test_data_path))
@@ -265,10 +268,14 @@ class JenkinsJobAggregators(object):
         if updated:
             self.logger.debug("{} builds updated, call postprocessors".format(updated))
             self._postprocess_job(test_mode=test_mode)
+        elif force_default_job_update:
+            self._postprocess_job(test_mode=test_mode, default_only=True)
         return
 
 
-    def update_builds(self, *, test_builds=None, test_data_path=None):
+    def update_builds(self, *, test_builds=None,
+                               test_data_path=None,
+                               force_default_job_update=False):
         self.logger.info("start")
 
         if test_builds:
@@ -285,7 +292,8 @@ class JenkinsJobAggregators(object):
             return
         possible_builds = set([str(n) for n in range(1, last_build+1)])
         candidate_builds = sorted(possible_builds.difference(completed_builds), key=nat_sort, reverse=True)
-        self._do_updates(builds=candidate_builds[:self.builds_max])
+        self._do_updates(builds=candidate_builds[:self.builds_max],
+                         force_default_job_update=force_default_job_update)
 
 
 # MAIN -----
@@ -293,7 +301,8 @@ class JenkinsJobAggregators(object):
 cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
                         'JENKINS_HOST': {'default': None},
                         'JENKINS_DB_NAME': {'default': None},
-                        'UPDATE_JOB_LIST': {'default': None}})
+                        'UPDATE_JOB_LIST': {'default': None},
+                        'ALL_JOB_UPDATE_FREQ_HR': {'default': 24}})
 
 # It's log, it's log... :)
 logging.basicConfig(level=cfg.get('LOG_LEVEL'),
@@ -336,6 +345,7 @@ try:
         raise ValueError("JENKINS_HOST not defined")
     logger.info("using jenkins_host {}".format(jenkins_host))
 
+    force_default_job_update = False
     job_list = args.test_job
     if not job_list:
         job_list = cfg.get('UPDATE_JOB_LIST')
@@ -344,7 +354,22 @@ try:
     else:
         logger.info("no job list, fetching all known jobs")
         job_list = JenkinsApi(host=jenkins_host).list_jobs()
+
+        # Update the active jobs list in the DB
+        logger.info("updating active jobs list in DB")
+        jmdb.active_jobs(job_list=job_list)
+
+        # Since we're doing the full list, see if we need to force
+        # a default update of job stats.  A force update will ensure the
+        # job stats are maintained even if there are no recent builds for
+        # that job. (ENG-8959)
+        ts = jmdb.all_job_update_ts()
+        if int(time.time()) > ts:
+            force_default_job_update = True
+
     logger.info("job list: {}".format(job_list))
+    logger.info("force_default_job_update: {}"
+                .format(force_default_job_update))
 
     for job_name in job_list:
         logger.info("process {}".format(job_name))
@@ -364,8 +389,15 @@ try:
                                     aggregator_plugins=aggregator_plugins.by_job(job_name=job_name),
                                     postprocessor_plugins=postprocessor_plugins.by_job(job_name=job_name))
         jja.update_builds(test_builds=args.test_builds,
-                          test_data_path=args.test_data_path)
+                          test_data_path=args.test_data_path,
+                          force_default_job_update=force_default_job_update)
         process_lock.unlock()
+
+    if force_default_job_update:
+        next_force = int(time.time() + (cfg.get('ALL_JOB_UPDATE_FREQ_HR')*3600))
+        logger.info("set next force_default_job_update: {}".format(next_force))
+        jmdb.all_job_update_ts(ts=next_force)
+
 
 except Exception as e:
     # XXXrs - FUTURE - context manager for keep-alive lock

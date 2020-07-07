@@ -303,6 +303,36 @@ class JenkinsMongoDB(object):
         db = self.jenkins_db()
         return db.collection('_downstream_jobs')
 
+    def active_jobs(self, *, job_list=None):
+        coll = self.jenkins_db().collection('_jenkins_meta')
+        if job_list is not None:
+            if not isinstance(job_list, list):
+                raise ValueError("job_list must be a list")
+            doc = coll.find_one_and_update({'_id': 'active'}, {'$set':{'job_list': job_list}},
+                                           upsert=True, return_document = ReturnDocument.AFTER)
+        else:
+            doc = coll.find_one({'_id': 'active'})
+
+        if not doc:
+            return []
+        return doc.get('job_list', [])
+
+    def all_job_update_ts(self, *, ts=None):
+        coll = self.jenkins_db().collection('_jenkins_meta')
+        if ts is not None:
+            if isinstance(ts, float):
+                ts = int(ts)
+            if not isinstance(ts, int):
+                raise ValueError("ts must be a number")
+            doc = coll.find_one_and_update({'_id': 'all_job_update'}, {'$set':{'ts': ts}},
+                                           upsert=True, return_document = ReturnDocument.AFTER)
+        else:
+            doc = coll.find_one({'_id': 'all_job_update'})
+
+        if not doc:
+            return 0
+        return doc.get('ts', 0)
+
 if __name__ == '__main__':
     print("Compile check A-OK!")
 
