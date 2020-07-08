@@ -530,7 +530,7 @@ scrape_configs:
     honor_labels: true
     static_configs:
       - targets:
-          - '{{ env "NOMAD_IP_pushgateway_ui" }}:9091'
+          - '{{ env "NOMAD_IP_prometheus_ui" }}:9091'
   - job_name: jenkins-exporter
     metrics_path: /prometheus
     params:
