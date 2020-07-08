@@ -85,10 +85,11 @@ mount_xlrroot() {
     fi
 
     # shellcheck disable=SC2046
-    local tmpdir="$(mktemp -d -t nfs.XXXXXX)"
     set +e
+    local rc tmpdir
+    tmpdir="$(mktemp -d -t nfs.XXXXXX)"
     mount -t $NFS_TYPE -o ${NFS_OPTS},timeo=3 $NFSHOST:/$NFSDIR $tmpdir
-    local rc=$?
+    rc=$?
     if [ $rc -eq 32 ]; then
         mount -t $NFS_TYPE -o ${NFS_OPTS},timeo=3 $NFSHOST:/ $tmpdir
         rc=$?
@@ -489,6 +490,7 @@ main() {
 
     if [ -z "$NFS_TYPE" ]; then
         if [[ $NFSHOST =~ ^fs-[0-9a-f]{8}$ ]]; then
+            FSID="$NFSHOST"
             if [ -n "$SUBNET" ]; then
                 if EFSIP="$(efsip $NFSHOST $SUBNET)"; then
                     NFSHOST=$EFSIP
@@ -579,17 +581,35 @@ main() {
             fi
             sleep 2
         done
+        : > /etc/ssh/ssh_known_hosts
+        : > /etc/ansible/hosts
+        MYNODE_ID=''
         for NODE_ID in $(seq 0 $((NUM_INSTANCES - 1))); do
-            if [ "$LOCAL_IPV4" == "${IPS[$NODE_ID]}" ]; then
-                break
+            local localip="${IPS[$NODE_ID]}"
+            local localdns=ip-"${localip//./-}"
+            local localfqdn="$localdns.$(dnsdomainname)"
+            if [ "$LOCAL_IPV4" == "$localip" ]; then
+                MYNODE_ID="${MYNODE_ID:-$NODE_ID}"
+                echo "vm${NODE_ID}      ansible_connection=local" >> /etc/ansible/hosts
+            else
+                echo "vm${NODE_ID}      ansible_host=$localip" >> /etc/ansible/hosts
             fi
+            sed -i "/$localip/d; /vm${NODE_ID}/d; /$localdns/d" /etc/hosts
+            echo "$localip   $localfqdn $localdns vm${NODE_ID}" >> /etc/hosts
+            for ii in $localip $localfqdn $localdns vm${NODE_ID}; do
+                echo "Scanning $ii" >&2
+                ssh-keyscan $ii >> /etc/ssh/ssh_known_hosts
+            done
         done
+        NODE_ID="${MYNODE_ID}"
         if [ "$LOCAL_IPV4" != "${IPS[$NODE_ID]}" ]; then
             log "WARNING: Unable to find $LOCAL_IPV4 in the list of IPS: ${IPS[*]}"
         fi
     else
         IPS=("$LOCAL_IPV4")
         NODE_ID=0
+        echo "vm0   ansible_connection=local" > /etc/ansible/hosts
+        echo "$LOCAL_IPV4   $(hostname -f) $(hostname -s) vm0" >> /etc/hosts
     fi
 
     aws ec2 create-tags --resources $INSTANCE_ID \
@@ -644,6 +664,12 @@ main() {
         FQDN="$(hostname -f)"
     fi
 
+    XCE_USER_HOME=${XCE_USER_HOME:-/home/xcalar}
+    SSHDIR=$XCE_USER_HOME/.ssh
+    mkdir -p $SSHDIR
+    chmod 0700 $SSHDIR
+    touch ${XCE_USER_HOME}/.hushlogin
+    chown xcalar:xcalar $SSHDIR ${XCE_USER_HOME}/.hushlogin
     if [ $NODE_ID -eq 0 ]; then
         if [ -n "$NIC" ]; then
             ec2_attach_nic "$NIC" "$INSTANCE_ID"
@@ -671,7 +697,10 @@ main() {
         else
             generate_caddy /etc/xcalar/Caddyfile.orig > $XLRROOT/config/Caddyfile.$$
         fi
-
+        ssh-keygen -t rsa -N "" -f ${SSHDIR}/id_rsa -C "xcalar@$(hostname -f)"
+        chown xcalar:xcalar ${SSHDIR}/id_rsa.pub
+        cp -a ${SSHDIR}/id_rsa.pub $XLRROOT/config/authorized_keys
+        chmod 0600 $XLRROOT/config/authorized_keys
         mv $XLRROOT/config/Caddyfile.$$ $XLRROOT/config/Caddyfile
         /opt/xcalar/scripts/genDefaultAdmin.sh \
             --username "${ADMIN_USERNAME}" \
@@ -739,6 +768,8 @@ main() {
         /etc/init.d/xcalar start
     fi
     rc=$?
+
+    cp -a $XLRROOT/config/authorized_keys $SSHDIR
 
     if ((SYSTEMD)); then
         systemctl enable $SYSTEMD_UNIT

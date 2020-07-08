@@ -29,37 +29,6 @@ if ! jq -r . < $TEMPLATE >/dev/null 2>&1; then
 fi
 
 
-#AMZN1_AMI=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-gp2  --query Parameter.Value --output text)
-#AMZN2_AMI=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2  --query Parameter.Value --output text)
-
-#aws ec2 describe-images --image-ids $AMZN1_AMI $AMZN2_AMI --query Images[].Name --output text
-
-#exit
-
-aws_ssm_update_base() {
-    aws ssm put-parameter --tier Standard --type String --name /xcalar/cloud/images/xdp-base-latest/xdp-base-amzn2  --value ami-0331cc46cb5937bc5 \
-        --tags \
-            Key=Name,Value=xdp-base-amzn2-2.0.20191024.3-1-20191106 \
-            Key=OSID,Value=amzn2 \
-            Key=BuildNumber,Value=${BUILD_NUMBER:-1} \
-            Key=Today,Value="$(date +%Y%m%d)"
-}
-
-aws_ssm_del_tags() {
-    [ $# -gt 0 ] || return 1
-    aws ssm add-tags-for-resource --resource-type Parameter --resource-id "$@"
-}
-
-aws_ssm_add_tags() {
-    [ $# -gt 0 ] || return 1
-    aws ssm add-tags-for-resource --resource-type Parameter --resource-id "$@"
-}
-
-aws_ssm_get_tags() {
-    [ $# -gt 0 ] || set -- /xcalar/cloud/images/xdp-base-latest/xdp-base-amzn2
-    aws ssm list-tags-for-resource --resource-type Parameter --resource-id "$@"
-}
-
 if ! installer-version.sh "$INSTALLER" > installer-version.json; then
     die "Failed to get installer info"
 fi
@@ -85,7 +54,7 @@ if ! packer.io build \
     -var installer="$INSTALLER" \
     -var installer_url="$INSTALLER_URL" \
     -var-file installer-version.json \
-    -parallel=true $TEMPLATE; then
+    -parallel-builds=1 $TEMPLATE; then
     exit 1
 fi
 

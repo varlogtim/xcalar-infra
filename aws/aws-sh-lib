@@ -773,3 +773,32 @@ aws_asg_detach() {
         && aws autoscaling update-auto-scaling-group --auto-scaling-group-name $asg_name --min-size $((min_size - count)) \
         && aws autoscaling detach-instances --auto-scaling-group-name $asg_name --should-decrement-desired-capacity --instance-ids "$@"
 }
+
+
+aws_ssm_update_base() {
+    local name="$1" ami="$2" osid="$3"
+    local key="${4:-/xcalar/cloud/images/xdp-base-latest/xdp-base-amzn2}"
+    aws ssm put-parameter --tier Standard --type String \
+        --name "$key" \
+        --value "$ami" \
+        --tags \
+            Key=Name,Value="$name" \
+            Key=OSID,Value="$osid" \
+            ${BUILD_NUMBER:+Key=BuildNumber,Value=$BUILD_NUMBER} \
+            Key=Today,Value="$(date +%Y%m%d)"
+}
+
+aws_ssm_del_tags() {
+    [ $# -gt 0 ] || return 1
+    aws ssm add-tags-for-resource --resource-type Parameter --resource-id "$@"
+}
+
+aws_ssm_add_tags() {
+    [ $# -gt 0 ] || return 1
+    aws ssm add-tags-for-resource --resource-type Parameter --resource-id "$@"
+}
+
+aws_ssm_get_tags() {
+    [ $# -gt 0 ] || set -- /xcalar/cloud/images/xdp-base-latest/xdp-base-amzn2
+    aws ssm list-tags-for-resource --resource-type Parameter --resource-id "$@"
+}

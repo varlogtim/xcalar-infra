@@ -203,7 +203,7 @@ main() {
 
     mkdir -p /etc/ansible
     curl -fsSL https://raw.githubusercontent.com/ansible/ansible/devel/examples/ansible.cfg \
-        | sed -r 's/^#?host_key_checking.*$/host_key_checking = False/g; s/^#?retry_files_enabled = .*$/retry_files_enabled = False/g' > /etc/ansible/ansible.cfg
+        | sed -r 's/^#?([a-z]+)_warnings.*$/\1_warnings = False/; s/^#?host_key_checking.*$/host_key_checking = False/; s/^#?retry_files_enabled.*$/retry_files_enabled = False/; s/^#?forks.*/forks = 50/' > /etc/ansible/ansible.cfg
 
     for svc in xcalar puppet collectd consul nomad vault lifecycled update-motd; do
         if [ "$OSID" = amzn1 ]; then
