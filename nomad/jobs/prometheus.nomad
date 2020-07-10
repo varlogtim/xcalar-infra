@@ -47,7 +47,7 @@ job "prometheus" {
           }
         }
 
-        cpu    = 5000
+        cpu    = 4000
         memory = 250
       }
 
@@ -202,185 +202,186 @@ EOT
     }
 
     #### ALERT MANAGER #####
-    #    task "alertmanager" {
-    #      driver = "docker"
-    #
-    #      config {
-    #        image      = "prom/${NOMAD_TASK_NAME}:latest"
-    #        force_pull = true
-    #
-    #        volumes = [
-    #          "local/${NOMAD_TASK_NAME}.yml:/etc/${NOMAD_TASK_NAME}/${NOMAD_TASK_NAME}.yml",
-    #          "/netstore/infra/${NOMAD_TASK_NAME}/nomad:/${NOMAD_TASK_NAME}
-    #        ]
-    #
-    #        port_map {
-    #          alertmanager_ui = 9093
-    #        }
-    #      }
-    #
-    #      resources {
-    #        memory = 250
-    #
-    #        network {
-    #          port "alertmanager_ui" {
-    #            static = "9093"
-    #          }
-    #        }
-    #      }
-    #
-    #      service {
-    #        name = "alertmanager"
-    #        port = "alertmanager_ui"
-    #
-    #        tags = [
-    #          "urlprefix-alertmanager.nomad:9999/",
-    #          "urlprefix-alertmanager.service.consul:9999/",
-    #          "urlprefix-alertmanager.service.consul:443/",
-    #        ]
-    #
-    #        check {
-    #          name     = "alertmanager_ui port alive"
-    #          type     = "tcp"
-    #          interval = "20s"
-    #          timeout  = "5s"
-    #        }
-    #      }
-    #
-    #      template {
-    #        change_mode   = "signal"
-    #        change_signal = "SIGHUP"
-    #        destination   = "local/alertmanager.yml"
-    #
-    #        data = <<EOT
-    #---
-    #global:
-    #  scrape_interval: 15s
-    #  scrape_timeout: 10s
-    #  evaluation_interval: 15s
-    #
-    #scrape_configs:
-    #  - job_name: prometheus
-    #global:
-    #  # The smarthost and SMTP sender used for mail notifications.
-    #  smtp_smarthost: 'localhost:25'
-    #  smtp_from: 'alertmanager@int.xcalar.com'
-    #
-    ## The root route on which each incoming alert enters.
-    #route:
-    #  # The root route must not have any matchers as it is the entry point for
-    #  # all alerts. It needs to have a receiver configured so alerts that do not
-    #  # match any of the sub-routes are sent to someone.
-    #  receiver: 'team-X-mails'
-    #
-    #  # The labels by which incoming alerts are grouped together. For example,
-    #  # multiple alerts coming in for cluster=A and alertname=LatencyHigh would
-    #  # be batched into a single group.
-    #  group_by: ['alertname', 'cluster']
-    #
-    #  # When a new group of alerts is created by an incoming alert, wait at
-    #  # least 'group_wait' to send the initial notification.
-    #  # This way ensures that you get multiple alerts for the same group that start
-    #  # firing shortly after another are batched together on the first
-    #  # notification.
-    #  group_wait: 30s
-    #
-    #  # When the first notification was sent, wait 'group_interval' to send a batch
-    #  # of new alerts that started firing for that group.
-    #  group_interval: 5m
-    #
-    #  # If an alert has successfully been sent, wait 'repeat_interval' to
-    #  # resend them.
-    #  repeat_interval: 3h
-    #
-    #  # All the above attributes are inherited by all child routes and can
-    #  # overwritten on each.
-    #
-    #  # The child route trees.
-    #  routes:
-    #  # This routes performs a regular expression match on alert labels to
-    #  # catch alerts that are related to a list of services.
-    #  - match_re:
-    #      service: ^(foo1|foo2|baz)$
-    #    receiver: team-X-mails
-    #
-    #    # The service has a sub-route for critical alerts, any alerts
-    #    # that do not match, i.e. severity != critical, fall-back to the
-    #    # parent node and are sent to 'team-X-mails'
-    #    routes:
-    #    - match:
-    #        severity: critical
-    #      receiver: team-X-pager
-    #
-    #  - match:
-    #      service: files
-    #    receiver: team-Y-mails
-    #
-    #    routes:
-    #    - match:
-    #        severity: critical
-    #      receiver: team-Y-pager
-    #
-    #  # This route handles all alerts coming from a database service. If there's
-    #  # no team to handle it, it defaults to the DB team.
-    #  - match:
-    #      service: database
-    #
-    #    receiver: team-DB-pager
-    #    # Also group alerts by affected database.
-    #    group_by: [alertname, cluster, database]
-    #
-    #    routes:
-    #    - match:
-    #        owner: team-X
-    #      receiver: team-X-pager
-    #
-    #    - match:
-    #        owner: team-Y
-    #      receiver: team-Y-pager
-    #
-    #
-    ## Inhibition rules allow to mute a set of alerts given that another alert is
-    ## firing.
-    ## We use this to mute any warning-level notifications if the same alert is
-    ## already critical.
-    #inhibit_rules:
-    #- source_match:
-    #    severity: 'critical'
-    #  target_match:
-    #    severity: 'warning'
-    #  # Apply inhibition if the alertname is the same.
-    #  equal: ['alertname']
-    #
-    #
-    #receivers:
-    #- name: 'team-X-mails'
-    #  email_configs:
-    #  - to: 'team-X+alerts@example.org'
-    #
-    #- name: 'team-X-pager'
-    #  email_configs:
-    #  - to: 'team-X+alerts-critical@example.org'
-    #  pagerduty_configs:
-    #  - service_key: <team-x-key>
-    #
-    #- name: 'team-Y-mails'
-    #  email_configs:
-    #  - to: 'team-Y+alerts@example.org'
-    #
-    #- name: 'team-Y-pager'
-    #  pagerduty_configs:
-    #  - service_key: <team-y-key>
-    #
-    #- name: 'team-DB-pager'
-    #  pagerduty_configs:
-    #  - service_key: <team-db-key>
-    #EOT
-    #      }
-    #    }
-    #
-    #### PUSH GATEWAY #####
+    task "alertmanager" {
+      driver = "docker"
 
+      config {
+        image      = "prom/alertmanager:latest"
+        force_pull = true
+
+        volumes = [
+          "local/alertmanager.yml:/etc/alertmanager/alertmanager.yml",
+          "/netstore/infra/alertmanager/nomad:/alertmanager"
+        ]
+
+        args = [
+          "--storage.path=/alertmanager/data",
+          "--config.file=/etc/alertmanager/alertmanager.yml"
+        ]
+
+        port_map {
+          alertmanager_ui = 9093
+        }
+      }
+
+      resources {
+        cpu = 1000
+        memory = 250
+
+        network {
+          port "alertmanager_ui" {
+            static = "9093"
+          }
+        }
+      }
+
+      service {
+        name = "alertmanager"
+        port = "alertmanager_ui"
+
+        tags = [
+          "urlprefix-alertmanager.service.consul:443/",
+          "urlprefix-alertmanager.service.consul:9999/",
+          "urlprefix-alertmanager.nomad:9999/",
+        ]
+
+        check {
+          name     = "alertmanager_ui port alive"
+          type     = "tcp"
+          interval = "20s"
+          timeout  = "5s"
+        }
+      }
+
+      template {
+        change_mode   = "signal"
+        change_signal = "SIGHUP"
+        destination   = "local/alertmanager.yml"
+
+        data = <<HERE
+---
+global:
+  # The smarthost and SMTP sender used for mail notifications.
+  smtp_smarthost: {{ env "NOMAD_IP_alertmanager_ui" }}:25
+  smtp_require_tls: false
+  smtp_from: 'alertmanager@xcalar.com'
+
+## The directory from which notification templates are read.
+#templates:
+#  - '/alertmanager/template/*.tmpl'
+
+# The root route on which each incoming alert enters.
+route:
+  # The root route must not have any matchers as it is the entry point for
+  # all alerts. It needs to have a receiver configured so alerts that do not
+  # match any of the sub-routes are sent to someone.
+  #receiver: 'team-X-mails'
+  receiver: rstephens-email
+
+  # The labels by which incoming alerts are grouped together. For example,
+  # multiple alerts coming in for cluster=A and alertname=LatencyHigh would
+  # be batched into a single group.
+  group_by: ['alertname', 'job', 'severity']
+
+  # When a new group of alerts is created by an incoming alert, wait at
+  # least 'group_wait' to send the initial notification.
+  # This way ensures that you get multiple alerts for the same group that start
+  # firing shortly after another are batched together on the first
+  # notification.
+  group_wait: 1m
+
+  # When the first notification was sent, wait 'group_interval' to send a batch
+  # of new alerts that started firing for that group.
+  group_interval: 5m
+
+  # If an alert has successfully been sent, wait 'repeat_interval' to
+  # resend them.
+  repeat_interval: 3h
+
+### CHILD ROUTES ###
+#  # The child route trees.
+#  routes:
+#  # This routes performs a regular expression match on alert labels to
+#  # catch alerts that are related to a list of services.
+#  - match_re:
+#      service: ^(foo1|foo2|baz)$
+#    receiver: team-X-mails
+#    # The service has a sub-route for critical alerts, any alerts
+#    # that do not match, i.e. severity != critical, fall-back to the
+#    # parent node and are sent to 'team-X-mails'
+#    routes:
+#    - match:
+#        severity: critical
+#      receiver: team-X-pager
+#  - match:
+#      service: files
+#    receiver: team-Y-mails
+#
+#    routes:
+#    - match:
+#        severity: critical
+#      receiver: team-Y-pager
+#
+#  # This route handles all alerts coming from a database service. If there's
+#  # no team to handle it, it defaults to the DB team.
+#  - match:
+#      service: database
+#    receiver: team-DB-pager
+#    # Also group alerts by affected database.
+#    group_by: [alertname, cluster, database]
+#    routes:
+#    - match:
+#        owner: team-X
+#      receiver: team-X-pager
+#      continue: true
+#    - match:
+#      owner: team-Y
+#      receiver: team-Y-pager
+#
+## Inhibition rules allow to mute a set of alerts given that another alert is
+## firing.
+## We use this to mute any warning-level notifications if the same alert is
+## already critical.
+#inhibit_rules:
+#- source_match:
+#    severity: 'critical'
+#  target_match:
+#    severity: 'warning'
+#  # Apply inhibition if the alertname is the same.
+#  equal: ['alertname']
+#
+#
+receivers:
+- name: 'rstephens-email'
+  email_configs:
+  - to: 'rstephens@xcalar.com'
+
+#- name: 'team-X-mails'
+#  email_configs:
+#  - to: 'team-X+alerts@example.org'
+#
+#- name: 'team-X-pager'
+#  email_configs:
+#  - to: 'team-X+alerts-critical@example.org'
+#  pagerduty_configs:
+#  - service_key: <team-x-key>
+#
+#- name: 'team-Y-mails'
+#  email_configs:
+#  - to: 'team-Y+alerts@example.org'
+#
+#- name: 'team-Y-pager'
+#  pagerduty_configs:
+#  - service_key: <team-y-key>
+#
+#- name: 'team-DB-pager'
+#  pagerduty_configs:
+#  - service_key: <team-db-key>
+HERE
+       }
+    }
+
+    #### PUSH GATEWAY #####
     task "pushgateway" {
       driver = "docker"
 
@@ -436,6 +437,7 @@ EOT
 
         volumes = [
           "local/prometheus.yml:/etc/prometheus/prometheus.yml",
+          "local/rules.yml:/etc/prometheus/rules.yml",
           "/mnt/data/prometheus:/prometheus",
         ]
 
@@ -484,6 +486,20 @@ EOT
       template {
         change_mode   = "signal"
         change_signal = "SIGHUP"
+        destination   = "local/rules.yml"
+        data = <<HERE
+---
+groups:
+- name: rls_experimental
+  rules:
+  - alert: RLSExperimental
+    expr: rls_experimental > 0
+HERE
+      }
+
+      template {
+        change_mode   = "signal"
+        change_signal = "SIGHUP"
         destination   = "local/prometheus.yml"
 
         data = <<EOH
@@ -492,6 +508,11 @@ global:
   scrape_interval: 15s
   scrape_timeout: 10s
   evaluation_interval: 15s
+
+# Rule files specifies a list of globs. Rules and alerts are read from
+# all matching files.
+rule_files:
+  - '/etc/prometheus/rules.yml'
 
 scrape_configs:
   - job_name: prometheus
@@ -605,6 +626,12 @@ scrape_configs:
       regex: '(.*)http(.*)'
       action: keep
 
+alerting:
+  alertmanagers:
+  - scheme: http
+    static_configs:
+    - targets:
+        - '{{ env "NOMAD_IP_prometheus_ui" }}:9093'
 EOH
       }
     }

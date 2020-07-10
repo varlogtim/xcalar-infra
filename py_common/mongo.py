@@ -348,6 +348,32 @@ class JenkinsMongoDB(object):
             return 0
         return doc.get('ts', 0)
 
+    def alert_ttl(self, *, alert_group, alert_id, ttl):
+        coll = self.jenkins_db().collection('_jenkins_meta')
+        operator = '$set'
+        expire = time.time()
+        if not ttl:
+            operator = '$unset'
+        else:
+            expire += ttl
+        _id = "{}_alerts_expire".format(alert_group)
+        return coll.find_one_and_update({'_id': _id}, {operator:{alert_id: int(expire)}},
+                                        upsert=True, return_document = ReturnDocument.AFTER)
+
+    def alerts_expired(self, *, alert_group):
+        coll = self.jenkins_db().collection('_jenkins_meta')
+        _id = "{}_alerts_expire".format(alert_group)
+        doc = coll.find_one({'_id': _id})
+        expired = []
+        if not doc:
+            return expired
+        doc.pop('_id')
+        now = int(time.time())
+        for alert_id,expire in doc.items():
+            if expire <= now:
+                expired.append(alert_id)
+        return expired
+
 if __name__ == '__main__':
     print("Compile check A-OK!")
 
@@ -358,6 +384,24 @@ if __name__ == '__main__':
                     handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
+    """
+    jmdb = JenkinsMongoDB()
+    print("set: {}".format(jmdb.alert_ttl(alert_group="mine", alert_id="foo", ttl=1)))
+    print("set: {}".format(jmdb.alert_ttl(alert_group="mine", alert_id="bar", ttl=3)))
+    print("expired: {}".format(jmdb.alerts_expired(alert_group="mine")))
+    print("sleep 2")
+    time.sleep(2)
+    print("expired: {}".format(jmdb.alerts_expired(alert_group="mine")))
+    print("sleep 2")
+    time.sleep(2)
+    print("expired: {}".format(jmdb.alerts_expired(alert_group="mine")))
+    print("clear bar: {}".format(jmdb.alert_ttl(alert_group="mine", alert_id="bar", ttl=None)))
+    print("clear foo: {}".format(jmdb.alert_ttl(alert_group="mine", alert_id="foo", ttl=None)))
+    print("clear foo again: {}".format(jmdb.alert_ttl(alert_group="mine", alert_id="foo", ttl=None)))
+    print("all: {}".format(jmdb.alerts_expired(alert_group="mine")))
+    """
+
+    """
     mongo = MongoDB(db_name='unit_test_db')
     coll = mongo.collection(name='test-collection')
     coll.remove({'_id': '123'})
@@ -366,6 +410,7 @@ if __name__ == '__main__':
         doc = coll.find_one_and_update({'_id': '123'}, {'$inc': {'counter': 1}}, return_document = ReturnDocument.AFTER)
         print(doc)
         time.sleep(1)
+    """
 
     """
     kal1 = MongoDBKeepAliveLock(db=mongo, name="some-test-lock")
