@@ -498,6 +498,13 @@ scrape_configs:
     static_configs:
       - targets:
           - localhost:9090
+  - job_name: minio-job
+    bearer_token: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQ3NDgxOTUzMjIsImlzcyI6InByb21ldGhldXMiLCJzdWIiOiJLM0NDMllNV0lHU1pWUjA5UTNXTyJ9.Q8T3YrHDirF3GnClLg8YYBcxs2zXNbg1CyQJLTWGM9blfmf5BlpHJ-5Kwfzm-EsdeQgsz0R-r__c7MNk3Mlsnw
+    metrics_path: /minio/prometheus/metrics
+    scheme: https
+    static_configs:
+    - targets: [minio.int.xcalar.com]
+
   - job_name: vsphere
     params:
       format:
