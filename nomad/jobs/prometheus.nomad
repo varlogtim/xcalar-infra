@@ -34,7 +34,7 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        image      = "grafana/loki:master"
+        image      = "grafana/loki:latest"
         force_pull = true
 
         args = ["-config.file=/etc/loki/local-config.yaml"]
@@ -131,9 +131,8 @@ job "prometheus" {
       driver = "docker"
 
       config {
-        #image      = "grafana/grafana:7.0.5"
-        image      = "grafana/grafana:7.0.4"
-        force_pull = false
+        image      = "grafana/grafana:latest"
+        force_pull = true
 
         port_map {
           grafana_ui = 3000
@@ -142,7 +141,7 @@ job "prometheus" {
         volumes = [
           "/netstore/infra/grafana-ui/nomad/var/lib/grafana:/var/lib/grafana",
           "/netstore/infra/grafana-ui/nomad/etc/grafana:/etc/grafana",
-          "secrets/credentials:/home/grafana/.aws/credentials",
+          "secrets/credentials:/usr/share/grafana/.aws/credentials",
         ]
       }
 
@@ -164,6 +163,7 @@ job "prometheus" {
 
         data = <<EOT
 [default]
+region = us-west-2
 {{ with secret "aws/sts/grafana-cloudwatch" "ttl=43200"}}
 aws_access_key_id = {{ .Data.access_key }}
 aws_secret_access_key = {{ .Data.secret_key }}

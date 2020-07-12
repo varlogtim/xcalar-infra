@@ -48,7 +48,7 @@ job "nexus" {
       driver = "docker"
 
       config {
-        image      = "sonatype/nexus3:3.24.0"
+        image      = "sonatype/nexus3:latest"
         force_pull = true
 
         volumes = [
