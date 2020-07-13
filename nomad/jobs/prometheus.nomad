@@ -502,9 +502,18 @@ scrape_configs:
     bearer_token: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQ3NDgxOTUzMjIsImlzcyI6InByb21ldGhldXMiLCJzdWIiOiJLM0NDMllNV0lHU1pWUjA5UTNXTyJ9.Q8T3YrHDirF3GnClLg8YYBcxs2zXNbg1CyQJLTWGM9blfmf5BlpHJ-5Kwfzm-EsdeQgsz0R-r__c7MNk3Mlsnw
     metrics_path: /minio/prometheus/metrics
     scheme: https
+    tls_config:
+      insecure_skip_verify: true
     static_configs:
     - targets: [minio.int.xcalar.com]
-
+  - job_name: minioazure-job
+    bearer_token: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjQ3NDgxOTk5NDgsImlzcyI6InByb21ldGhldXMiLCJzdWIiOiJ4Y2RhdGFzZXRzd2VzdHVzMiJ9.1VtQDRCPza--0QFpvOWr0QPvl6f5qdtpn-zPuGnBVxlNtjzGvXizUNmQz2lOtRBtPfetzizqC9uHTEouPBu9CQ
+    metrics_path: /minio/prometheus/metrics
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+    - targets: [minioazure.int.xcalar.com]
   - job_name: vsphere
     params:
       format:
