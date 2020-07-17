@@ -2640,8 +2640,9 @@ def get_caddy_config_debug_log(ip):
     caddy_info = []
 
     caddyfile_path = "/etc/xcalar/Caddyfile"
-    # should be a main line in Caddyfile of format http|https://0.0.0.0<:port>
-    grep_cmd = "grep -oP '(http|https)://0\.0\.0\.0:(\d+)' " + caddyfile_path
+    XcalarConfigVarFilePath = "/opt/xcalar/etc/default/xcalar"
+    # should be a main line in Caddyfile of format http|https://0.0.0.0>
+    grep_cmd = "grep -oP '(http|https)://0\.0\.0\.0' " + caddyfile_path
 
     # first make sure that line exists (helpful to check for this line not being there
     # in case the next grep commands return no output)
@@ -2657,10 +2658,14 @@ def get_caddy_config_debug_log(ip):
         raise ValueError("Couldn't determine http vs. https from Caddyfile")
     protocol = stdout.strip()
 
-    # now get the port
-    status, stdout, stderr = run_ssh_cmd(ip, grep_cmd + " | grep -oP ':(\d+)' | grep -oP '(\d+)'")
+    #now get the port
+    grep_port_cmd = "grep -oP 'XCE_HTTPS_PORT=(\d+)' " + XcalarConfigVarFilePath
+    status, stdout, stderr = run_ssh_cmd(ip, grep_port_cmd + " | grep -oP '(\d+)'")
     if not stdout:
-        raise ValueError("Couldn't determine port from Caddyfile")
+        grep_port_cmd = "grep -oP 'XCE_HTTPS_PORT=(\d+)' " + DEFAULT_CFG_PATH
+        status, stdout, stderr = run_ssh_cmd(ip, grep_port_cmd + " | grep -oP '(\d+)'")
+        if not stdout:
+            raise ValueError("Couldn't determine port from ConfigFile")
     port = stdout.strip()
 
     caddy_info = [protocol, port]
