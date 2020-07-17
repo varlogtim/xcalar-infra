@@ -51,20 +51,23 @@ from py_common.sorts import nat_sort
 # to be made extensible (e.g. it should be easier to add more test groups)
 UbmTestGroupName = "ubmTest"
 
-# Number of prior runs, over which to calculate stats to decide if the current
-# build has regressed or not.
-# XXX: This number should actually be dependent on the ubm - some may have
-# very low variance, some high - for the latter, the sample size probably
-# needs to be higher than that needed for low variance ubms
-UbmNumPrevRuns = 3
 
 # Regression detection threshold - number of std-deviations difference between
 # historical and current mean times:
 # i.e. for any benchmark,
 #  if new_mean >= RegDetThr * historical_old_mean
 #      then new_mean is flagged as having regressed
-#  where historical_old_mean is the mean over the prior UbmNumPrevRuns runs
+#  where historical_old_mean is mean over prior UBM_PERF_REGR_NRUNS runs
+#  (see elsewhere in this file for what UBM_PERF_REGR_NRUNS is)
+#
+# NOTE: the detection threshold is higher for UBMs in the list of low variance
+# UBMs - so we use LowVarRegDetThr for such UBMs - this is based on experiments
+# running a specific set of UBMs periodically over a long time with the code
+# base under measurement remaining exactly the same across all runs.
+
 RegDetThr = 3
+LowVarRegDetThr = 10
+LowVarUbms = ["aggregate-min", "filter"]
 
 # File name in which a regression alert message to be emailed, may be stored
 # at the end of an update post-processor method.
@@ -514,8 +517,9 @@ class UbmPerfResultsData(object):
 # method for details.
 #
 # The mean time reported for a ubm in the current build/run, is considered a
-# regression if it exceeds the mean of the previous UbmNumPrevRuns runs or the
-# mean of the oldest recorded UbmNumPrevRuns, by RegDetThr std deviations.
+# regression if it exceeds the mean of the previous UBM_PERF_REGR_NRUNS runs
+# or the mean of the oldest recorded UBM_PERF_REGR_NRUNS, by RegDetThr std
+# deviations.
 #
 # More functionality may be added to update_job over time.
 
@@ -523,7 +527,20 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
     ENV_PARAMS = {"JENKINS_HOST": {'default': 'jenkins.int.xcalar.com'}}
     ENV_PARAMS = {"JENKINS_HOST": {'default': 'jenkins.int.xcalar.com'},
                   "UBM_PERF_ARTIFACTS_ROOT":
-                  {"default": "/netstore/qa/jenkins"}}
+                  {"default": "/netstore/qa/jenkins"},
+                  "UBM_PERF_REGR_NRUNS": {'default': '20'}}
+
+    # env var UBM_PERF_REGR_NRUNS - No of prior runs, over which to calculate
+    # stats to decide if the current build has regressed or not. This is an
+    # environment variable to be set (or not) for the update job - since
+    # we're still tweaking it to get the right sample size over which to
+    # detect regression - a value of 3 is too small for certain benchmarks,
+    # which have high variance - so the default value is higher (based on
+    # experiments measuring the UBMs with the same code-base from run to run).
+
+    # XXX: This number should actually be dependent on the ubm - some may
+    # have very low variance, some high - for the latter, the sample size
+    # needs to be higher than that needed for low variance ubms
 
     def __init__(self, *, job_name):
         pp_name = "{}_postprocessor".format(UbmTestGroupName)
@@ -545,6 +562,7 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             "Please see console output at {} for more details"
         self.alert_email_subject = "Regression in XCE benchmarks!!"
         self.alljob = JenkinsAllJobIndex(jmdb=self.jmdb)
+        self.ubm_num_prev_runs = int(cfg.get('UBM_PERF_REGR_NRUNS'))
 
     def get_cv(self, stdev, mean):
         try:
@@ -615,6 +633,19 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                 self.get_delta(ubm_min, ubm_max)
         return rtn
 
+    def has_regressed(self, *, ubm, new_mean, old_mean, old_sdev):
+        reg_det_thr = RegDetThr
+        # XXX: based on experiments, some UBMs have extremely low variance and
+        # need a higher threshold for valid regression detection (i.e. to
+        # minimize false positives)
+        if ubm in LowVarUbms:
+            reg_det_thr = LowVarRegDetThr
+        if old_sdev is not None and new_mean[ubm] >= old_mean +\
+                reg_det_thr * old_sdev:
+            return True
+        else:
+            return False
+
     # 'update_job' has two main goals:
     # (A) Flag a regression in latest run's stats vs historical stats
     # (B) Re-compute several periods' historical stats with the latest build's
@@ -629,9 +660,9 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
         assert(len(self.tgroups) <= 1)
         for tg in self.tgroups:
             # for each test group, calculate stats for each ubm over the
-            # previous UbmNumPrevRuns runs, to check if latest run has
+            # previous self.ubm_num_prev_runs runs, to check if latest run has
             # regressed as compared to the immediately previous
-            # UbmNumPrevRuns runs
+            # self.ubm_num_prev_runs runs
             assert(tg == UbmTestGroupName)
             xcevs = self.ubm_perf_results_data.xce_versions(test_group=tg)
             builds = self.ubm_perf_results_data.\
@@ -639,20 +670,24 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                             reverse=False)
             num_builds = len(builds)
             self.logger.debug("builds {}".format(builds))
+            self.logger.debug("ubm_num_prev_runs {}".format(
+                self.ubm_num_prev_runs))
             # if there aren't sufficient old builds to compare against,
             # return; else proceed to detect regression if any
-            if num_builds - 1 < UbmNumPrevRuns:
+            if num_builds - 1 < self.ubm_num_prev_runs:
                 return {}
 
-            # calculate avg over last UbmNumPrevRuns runs; first get the
-            # begin/end offsets into the builds list for these builds
-            begin_build_offset = num_builds - UbmNumPrevRuns - 1
-            end_build_offset = begin_build_offset + UbmNumPrevRuns
+            # calculate avg over last self.ubm_num_prev_runs runs; first get
+            # the begin/end offsets into the builds list for these builds
+
+            begin_build_offset = num_builds - self.ubm_num_prev_runs - 1
+            end_build_offset = begin_build_offset + self.ubm_num_prev_runs
             curr_bnum = builds[num_builds - 1]
 
-            # convert list of last UbmNumPrevRuns builds into list of dicts
-            # with job_name and build_number - to make this compatible with
-            # the 'builds' param needed by _ubm_stats()
+            # convert list of last self.ubm_num_prev_runs builds into list of
+            # dicts with job_name and build_number - to make this compatible
+            # with the 'builds' param needed by _ubm_stats()
+
             prev_N_builds = []
             for b in builds[begin_build_offset:end_build_offset]:
                 bdict = {'job_name': self.job_name, "build_number": b}
@@ -673,7 +708,7 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
             self.logger.info("curr_ubmvals -> {}".format(curr_ubmvals))
 
             # For each ubm, check if there's a regression as compared to the
-            # most recent UbmNumPrevRuns builds, building up a dictionary of
+            # most recent self.ubm_num_prev_runs builds, building up a dictionary of
             # regressions in 'ubm_prevN_regr'
             ubm_prevN_regr = {}
             new_mean = {}
@@ -687,8 +722,9 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                     old_sdev = (old_cv_pct / 100.0) * old_mean
                 else:
                     old_sdev = None
-                if old_sdev is not None and new_mean[ubm] >= old_mean +\
-                   RegDetThr * old_sdev:
+
+                if self.has_regressed(ubm=ubm, new_mean=new_mean,
+                                      old_mean=old_mean, old_sdev=old_sdev):
                     # There's a regression! Add the stats to regressions dict
                     # An alert will be sent about this after checking for
                     # oldest N window for regressions to prevent creeping
@@ -722,8 +758,9 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                            {'label': 'last_30d', 'start': now-(day_ms*30), 'end': now},
                            {'label': 'prev_30d', 'start': now-(day_ms*60), 'end': now-(day_ms*30)-1},
                            {'label': 'last_60d', 'start': now-(day_ms*60), 'end': now},
-                           {'label': '{}_prev_30d'.format(UbmNumPrevRuns), 'start': now-(day_ms*60),
-                            'end': now-(day_ms*(60-UbmNumPrevRuns))}]
+                           {'label':
+                            '{}_prev_30d'.format(self.ubm_num_prev_runs), 'start': now-(day_ms*60),
+                            'end': now-(day_ms*(60-self.ubm_num_prev_runs))}]
 
                 # for each period, compute per-ubm stats (as returned by
                 # self._ubm_stats()) and store in ubm_all_period_stats dict,
@@ -770,7 +807,8 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
                 # now compute regression vs a N run group that's 60d old using
                 # the ubm_all_period_stats{} dict to get this window
 
-                # Check for regression against the oldest UbmNumPrevRuns
+                # Check for regression against the oldest
+                # self.ubm_num_prev_runs
                 # run, and accumulate into oldest_Nrun_regr if any found
                 oldest_Nrun_regr = {}
                 for ubm in curr_ubmvals:
@@ -818,9 +856,9 @@ class UbmPerfPostprocessor(JenkinsPostprocessorBase):
 
             if len(ubm_prevN_regr) > 0 or len(oldest_Nrun_regr) > 0:
                 recent_regr_key =\
-                    'regr_over_{}_latest_runs'.format(UbmNumPrevRuns)
+                    'regr_over_{}_latest_runs'.format(self.ubm_num_prev_runs)
                 old_regr_key =\
-                    'regr_over_{}_oldest_runs'.format(UbmNumPrevRuns)
+                    'regr_over_{}_oldest_runs'.format(self.ubm_num_prev_runs)
                 ubm_prev_and_oldest_regr =\
                     {recent_regr_key: 'none',
                      old_regr_key: 'none'}
