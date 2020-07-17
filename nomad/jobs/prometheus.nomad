@@ -281,7 +281,7 @@ route:
   # The labels by which incoming alerts are grouped together. For example,
   # multiple alerts coming in for cluster=A and alertname=LatencyHigh would
   # be batched into a single group.
-  group_by: ['alertname', 'job', 'severity']
+  group_by: ['alertname', 'job']
 
   # When a new group of alerts is created by an incoming alert, wait at
   # least 'group_wait' to send the initial notification.
@@ -349,8 +349,8 @@ route:
 #    severity: 'warning'
 #  # Apply inhibition if the alertname is the same.
 #  equal: ['alertname']
-#
-#
+
+# For now, everything to me.
 receivers:
 - name: 'rstephens-email'
   email_configs:
@@ -490,10 +490,30 @@ HERE
         data = <<HERE
 ---
 groups:
-- name: rls_experimental
+- name: ubm_regression
   rules:
-  - alert: RLSExperimental
-    expr: rls_experimental > 0
+  - alert: UBMRegression
+    expr: ubm_regression > 0
+- name: sql_precheckin_regression
+  rules:
+  - alert: SQLPrecheckinTPCHRegression
+    expr: sql_precheckin_tpch_regression > 0
+- name: sql_scale_tpds_regression
+  rules:
+  - alert: SQLScaleTPCDSRegression
+    expr: sql_scale_tpcds_regression > 0
+- name: sql_scale_tpch_regression
+  rules:
+  - alert: SQLScaleTPCHRegression
+    expr: sql_scale_tpch_regression > 0
+- name: xce_coverage_regression
+  rules:
+  - alert: XCECoverageRegression
+    expr: xce_coverage_regression > 0
+- name: xd_coverage_regression
+  rules:
+  - alert: XDCoverageRegression
+    expr: xd_coverage_regression > 0
 HERE
       }
 
