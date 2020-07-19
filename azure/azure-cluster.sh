@@ -13,7 +13,6 @@ export PATH=$XLRINFRADIR/bin:$PATH
 source infra-sh-lib
 source azure-sh-lib
 
-
 #INSTALLER="${INSTALLER:-/netstore/qa/Downloads/byJob/BuildTrunk/xcalar-latest-installer-prod}"
 COUNT=1
 INSTANCE_TYPE=''
@@ -25,8 +24,8 @@ BUCKET="${BUCKET:-xcrepo}"
 CUSTOM_SCRIPT_NAME="devBootstrap.sh"
 
 BOOTSTRAP="${BOOTSTRAP:-$XLRINFRADIR/azure/bootstrap/$CUSTOM_SCRIPT_NAME}"
-BOOTSTRAP_SHA=`sha1sum "$BOOTSTRAP" | awk '{print $1}'`
-S3_BOOTSTRAP_KEY="bysha1/$BOOTSTRAP_SHA/`basename $BOOTSTRAP`"
+BOOTSTRAP_SHA=$(sha1sum "$BOOTSTRAP" | awk '{print $1}')
+S3_BOOTSTRAP_KEY="bysha1/$BOOTSTRAP_SHA/$(basename $BOOTSTRAP)"
 S3_BOOTSTRAP="s3://$BUCKET/$S3_BOOTSTRAP_KEY"
 PARAMETERS_DEFAULTS="${PARAMETERS_DEFAULTS:-$XLRINFRADIR/azure/xdp-standard/defaults.json}"
 BOOTSTRAP_URL="${BOOTSTRAP_URL:-https://s3-us-west-2.amazonaws.com/$BUCKET/$S3_BOOTSTRAP_KEY}"
@@ -44,8 +43,8 @@ image_id() {
     echo "/subscriptions/${subid}/resourceGroups/${rg}/providers/Microsoft.Compute/images/${img}"
 }
 
-usage () {
-    cat << EOF
+usage() {
+    cat <<EOF
     usage: $0 -i installer -t instance-type [-c count (default: $COUNT)] [-n clusterName (default: $CLUSTER)]
             [-l location (default: $LOCATION)] [-k licenseKey] [-s server:/share] [-x template.json (default: $TEMPLATE)]
             [-m imageid]
@@ -55,19 +54,30 @@ EOF
 
 while getopts "hi:c:t:n:l:k:s:p:x:m:" opt "$@"; do
     case "$opt" in
-        h) usage; exit 0;;
-        i) INSTALLER="$OPTARG";;
-        c) COUNT="$OPTARG";;
-        t) INSTANCE_TYPE="$OPTARG";;
-        n) CLUSTER="$OPTARG";;
-        l) LOCATION="$OPTARG";;
-        k) LICENSE="$OPTARG";;
-        s) SHARE_NAME="$OPTARG";;
-        p) PARAMETERS_DEFAULTS=$OPTARG;;
-        x) TEMPLATE="$OPTARG";;
-        m) IMAGEID="$OPTARG";;
-        \?) echo >&2 "Invalid option. $OPTARG"; usage >&2; exit 1;;
-        :) echo >&2 "Invalid option. $OPTARG requires argument."; usage >&2; exit 1;;
+        h)
+            usage
+            exit 0
+            ;;
+        i) INSTALLER="$OPTARG" ;;
+        c) COUNT="$OPTARG" ;;
+        t) INSTANCE_TYPE="$OPTARG" ;;
+        n) CLUSTER="$OPTARG" ;;
+        l) LOCATION="$OPTARG" ;;
+        k) LICENSE="$OPTARG" ;;
+        s) SHARE_NAME="$OPTARG" ;;
+        p) PARAMETERS_DEFAULTS=$OPTARG ;;
+        x) TEMPLATE="$OPTARG" ;;
+        m) IMAGEID="$OPTARG" ;;
+        \?)
+            echo >&2 "Invalid option. $OPTARG"
+            usage >&2
+            exit 1
+            ;;
+        :)
+            echo >&2 "Invalid option. $OPTARG requires argument."
+            usage >&2
+            exit 1
+            ;;
     esac
 done
 
@@ -78,18 +88,18 @@ if ! http_code="$(curl -f -o /dev/null -s -L -w '%{http_code}\n' -I "${BOOTSTRAP
     aws s3 cp --acl public-read "$BOOTSTRAP" "$S3_BOOTSTRAP"
 fi
 
-az group create --name "$CLUSTER" --location "$LOCATION" --tags adminEmail=${BUILD_USER_EMAIL:-$(git config user.email)}  owner="${BUILD_USER_ID:-$(git config user.name)}" deployHost="$(hostname -s)"
+az group create --name "$CLUSTER" --location "$LOCATION" --tags adminEmail=${BUILD_USER_EMAIL:-$(git config user.email)} owner="${BUILD_USER_ID:-$(git config user.name)}" deployHost="$(hostname -s)"
 
 if [ -n "$INSTALLER" ] && [ -z "$INSTALLER_URL" ]; then
     if [ "$INSTALLER" = "none" ]; then
         INSTALLER_URL="http://none"
-    elif [[ "$INSTALLER" =~ ^s3:// ]]; then
+    elif [[ $INSTALLER =~ ^s3:// ]]; then
         if ! INSTALLER_URL="$(aws s3 presign "$INSTALLER")"; then
             echo >&2 "Unable to sign the s3 uri: $INSTALLER"
         fi
-    elif [[ "$INSTALLER" =~ ^gs:// ]]; then
+    elif [[ $INSTALLER =~ ^gs:// ]]; then
         INSTALLER_URL="http://${INSTALLER#gs://}"
-    elif [[ "$INSTALLER" =~ ^http[s]?:// ]]; then
+    elif [[ $INSTALLER =~ ^http[s]?:// ]]; then
         INSTALLER_URL="$INSTALLER"
     else
         if ! INSTALLER_URL="$($XLRINFRADIR/bin/installer-url.sh -d az "$INSTALLER")"; then
@@ -107,7 +117,7 @@ if [ -n "$INSTALLER_URL" ]; then
     fi
 fi
 
-DEPLOY_COUNT=$(az group  deployment list -g $CLUSTER -otsv | wc -l)
+DEPLOY_COUNT=$(az deployment group list -g $CLUSTER -otsv | wc -l)
 NOW=$(date +%Y%m%d%H%M)
 if [ $DEPLOY_COUNT -eq 0 ]; then
     DEPLOY="$CLUSTER-deploy"
@@ -121,7 +131,7 @@ for op in validate create; do
     if [ "$op" = create ]; then
         deploy_name="--name ${DEPLOY}"
     fi
-    az group deployment $op -j --resource-group "$CLUSTER" $deploy_name --template-file "$TEMPLATE" \
+    az deployment group $op --resource-group "$CLUSTER" $deploy_name --template-file "$TEMPLATE" \
         --parameters \
         @${PARAMETERS_DEFAULTS} \
         ${INSTALLER_URL:+installerUrl="$INSTALLER_URL"} \

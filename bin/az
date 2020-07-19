@@ -4,7 +4,7 @@
 
 set -e
 
-#==== just customize this part to another tool, saw aws cli
+#==== just customize this part to another tool, say aws cli
 PROG="$(basename "$0")"
 
 AZ_IMAGE_DEFAULT=${AZ_IMAGE_DEFAULT:-microsoft/azure-cli:latest}
@@ -39,12 +39,18 @@ if [ "$STLD" != "$TLD" ]; then
     ARGS+=(-v $STLD:$STLD)
 fi
 
+if ! test -w /var/run/docker.sock; then
+    DOCKER='sudo docker'
+else
+    DOCKER=docker
+fi
+
 touch ${PHOME}/img-check.ts
 if [ ${PHOME}/img-check.ts -nt ${PHOME}/img-next.ts ]; then
     echo >&2 "Updating $PIMAGE ..."
-    docker pull "$PIMAGE"
+    $DOCKER pull "$PIMAGE"
     touch --date='1 day' ${PHOME}/img-next.ts
 fi
 
 [ $# -gt 0 ] || set -- --help
-exec docker run --rm "${ARGS[@]}" -- "$PIMAGE" $PROG "$@"
+exec $DOCKER run --rm "${ARGS[@]}" -- "$PIMAGE" $PROG "$@"

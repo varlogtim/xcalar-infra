@@ -436,7 +436,7 @@
     "Reader": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
-    "imageSKU": "7.7",
+    "imageSKU": "7_8",
     "cleanimage": {
             "publisher": "[variables('imagePublisher')]",
             "offer": "[variables('imageOffer')]",
@@ -655,7 +655,6 @@
             "properties": {
               "privateIPAllocationMethod": "Dynamic",
               "publicIPAddress": "[if(parameters('providePublicIp'), json(concat('{ \"id\": \"',resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'),copyIndex())),'\" }')), json('null'))]",
-              // "publicIPAddress": { "id": "[if(parameters('providePublicIp'), resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('publicIpAddressName'),copyIndex())), json('null')]" },
               "subnet": {
                 "id": "[variables('subnetRef')]"
               }

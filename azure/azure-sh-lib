@@ -33,37 +33,37 @@ az_setup() {
 }
 
 if [ "$AZCLI_USE_DOCKER" = true ]; then
-az() {
-    local ARGS=()
-    if [ -S "$SSH_AUTH_SOCK" ]; then
-        ARGS+=(-e SSH_AUTH_SOCK -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK)
-    fi
-    if [ -e "$HOME"/.azure ]; then
-        ARGS+=(-v $HOME/.azure:/root/.azure)
-    fi
-    if [ -e "$HOME"/.ssh ]; then
-        ARGS+=(-v ${HOME}/.ssh:/root/.ssh)
-    fi
-    if [ -e "$WORKSPACE" ]; then
-        ARGS+=(-e $WORKSPACE -v "$WORKSPACE":"$WORKSPACE":ro)
-    fi
-    if [ -e "$XLRINFRADIR" ]; then
-        ARGS+=(-e XLRINFRADIR)
-        if [ -z "$WORKSPACE" ] || [[ "${XLRINFRADIR#$WORKSPACE/}" =~ ^/ ]]; then
-            ARGS+=(-v "$XLRINFRADIR":"$XLRINFRADIR":ro)
+    az() {
+        local ARGS=()
+        if [ -S "$SSH_AUTH_SOCK" ]; then
+            ARGS+=(-e SSH_AUTH_SOCK -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK)
         fi
-    fi
-    ARGS+=(-e AZURE_SUBSCRIPTION_ID -e AZURE_CLIENT_ID -e AZURE_CLIENT_SECRET -e AZURE_TENANT_ID)
-    docker run --rm "${ARGS[@]}" mcr.microsoft.com/azure-cli az "$@"
-}
-export -f az
+        if [ -e "$HOME"/.azure ]; then
+            ARGS+=(-v $HOME/.azure:/root/.azure)
+        fi
+        if [ -e "$HOME"/.ssh ]; then
+            ARGS+=(-v ${HOME}/.ssh:/root/.ssh)
+        fi
+        if [ -e "$WORKSPACE" ]; then
+            ARGS+=(-e $WORKSPACE -v "$WORKSPACE":"$WORKSPACE":ro)
+        fi
+        if [ -e "$XLRINFRADIR" ]; then
+            ARGS+=(-e XLRINFRADIR)
+            if [ -z "$WORKSPACE" ] || [[ ${XLRINFRADIR#$WORKSPACE/} =~ ^/ ]]; then
+                ARGS+=(-v "$XLRINFRADIR":"$XLRINFRADIR":ro)
+            fi
+        fi
+        ARGS+=(-e AZURE_SUBSCRIPTION_ID -e AZURE_CLIENT_ID -e AZURE_CLIENT_SECRET -e AZURE_TENANT_ID)
+        docker run --rm "${ARGS[@]}" mcr.microsoft.com/azure-cli az "$@"
+    }
+    export -f az
 fi
 
 az_login() {
     (
-    set +x
-    az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID && \
-    az account set --subscription $AZURE_SUBSCRIPTION_ID
+        set +x
+        az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID \
+            && az account set --subscription $AZURE_SUBSCRIPTION_ID
     )
 }
 
@@ -153,14 +153,14 @@ az_groups() {
     local groups=$AZ_CACHEDIR/allgroups.json name group groupdir
     local now=$(date +%Y%m%d%H%M%S)
 
-    az group list -ojson > $groups
-    jq -r '.[].id' < $groups > $AZ_CACHEDIR/allgroups.txt
+    az group list -ojson >$groups
+    jq -r '.[].id' <$groups >$AZ_CACHEDIR/allgroups.txt
     groupdir=$AZ_CACHEDIR/groups/${now}
     mkdir -p $groupdir
     for name in $(cat $AZ_CACHEDIR/allgroups.txt); do
         name=$(basename $name)
         echo >&2 "Updating $name ..."
-        az group show -g ${name} -ojson > $groupdir/${name}.json
+        az group show -g ${name} -ojson >$groupdir/${name}.json
     done
     ln -sfn $now $groupdir/../current
 }
@@ -190,7 +190,7 @@ az_rg_vms_do() {
     local pids=() id
     for id in "${ids[@]}"; do
         say "az vm $action $* --ids $id"
-        az vm $action "$@" --ids "$id" < /dev/null &
+        az vm $action "$@" --ids "$id" </dev/null &
         pids+=($!)
     done
     say "Waiting for action $action to finish"
@@ -254,7 +254,7 @@ az_rg_ip() {
     if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
         return 1
     fi
-    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
+    if ip="$(jq -r .properties.ipAddress <<<$ip_data)" && test -n "$ip" && test "$ip" != null; then
         echo $ip
         return 0
     fi
@@ -269,11 +269,11 @@ az_rg_dns_or_ip() {
     if ! ip_data=$(az resource show --ids "$ip_id" -ojson); then
         return 1
     fi
-    if dns="$(jq -r .properties.dnsSettings.fqdn <<< $ip_data)" && test -n "$dns" && test "$dns" != null; then
+    if dns="$(jq -r .properties.dnsSettings.fqdn <<<$ip_data)" && test -n "$dns" && test "$dns" != null; then
         echo $dns
         return 0
     fi
-    if ip="$(jq -r .properties.ipAddress <<< $ip_data)" && test -n "$ip" && test "$ip" != null; then
+    if ip="$(jq -r .properties.ipAddress <<<$ip_data)" && test -n "$ip" && test "$ip" != null; then
         echo $ip
         return 0
     fi
@@ -324,7 +324,7 @@ az_fix_deploysh() {
         if test -f "$1"; then
             dos2unix -q -n "$1" $tmp
         else
-            cat - > $tmp
+            cat - >$tmp
             dos2unix -q $tmp
         fi
         sed '/^$/d' $tmp | sed -e 's/^#/\n#/g' | shfmt -i 2 -ci
@@ -338,7 +338,7 @@ az_vm_cache() {
 
 az_vms() {
     if [ "$(file_age $AZ_ALLVMS)" -gt $((3 * 60 * 60)) ] || [ "$1" = "-f" ]; then
-        az_vm_cache > $AZ_ALLVMS || return 1
+        az_vm_cache >$AZ_ALLVMS || return 1
     fi
     cat "${AZ_ALLVMS}"
 }
@@ -350,7 +350,7 @@ az_vm_running() {
 
 az_vm_details_update() {
     mkdir -p "$AZ_CACHEDIR" \
-        && az vm list -d -ojson > "${AZ_ALLVMS}.tmp" \
+        && az vm list -d -ojson >"${AZ_ALLVMS}.tmp" \
         && mv -f "${AZ_ALLVMS}.tmp" "${AZ_ALLVMS}"
     return
 }
@@ -384,7 +384,7 @@ az_blob_upload_public() {
     test -f "$fname" || return 1
     local name="${2:-$fname}"
     local no_cache="--content-cache-control no-cache,no-store,must-revalidate,max-age=0,no-transform"
-    az storage blob upload -f "$fname" -n "$name" --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" $no_cache > /dev/null \
+    az storage blob upload -f "$fname" -n "$name" --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" $no_cache >/dev/null \
         && az storage blob url --account-name ${AZ_PUBLIC_ACCOUNT} --container-name "${AZ_PUBLIC_CONTAINER}" --name "$name" -otsv
 }
 
@@ -574,16 +574,15 @@ az_role_assign_group() {
     return 1
 }
 
-
 az_deploy_usage() {
 
-    local -a params=($(jq -r '.parameters|keys|join("\n")' < $TEMPLATE | tr '\t' '\n')) str=()
+    local -a params=($(jq -r '.parameters|keys|join("\n")' <$TEMPLATE | tr '\t' '\n')) str=()
     local ii
     for ii in "${params[@]}"; do
         str+=("[${ii}=]")
     done
 
-    cat << EOF
+    cat <<EOF
     az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer installer] [--dnslabel dns]
               [--cluster cluster] [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
               [--parameters-file params.json] [-n|--name name] [--dnslabel dns] [--mode Incremental|Complete] ${str[*]}
@@ -596,9 +595,9 @@ az_ad_contributor() {
     local email="$2"
     local role="${3:-Contributor}"
     local role_id user_id sub_id scope
-    role_id=$(az role definition list -n "$role" -otsv --query '[].id') && \
-    sub_id=$(az account show --query id -otsv) && \
-    user_id=$(az ad user show --id $email --query objectId -otsv)
+    role_id=$(az role definition list -n "$role" -otsv --query '[].id') \
+        && sub_id=$(az account show --query id -otsv) \
+        && user_id=$(az ad user show --id $email --query objectId -otsv)
     if [ $? -ne 0 ] || [ -z "$user_id" ] || [ -z "$group" ]; then
         say "Failed to find user_id for email=$email"
         return 1
@@ -648,7 +647,7 @@ az_deploy() {
                 location="${1##*=}"
                 shift 1
                 ;;
-            --group=*|--resource-group=*)
+            --group=* | --resource-group=*)
                 group="${1##*=}"
                 shift 1
                 ;;
@@ -700,7 +699,7 @@ az_deploy() {
                 _artifactsLocation="$2"
                 shift 2
                 ;;
-            -c|--cluster)
+            -c | --cluster)
                 cluster="$2"
                 shift 2
                 ;;
@@ -799,7 +798,7 @@ az_deploy() {
         return 1
     fi
 
-    if [[ "$installer" =~ RC ]]; then
+    if [[ $installer =~ RC ]]; then
         licenseParamFile=$LICENSERC
     fi
     if [ -n "$installer" ]; then
@@ -807,7 +806,7 @@ az_deploy() {
             installer_url="$(installer-url.sh -d az "$installer")"
             extra_params+=(installerUrl="$installer_url")
             extra_params+=(installerUrlSasToken="")
-        elif [[ "$installer" =~ ^https:// ]]; then
+        elif [[ $installer =~ ^https:// ]]; then
             installer_url="$installer"
             extra_params+=(installerUrl="$installer_url")
             extra_params+=(installerUrlSasToken="")
@@ -837,10 +836,10 @@ az_deploy() {
     local OUTPUT=${XLRINFRADIR}/output
     rm -rf "${OUTPUT:?}"/*
     mkdir -p $OUTPUT
-    az group deployment validate -j -g $group $template_arg \
+    az deployment group validate -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
-        _artifactsLocation="${_artifactsLocation}" vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" > /dev/null
+        _artifactsLocation="${_artifactsLocation}" vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" >/dev/null
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
         cat "$TMP" >&2
@@ -853,7 +852,7 @@ az_deploy() {
     say " and your deployment here: $(az_rg_deployment_url $group)"
     say
 
-    az group deployment create -j --mode $mode --name deploy-${now} -g $group $template_arg \
+    az deployment group create --mode $mode --name deploy-${now} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
         _artifactsLocation="${_artifactsLocation}" "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
@@ -883,12 +882,12 @@ az_deploy() {
     for cmd in stop start delete; do
         local url="https://jenkins.int.xcalar.com/job/AzureClusterControl/buildWithParameters?CLUSTER_NAME=$group&RG_COMMAND=$cmd"
         say "$cmd your cluster: $url"
-        echo $url > ${group}-${cmd}.url
+        echo $url >${group}-${cmd}.url
 
     done
     say
     say "Your URL: $dns"
-    echo $dns > $XLRINFRADIR/${group}.url
+    echo $dns >$XLRINFRADIR/${group}.url
 }
 
 az_quickdeploy() {
@@ -900,21 +899,30 @@ az_quickdeploy() {
 
     az group create -g ${group} -l ${location}
     az_deploy -g ${group} -i "${installer}" --count 1 --name xdp-${name} \
-          --template-file ${dir}/xdp-standard/mainTemplate.json \
+        --template-file ${dir}/xdp-standard/mainTemplate.json \
         --parameters-file ${dir}/xdp-standard/mainTemplate.defaults.json "$@"
 }
 
 az_timezone_str() {
     local timezone=''
     case "$1" in
-        [Pp][Ss][Tt]) timezone="Pacific Standard Time"; shift;;
-        [Ii][Ss][Tt]) timezone="India Standard Time"; shift;;
-        [Ee][Ss][Tt]) timezone="Eastern Standard Time"; shift;;
-        Pacific\ Standard\ Time|Eastern\ Standard\ Time|India\ Standard\ Time)
+        [Pp][Ss][Tt])
+            timezone="Pacific Standard Time"
+            shift
+            ;;
+        [Ii][Ss][Tt])
+            timezone="India Standard Time"
+            shift
+            ;;
+        [Ee][Ss][Tt])
+            timezone="Eastern Standard Time"
+            shift
+            ;;
+        Pacific\ Standard\ Time | Eastern\ Standard\ Time | India\ Standard\ Time)
             timezone="$1"
             shift
             ;;
-        Pacific|Eastern|India)
+        Pacific | Eastern | India)
             timezone="${1} Standard Time"
             shift
             ;;
@@ -937,15 +945,36 @@ az_rg_scheduled_shutdown() {
     while [ $# -gt 0 ]; do
         local cmd="$1"
         case "$cmd" in
-            -g|--group) group="$2"; shift 2;;
-            --timezone) timezone="$(az_timezone_str "$2")"; shift 2;;
-            --time) time="$2"; shift 2;;
-            --disable) enabled=false; shift 1;;
-            --enable) enabled=true; shift 1;;
-            --enabled) enabled="$2"; shift 2;;
-            --) shift; break;;
-            -*) return 1;;
-            *) break;;
+            -g | --group)
+                group="$2"
+                shift 2
+                ;;
+            --timezone)
+                timezone="$(az_timezone_str "$2")"
+                shift 2
+                ;;
+            --time)
+                time="$2"
+                shift 2
+                ;;
+            --disable)
+                enabled=false
+                shift 1
+                ;;
+            --enable)
+                enabled=true
+                shift 1
+                ;;
+            --enabled)
+                enabled="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*) return 1 ;;
+            *) break ;;
         esac
     done
     if test -z "$group"; then
@@ -966,7 +995,7 @@ az_rg_scheduled_shutdown() {
         -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json \
         --parameters \
         enabled=${enabled} \
-        vmName="${vm0%[0-9]*}"\
+        vmName="${vm0%[0-9]*}" \
         time="${time//:/}" timeZoneId="${timezone:-Pacific Standard Time}" \
         scaleNumber=$count "$@" -ojson $NO_WAIT
 }
@@ -993,8 +1022,8 @@ az_privdns_hosts_list() {
     local shortdns="${dnsname%%.*}"
     local subnet="${2-10.11}"
     local rc
-    az vm list-ip-addresses -o table | grep "${subnet//./\\.}" |  tr -s ' ' \
-        | awk  '
+    az vm list-ip-addresses -o table | grep "${subnet//./\\.}" | tr -s ' ' \
+        | awk '
             NF==3{printf "%s\t\t\t%s-pip.'$dnsname'\t%s-pip.'$shortdns'\n%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1,$(NF-1),$1,$1 }
             NF==2{printf "%s\t\t\t%s.'$dnsname'\t%s.'$shortdns'\n",$(NF),$1,$1 }
             ' \
@@ -1026,7 +1055,7 @@ az_privdns_update_ssh_hosts() {
     while [ $# -gt 0 ]; do
         local cmd="$1"
         case "$cmd" in
-            -h|--help)
+            -h | --help)
                 echo >&2 "az_privdns_hosts_list [--dnsname DNS (default: $dnsname)] [--subnet NETWORK (default: $subnet) [--] user@host1 ..."
                 return 0
                 ;;
@@ -1047,7 +1076,7 @@ az_privdns_update_ssh_hosts() {
                 az_privdns_update_ssh_hosts --help
                 return 1
                 ;;
-            *) break;;
+            *) break ;;
         esac
     done
     [ $# -eq 0 ] && set -- "${default_ssh_hosts[@]}"
@@ -1057,11 +1086,11 @@ az_privdns_update_ssh_hosts() {
     chmod 0644 $tmp
 
     (
-    az_privdns_hosts_list "$dnsname" "$subnet" \
-     && az_vmss_hosts_list "$dnsname" "$subnet" || exit 1
-    ) > $tmp || return 1
+        az_privdns_hosts_list "$dnsname" "$subnet" \
+            && az_vmss_hosts_list "$dnsname" "$subnet" || exit 1
+    ) >$tmp || return 1
     local -i nlines
-    nlines=$(wc -l < $tmp)
+    nlines=$(wc -l <$tmp)
     say "Azure DNS has $nlines entries."
     if [ $nlines -lt 10 ]; then
         say "That's too few. Bailing"
@@ -1069,8 +1098,8 @@ az_privdns_update_ssh_hosts() {
     fi
     for ii in "$@"; do
         _scp $tmp ${ii}:/tmp/htmp-$$ \
-        && _ssh $ii "if ! diff -q /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts >/dev/null; then sudo mv -v /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts && echo \"Replaced azure-fqdn.hosts on $ii\"; sudo service dnsmasq restart; else echo \"No change\"; fi" \
-        || return 1
+            && _ssh $ii "if ! diff -q /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts >/dev/null; then sudo mv -v /tmp/htmp-$$ /etc/hosts.d/azure-fqdn.hosts && echo \"Replaced azure-fqdn.hosts on $ii\"; sudo service dnsmasq restart; else echo \"No change\"; fi" \
+            || return 1
     done
     mv -f $tmp /tmp/azure-fqdn-$(id -u).hosts
 }

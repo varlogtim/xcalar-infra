@@ -3,16 +3,16 @@ job "fabio" {
   type        = "system"
 
   update {
-    stagger      = "5s"
+    stagger      = "10s"
     max_parallel = 1
   }
 
   group "fabio" {
     restart {
-      attempts = 3
-      delay    = "30s"
-      interval = "3m"
-      mode     = "fail"
+      attempts = 30
+      delay    = "5s"
+      interval = "5m"
+      mode     = "delay"
     }
 
     task "fabio" {
@@ -35,7 +35,7 @@ job "fabio" {
 
         data = <<EOT
 registry.consul.addr = {{ env "NOMAD_IP_lb" }}:8500
-proxy.cs = cs=vault-pki;type=vault-pki;cert=xcalar_ca/issue/int-xcalar-com;refresh=24h
+proxy.cs = cs=vault-pki;type=vault-pki;cert=xcalar_ca/issue/int-xcalar-com;refresh=168h
 proxy.addr = :{{ env "NOMAD_PORT_http" }},:{{ env "NOMAD_PORT_lb" }},:{{ env "NOMAD_PORT_ssl" }};cs=vault-pki;tlsmin=tls12;tlsmax=tls12
 
 #registry.consul.register.enabled = false
