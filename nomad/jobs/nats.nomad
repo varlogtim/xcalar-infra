@@ -17,11 +17,73 @@ job "nats" {
       mode     = "delay"
     }
 
+    task "nats_streaming_server" {
+      driver = "docker"
+
+      config {
+        image      = "nats-streaming:latest"
+        force_pull = true
+
+        port_map {
+          nats_streaming_port = 4222
+          streaming_ui_port   = 8222
+        }
+
+        #        args = [
+        #          "--client_advertise",
+        #          "${NOMAD_IP_io}",
+        #          "--http_port",
+        #          "${NOMAD_PORT_web_port}",
+        #          "-c",
+        #          "nats-server.conf",
+        #        ]
+      }
+
+      resources {
+        cpu    = 500
+        memory = 128
+
+        network {
+          port "nats_streaming_port" {}
+
+          port "streaming_ui_port" {}
+        }
+      }
+
+      service {
+        name = "nats-streaming"
+        tags = ["nats-streaming"]
+        port = "nats_streaming_port"
+
+        check {
+          name     = "nats_streaming_port is alive"
+          type     = "tcp"
+          interval = "20s"
+          timeout  = "8s"
+        }
+      }
+
+      service {
+        name = "nats-streaming-ui"
+        tags = ["urlprefix-nats-streaming-ui.service.consul:9999/", "urlprefix-nats-streaming-ui.service.consul:443/"]
+        port = "streaming_ui_port"
+
+        check {
+          name     = "streaming_ui_port alive"
+          type     = "http"
+          path     = "/varz"
+          interval = "20s"
+          timeout  = "5s"
+        }
+      }
+    }
+
     task "nats_server" {
       driver = "docker"
 
       config {
-        image = "nats:2.0.2"
+        image      = "nats:2"
+        force_pull = true
 
         port_map {
           nats_port  = 4222
