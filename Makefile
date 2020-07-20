@@ -20,8 +20,10 @@ REQUIRES_IN  = requirements.in
 HOOKS        = .git/hooks/pre-commit
 PYTHON      ?= /opt/xcalar/bin/python3
 TOUCH        = /usr/bin/touch
+OSID        ?= $(shell osid)
 PYVER       := $(shell $(PYTHON) -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor))")
-WHEELS      ?= /infra/wheels/py$(PYVER)
+WHEELS      ?= /infra/wheels/py$(PYVER)-$(OSID)
+UNIV_WHEELS := /infra/wheels/py$(PYVER)
 
 TOUCH ?= /usr/bin/touch
 
@@ -41,8 +43,8 @@ venv: .updated
 	@echo "Syncing virtualenv in $(VENV) with packages in $(REQUIRES) ..."
 	@$(VENV)/bin/python -m pip install -U pip
 	@$(VENV)/bin/python -m pip install -U setuptools
-	@$(VENV)/bin/python -m pip install -c $(REQUIRES) wheel pip-tools
-	@$(VENV)/bin/python -m pip install --no-index --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) --find-links http://$(NETSTORE_IP)$(WHEELS) -r $(REQUIRES)
+	@$(VENV)/bin/python -m pip install -U wheel pip-tools
+	@$(VENV)/bin/python -m pip install --no-index --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) --find-links $(NETSTORE_NFS)$(UNIV_WHEELS) --find-links http://$(NETSTORE_HOST)$(UNIV_WHEELS) --find-links http://$(NETSTORE_IP)$(UNIV_WHEELS) -r $(REQUIRES)
 	@$(TOUCH) $@
 
 recompile: $(VENV)/bin/pip-compile

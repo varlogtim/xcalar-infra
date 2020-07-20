@@ -1079,14 +1079,17 @@ dcc_cmd_ssh() {
 }
 
 dcc_cmd_build() {
+    set -x
     parse_args "$@"
     if [ -z "$INSTALLER" ] && [ -z "$INSTALLER_URL" ]; then
         die "ERROR: Must specify either --installer or --installer-url"
     fi
+    (cd $XLRINFRADIR/docker/registry && make)
     if [ -f "$INSTALLER" ] || [ -n "$INSTALLER_URL" ]; then
         make -C $XLRINFRADIR/packer/docker \
             INSTALLER="$INSTALLER" \
-            INSTALLER_URL="$INSTALLER_URL"
+            INSTALLER_URL="$INSTALLER_URL" \
+            REGISTRY=$DEFAULT_REGISTRY
         return $?
     fi
     die "ERROR: Must specify either --installer or --installer-url"
@@ -1397,11 +1400,15 @@ parse_args() {
                 shift
                 ;;
             --installer)
-                INSTALLER="$1"
+                export INSTALLER="$1"
+                shift
+                ;;
+            --installer-url)
+                export INSTALLER_URL="$1"
                 shift
                 ;;
             --registry)
-                REGISTRY="$1"
+                export REGISTRY="$1"
                 set_cluster_config registry "$1"
                 shift
                 ;;

@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if ((XTRACE)) || [[ $- == *x* ]]; then
+    export PS4='# [${PWD}] ${BASH_SOURCE#$PWD/}:${LINENO}: ${FUNCNAME[0]}() - ${container:+[$container] }[${SHLVL},${BASH_SUBSHELL},$?] '
+    set -x
+fi
+
 ROOTFS="${ROOTFS:-}"
 
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/puppetlabs/bin:/root/bin
@@ -13,19 +18,18 @@ say() {
     echo >&2 "$1"
 }
 
-
 cloudid() {
     local dmi_id='/sys/class/dmi/id/sys_vendor'
-    local vendor cloud=
+    local vendor cloud='nocloud'
 
     if [ -e "$dmi_id" ]; then
-        read -r vendor < "$dmi_id"
+        read -r vendor <"$dmi_id"
         case "$vendor" in
-            Microsoft\ Corporation) cloud=azure;;
-            Amazon\ EC2) cloud=aws;;
-            Google) cloud=gce;;
-            #VMWare*) cloud=vmware;;
-            #oVirt*) cloud=ovirt;;
+            Microsoft\ Corporation) cloud=azure ;;
+            Amazon\ EC2) cloud=aws ;;
+            Google) cloud=gce ;;
+                #VMWare*) cloud=vmware;;
+                #oVirt*) cloud=ovirt;;
         esac
     fi
     echo "$cloud"
@@ -134,7 +138,7 @@ if have_package puppet-agent; then
     fi
     rm -rf ${ROOTFS}/etc/puppetlabs/puppet/ssl ${ROOTFS}/etc/puppetlabs/code
     sed -i '/certname/d' ${ROOTFS}/etc/puppetlabs/puppet/puppet.conf
-    sed -i '/server/d' /etc/puppetlabs/puppet/puppet.conf
+    sed -i '/server/d' ${ROOTFS}/etc/puppetlabs/puppet/puppet.conf
 fi
 
 if have_package collectd; then
@@ -154,17 +158,17 @@ if have_package cloud-init; then
     svc_cmd enable cloud-init
     svc_cmd enable cloud-init-local
     svc_cmd enable cloud-final
-    rm -rfv  ${ROOTFS}/var/lib/cloud/instance/*
-    rm -fv  ${ROOTFS}/var/lib/cloud/instance
+    rm -rfv ${ROOTFS}/var/lib/cloud/instance/*
+    rm -fv ${ROOTFS}/var/lib/cloud/instance
     truncate -s 0 ${ROOTFS}/var/log/cloud*.log ${ROOTFS}/var/log/user-data*.log
     if [ -z "$CLOUD" ] || [ "$CLOUD" = none ]; then
-        cat > ${ROOTFS}/etc/cloud/cloud.cfg.d/90-networking-disabled.cfg <<EOF
+        cat >${ROOTFS}/etc/cloud/cloud.cfg.d/90-networking-disabled.cfg <<EOF
 network:
   config: disabled
 EOF
         sed -i '/package-update-upgrade-install/d; /datasource_list/d; s/disable_root:.*$/disable_root: 0/g; s/ssh_pwauth.*$/ssh_pwauth: 1/g' ${ROOTFS}/etc/cloud/cloud.cfg
         sed -i '/datasource_list:/d' ${ROOTFS}/etc/cloud/cloud.cfg
-        echo 'datasource_list: [ ConfigDrive, NoCloud, None ]' >> ${ROOTFS}/etc/cloud/cloud.cfg
+        echo 'datasource_list: [ ConfigDrive, NoCloud, None ]' >>${ROOTFS}/etc/cloud/cloud.cfg
     fi
 fi
 
@@ -226,7 +230,7 @@ if ((DEPROVISION_NETWORK)); then
 
     if [ $ELVERSION = 7 ]; then
         sed -i 's/^GRUB_TIMEOUT=.*$/GRUB_TIMEOUT=0/g' ${ROOTFS}/etc/default/grub
-        if ! grep -q 'net.ifnames=0' ${ROOTFS}/etc/default/grub; then
+        if ! grep -q 'net.ifnames' ${ROOTFS}/etc/default/grub; then
             sed -i 's/rhgb quiet/net.ifnames=0 biosdevname=0/g' ${ROOTFS}/etc/default/grub
         fi
         sed -i 's/rhgb quiet//g' ${ROOTFS}/etc/default/grub
@@ -240,16 +244,11 @@ if ((DEPROVISION_NETWORK)); then
 fi
 
 # Remove all registration info
-if  [[ $RELEASE =~ ^redhat- ]]; then
+if [[ $RELEASE =~ ^redhat- ]]; then
     subscription-manager unsubscribe --all || true
     subscription-manager unregister || true
     subscription-manager clean || true
 fi
-
-truncate -s 0 ${ROOTFS}/etc/machine-id
-rm -fv ${ROOTFS}/etc/sysconfig/rhn/systemid
-rm -fv ${ROOTFS}/root/.bash_history ${ROOTFS}/home/*/.bash_history
-history -c
 
 yum clean all --enablerepo='*'
 rm -rf ${ROOTFS}/var/cache/yum/*
@@ -261,13 +260,16 @@ EOF
 
 if ((DEPROVISION_NETWORK)); then
     rm -f ${ROOTFS}/etc/hostname
-    if command -v hostnamectl >/dev/null; then
-        hostnamectl set-hostname 'localhost'
-    else
-        hostname 'localhost'
-    fi
 fi
 export HISTFILESIZE=0
 export HISTSIZE=0
 
+rm -fv ${ROOTFS}/etc/ssh/ssh_host_*
+: >${ROOTFS}/etc/machine-id
+rm -fv ${ROOTFS}/etc/sysconfig/rhn/systemid
+rm -fv ${ROOTFS}/root/.bash_history ${ROOTFS}/home/*/.bash_history
+history -c
+
+/usr/sbin/sys-unconfig
+shutdown -P now
 exit 0

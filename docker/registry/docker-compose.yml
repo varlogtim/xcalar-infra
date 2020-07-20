@@ -5,8 +5,8 @@ volumes:
     external: true
   redis:
     external: true
-  postgres:
-    external: true
+#  postgres:
+#external: true
 
 networks:
   xcalarnet:
@@ -27,6 +27,7 @@ services:
   redis:
     image: redis:6
     restart: unless-stopped
+    init: true
     networks:
       xcalarnet:
         ipv4_address: 172.20.0.249
@@ -38,6 +39,7 @@ services:
   registry:
     image: registry:2
     restart: unless-stopped
+    init: true
     container_name: registry
     hostname: registry
     networks:

@@ -9,24 +9,21 @@ variables:
   ts: '{{ timestamp }}'
   osid: el7
   cacher_ip: '{{ env `CACHER_IP` }}'
-  #iso_url: el7-packages-qemu/tdhtest
-  iso_url: http://netstore/images/el7-base-qemu.qcow2
-  iso_checksum: 'md5:c725eab04431dcc046719c92888d5c5e'
+  iso_url: el7-base-qemu/tdhtest
+  iso_checksum: 'md5:489da6148a3480a9d4ef94eb895ef033'
   headless: "true"
   home: '{{env `HOME`}}'
   puppet_src: '{{env `PUPPETSRCDIR`}}'
   puppet_host: 'puppet'
-  puppet_sha1: '{{env `PUPPETSHA1`}}'
   domain: 'int.xcalar.com'
   disk_size: "128000"
   build_number: '4'
   environment: 'production'
-  output_directory: '/mnt/ssd/images'
+  output_directory: null
   mirrorurl: 'http://netstore/isos/centos/7'
-  manifest: '{{template_dir}}/packer-manifest.json'
 builders:
   - type: qemu
-    name: "{{user `osid`}}-{{user `role`}}-qemu"
+    name: "{{user `osid`}}-packages-qemu"
     accelerator: kvm
     iso_url: '{{ user `iso_url` }}'
     iso_checksum: '{{ user `iso_checksum` }}'
@@ -37,8 +34,10 @@ builders:
     format: qcow2
     headless: "{{user `headless`}}"
     http_directory: httpdir
-    host_port_min: 10080
-    host_port_max: 10280
+    http_port_min: 10082
+    http_port_max: 10082
+    host_port_min: 2229
+    host_port_max: 2239
     ssh_username: root
     ssh_password: Welcome1
     ssh_port: 22
@@ -47,8 +46,10 @@ builders:
     net_device: virtio-net
     disk_interface: virtio
     vnc_bind_address: 0.0.0.0
+    vnc_port_min: 5999
+    vnc_port_max: 6019
     memory: 2048
-    cpus: 2
+    cpus: 4
     qemuargs:
       - - "-serial"
         - "mon:stdio"
@@ -63,48 +64,34 @@ builders:
     #        - 2
     #
 provisioners:
-  - type: shell-local
-    inline:
-      - ulimit -Ss 8192; cd {{ user `puppet_src` }} && make puppet.tar.gz
   - type: shell
     inline:
-      - mkdir /tmp/scripts
+      - mkdir /tmp/packer
 
   - type: file
-    source: "{{ user `puppet_src` }}/puppet.tar.gz"
-    destination: /tmp/scripts/
+    source: "{{ user `puppet_src` }}/t/repo.tar"
+    destination: /tmp/packer/
 
   - type: file
-    source: "{{ template_dir }}/../scripts/run-puppet.sh"
-    destination: /tmp/scripts/
-
-  - type: file
-    source: "{{ template_dir }}/../scripts/cloud-init-nocloud.sh"
-    destination: /tmp/scripts/
+    source: "{{ user `puppet_src` }}/t/{{user `osid`}}-packages.txt"
+    destination: /tmp/packer/
 
   - type: file
     source: "{{ template_dir }}/../scripts/{{user `osid`}}-build.sh"
-    destination: /tmp/scripts/
+    destination: /tmp/packer/
 
   - type: file
     source: "{{ template_dir }}/../scripts/centos-updates.sh"
-    destination: /tmp/scripts/
+    destination: /tmp/packer/
 
   - type: shell
     environment_vars:
-      - "PS4=# ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] "
       - OSID={{user `osid`}}
       - http_proxy={{user `http_proxy`}}
       - https_proxy={{user `https_proxy`}}
       - no_proxy={{user `no_proxy`}}
-      - FACTER_role={{user `role`}}
-      - FACTER_cluster={{user `cluster`}}
-      - FACTER_packer=1
-      - FACTER_datacenter={{user `datacenter`}}
       - CACHER_IP={{user `cacher_ip`}}
       - MYHOSTNAME={{user `cluster`}}-{{user `osid`}}.{{user `domain`}}
-      - PUPPET_TAR=/tmp/scripts/puppet.tar.gz
-      - FACTER_override=offline
       - EL7_MIRROR_URL={{user `mirrorurl`}}
       - XCALAR_PYTHON_VERSION=3.6.11-150
       - XCALAR_ARROW_VERSION=0.13.0-8
@@ -124,27 +111,15 @@ provisioners:
     execute_command: chmod +x {{ .Path }}; {{ .Vars }} {{.Path}}
     inline:
       - set -x
-      - curl -fsSL $EL7_MIRROR_URL/centos-mirror.repo -o /etc/yum.repos.d/centos-mirror.repo && echo $EL7_MIRROR_URL > /etc/yum/vars/mirrorurl
-      - yum install -y git222-core
-      - cd /tmp/scripts
-      - mkdir puppet
-      - tar zxf puppet.tar.gz -C puppet
+      - cd /tmp/packer
       - yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
-      - bash -x run-puppet.sh
-        #- bash -x {{user `osid`}}-build.sh
-        #- bash -x cloud-init-nocloud.sh
-      - echo "[main]" > /etc/puppetlabs/puppet/puppet.conf
-      - echo "server = {{user `puppet_host`}}.{{user `domain`}}" >> /etc/puppetlabs/puppet/puppet.conf
-      - if [ "{{user `environment`}}" != "production" ]; then echo "environment = {{user `environment`}}" >> /etc/puppetlabs/puppet/puppet.conf; fi
-
+      - yum localinstall -y http://repo.xcalar.net/xcalar-release-${OSID}.rpm
+      - bash -x {{user `osid`}}-build.sh
+      - yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
+      - yum install --enablerepo='xcalar-*' -y $(cat ${OSID}-packages.txt  | grep -v '^#')
+      - yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
+      - exit 0
   - type: shell
-    inline:
-      - rm -rf /tmp/scripts
-      - rm -rf /etc/puppetlabs/code
-
-  - type: shell
-    environment_vars:
-      - NODISABLE=puppet
     script: '{{ template_dir }}/../scripts/generalize.sh'
     expect_disconnect: true
     skip_clean: true
@@ -154,18 +129,3 @@ post-processors:
     format: gz
     keep_input_artifact: true
     output: '{{user `output_directory`}}/{{build_name}}-{{user `build_number`}}.gz'
-  - type: manifest
-    output: '{{user `manifest`}}'
-    strip_path: true
-    custom_data:
-      build_number: '{{user `build_number`}}'
-      cluster: '{{user `cluster`}}'
-      datacenter: '{{user `datacenter`}}'
-      iso_checksum: '{{user `iso_checksum`}}'
-      iso_url: '{{user `iso_url`}}'
-      osid: '{{user `osid`}}'
-      output_directory: '{{user `output_directory`}}'
-      puppet_sha1: '{{user `puppet_sha1`}}'
-      role: '{{user `role`}}'
-      today: '{{user `today`}}'
-      output: '{{user `output_directory`}}/{{build_name}}-{{user `build_number`}}.gz'
