@@ -80,7 +80,13 @@ TMP=$(mktemp -t dns.XXXXXX)
 # shellcheck disable=SC2046
 trap "rm -f $TMP" EXIT
 
-docker pull $IMAGE
+if ! test -w /var/run/docker.sock; then
+    DOCKER='sudo docker'
+else
+    DOCKER=docker
+fi
+
+$DOCKER pull $IMAGE
 
 DOCKER_FLAGS="-it --rm --name certbot -v $LE_DIR:/etc/letsencrypt -v $LE_ACCOUNTS:/etc/letsencrypt/accounts -v /var/lib/letsencrypt:/var/lib/letsencrypt --dns 8.8.8.8 --dns 8.8.4.4"
 
@@ -88,7 +94,7 @@ if [[ $IMAGE == certbot/dns-google ]]; then
     (
         vault kv get -field=data secret/service_accounts/gcp/google-dnsadmin >> $TMP
         set -x
-        docker run $DOCKER_FLAGS \
+        $DOCKER run $DOCKER_FLAGS \
             -v "$(readlink -f $TMP):/etc/gdns.json:ro" \
             $IMAGE certonly --dns-google-credentials /etc/gdns.json \
             --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
@@ -101,13 +107,13 @@ elif [[ $IMAGE == certbot/dns-route53 ]]; then
             eval $(vault-aws-credentials-provider.sh --account $AWS_ACCOUNT --export-env --ttl 900) || exit 1
         fi
         set -x
-        docker run $DOCKER_FLAGS \
+        $DOCKER run $DOCKER_FLAGS \
             -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
             $IMAGE certonly --dns-route53 --dns-route53-propagation-seconds 60 \
             --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
     )
 else
-        docker run $DOCKER_FLAGS \
+        $DOCKER run $DOCKER_FLAGS \
             $IMAGE certonly \
             --preferred-challenges "dns-01" \
             --server $LE_ENDPOINT -m ${EMAIL} --agree-tos $DOMAIN_ARGS
@@ -119,13 +125,13 @@ fi
 echo >&2 "The key is in ${LE_DIR}/live/${DOMAIN}/privkey.pem and the certificate is in ${LE_DIR}/live/${DOMAIN}/fullchain.pem"
 
 if $DRYRUN; then
-    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/privkey.pem | tee privkey.pem
-    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/fullchain.pem | tee fullchain.pem
+    $DOCKER run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/privkey.pem | tee privkey.pem
+    $DOCKER run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/fullchain.pem | tee fullchain.pem
 else
     echo >&2 "Storing key and cert into vault: secret/certs/${DOMAIN}/cert.key and cert.crt"
 
-    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/privkey.pem | vault kv put secret/certs/${DOMAIN}/cert.key data=-
-    docker run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/fullchain.pem | vault kv put secret/certs/${DOMAIN}/cert.crt data=-
+    $DOCKER run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/privkey.pem | vault kv put secret/certs/${DOMAIN}/cert.key data=-
+    $DOCKER run --rm -v ${LE_DIR}:${LE_DIR}:ro busybox cat ${LE_DIR}/live/${DOMAIN}/fullchain.pem | vault kv put secret/certs/${DOMAIN}/cert.crt data=-
 
     vault kv get -field=data secret/certs/${DOMAIN}/cert.key > $DOMAIN.key
     vault kv get -field=data secret/certs/${DOMAIN}/cert.crt > $DOMAIN.crt
