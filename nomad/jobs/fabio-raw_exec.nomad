@@ -35,7 +35,7 @@ job "fabio" {
 
         data = <<EOT
 registry.consul.addr = {{ env "NOMAD_IP_lb" }}:8500
-proxy.cs = cs=vault-pki;type=vault-pki;cert=xcalar_ca/issue/int-xcalar-com;refresh=168h
+proxy.cs = cs=vault-pki;type=vault-pki;cert=xcalar_ca/issue/int-xcalar-com;refresh=24h
 proxy.addr = :{{ env "NOMAD_PORT_http" }},:{{ env "NOMAD_PORT_lb" }},:{{ env "NOMAD_PORT_ssl" }};cs=vault-pki;tlsmin=tls12;tlsmax=tls12
 
 #registry.consul.register.enabled = false
