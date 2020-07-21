@@ -99,12 +99,12 @@ update_bootstrap:
 
 validateMain: $(VALIDATE_RG) parameters.json
 	@bash -n $(BOOTSTRAP)
-	@az deployment group validate --resource-group $(VALIDATE_RG) --template-file "mainTemplate.json" --parameters @parameters.main.json
+	@az deployment validate --resource-group $(VALIDATE_RG) --template-file "mainTemplate.json" --parameters @parameters.main.json
 
 validate: $(VALIDATE_RG) parameters.json
 	@bash -n $(BOOTSTRAP)
 	@aws s3 cp $(S3_BOOTSTRAP) - >/dev/null 2>&1 || aws s3 cp $(BOOTSTRAP) $(S3_BOOTSTRAP)
-	@az deployment group validate --resource-group $(VALIDATE_RG) \
+	@az deployment validate --resource-group $(VALIDATE_RG) \
      --template-file "$(TEMPLATE)" \
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize, vmSize,\
@@ -115,7 +115,7 @@ validate: $(VALIDATE_RG) parameters.json
 
 deploy: $(GROUP) validate
 	@(touch local.mk; cat local.mk; echo GROUP=$(GROUP)) | uniq | tee local.mk.tmp >/dev/null && mv local.mk.tmp local.mk
-	time az deployment group create --resource-group $(GROUP) --name $(DEPLOY) \
+	time az deployment create --resource-group $(GROUP) --name $(DEPLOY) \
      --template-file "$(TEMPLATE)" \
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, dataDiskSize, vmSize,\
@@ -123,7 +123,7 @@ deploy: $(GROUP) validate
                                            installerUrl: {value:"$(INSTALLER_URL)"},\
                                            bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
                                            }|tojson' $(PARAMETERS_DEFAULTS) $(PARAMETERS))"
-	@echo "Your cluster is available at https://$$(az deployment group show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
+	@echo "Your cluster is available at https://$$(az deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
 deployDev: $(GROUP) validate
 	bash -n $(BOOTSTRAP)
@@ -131,7 +131,7 @@ deployDev: $(GROUP) validate
 	aws s3api put-object-acl --acl public-read --bucket $(BUCKET) --key $(S3_BOOTSTRAP_KEY)
 	sed -i -e 's|"scriptsUri":.*$$|"scriptsUri": "'`dirname $(BOOTSTRAP_URL)`'",|g' applianceDevTemplate.json
 	@(touch local.mk; cat local.mk; echo GROUP=$(GROUP)) | uniq | tee local.mk.tmp >/dev/null && mv local.mk.tmp local.mk
-	time az deployment group create --resource-group $(GROUP) --name $(DEPLOY) \
+	time az deployment create --resource-group $(GROUP) --name $(DEPLOY) \
      --template-file applianceDevTemplate.json \
      --parameters "$$(jq -r -s '.[0] * .[1] | .parameters | {\
                                            adminEmail, adminUsername, adminPassword, licenseKey, scaleNumber, vmSize,\
@@ -139,12 +139,12 @@ deployDev: $(GROUP) validate
                                            installerUrl: {value:"$(INSTALLER_URL)"},\
                                            bootstrapUrl: {value:"$(BOOTSTRAP_URL)"}\
                                            }|tojson' $(PARAMETERS_DEFAULTS) $(PARAMETERS))"
-	@echo "Your cluster is available at https://$$(az deployment group show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
+	@echo "Your cluster is available at https://$$(az deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
 deployMain: $(GROUP) validateMain
-	time az deployment group create --resource-group $(GROUP) --name $(DEPLOY) \
+	time az deployment create --resource-group $(GROUP) --name $(DEPLOY) \
      --template-file mainTemplate.json --parameters @parameters.main.json
-	@echo "Your cluster is available at https://$$(az deployment group show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
+	@echo "Your cluster is available at https://$$(az deployment show --resource-group $(GROUP) --name $(DEPLOY) --output json --query 'properties.outputs.url.value' --output tsv)"
 
 getips:
 	@az vm list-ip-addresses --resource-group $(GROUP) --output json --query '[].virtualMachine.network.publicIpAddresses[].[name,ipAddress]' --output tsv

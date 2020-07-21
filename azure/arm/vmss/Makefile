@@ -37,7 +37,7 @@ $(RESOURCE_GROUP)/nomadvmss.azuredeploy.json: template/azuredeploy.yaml
 	yarm -i $< -o $@
 
 validate: $(RESOURCE_GROUP)/nomadvmss.azuredeploy.json $(RESOURCE_GROUP)/nomadvmss.parameters.json $(RESOURCE_GROUP)/nomadvmss.cloud-init.yaml
-	az deployment group validate \
+	az deployment validate \
 	    -g $(RESOURCE_GROUP) \
 	    --template-file $(RESOURCE_GROUP)/nomadvmss.azuredeploy.json \
         --parameters \
@@ -46,7 +46,7 @@ validate: $(RESOURCE_GROUP)/nomadvmss.azuredeploy.json $(RESOURCE_GROUP)/nomadvm
         customData="$$(gzip -c nomadvmss.cloud-init.yaml | base64 -w0)"
 
 deploy: validate
-	az deployment group create --name deploy-`date +'%Y%m%d%H%S'` \
+	az deployment create --name deploy-`date +'%Y%m%d%H%S'` \
 	    -g $(RESOURCE_GROUP) \
 	    --template-file $(RESOURCE_GROUP)/nomadvmss.azuredeploy.json \
         --parameters \

@@ -71,7 +71,7 @@ echo
 echo "You'll be able to ssh into your instance long before this next step completes."
 echo
 (set -x
-az deployment group create --name "${DEPLOY}" \
+az deployment create --name "${DEPLOY}" \
                            --resource-group "${GROUP}" \
                            --template-uri "$BASE_URL/mainTemplate.json" \
                            --parameters @${PARAMETERS} \

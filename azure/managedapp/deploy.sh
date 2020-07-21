@@ -105,7 +105,7 @@ fi
 echo "Starting deployment..."
 (
     set -x
-    az deployment group create --name $deploymentName --resource-group $resourceGroupName --template-file $templateFilePath --parameters @$parametersFilePath
+    az deployment create --name $deploymentName --resource-group $resourceGroupName --template-file $templateFilePath --parameters @$parametersFilePath
 )
 rc=$?
 if [ $rc == 0 ]; then

@@ -117,7 +117,7 @@ if [ -n "$INSTALLER_URL" ]; then
     fi
 fi
 
-DEPLOY_COUNT=$(az deployment group list -g $CLUSTER -otsv | wc -l)
+DEPLOY_COUNT=$(az deployment list -g $CLUSTER -otsv | wc -l)
 NOW=$(date +%Y%m%d%H%M)
 if [ $DEPLOY_COUNT -eq 0 ]; then
     DEPLOY="$CLUSTER-deploy"
@@ -131,7 +131,7 @@ for op in validate create; do
     if [ "$op" = create ]; then
         deploy_name="--name ${DEPLOY}"
     fi
-    az deployment group $op --resource-group "$CLUSTER" $deploy_name --template-file "$TEMPLATE" \
+    az deployment $op --resource-group "$CLUSTER" $deploy_name --template-file "$TEMPLATE" \
         --parameters \
         @${PARAMETERS_DEFAULTS} \
         ${INSTALLER_URL:+installerUrl="$INSTALLER_URL"} \
