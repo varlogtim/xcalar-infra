@@ -8,7 +8,6 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
-sudo chown jenkins:jenkins /home/jenkins/.config
 source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
 
@@ -50,7 +49,7 @@ anyfailed=0
 for ii in `seq 1 $NUM_ITERATIONS`; do
     echo "Iteration $ii"
     jj=1
-    
+
     for Test in "${TestsToRun[@]}"; do
         logfile="$TMPDIR/${hostname//./_}_${Test//::/_}_$ii.log"
 
