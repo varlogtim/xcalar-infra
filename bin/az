@@ -51,7 +51,7 @@ fi
 touch ${PHOME}/img-check.ts
 if [ ${PHOME}/img-check.ts -nt ${PHOME}/img-next.ts ]; then
     echo >&2 "Updating $PIMAGE ..."
-    $DOCKER pull "$PIMAGE" >&2
+    $DOCKER pull "$PIMAGE"
     touch --date='1 day' ${PHOME}/img-next.ts
 fi
 

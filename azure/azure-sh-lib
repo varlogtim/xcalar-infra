@@ -836,7 +836,7 @@ az_deploy() {
     local OUTPUT=${XLRINFRADIR}/output
     rm -rf "${OUTPUT:?}"/*
     mkdir -p $OUTPUT
-    az deployment validate -g $group $template_arg \
+    az deployment group validate -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
         _artifactsLocation="${_artifactsLocation}" vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" >/dev/null
@@ -852,7 +852,7 @@ az_deploy() {
     say " and your deployment here: $(az_rg_deployment_url $group)"
     say
 
-    az deployment create --mode $mode --name deploy-${now} -g $group $template_arg \
+    az deployment group create --mode $mode --name deploy-${now} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
         _artifactsLocation="${_artifactsLocation}" "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
         vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
@@ -990,7 +990,7 @@ az_rg_scheduled_shutdown() {
     local vm0="${vms[0]}"
     vm0="${vm0##*/}"
 
-    az deployment create \
+    az deployment group create \
         -n scheduledShutdown-${group}-${now} \
         -g $group --template-file $XLRINFRADIR/azure/arm/scheduledShutdown/scheduledShutdown.json \
         --parameters \

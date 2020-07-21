@@ -228,7 +228,7 @@ while [ $# -gt 0 ]; do
                 fi
             fi
             (
-                debug az deployment validate --template-uri "${templateUrl}" --parameters @$PARAMETERS --parameters _artifactsLocation="$artifactsLoc" --parameters _artifactsLocationSasToken='' \
+                debug az deployment group validate --template-uri "${templateUrl}" --parameters @$PARAMETERS --parameters _artifactsLocation="$artifactsLoc" --parameters _artifactsLocationSasToken='' \
                     --parameters "location=${LOCATION}" --parameters appName=${CLUSTER} "${EXTRA_ARGS[@]}" -g "${GROUP}" -ojson >$TMPDIR/error.json
                 code="$(jq -r .error.code <$TMPDIR/error.json)"
                 if [ $? -ne 0 ] || [ "$code" != "null" ]; then
@@ -237,13 +237,13 @@ while [ $# -gt 0 ]; do
                     exit 1
                 fi
 
-                debug az deployment create -g "${GROUP}" --name "${DEPLOY}" --no-wait -ojson --template-uri "${templateUrl}" --parameters @$PARAMETERS --parameters _artifactsLocation="$artifactsLoc" _artifactsLocationSasToken='' \
+                debug az deployment group create -g "${GROUP}" --name "${DEPLOY}" --no-wait -ojson --template-uri "${templateUrl}" --parameters @$PARAMETERS --parameters _artifactsLocation="$artifactsLoc" _artifactsLocationSasToken='' \
                     "location=${LOCATION}" appName=${CLUSTER} "${EXTRA_ARGS[@]}" >$TMPDIR/error.json
-                debug az deployment wait --exists -g "$GROUP" --name "$DEPLOY"
+                debug az deployment group wait --exists -g "$GROUP" --name "$DEPLOY"
                 google-chrome "$(az_rg_deployment_url $GROUP $DEPLOY)"
             )
             echo $((COUNT + 1)) >count.txt
-            az deployment wait --created -g $GROUP --name $DEPLOY
+            az deployment group wait --created -g $GROUP --name $DEPLOY
             DNS=$(az_rg_dns $GROUP)
             echo "DNS: $DNS"
             ssh $DNS

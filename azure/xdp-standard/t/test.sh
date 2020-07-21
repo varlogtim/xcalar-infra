@@ -43,10 +43,10 @@ test_setup() {
 }
 
 az_deploy() {
-    az deployment validate \
+    az deployment group validate \
         --template-file mainTemplate.json \
         --mode complete "$@" \
-        && az deployment create --name my-deploy \
+        && az deployment group create --name my-deploy \
             --template-file mainTemplate.json \
             --mode complete "$@"
 }
