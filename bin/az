@@ -23,7 +23,7 @@ WRAP_USE_DOCKER="${PROGU}_USE_DOCKER"
 WRAP_HOME=${PROGU}_HOME
 PIMAGE="${!WRAP_IMAGE:-${!WRAP_IMAGE_DEFAULT}}"
 PHOME="${!WRAP_HOME}"
-if [ "${!WRAP_USE_DOCKER}" != true ] && ALLPROG=("$(which -a $PROG | grep -v "$(readlink -f "${BASH_SOURCE[0]}")")"); then
+if [ "${!WRAP_USE_DOCKER}" != true ] && ALLPROG=("$(which $PROG | grep -v "$(readlink -f "${BASH_SOURCE[0]}")")"); then
     exec "${ALLPROG[0]}" "$@"
 fi
 [ -d ${PHOME} ] || { mkdir -p ${PHOME} && chmod 0700 ${PHOME}; }
@@ -36,6 +36,8 @@ fi
 ENVS=()
 ENVS+=(-e AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west2} -e AWS_SECRET_ACESS_KEY -e AWS_ACCESS_KEY_ID -e AWS_SESSION_TOKEN -e AWS_PROFILE)
 ENVS+=(-e AZURE_CLIENT_ID -e AZURE_CLIENT_SECRET -e AZURE_STORAGE_ACCOUNT -e AZURE_STORAGE_KEY -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT_ID)
+ENVS+=(-e ARM_CLIENT_ID -e ARM_CLIENT_SECRET -e ARM_SUBSCRIPTION_ID -e ARM_TENANT_ID)
+
 # The source could be in a different directory/repo
 STLD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && git rev-parse --show-toplevel || pwd)"
 if [ "$STLD" != "$TLD" ]; then
@@ -51,7 +53,7 @@ fi
 touch ${PHOME}/img-check.ts
 if [ ${PHOME}/img-check.ts -nt ${PHOME}/img-next.ts ]; then
     echo >&2 "Updating $PIMAGE ..."
-    $DOCKER pull "$PIMAGE"
+    $DOCKER pull "$PIMAGE" >&2
     touch --date='1 day' ${PHOME}/img-next.ts
 fi
 
