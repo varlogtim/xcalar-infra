@@ -27,8 +27,6 @@ from py_common.jenkins_aggregators import JenkinsJobMetaCollection
 from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
 from py_common.mongo import MongoDB, JenkinsMongoDB
 
-from coverage.file_groups import FileGroups
-
 class XDUnitTestCoverage(object):
     GZIPPED = re.compile(r".*\.gz\Z")
 
@@ -126,45 +124,34 @@ class XDUnitTestCoverageData(object):
 
     # XXXrs - temporary static config.
     FILE_GROUPS = {"Critical Files": [
-        "/ts/components/datastore/DS.js",
-        "/ts/components/datastore/DSForm.js",
-        "/ts/components/datastore/DSPreview.js",
-        "/ts/components/datastore/DSTable.js",
-        "/ts/components/datastore/DSTargetManager.js",
-        "/ts/components/datastore/FileBrowser.js",
-
-        "/ts/components/dag/DagGraph.js",
-        "/ts/components/dag/DagGraphExecutor.js",
-        "/ts/components/dag/DagLineage.js",
-        "/ts/components/dag/DagList.js",
-        "/ts/components/dag/DagNodeExecutor.js",
-        "/ts/components/dag/DagNodeMenu.js",
-        "/ts/components/dag/DagPanel.js",
-        "/ts/components/dag/DagParamManager.js",
-        "/ts/components/dag/DagQueryConverter.js",
-        "/ts/components/dag/DagSubGraph.js",
-        "/ts/components/dag/DagTab.js",
-        "/ts/components/dag/DagTabManager.js",
-        "/ts/components/dag/DagTabUser.js",
-        "/ts/components/dag/DagTable.js",
-        "/ts/components/dag/DagTblManager.js",
-        "/ts/components/dag/DagView.js",
-        "/ts/components/dag/DagViewManager.js",
-        "/ts/components/dag/node/DagNode.js",
-
-        "/ts/components/sql/SQLDagExecutor.js",
-        "/ts/components/sql/SQLEditor.js",
-        "/ts/components/sql/SQLExecutor.js",
-        "/ts/components/sql/SQLSnippet.js",
-        "/ts/components/sql/sqlQueryHistory.js",
-        "/ts/components/sql/workspace/SQLEditorSpace.js",
-        "/ts/components/sql/workspace/SQLHistorySpace.js",
-        "/ts/components/sql/workspace/SQLResultSpace.js",
-        "/ts/components/sql/workspace/SQLTable.js",
-        "/ts/components/sql/workspace/SQLTableLister.js",
-        "/ts/components/sql/workspace/SQLTableSchema.js",
-        "/ts/components/sql/workspace/SQLWorkSpace.js"]}
-
+       "/ts/components/workbook/workbookManager.js"
+       "/ts/components/dag/DagGraph.js",
+       "/ts/components/dag/DagGraphExecutor.js",
+       "/ts/components/dag/DagLineage.js",
+       "/ts/components/dag/DagList.js",
+       "/ts/components/dag/DagNodeExecutor.js",
+       "/ts/components/dag/DagNodeMenu.js",
+       "/ts/components/dag/DagQueryConverter.js",
+       "/ts/components/dag/DagSubGraph.js",
+       "/ts/components/dag/DagTab.js",
+       "/ts/components/dag/DagTabManager.js",
+       "/ts/components/dag/DagTabUser.js",
+       "/ts/components/dag/DagTable.js",
+       "/ts/components/dag/DagView.js",
+       "/ts/components/dag/DagViewManager.js",
+       "/ts/components/dag/node/DagNode.js",
+       "/ts/components/worksheet/oppanel/SQLOpPanel.js"
+       "/ts/components/sql/SQLDagExecutor.js",
+       "/ts/components/sql/SQLEditor.js",
+       "/ts/components/sql/SQLExecutor.js",
+       "/ts/components/sql/SQLSnippet.js",
+       "/ts/components/sql/sqlQueryHistory.js",
+       "/ts/components/sql/workspace/SQLEditorSpace.js",
+       "/ts/components/sql/workspace/SQLResultSpace.js",
+       "/ts/components/sql/workspace/SQLTable.js",
+       "/ts/components/sql/workspace/SQLTableLister.js",
+       "/ts/components/sql/workspace/SQLTableSchema.js",
+       "/ts/components/sql/workspace/SQLWorkSpace.js" ]}
 
     def __init__(self):
 
