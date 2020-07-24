@@ -319,7 +319,14 @@
         "type": "string",
         "defaultValue": "",
         "metadata": {
-            "description": "Image to use. Must be specified as a full image id (eg, /subscription/subid/.../image)"
+            "description": "Image to use"
+        }
+    },
+    "imageSKU": {
+        "type": "string",
+        "defaultValue": "7_8",
+        "metadata": {
+            "description": "Image SKU to use"
         }
     }
   },
@@ -436,7 +443,7 @@
     "Reader": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
     "imagePublisher": "OpenLogic",
     "imageOffer": "CentOS",
-    "imageSKU": "7_8",
+    "imageSKU": "[parameters('imageSKU')]",
     "cleanimage": {
             "publisher": "[variables('imagePublisher')]",
             "offer": "[variables('imageOffer')]",

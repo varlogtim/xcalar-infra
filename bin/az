@@ -1,8 +1,28 @@
 #!/bin/bash
 #
-# shellcheck disable=SC2086,SC2207,SC2206,SC2034,SC2015
+# shellcheck disable=SC2086,SC2207,SC2206,SC2034,SC2015,SC2046
 
 set -e
+
+# Some directories may have been created as root via the
+# docker container
+safe_mkdir() {
+    if [ -w "$1" ]; then
+        return 0
+    fi
+    if ! [ -d "$1" ]; then
+        if ! mkdir -p "$1"; then
+            return 1
+        fi
+    fi
+    if ! [ -w "$1" ]; then
+        if ! sudo chown $(id -u):$(id -g) "$1"; then
+            return 1
+        fi
+    fi
+}
+
+
 
 #==== just customize this part to another tool, say aws cli
 PROG="$(basename "$0")"
@@ -23,10 +43,26 @@ WRAP_USE_DOCKER="${PROGU}_USE_DOCKER"
 WRAP_HOME=${PROGU}_HOME
 PIMAGE="${!WRAP_IMAGE:-${!WRAP_IMAGE_DEFAULT}}"
 PHOME="${!WRAP_HOME}"
+PLOG="$PHOME"/logs/"$PROG".log
 if [ "${!WRAP_USE_DOCKER}" != true ] && ALLPROG=("$(which $PROG | grep -v "$(readlink -f "${BASH_SOURCE[0]}")")"); then
     exec "${ALLPROG[0]}" "$@"
 fi
+safe_mkdir "$PHOME"
+safe_mkdir "$(dirname "$PLOG")"
+test -w "$PLOG" || sudo chown "$(id -u):$(id -g)" "$PLOG"
+touch "$PLOG"
+
+
 [ -d ${PHOME} ] || { mkdir -p ${PHOME} && chmod 0700 ${PHOME}; }
+[ -d ${PHOME}/logs ] || {
+    mkdir -p ${PHOME}/logs 2>/dev/null || sudo mkdir -p ${PHOME}/logs
+}
+[ -w ${PHOME}/logs ] || {
+    sudo chown -R $(id -u):$(id -g) ${PHOME}/logs
+}
+touch ${PHOME}/logs/${PROG}.log
+
+
 ARGS=(-v ${PHOME}:/root/$(basename ${PHOME}))
 TLD="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ARGS+=(-v $TLD:$TLD -w $PWD)

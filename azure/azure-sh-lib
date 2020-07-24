@@ -16,14 +16,16 @@ az_setup() {
     AZ_CACHEDIR="${XDG_CACHE_DIR:-$HOME/.cache}/azure"
     HTTPCACHE="http://netstore.int.xcalar.com/infra/azure/allvms.json"
     AZ_ALLVMS="$AZ_CACHEDIR/allvms.json"
-    TODAY=$(date +%Y%m%d)
+    AZ_APIVER=${AZ_APIVER:-2019-08-15}
     TEMPLATE=$XLRINFRADIR/azure/xdp-standard/mainTemplate.json
-    TEMPLATE_VERSION=${TEMPLATE_VERSION:-v16}
-    TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/${TEMPLATE_VERSION}/mainTemplate.json
+    DEFAULT_TEMPLATE_VERSION=v17
+    TEMPLATE_URL=https://xcrepo.blob.core.windows.net/public/xdp-standard-platform/${TEMPLATE_VERSION:-$DEFAULT_TEMPLATE_VERSION}/mainTemplate.json
     DEFAULTS=$XLRINFRADIR/azure/xdp-standard/$(basename $TEMPLATE .json).defaults.json
     LICENSEDEV=$XLRINFRADIR/azure/xdp-standard/licenseDev.json
     LICENSERC=$XLRINFRADIR/azure/xdp-standard/licenseRC.json
     [ -n "$BUILD_URL" ] && NO_WAIT='' || NO_WAIT='--no-wait'
+    DEFAULT_LOCATION="$(az configure -l -otsv | awk '/^location/{print $(NF)}')"
+    DEFAULT_LOCATION="${DEFAULT_LOCATION:-westus2}"
     AZ_PUBLIC_ACCOUNT=${AZ_PUBLIC_ACCOUNT:-xcrepo}
     AZ_PUBLIC_CONTAINER=${AZ_PUBLIC_CONTAINER:-public}
     AZ_PUBKEY="${AZ_PUBKEY:-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCkSfi00gfzVoaqLs/Col/kNNg2jGHNhP3LA6OykWt1ev04CbNCiGB01+wgPy6Jx0aKvA7Mx7a4cUCJs8NvgH0wfgzLo0HAcAdMoXHl7ZE6psOR5/w7WJEFZ4xd7v9WanAsONtgS5iLwuzHkMvrImO6aOz2YxzYoNRpVbsJ5PViD9EkRyaEPLRI0A9/DFY96o/xRT/EXxT2ekjJ9loIkeU2Cxs1k0R0TYxPORAvuaM2HHQ12fG51wSNkc3WQ7ehLlULjnxyanptLTDGlU6CwN0i7YEbqr8gpCw510KJg75TqxB8pBxBuN0RHacsf6Lgz/rSw97ryox/ynCzQT9hrE9b azureuser@xdp-standard}"
@@ -76,7 +78,7 @@ az_subscription() {
 }
 
 az_mktemp() {
-    mktemp "$@" ${TMPDIR:-/tmp}/azure-sh-lib.XXXXXX
+    mktemp -t azure-sh-lib.XXXXXX
 }
 
 az_version() {
@@ -91,9 +93,14 @@ az_meta() {
     curl --connect-timeout 1 --fail --silent -H Metadata:True "$@"
 }
 
+azmeta() {
+    local apiver="${AZ_APIVER:-2019-08-15}"
+    curl --connect-timeout 1 --fail --silent -H Metadata:True "http://169.254.169.254/metadata/instance?api-version=${apiver}&format=json"
+}
+
 az_rg_create() {
     local name="$1"
-    local location=${2:-${LOCATION:-westus2}}
+    local location=${2:-${AZ_LOCATION:-$DEFAULT_LOCATION}}
     az_rg_exists "$name" || [[ "$(az group create -n "$name" -l $location -ojson --query 'properties.provisioningState' -otsv)" == Succeeded ]]
 }
 
@@ -102,36 +109,39 @@ az_rg_create() {
 # NAME=trial-rmadugula-01-vm0
 # OFFER=CentOS
 az_metadata_instance() {
-    az_meta "http://169.254.169.254/metadata/instance?api-version=2019-06-04&format=json" | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'
+    local apiver="${AZ_APIVER:-2019-08-15}"
+    az_meta "http://169.254.169.254/metadata/instance?api-version=${apiver}&format=json" | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'
 }
 
 # Returns any scheduled events in this format:
 ## { "DocumentIncarnation": 0, "Events": [] }
 az_metadata_event() {
-    az_meta "http://169.254.169.254/metadata/scheduledevents?api-version=2019-06-04&format=json" | jq -r . #| jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'; echo "${PIPESTATUS[0]}";
+    local apiver="${AZ_APIVER:-2019-08-15}"
+    az_meta "http://169.254.169.254/metadata/scheduledevents?api-version=${apiver}&format=json" | jq -r . #| jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/\U\1=/g'; echo "${PIPESTATUS[0]}";
 }
 
 # Render tags as:
 #
 az_metadata_tags_nodeps() {
-    az_meta 'http://169.254.169.254/metadata/instance/compute/tags?api-version=2019-06-04&format=text' | tr ';' '\n' | sed -r 's/^(.*):(.*)$/\1="\2"/g'
+    local apiver="${AZ_APIVER:-2019-08-15}"
+    az_meta "http://169.254.169.254/metadata/instance/compute/tags?api-version=${apiver}&format=text" | tr ';' '\n' | sed -r 's/^(.*):(.*)$/\1="\2"/g'
 }
 
 az_metadata_env() {
     (
         set -eo pipefail
         local tmp
-        tmp="$(az_mktemp -d)"
-        az_meta 'http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json' \
+        tmp="$(mktemp -t azure-sh-lib.XXXXXX)"
+        azmeta \
             | jq -r ".compute|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" | sed -re 's/^([^=]+)=/AZ_\U\1 /g' \
             | while read KEY VALUE; do
-                echo "${KEY//-/_}=\"${VALUE}\""
+                printf '%s=%q\n' "${KEY//-/_}" "${VALUE}"
             done | tee $tmp
         . $tmp
         if [ -n "$AZ_TAGS" ]; then
-            echo "$AZ_TAGS" | tr ';' '\n' | sed -r 's/^([^:]+):/AZ_TAG_\U\1 /g' | while read KEY VALUE; do echo "${KEY//-/_}=\"${VALUE}\""; done | tee -a $tmp
+            echo "$AZ_TAGS" | tr ';' '\n' | sed -r 's/^([^:]+):/AZ_TAG_\U\1 /g' | while read KEY VALUE; do printf '%s=%q\n' "${KEY//-/_}" "${VALUE}"; done | tee -a $tmp
         fi
-        az_meta 'http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json' \
+        azmeta \
             | jq -r '.network.interface[0].ipv4.ipAddress[0]|[.privateIpAddress,.publicIpAddress]|@tsv' \
             | while read LOCALIP4 PUBLICIPV4; do
                 echo "AZ_LOCALIPV4=${LOCALIP4}"
@@ -200,7 +210,7 @@ az_rg_vms_do() {
 
 az_rg_vms_stop_start_all() {
     local rg="$1" rc ip
-    if [ -z "$rg" ] || [ "$(az group exists -g $rg -otsv)" != true ]; then
+    if [ -z "$rg" ] || ! az_rg_exists "$rg"; then
         error "Need to specify existing resource group"
         return 1
     fi
@@ -458,12 +468,14 @@ az_container_size() {
 
 # Returns the entire json document
 az_meta_json() {
-    az_meta "http://169.254.169.254/metadata/instance?api-version=2018-04-02&format=json"
+    local apiver="${AZ_APIVER:-2019-08-15}"
+    az_meta "http://169.254.169.254/metadata/instance?api-version=${apiver}&format=json"
 }
 
 # az_meta_text <key>, for example compute/name
 az_meta_text() {
-    az_meta "http://169.254.169.254/metadata/instance/$1?api-version=2018-04-02&format=text"
+    local apiver="${AZ_APIVER:-2019-08-15}"
+    az_meta "http://169.254.169.254/metadata/instance/$1?api-version=${apiver}&format=text"
 }
 
 ## Resource group level functions
@@ -583,7 +595,7 @@ az_deploy_usage() {
     done
 
     cat <<EOF
-    az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer installer] [--dnslabel dns]
+    az_deploy [-g|--group grp] [-l|--location loc] [-i|--installer installer] [--dnslabel dns] [--image-sku SKU]
               [--cluster cluster] [--size vmSize] [--count num] [--template-uri http://..] [--template-file file.json]
               [--parameters-file params.json] [-n|--name name] [--dnslabel dns] [--mode Incremental|Complete] ${str[*]}
 EOF
@@ -612,7 +624,7 @@ az_deploy() {
     local now=$(date +%Y%m%d%H%M%S)
     local -a extra_params=()
     local email="${BUILD_USER_EMAIL:-$(git config user.email)}"
-    local location=${LOCATION}
+    local location=${AZ_LOCATION:-$DEFAULT_LOCATION}
     local name group count=1 size=Standard_D8_v3 template_arg storageAccount_arg
     local template=$AZ_DEFAULT_TEMPLATE
     local parameters_file=${DEFAULTS}
@@ -681,6 +693,10 @@ az_deploy() {
                 ;;
             --size=*)
                 size="${1##*=}"
+                shift 1
+                ;;
+            --image-sku=*)
+                image_sku="${1##*=}"
                 shift 1
                 ;;
             --name=*)
@@ -759,6 +775,10 @@ az_deploy() {
                 size="$2"
                 shift 2
                 ;;
+            --image-sku)
+                image_sku="$2"
+                shift 2
+                ;;
             -i | --installer)
                 installer="$2"
                 shift 2
@@ -789,7 +809,7 @@ az_deploy() {
     test -n "$name" || name="xdp-${BUILD_USER_ID:-$USER}-${uid}"
     test -n "$dnslabel" || dnslabel="${name}"
 
-    if [ "$(az group exists -g "$group" -otsv)" = false ]; then
+    if ! az_rg_exists "$group"; then
         say "Must specify resource group with -g <resource group>"
         say "Please create a resource group first, for example:"
         say ""
@@ -839,7 +859,7 @@ az_deploy() {
     az deployment group validate -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} "appName=${name}" \
         "adminEmail=$email" domainNameLabel=${dnslabel} "${extra_params[@]}" \
-        _artifactsLocation="${_artifactsLocation}" vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" >/dev/null
+        _artifactsLocation="${_artifactsLocation}" ${image_sku:+imageSKU=$image_sku} vmSize=$size scaleNumber=$count osDiskSize=$osDiskSize "$@" -ojson | tee "$TMP" >/dev/null
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
         cat "$TMP" >&2
@@ -855,7 +875,7 @@ az_deploy() {
     az deployment group create --mode $mode --name deploy-${now} -g $group $template_arg \
         --parameters ${parameters_file+@$parameters_file} @${licenseParamFile} \
         _artifactsLocation="${_artifactsLocation}" "appName=${name}" "adminEmail=$email" osDiskSize=$osDiskSize domainNameLabel=${dnslabel} "${extra_params[@]}" \
-        vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
+        ${image_sku:+imageSKU=$image_sku} vmSize=$size scaleNumber=$count "$@" -ojson | tee "$TMP"
     rc=${PIPESTATUS[0]}
     if [ $rc != 0 ]; then
         say "Failed to deploy!"

@@ -91,6 +91,10 @@
     },
     "cgroupsEnabled": {
       "value": "false"
+    },
+    "imageSKU": {
+      "value": "7_8"
     }
+
   }
 }
