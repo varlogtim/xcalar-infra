@@ -244,6 +244,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
         "$XLRDIR/src/data/lang/${PKG_LANG}/StatusCode.enum"
         "$XLRDIR/src/data/lang/${PKG_LANG}/FunctionCategory.enum"
         "$XLRDIR/src/include/runtime/RuntimeEnums.enum"
+        "$XLRDIR/src/include/LogLevel.enum"
         "$XLRDIR/src/include/querymanager/DataflowEnums.enum"
     )
     thriftVersionFile="$XLRGUIDIR/ts/thrift/XcalarApiVersionSignature_types.js"
