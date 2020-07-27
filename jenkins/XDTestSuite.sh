@@ -277,6 +277,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
         echo "Current version of XCE is compatible"
         foundVersion="true"
     else
+        echo "Current: ThriftVersionSigNew2 = $versionSigThriftNew2; ThriftVersionSig = $versionSigThrift; XcrpcVersionSig = $versionSigXcrpc"
         echo "Current version of XCE is not compatible. Trying..."
         gitshas=`git log --format=%H $checkOutFiles`
         prevSha="HEAD"
@@ -298,7 +299,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
                 versionSigXcrpc="N/A"
                 foundVerXcrpc=0
             fi
-            echo "$gitsha: ThriftVersionSigNew = $versionSigThriftNew; ThriftVersionSig = $versionSigThrift; XcrpcVersionSig = $versionSigXcrpc"
+            echo "$gitsha: ThriftVersionSigNew2 = $versionSigThriftNew2; ThriftVersionSig = $versionSigThrift; XcrpcVersionSig = $versionSigXcrpc"
             if [ $foundVerThrift -eq 0 ] && [ $foundVerXcrpc -eq 0 ]; then
                 echo "$gitsha is a match"
                 echo "Checking out $prevSha as the last commit with the matching signature"
