@@ -339,11 +339,9 @@ echo "Building XD"
 cd $XLRGUIDIR
 
 if [ $JOB_NAME = "XDFuncTest" ]; then
-    # XXX Revert this to make dev when ENG-6945 is done
-    make trunk PRODUCT="$GUI_PRODUCT"
+    make dev PRODUCT="$GUI_PRODUCT"
 else
-    # XXX Revert this to make debug when ENG-6945 is done
-    make trunk PRODUCT="$GUI_PRODUCT"
+    make debug PRODUCT="$GUI_PRODUCT"
 fi
 
 if [ "$GUI_PRODUCT" = "XI" ]; then
