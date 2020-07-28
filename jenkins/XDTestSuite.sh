@@ -253,10 +253,10 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     cd $XLRDIR
     foundVersion="false"
     isCheckXcrpc="true"
-    checkOutFiles="${thriftDefFileList[@]} $thriftDefFile $thriftDefFileH $xcrpcDefDir"
+    checkOutFiles="${thriftDefFileList2[@]} $thriftDefFile $thriftDefFileH $xcrpcDefDir"
     if [ ! -f "$xcrpcVersionFile" ]; then
         isCheckXcrpc="false"
-        checkOutFiles="${thriftDefFileList[@]} $thriftDefFile $thriftDefFileH"
+        checkOutFiles="${thriftDefFileList2[@]} $thriftDefFile $thriftDefFileH"
         echo "Skip xcrpc check"
     fi
     versionSigThriftNew=$(generateThriftVersionSigNew "${thriftDefFileList[@]}")
@@ -279,10 +279,10 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
     else
         echo "Current: ThriftVersionSigNew2 = $versionSigThriftNew2; ThriftVersionSig = $versionSigThrift; XcrpcVersionSig = $versionSigXcrpc"
         echo "Current version of XCE is not compatible. Trying..."
-        gitshas=`git log --format=%H $checkOutFiles`
+        gitshas=`git log --format=%H -- $checkOutFiles`
         prevSha="HEAD"
         for gitsha in $gitshas; do
-            if ! git checkout "$gitsha" $checkOutFiles; then
+            if ! git checkout "$gitsha"; then
                 break
             fi
             versionSigThriftNew=$(generateThriftVersionSigNew "${thriftDefFileList[@]}")
@@ -303,7 +303,7 @@ if [ "$AUTO_DETECT_XCE" = "true" ]; then
             if [ $foundVerThrift -eq 0 ] && [ $foundVerXcrpc -eq 0 ]; then
                 echo "$gitsha is a match"
                 echo "Checking out $prevSha as the last commit with the matching signature"
-                git checkout HEAD $checkOutFiles
+                #git checkout HEAD $checkOutFiles
                 git checkout "$prevSha"
                 git submodule update --init --recursive xcalar-idl
                 foundVersion="true"
