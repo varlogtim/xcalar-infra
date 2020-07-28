@@ -113,7 +113,7 @@ checkApiVersionSig() {
 generateXcrpcVersionSig() {
     local PROTO_DIR="$1"
 
-    local checkFiles=$(find $PROTO_DIR -name "*.proto" | LC_COLLATE=C sort)
+    local checkFiles=$(find $PROTO_DIR -name "*.proto" | LC_ALL=C sort)
     local totalValue=""
     local newline=$'\n'
     local protoFile
