@@ -22,6 +22,11 @@ VmProvider=${VmProvider:-GCE}
 
 onExit() {
     exitCode=$1
+    if [ "$KEEP_CLUSTER" == "1" ]; then
+        echo "KEEP_CLUSTER is set, existing and preserving the cluster"
+        echo "***WARNING*** YOU MUST CLEAN THIS UP MANUALLY WHEN DEBUGGING IS DONE, IT'S EXPENSIVE!!! *****"
+        exit $exitCode
+    fi
     # Mask anything that could interrupt us
     trap '' HUP QUIT INT TERM
     if [ -n "$CLUSTERNAME" ]; then
