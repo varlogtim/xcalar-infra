@@ -63,7 +63,7 @@ job "nexus" {
       }
 
       env {
-        INSTALL4J_ADD_VM_PARAMS = "-Xms3000m -Xmx3000m -XX:MaxDirectMemorySize=3g -Djava.util.prefs.userRoot=/nexus-data/javaprefs"
+        INSTALL4J_ADD_VM_PARAMS = "-Xms1000m -Xmx3000m -XX:MaxDirectMemorySize=3g -Djava.util.prefs.userRoot=/nexus-data/javaprefs -Djava.awt.headless=true"
       }
 
       template {
@@ -77,7 +77,7 @@ EOD
       }
 
       resources {
-        memory = 3300
+        memory = 4000
         cpu    = 4000
 
         network {
