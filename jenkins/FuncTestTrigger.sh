@@ -13,8 +13,6 @@ export XCE_CONFIG=$INSTALL_OUTPUT_DIR/etc/xcalar/default.cfg
 export XCE_USER=`id -un`
 export XCE_GROUP=`id -gn`
 
-. $XLRDIR/bin/jenkins/jenkinsUtils.sh
-
 TestsToRun=($TestCases)
 TAP="AllTests.tap"
 rm -f "$TAP"
@@ -50,8 +48,6 @@ funcstatsd () {
     fi
 }
 
-trap "genBuildArtifacts" EXIT
-
 # Build the source
 source doc/env/xc_aliases
 
@@ -81,7 +77,12 @@ mkdir -p $INSTALL_OUTPUT_DIR
 set +e
 $INSTALLER_PATH -d $INSTALL_OUTPUT_DIR -v
 rm $XCE_CONFIG
+
+# XLRDIR is under INSTALL_OUTPUT_DIR so this can't happen earlier
+. $XLRDIR/bin/jenkins/jenkinsUtils.sh
 set -e
+
+trap "genBuildArtifacts" EXIT
 
 $XLRDIR/scripts/genConfig.sh $INSTALL_OUTPUT_DIR/etc/xcalar/template.cfg $XCE_CONFIG `hostname`
 echo "$CONFIG_PARAMS" | tee -a $XCE_CONFIG
