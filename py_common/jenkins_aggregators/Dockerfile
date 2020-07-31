@@ -6,11 +6,12 @@ MAINTAINER Robert Stephens <rstephens@xcalar.com>
 ENV LOG_LEVEL="INFO"
 ENV JENKINS_HOST="jenkins.int.xcalar.com"
 
-# Must mount /opt/clang5 to container when run
-# Caveat: Don't be over-specific and mount /opt/clang5/bin, or
-#         some requirements will not be visible to the tools.
-ENV CLANG_LLVM_COV_PATH="/opt/clang5/bin/llvm-cov"
-ENV CLANG_LLVM_PROFDATA_PATH="/opt/clang5/bin/llvm-profdata"
+# clang7 tools staged at /netstore/qa/coverage/clang7
+# We use clang7 here in preference to infra-ubiquitous clang5 because
+# clang5 merge is buggy (can't handle more than 3 data sets)
+# and the reported coverage percentages seem inaccurate (see ENG-8898).
+ENV CLANG_LLVM_COV_PATH="/netstore/qa/coverage/clang7/bin/llvm-cov"
+ENV CLANG_LLVM_PROFDATA_PATH="/netstore/qa/coverage/clang7/bin/llvm-profdata"
 
 WORKDIR /usr/src/app
 
