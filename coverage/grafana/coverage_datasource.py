@@ -39,6 +39,11 @@ logger = logging.getLogger(__name__)
 xce_coverage_data = XCEFuncTestCoverageData()
 xd_coverage_data = XDUnitTestCoverageData()
 
+mode_to_coverage_data = {
+    'xce': xce_coverage_data,
+    'xd': xd_coverage_data
+    }
+
 app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
@@ -156,12 +161,55 @@ def _xce_results(*, xce_vers, first_bnum, names, ts):
     logger.debug("results: {}".format(results))
     return results
 
+
+def _comparison_table(*, target_name):
+    """
+    Target name specifes query.
+    Format:
+        <xce|xd>:<build_num_1>:<build_num_2>:<file_group>
+    """
+    try:
+        mode,bnum1,bnum2,filenames = target_name.split(':')
+    except Exception as e:
+        abort(404, Exception('incomprehensible target_name: {}'.format(target_name)))
+
+    coverage_data = mode_to_coverage_data.get(mode, None)
+    if not coverage_data:
+        err = 'unknown mode: {}'.format(mode)
+        logger.exception(err)
+        abort(404, ValueError(err))
+
+    logger.info("mode {} bnum1 {} bnum2 {} filenames {}"
+                .format(mode, bnum1, bnum2, filenames))
+
+    rows = []
+    columns = [
+        {"text":"File", "type":"string"},
+        {"text":"Build {} coverage pct.".format(bnum1), "type":"number"},
+        {"text":"Build {} coverage pct.".format(bnum2), "type":"number"},
+        {"text":"Delta", "type":"number"},
+    ]
+
+    for filename in _parse_multi(filenames):
+        cvg1 = coverage_data.coverage(bnum=bnum1, filename=filename)
+        cvg2 = coverage_data.coverage(bnum=bnum2, filename=filename)
+        if cvg1 is None or cvg2 is None:
+            delta = "NaN"
+        else:
+            delta = cvg2-cvg1
+        rows.append([filename, cvg1, cvg2, delta])
+
+    results = [{"columns": columns,
+                "rows": rows,
+                "type" : "table"}]
+
+    return results
+
+
 def _timeserie_results(*, target, request_ts_ms):
     """
     Target name format:
-        <xd_versions>:<first_bnum>:<names>:xd
-        or
-        <xce_versions>:<first_bnum>:<names>:xce
+        <xce|xd>:<versions>:<first_bnum>:<names>
     """
 
     logger.info("start")
@@ -173,7 +221,7 @@ def _timeserie_results(*, target, request_ts_ms):
         logger.exception(err)
         abort(404, ValueError(err))
     try:
-        vers,first_bnum,names,mode = t_name.split(':')
+        mode,vers,first_bnum,names = t_name.split(':')
     except Exception as e:
         err = 'incomprehensible target name: {}'.format(t_name)
         logger.exception(err)
@@ -243,8 +291,15 @@ def query_metrics():
     for target in req['targets']:
         if not request_type:
             request_type = target.get('type', 'timeserie')
-        if request_type != 'timeserie':
-            abort(404, Exception('only timeserie type supported'))
+
+        if request_type == 'table':
+            target_name = target.get('target', None)
+            logger.debug("target name: {}".format(target_name))
+            # Table target name contains enough meta-data to produce the entire
+            # comparison table.  We're done in one.
+            results = _comparison_table(target_name=target_name)
+            logger.debug("table results: {}".format(results))
+            return jsonify(results)
 
         # Return results in timeserie format, but we're not actually
         # using a time-series.  We force all results into the board's

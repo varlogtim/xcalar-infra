@@ -1,7 +1,7 @@
 Push new container to the registry:
 
     docker tag coverage-grafana-datasource registry.service.consul/xcalar-qa/coverage-grafana-datasource
-    docker push
+    docker push registry.service.consul/xcalar-qa/coverage-grafana-datasource
 
 Do the nomad stuff:
     Job file here:
