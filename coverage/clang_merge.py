@@ -35,7 +35,9 @@ if __name__ == '__main__':
                         dest='coverage_dirs', action='append', required=True)
     parser.add_argument("--out", help="output directory to store merged results",
                         required=True)
+    parser.add_argument("--src", help="directory containing sources to use for llvm-cov show",
+                        required=True)
     parser.add_argument("--force", help="force re-creation of all files", action='store_true')
     args = parser.parse_args()
 
-    ClangCoverageDir.merge(dirs=args.coverage_dirs, out_dir=args.out, force=args.force)
+    ClangCoverageDir.merge(dirs=args.coverage_dirs, out_dir=args.out, src_dir=args.src, force=args.force)

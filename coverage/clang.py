@@ -145,7 +145,8 @@ class ClangCoverageDir(object):
 
     ENV_PARAMS = {"CLANG_BIN_PATH": {"default":"/usr/local/bin/clang"},
                   "ARTIFACTS_RAWPROF_DIR_NAME": {"default": "rawprof"},
-                  "ARTIFACTS_BIN_DIR_NAME": {"default": "bin"}}
+                  "ARTIFACTS_BIN_DIR_NAME": {"default": "bin"},
+                  "ARTIFACTS_SRC_DIR_NAME": {"default": "src"}}
 
     def __init__(self, *, coverage_dir, bin_name="usrnode",
                                         profdata_file_name="usrnode.profdata",
@@ -161,10 +162,14 @@ class ClangCoverageDir(object):
         self.json_file_name = json_file_name
         self.rawprof_dir_name = cfg.get("ARTIFACTS_RAWPROF_DIR_NAME")
         self.bin_dir_name = cfg.get("ARTIFACTS_BIN_DIR_NAME")
+        self.src_dir_name = cfg.get("ARTIFACTS_SRC_DIR_NAME")
         self.clang_bin_path = cfg.get("CLANG_BIN_PATH")
 
     def bin_path(self):
         return os.path.join(self.coverage_dir, self.bin_dir_name, self.bin_name)
+
+    def src_dir_path(self):
+        return os.path.join(self.coverage_dir, self.src_dir_name)
 
     def profdata_path(self):
         return os.path.join(self.coverage_dir, self.profdata_file_name)
@@ -259,7 +264,7 @@ class ClangCoverageDir(object):
                                 .format(cp.stderr.decode('utf-8')))
 
     @classmethod
-    def _create_html(cls, *, clang_tools, out_dir, bin_path, profdata_path, force):
+    def _create_html(cls, *, clang_tools, out_dir, src_dir, bin_path, profdata_path, force):
         logger = logging.getLogger(__name__)
         logger.debug("start")
 
@@ -272,11 +277,23 @@ class ClangCoverageDir(object):
         cargs.extend(["-instr-profile", profdata_path])
         cargs.extend(["-format", "html"])
         cargs.extend(["-output-dir", out_dir])
+        if src_dir is not None and os.path.exists(src_dir):
+            cargs.extend(["--path-equivalence", "/,{}".format(src_dir)])
+        else:
+            logger.error("expected src dir {} does not exist".format(src_dir))
         logger.debug("run: {}".format(cargs))
         cp = subprocess.run(cargs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if cp.returncode:
             err = "llvm-cov failure: {}".format(cp.stdout.decode('utf-8'))
             raise Exception(err)
+
+        coverage_dir_path = os.path.join(out_dir, "coverage")
+        if os.path.exists(coverage_dir_path):
+            cargs = ["chmod", "-R", "o+rx", coverage_dir_path]
+            cp = subprocess.run(cargs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if cp.returncode:
+                err = "chmod failure: {}".format(cp.stdout.decode('utf-8'))
+                logger.error(err)
 
     @classmethod
     def _merge_profdata(cls, *, clang_tools, profdata_files, profdata_path, force):
@@ -342,6 +359,7 @@ class ClangCoverageDir(object):
         if create_html:
             self._create_html(clang_tools=clang_tools,
                               out_dir=self.coverage_dir,
+                              src_dir=self.src_dir_path(),
                               bin_path=bin_path,
                               profdata_path=profdata_path,
                               force=force)
@@ -349,6 +367,7 @@ class ClangCoverageDir(object):
     @classmethod
     def merge(cls, *, dirs,
                       out_dir,
+                      src_dir,
                       bin_name="usrnode",
                       profdata_file_name="usrnode.profdata",
                       force=False,
@@ -403,6 +422,7 @@ class ClangCoverageDir(object):
         if create_html:
             cls._create_html(clang_tools=clang_tools,
                              out_dir=out_dir,
+                             src_dir=src_dir,
                              bin_path=bin_path,
                              profdata_path=profdata_path,
                              force=True) # Always re-create output files
