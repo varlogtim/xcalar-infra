@@ -1,4 +1,5 @@
 import dateutil.parser
+import re
 from datetime import datetime
 from html.entities import name2codepoint
 from html.parser import HTMLParser
@@ -7,9 +8,9 @@ from html.parser import HTMLParser
 # -------------------
 # validate time
 # -------------------
-def validate_iso( sval ):
+def validate_iso( dt ):
     try:
-        valid_datetime = dateutil.parser.parse(sval)
+        valid_datetime = dateutil.parser.parse(dt)
         return True
     except ValueError:
         return False
@@ -149,6 +150,25 @@ class MyHTMLParser(HTMLParser):
                 #     self.RESULT.append(tuple(parsed))
                 #     print(f'*** {parsed}')
 
+            elif ' PASSED ' in data:
+                # 05:28:40 PASS: mgmtdtest.sh 95 - Test "importRetina" passed
+                # 08:41:28 io/test_export.py::test_multiple_parquet_telecom_prefixed PASSED         [ 98%]
+
+                subset = re.sub('PASSED\s+\[ \d+%\]', '', data.strip())
+                current_time = self.last_time_record if self.result[1].isspace() else self.result[1]
+                if not validate_iso(current_time): return
+
+                delta = calculate_delta2(self.last_time_record, current_time)
+                parsed.append(f'{self.date} {current_time}')    # datetime
+                parsed.append(self.build_number)                # build_number
+                parsed.append(subset)                           # subset
+                parsed.append(delta)                            # delta
+                parsed.append(self.slave)                       # slave_host
+                parsed.append('PASS')                           # status
+                self.last_time_record = current_time
+                self.RESULT.append(tuple(parsed))
+                print(f'--- {parsed}')
+
             elif 'FAIL' in data:
                 if 'FAIL:' in data:
                     # 01:02:11 FAIL: mgmtdtest.sh returned 1
@@ -240,4 +260,3 @@ if __name__ == '__main__':
     dt1 = '18:06:59.321'
     dt2 = '18:09:35.78'
     calculate_delta3( dt1, dt2 )
-
