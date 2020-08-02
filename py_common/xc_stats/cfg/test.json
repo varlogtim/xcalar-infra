@@ -1,0 +1,30 @@
+{
+    "figsize": [22,5],
+    "figures": [
+        {
+            "figsize": [8,5],
+            "title": "CPU Sys",
+            "y1label": "CPU sys%",
+            "metrics": [
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, sys]"
+                }
+            ]
+        },
+        {
+            "title": "Memory vs. Idle",
+            "y1label": "SystemMemoryCgXCEUsed",
+            "y2label": "CPU idle %",
+
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemMemoryCgXCEUsed]"
+                },
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, idle]",
+                    "ploty2": true
+                }
+            ]
+        }
+    ]
+}

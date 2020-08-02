@@ -1,0 +1,30 @@
+{
+    "figsize": [22,5],
+    "y1label": "CPU Pct",
+    "figures": [
+        {
+            "title": "All CPU Idle Pct",
+            "metrics": [
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, idle]"
+                }
+            ]
+        },
+        {
+            "title": "All CPU Sys Pct",
+            "metrics": [
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, sys]"
+                }
+            ]
+        },
+        {
+            "title": "All CPU User Pct",
+            "metrics": [
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, usr]"
+                }
+            ]
+        }
+    ]
+}
