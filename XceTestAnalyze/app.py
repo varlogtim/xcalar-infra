@@ -32,6 +32,9 @@ if __name__ == '__main__':
         # 1. Insert build info
         # --------------------
         info = jenkins.fetch_job_build_info(job_name, build_number)
+        if info is None:
+            continue
+
         timestamp = info['test_timestamp']
         slave = info['builtOn']
         insert_info(info)
@@ -67,5 +70,3 @@ if __name__ == '__main__':
         # --------------------
         result = parser.get_result()
         insert(result)
-
-

@@ -134,22 +134,6 @@ class MyHTMLParser(HTMLParser):
                     self.last_time_record = self.result[1]
                     pass
 
-                # else:
-                #     #
-                #     current_time = self.last_time_record if self.result[1].isspace() else self.result[1]
-                #     # delta = calculate_delta2( self.last_time_record, current_time )
-                #     delta = 0
-                #     data_trim = data.replace('PASS:', '').replace('passed','').strip()
-                #     parsed.append(f'{self.date} {current_time}')  # datetime
-                #     parsed.append(self.build_number)                # build_number
-                #     parsed.append(data_trim)                        # subset
-                #     parsed.append(delta)                            # delta
-                #     parsed.append(self.slave)                       # slave_host
-                #     parsed.append('PASS')                           # status
-                #     self.last_time_record = self.result[1]
-                #     self.RESULT.append(tuple(parsed))
-                #     print(f'*** {parsed}')
-
             elif ' PASSED ' in data:
                 # 05:28:40 PASS: mgmtdtest.sh 95 - Test "importRetina" passed
                 # 08:41:28 io/test_export.py::test_multiple_parquet_telecom_prefixed PASSED         [ 98%]
@@ -159,12 +143,12 @@ class MyHTMLParser(HTMLParser):
                 if not validate_iso(current_time): return
 
                 delta = calculate_delta2(self.last_time_record, current_time)
-                parsed.append(f'{self.date} {current_time}')    # datetime
-                parsed.append(self.build_number)                # build_number
-                parsed.append(subset)                           # subset
-                parsed.append(delta)                            # delta
-                parsed.append(self.slave)                       # slave_host
-                parsed.append('PASS')                           # status
+                parsed.append(f'{self.date} {current_time}')        # datetime
+                parsed.append(self.build_number)                    # build_number
+                parsed.append(subset)                               # subset
+                parsed.append(delta)                                # delta
+                parsed.append(self.slave)                           # slave_host
+                parsed.append('PASS')                               # status
                 self.last_time_record = current_time
                 self.RESULT.append(tuple(parsed))
                 print(f'--- {parsed}')

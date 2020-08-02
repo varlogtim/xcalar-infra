@@ -43,30 +43,34 @@ class jenkins_fetcher(object):
         return slave['builtOn']
 
     def fetch_job_build_info(self, job_name, build_no):
-        server = self.jenkins.Jenkins(self.url, username=self.id, password=self.pw)
-        # info = server.get_job_info(job_name, int(build_no))       # this is too much and slow
-        info = server.get_build_info(job_name, int(build_no))
-        epoch = int(info['timestamp']) / 1000
-        timestamp_obj = datetime.fromtimestamp(epoch)
-        timestamp = datetime.fromtimestamp(epoch).strftime("%Y_%m_%d, %H:%M:%S.%f")
+        try:
+            server = self.jenkins.Jenkins(self.url, username=self.id, password=self.pw)
+            # info = server.get_job_info(job_name, int(build_no))       # this is too much and slow
+            info = server.get_build_info(job_name, int(build_no))
+            epoch = int(info['timestamp']) / 1000
+            timestamp_obj = datetime.fromtimestamp(epoch)
+            timestamp = datetime.fromtimestamp(epoch).strftime("%Y_%m_%d, %H:%M:%S.%f")
 
-        info_dict = {
-            'id' : info['id'],
-            'test_timestamp' : timestamp_obj,
-            'job_name' : job_name,
-            'displayName' : info['displayName'],
-            'building' : str(info['building']),
-            'description' : info['description'] if info['description'] else '',
-            'duration' : info['duration'],
-            'estimatedDuration' : info['estimatedDuration'],
-            'executor' : info['executor'] if info['executor'] else '',
-            'fullDisplayName' : info['fullDisplayName'],
-            'queueId' : info['queueId'],
-            'url' : info['url'],
-            'builtOn' : info['builtOn'],
-            'result' : info['result']
-        }
-        return info_dict
+            info_dict = {
+                'id' : info['id'],
+                'test_timestamp' : timestamp_obj,
+                'job_name' : job_name,
+                'displayName' : info['displayName'],
+                'building' : str(info['building']),
+                'description' : info['description'] if info['description'] else '',
+                'duration' : info['duration'],
+                'estimatedDuration' : info['estimatedDuration'],
+                'executor' : info['executor'] if info['executor'] else '',
+                'fullDisplayName' : info['fullDisplayName'],
+                'queueId' : info['queueId'],
+                'url' : info['url'],
+                'builtOn' : info['builtOn'],
+                'result' : info['result']
+            }
+            return info_dict
+        except Exception as e:
+            print(f'Warning: {e}')
+            pass
 
 
 if __name__ == '__main__':
