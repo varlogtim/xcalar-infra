@@ -27,14 +27,24 @@ def frequence_bar_chart(size, times=[], nums=[], nums2=[], status=[],  title=Non
     plt.title(title)
 
     plt.xticks(x_pos, nums2)
-    fig.set_size_inches(w=0.5 * size, h=8, forward=True)
+    fig.set_size_inches(w=0.3 * size, h=8, forward=True)
     autolabel(a)
+
+    # set margins ( no white space )
+    plt.margins(x=0)
+
+    # set font
+    font = {'family': 'normal',
+            'weight': 'bold',
+            'size': 10}
+
+    plt.rc('font', **font)
     # set color
-    # barlist[0].set_color('r')
     for i in range(len(status)):
         if status[i] == 'FAIL':
             a[i].set_color('r')
     plt.show()
+    plt.savefig(f'{title}.png')
 
 
 def bar(top_n, tasks, nums, nums2, xlabel='', ylabel='', title='', bar_color='green'):

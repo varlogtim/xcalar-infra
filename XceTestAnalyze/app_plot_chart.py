@@ -28,8 +28,8 @@ if __name__ == '__main__':
     # -----------------------
     # single test
     # -----------------------
-    find_status_by_single_test('io/test_export.py::test_multiple_parquet_telecom_prefixed', args.size, args.days)
-    find_status_by_single_test('test_multiple_parquet_telecom_prefixed', args.size, args.days)
+    # find_status_by_single_test('io/test_export.py::test_multiple_parquet_telecom_prefixed', args.size, args.days)
+    find_status_by_single_test('%test_multiple_parquet_telecom_prefixed%', args.size, args.days)
 
 
     # -----------------------

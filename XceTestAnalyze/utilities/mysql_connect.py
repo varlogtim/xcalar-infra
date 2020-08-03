@@ -175,7 +175,7 @@ def query_with_fetchall_dictionary(sql=None, size=10):
 ## insight
 ##
 def find_status_by_single_test( subtest, size=10, days=182):
-    title = f'{subtest}\nFind status in last {days} days'
+    title = f'{subtest}\n Pass/ Fail in last {days} days'
     print(f'\n## {title}')
     # SUBSTRING_INDEX(SUBSTRING_INDEX(subset, ' ', 1), ' ', -1) AS task
     sql = f'''
@@ -186,7 +186,7 @@ def find_status_by_single_test( subtest, size=10, days=182):
             status
       FROM xce_test_logs
       WHERE subset like '{subtest}' and DATEDIFF(NOW(), test_timestamp) <= {days}
-      ORDER BY build_number
+      ORDER BY build_number desc
   '''
 
     result = query_with_fetchall_dictionary(sql, size)
@@ -202,9 +202,12 @@ def find_status_by_single_test( subtest, size=10, days=182):
         nums2.append(int(row['build_number']))
         nums.append(float(row['delta']))
         status_list.append(str(row['status']))
-        time_buildno.append(str(row['build_number'])+'\n'+str(row['test_timestamp']))
+        time_buildno.append(str(row['build_number'])+' ('+str(row['test_timestamp']) + ')')
 
-    frequence_bar_chart(size, times = times, nums=nums, nums2=time_buildno, status=status_list,  title=title, xlabel='(build_numbers)', ylabel='(seconds)')
+    # use len(nums) to get the bar counts
+    # Image size coundn't over 2^6 inches.
+    print(f'length: {len(nums)}')
+    frequence_bar_chart(len(nums), times = times, nums=nums, nums2=time_buildno, status=status_list,  title=title, xlabel='(build_numbers)', ylabel='(seconds)')
 
 
 
