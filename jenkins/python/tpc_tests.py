@@ -67,14 +67,14 @@ def test_jdbc_cmds(*, tpctype, argsdict, imd):
     sdkSess = "{}SdkSess_{}".format(tpctype, sid)
 
     # Base part of any commands...
-    cmd = "{} -H {} --jdbc-port {} -a {} -U {} -P {}"\
+    cmd = "{} --jdbc-port {} -a {}"\
           .format(argsdict['test_jdbc_path'],
-                  argsdict['jdbc_host'],
                   argsdict['jdbc_port'],
-                  argsdict['api_port'],
-                  argsdict['user'],
-                  argsdict['pass'])
+                  argsdict['api_port'])
 
+    cmd += " -U {}".format(argsdict["{}_user".format(tpctype)])
+    cmd += " -P {}".format(argsdict["{}_pass".format(tpctype)])
+    cmd += " -H {}".format(argsdict["{}_jdbc_host".format(tpctype)])
     cmd += " -t test_{}_xd_dataflows".format(tpctype)
     cmd += " -p {}".format(argsdict["{}_plan".format(tpctype)])
     cmd += " --SF {}".format(argsdict["{}_sf".format(tpctype)])
@@ -147,14 +147,15 @@ if __name__ == '__main__':
 
     parser.add_argument("--test_id", help="Test ID string", required=True)
     parser.add_argument("--test_jdbc_path", help="Path to test_jdbc", required=True)
-    parser.add_argument("--jdbc_host", help="JDBC server hostname", required=True)
+
     parser.add_argument("--jdbc_port", help="JDBC server port", default=10000)
     parser.add_argument("--api_port", help="API port", default=443)
-    parser.add_argument("--user", help="username", default="admin")
-    parser.add_argument("--pass", help="password", default="admin")
 
+    # TPC-DS
+    parser.add_argument("--tpcds_user", help="username", default="admin")
+    parser.add_argument("--tpcds_pass", help="password", default="admin")
     parser.add_argument("--tpcds_imd_merge", help="Do TPC-DS IMD merge test", action="store_true")
-
+    parser.add_argument("--tpcds_jdbc_host", help="TPC-DS JDBC server hostname")
     parser.add_argument("--tpcds_sf", help="TPC-DS Scale Factor", default=10)
     parser.add_argument("--tpcds_plan", help="TPC-DS Plan Path", default="/netstore/datasets/tpcds_new/sf_10")
     parser.add_argument("--tpcds_workers", help="TPC-DS workers", type=int, default=0)
@@ -162,8 +163,11 @@ if __name__ == '__main__':
     parser.add_argument("--tpcds_seed", help="TPC-DS random seed", type=int, default=123)
     parser.add_argument("--tpcds_skips", help="Comma-separated list of TPC-DS queries to skip")
 
+    # TPC-H
+    parser.add_argument("--tpch_user", help="username", default="admin")
+    parser.add_argument("--tpch_pass", help="password", default="admin")
     parser.add_argument("--tpch_imd_merge", help="Do TPC-H IMD merge test", action="store_true")
-
+    parser.add_argument("--tpch_jdbc_host", help="TPC-H JDBC server hostname")
     parser.add_argument("--tpch_sf", help="TPC-H Scale Factor", default=10)
     parser.add_argument("--tpch_plan", help="TPC-H Plan Path", default="/netstore/datasets/tpch_new/sf_10")
     parser.add_argument("--tpch_workers", help="TPC-H workers", type=int, default=0)
