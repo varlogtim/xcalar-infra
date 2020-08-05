@@ -55,7 +55,7 @@ fi
          --region ${AWS_REGION} &&
      aws cloudformation deploy --template-file packaged-sam.yaml \
          --stack-name ${CLOUDFORMATION_STACK_NAME} \
-         --capabilities CAPABILITY_IAM --region ${AWS_REGION} \
+         --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --region ${AWS_REGION} \
          --role-arn ${ROLE} && echo '0' > "$STATUS_FILE" ||
          echo '1' > "$STATUS_FILE")
 

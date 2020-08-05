@@ -113,7 +113,7 @@ main() {
     export PATH=$PATH:/opt/xcalar/bin
     hash -r
     PY3="$(which python3.6)"
-    PIP="$(which pip3)"
+    PIP="$PY3 -m pip"
     output='pip-bundler.tar.gz'
     install_target=''
     while [ $# -gt 0 ]; do
@@ -175,7 +175,7 @@ main() {
                 mkdir -p "$install_target" || die 2 "Failed to create $install_target"
             fi
             cp requirements.txt constraints.txt $install_target
-            PIP=${PIP:-/opt/xcalar/bin/pip3}
+            PIP="${PIP:-/opt/xcalar/bin/python3 -m pip}"
             PIP_ARGS=(-t $install_target --no-index --no-cache-dir --find-links file://${DIR}/wheels/ ${con:+-c $con})
             $PIP install "${PIP_ARGS[@]}" -U setuptools \
             && $PIP install "${PIP_ARGS[@]}" ${req:+-r $req} \

@@ -121,7 +121,7 @@ for STACK in ${STACK_LIST[@]}; do
                                                 ${MAINSTACKNAME_PARAMETER} \
                                                 ${SESSIONTABLE_PARAMETER} \
                                                 --role-arn ${ROLE} \
-                                                --capabilities CAPABILITY_IAM
+                                                --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
             fi
         fi
     else

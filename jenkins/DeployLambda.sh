@@ -29,7 +29,7 @@ fi
 sam build &&
 sam package --output-template-file packaged.yaml --s3-bucket ${S3_BUCKET} &&
 sam deploy --template-file packaged.yaml \
-           --capabilities CAPABILITY_IAM \
+           --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
            --stack-name ${STACK_NAME} \
            --role-arn ${ROLE} \
            --parameter-overrides UserTable=${USER_TABLE_NAME} BillingTable=${BILLING_TABLE_NAME} \

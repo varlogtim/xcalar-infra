@@ -114,7 +114,7 @@ for STACK in ${STACK_LIST[@]}; do
                                                 --parameters ParameterKey=ClusterSize,ParameterValue=0 \
                                                 ${CNAME_PARAMETER} ${AUTHSTACKNAME_PARAMETER} ${SESSIONTABLE_PARAMETER} ${MAINSTACKNAME_PARAMETER} \
                                                 --role-arn ${ROLE} \
-                                                --capabilities CAPABILITY_IAM
+                                                --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
             fi
         fi
     else
