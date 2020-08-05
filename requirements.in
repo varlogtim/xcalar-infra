@@ -1,6 +1,5 @@
 ansible
 ansible-modules-hashivault
-awscli
 aws-sam-cli
 azure-storage-blob>=2.1.0
 azure-storage-common>=2.1.0
@@ -17,7 +16,6 @@ git-review
 jinja2-cli[yaml]
 jupyterlab
 localstack
-notebook
 pip-tools
 pre-commit
 #ptvsd
