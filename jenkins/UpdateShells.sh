@@ -167,7 +167,7 @@ for STACK in ${CHECKED_STACK_LIST[@]}; do
                                         --no-use-previous-template \
                                         ${URL_PARAMS} ParameterKey=License,ParameterValue=${KEY} \
                                         --role-arn ${ROLE} \
-                                        --capabilities CAPABILITY_IAM
+                                        --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
         PREV_INFO=$(aws dynamodb get-item --table ${STACK_INFO_TABLE} \
                     --key '{"stack_id":{"S":"'"${STACK}"'"}}' | jq -r .Item.current_info.S)
         #Assue only template url and iamge id will change.

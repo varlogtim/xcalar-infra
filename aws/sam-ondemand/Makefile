@@ -40,7 +40,7 @@ package: $(BUILD)/.updated
 
 deploy: package
 	$(SAM) validate
-	$(SAM) deploy --template-file $(OUTPUT) --stack-name $(STACK) --s3-bucket $(S3BUCKET) --s3-prefix '$(S3PREFIX)' --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset --parameter-overrides S3Bucket=$(S3BUCKET) S3Prefix='$(S3PREFIX)' `cat parameters/overrides.txt` AllowedCIDR=`curl -4 -s https://checkip.amazonaws.com`/32
+	$(SAM) deploy --template-file $(OUTPUT) --stack-name $(STACK) --s3-bucket $(S3BUCKET) --s3-prefix '$(S3PREFIX)' --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --no-fail-on-empty-changeset --parameter-overrides S3Bucket=$(S3BUCKET) S3Prefix='$(S3PREFIX)' `cat parameters/overrides.txt` AllowedCIDR=`curl -4 -s https://checkip.amazonaws.com`/32
 
 
 server:

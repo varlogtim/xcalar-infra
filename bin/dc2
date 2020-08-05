@@ -341,7 +341,7 @@ dc2_deploy() {
 
     case "$MODE" in
         create)
-            if ! aws cloudformation create-stack --stack-name "$NAME" --capabilities CAPABILITY_IAM --template-url "${templateUrl}" --parameters "$(cfn-flip < "$PARAMS" | jq -r '.Parameters')"; then
+            if ! aws cloudformation create-stack --stack-name "$NAME" --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --template-url "${templateUrl}" --parameters "$(cfn-flip < "$PARAMS" | jq -r '.Parameters')"; then
                 die "Failed to create stack $NAME"
             fi
             if ((WAIT)); then
@@ -357,7 +357,7 @@ dc2_deploy() {
             if changeSetID="$(aws cloudformation \
                 create-change-set \
                 --stack-name "$NAME" \
-                --capabilities CAPABILITY_IAM \
+                --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
                 --template-url "${templateUrl}" \
                 --parameters "$(cfn-flip < "$PARAMS" | jq -r '.Parameters')" \
                 --change-set-name $changeSet \

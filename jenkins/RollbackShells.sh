@@ -152,7 +152,7 @@ for STACK in ${STACK_LIST[@]}; do
                                             --no-use-previous-template \
                                             ${PREV_INFO} ParameterKey=License,ParameterValue=${KEY} \
                                             --role-arn ${ROLE} \
-                                            --capabilities CAPABILITY_IAM
+                                            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
             aws dynamodb update-item --table-name ${STACK_INFO_TABLE} \
                                 --key '{"stack_id":{"S":"'"${STACK}"'"}}' \
                                 --update-expression "SET #C = :c REMOVE prev_info"\

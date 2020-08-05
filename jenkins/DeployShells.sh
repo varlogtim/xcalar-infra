@@ -52,7 +52,7 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
         ${URL_PARAMS} ParameterKey=License,ParameterValue=${KEY_VAL} \
         --tags Key=available,Value=true \
                 Key=deployment,Value=saas \
-        --capabilities CAPABILITY_IAM)
+        --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND)
         STACK_ID=$(echo $RET | jq -r .StackId)
         if [ -z ${STACK_ID} ]; then
             echo "create '${STACK_ID}' failes"
@@ -92,7 +92,7 @@ for STACK in ${AVAILABLE_STACKS[@]}; do
                                             --no-use-previous-template \
                                             ${URL_PARAMS} ParameterKey=License,ParameterValue=${KEY_VAL} \
                                             --role-arn ${ROLE} \
-                                            --capabilities CAPABILITY_IAM
+                                            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
             aws dynamodb put-item --table-name ${STACK_INFO_TABLE} \
                                 --item '{
                                     "stack_id": {"S": "'"${STACK}"'"},

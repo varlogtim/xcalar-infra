@@ -29,6 +29,11 @@ creds_table = os.environ.get('CREDS_TABLE')
 cfn_role_arn = os.environ.get('CFN_ROLE_ARN')
 default_credit = '500'
 
+IamCapabilities=[
+                'CAPABILITY_IAM',
+                'CAPABILITY_AUTO_EXPAND'
+            ]
+
 def get_available_stack(user_name):
     all_stacks = cfn_client.describe_stacks()['Stacks']
     available_status = ['CREATE_COMPLETE','UPDATE_COMPLETE']
@@ -97,9 +102,7 @@ def start_cluster(user_name, cluster_params):
             StackName=cfn_id,
             UsePreviousTemplate=True,
             Parameters=stack_params,
-            Capabilities=[
-                'CAPABILITY_IAM',
-            ],
+            Capabilities=IamCapabilities,
             RoleARN=cfn_role_arn
         )
     else:
@@ -107,9 +110,7 @@ def start_cluster(user_name, cluster_params):
             StackName=cfn_id,
             UsePreviousTemplate=True,
             Parameters=stack_params ,
-            Capabilities=[
-                'CAPABILITY_IAM',
-            ],
+            Capabilities=IamCapabilities,
             RoleARN=cfn_role_arn,
             Tags=tags
         )
@@ -150,9 +151,7 @@ def stop_cluster(user_name):
         StackName = cfn_id,
         UsePreviousTemplate = True,
         Parameters = stack_params,
-        Capabilities=[
-            'CAPABILITY_IAM',
-        ],
+        Capabilities=IamCapabilities,
         RoleARN=cfn_role_arn
     )
     return _make_reply(_http_status(response), {'status': Status.OK})
