@@ -311,6 +311,21 @@ function setServerCookie(res, name, val, secret, options) {
     res.setHeader('Set-Cookie', header);
 }
 
+function clearCookie(res, name, options) {
+    /**
+     * Express@4.15.x ships with cookie@0.3.0 which doens't support sameSite flag
+     * So we have to use cookie@0.4.0 to serialize cookies
+     */
+    var data = cookie.serialize(name, '', Object.assign(options, {
+        expires: new Date(0)
+    }));
+
+    var prev = res.getHeader('Set-Cookie') || [];
+    var header = Array.isArray(prev) ? prev.concat(data) : [prev, data];
+
+    res.setHeader('Set-Cookie', header);
+}
+
 router.get('/', (req, res) => {
   res.render('index', {
     apiUrl: req.apiGateway ? `https://${req.apiGateway.event.headers.Host}/${req.apiGateway.event.requestContext.stage}` : 'http://localhost:3000'
@@ -405,6 +420,7 @@ router.post('/login',
                                     { maxAge: 1000*req.session.timeout,
                                       domain: saasCookieDomain,
                                       httpOnly: true, signed: false,
+                                      sameSite: 'none', secure: true,
                                       path: '/' });
 
                     setSessionCookie(res, "connect.sid", req.sessionID,
@@ -412,6 +428,7 @@ router.post('/login',
                                      { maxAge: 1000*req.session.timeout,
                                        domain: saasCookieDomain,
                                        httpOnly: true, signed: false,
+                                       sameSite: 'none', secure: true,
                                        path: '/' });
 
                     res.status(200).send(successResp);
@@ -463,6 +480,7 @@ router.get('/status',
                                    { maxAge: 1000*req.session.timeout,
                                      domain: saasCookieDomain,
                                      httpOnly: true, signed: false,
+                                     sameSite: 'none', secure: true,
                                      path: '/' });
 
                    setSessionCookie(res, "connect.sid", req.sessionID,
@@ -470,14 +488,17 @@ router.get('/status',
                                     { maxAge: 1000*req.session.timeout,
                                       domain: saasCookieDomain,
                                       httpOnly: true, signed: false,
+                                      sameSite: 'none', secure: true,
                                       path: '/' });
                } else {
-                   res.clearCookie('connect.sid');
-                   res.clearCookie('connect.sid', { domain: saasCookieDomain,
+                   clearCookie(res, 'connect.sid', { sameSite: 'none', secure: true });
+                   clearCookie(res, 'connect.sid', { domain: saasCookieDomain,
                                                     httpOnly: true, signed: false,
+                                                    sameSite: 'none', secure: true,
                                                     path: '/' });
-                   res.clearCookie('jwt_token', { domain: saasCookieDomain,
+                   clearCookie(res, 'jwt_token', { domain: saasCookieDomain,
                                                   httpOnly: true, signed: false,
+                                                  sameSite: 'none', secure: true,
                                                   path: '/' });
                }
 
@@ -496,12 +517,14 @@ router.get("/logout", ensureAuthenticated, function(req, res, next) {
         }
 
         req.logOut();
-        res.clearCookie('connect.sid');
-        res.clearCookie('connect.sid', { domain: saasCookieDomain,
+        clearCookie(res, 'connect.sid', { sameSite: 'none', secure: true });
+        clearCookie(res, 'connect.sid', { domain: saasCookieDomain,
                                          httpOnly: true, signed: false,
+                                         sameSite: 'none', secure: true,
                                          path: '/' });
-        res.clearCookie('jwt_token', { domain: saasCookieDomain,
+        clearCookie(res, 'jwt_token', { domain: saasCookieDomain,
                                        httpOnly: true, signed: false,
+                                       sameSite: 'none', secure: true,
                                        path: '/' });
 
         findByIdFull(id, (findErr, user) => {
