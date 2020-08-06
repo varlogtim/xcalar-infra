@@ -240,7 +240,7 @@ createCluster() {
 
 installDeps() {
     rcmd sudo yum install -y tmux nc gcc gcc-c++ tcpdump pbzip2 java-1.8.0-openjdk-headless
-    rcmd sudo "$optRemoteXlrDir/bin/pip" install "gnureadline==6.3.8" "multiset==2.1.1" "JPype1==0.6.3" "JayDeBeApi==1.1.1"
+    rcmd sudo "$optRemoteXlrDir/bin/python3" -m pip install "gnureadline==6.3.8" "multiset==2.1.1" "JPype1==0.6.3" "JayDeBeApi==1.1.1"
     # XXX: Fix in test_jdbc
     local imdTestDir="/opt/xcalar/src/sqldf/tests/IMDTest/"
     rcmd mkdir -p "$optRemotePwd"
