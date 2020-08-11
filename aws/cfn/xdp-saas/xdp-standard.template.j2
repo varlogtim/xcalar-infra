@@ -64,11 +64,6 @@ Parameters:
     Type: String
     MinLength: 5
     MaxLength: 128
-  NotificationEmail:
-    Description: Email address to receive updates
-    Type: String
-    MinLength: 5
-    MaxLength: 128
   ClusterSize:
     Description: Desired number of EC2 instances to launch in your cluster
     Type: Number
@@ -157,7 +152,6 @@ Metadata:
         Parameters:
           - AdminUsername
           - AdminPassword
-          - NotificationEmail
 {%- if enableLicense %}
           - License
 {%- endif %}
@@ -203,8 +197,6 @@ Metadata:
         default: 'Administrator Username'
       AdminPassword:
         default: 'Administrator Password'
-      NotificationEmail:
-        default: 'Notification Email'
       InstanceType:
         default: 'EC2 Instance Type'
       ClusterSize:
