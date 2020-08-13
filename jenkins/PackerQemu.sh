@@ -56,7 +56,13 @@ export ROLE=${ROLE:-jenkins_slave}
 export CLUSTER=${CLUSTER:-jenkins-slave}
 export TARGET=${TARGET_OSID}-${ROLE}-${CLUSTER}-qemu
 
+set +e
 make ${TARGET}/tdhtest BUILD_NUMBER=$BUILD_NUMBER OUTPUT_DIRECTORY=$OUTPUT_DIRECTORY OUTDIR=$OUTDIR PUPPET_SRC=$PUPPET_SRC PUPPET_SHA1=$PUPPET_SHA1 VM_NAME="${TARGET}-${BUILD_NUMBER}" MANIFEST=$MANIFEST ROLE=$ROLE CLUSTER=$CLUSTER TARGET_OSID=$TARGET_OSID
-if test -e $(basename $MANIFEST); then
-    cp $(basename $MANIFEST) $MANIFEST
+rc=$?
+if [ $rc -eq 0 ]; then
+    if test -e $(basename $MANIFEST); then
+        cp $(basename $MANIFEST) $MANIFEST
+    fi
 fi
+pkill -ef qemu-
+exit $rc
