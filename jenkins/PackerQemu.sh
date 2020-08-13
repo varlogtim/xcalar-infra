@@ -13,6 +13,9 @@ export PROJECT=${PROJECT:-xdp-awsmp}
 
 export PUPPETSRCDIR=$PWD/puppet
 export OUTPUT_DIRECTORY=/netstore/builds/byJob/${JOB_NAME}/${BUILD_NUMBER}
+export PACKER_NO_COLOR=1
+export CHECKPOINT_DISABLE=1
+
 mkdir -p $OUTPUT_DIRECTORY
 
 . infra-sh-lib

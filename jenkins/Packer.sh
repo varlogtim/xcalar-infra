@@ -11,6 +11,9 @@ MANIFEST=$OUTDIR/packer-manifest.json
 export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
 export PROJECT=${PROJECT:-xdp-awsmp}
 
+export PACKER_NO_COLOR=1
+export CHECKPOINT_DISABLE=1
+
 if [ -n "$EXECUTOR_NUMBER" ]; then
     git clean -fxd aws packer azure
 fi
@@ -64,10 +67,22 @@ resolve_installer() {
 
 do_packer() {
     case "$BUILDER" in
-        amazon-*) CLOUD=aws; CLOUD_STORE=s3;;
-        arm-*|azure-*) CLOUD=azure; CLOUD_STORE=az;;
-        google*) CLOUD=google; CLOUD_STORE=gs;;
-        qemu*) CLOUD=qemu; CLOUD_STORE=;;
+        amazon-*)
+            CLOUD=aws
+            CLOUD_STORE=s3
+            ;;
+        arm-* | azure-*)
+            CLOUD=azure
+            CLOUD_STORE=az
+            ;;
+        google*)
+            CLOUD=google
+            CLOUD_STORE=gs
+            ;;
+        qemu*)
+            CLOUD=qemu
+            CLOUD_STORE=
+            ;;
     esac
 
     resolve_installer
@@ -86,7 +101,6 @@ do_packer() {
             say "License file $LICENSE_FILE not found"
         fi
     fi
-
 
     cd $XLRINFRADIR/packer/aws
     #export INSTALLER_URL=$(installer-url.sh -d s3 $INSTALLER)
@@ -129,21 +143,21 @@ do_packer() {
 
 do_upload_template() {
     (
-    cd $XLRINFRADIR/aws/cfn
-    local builder osid
-    packer_manifest_all $MANIFEST > $OUTDIR/amis.yaml
-    if [ -z "$INSTALLER_TAG" ]; then
-        set -a
-        eval $(installer-version.sh --format=sh "$INSTALLER")
-        set +a
-    fi
-    for builder in ${BUILDER//,/ }; do
-        osid="${builder##*-}"
-        dc2 upload --project ${PROJECT} --manifest $MANIFEST \
-            $(installer-version.sh --format=clieq "$INSTALLER") \
-            ${RELEASE:+--release ${RELEASE}} \
-            --url-file $OUTDIR/template-${builder}.url
-    done
+        cd $XLRINFRADIR/aws/cfn
+        local builder osid
+        packer_manifest_all $MANIFEST >$OUTDIR/amis.yaml
+        if [ -z "$INSTALLER_TAG" ]; then
+            set -a
+            eval $(installer-version.sh --format=sh "$INSTALLER")
+            set +a
+        fi
+        for builder in ${BUILDER//,/ }; do
+            osid="${builder##*-}"
+            dc2 upload --project ${PROJECT} --manifest $MANIFEST \
+                $(installer-version.sh --format=clieq "$INSTALLER") \
+                ${RELEASE:+--release ${RELEASE}} \
+                --url-file $OUTDIR/template-${builder}.url
+        done
     )
 }
 

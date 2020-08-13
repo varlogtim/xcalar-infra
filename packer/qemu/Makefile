@@ -27,8 +27,9 @@ COMMON_ARGS ?= \
 	-var "cacher_ip=$(CACHER_IP)" \
 	-var "http_proxy=$(http_proxy)" \
 	-var "https_proxy=" \
+	-var "vm_name=$(@D)-$(BUILD_NUMBER)" \
 	-var "no_proxy=$(no_proxy)" \
-	-var "output_directory=$(OUTPUT_DIRECTORY)/$(@D)/$(BUILD_NUMBER)" \
+	-var "output_directory=$(OUTPUT_DIRECTORY)/$(@D)-$(BUILD_NUMBER)" \
 	-var "build_number=$(BUILD_NUMBER)"
 
 #%.img: %.json
@@ -49,6 +50,7 @@ el8-base-qemu/tdhtest: base-qemu.json
 	$(PACKER_BUILD) \
 	$(COMMON_ARGS) \
 	-var "osid=el8" \
+	-var "mirrorurl=http://netstore/isos/centos/8" \
 	-var "kickstart=ks-el8.cfg" \
 	-var "iso_url=http://netstore/isos/CentOS_ISO/CentOS-8-x86_64-1905-boot.iso" \
 	-var "iso_checksum=md5:49d7d1b5d89451d20efd709161601714" \

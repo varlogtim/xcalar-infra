@@ -19,9 +19,10 @@ variables:
   puppet_sha1: '{{env `PUPPETSHA1`}}'
   domain: 'int.xcalar.com'
   disk_size: "128000"
-  build_number: '4'
+  build_number: '{{env `BUILD_NUMBER`}}'
   environment: 'production'
-  output_directory: '/mnt/ssd/images'
+  output_directory: null
+  vm_name: 'run-puppet'
   mirrorurl: 'http://netstore/isos/centos/7'
   manifest: '{{template_dir}}/packer-manifest.json'
 builders:
@@ -43,7 +44,7 @@ builders:
     ssh_password: Welcome1
     ssh_port: 22
     ssh_wait_timeout: 900s
-    vm_name: '{{build_name}}-{{user `build_number`}}'
+    vm_name: '{{user `vm_name`}}'
     net_device: virtio-net
     disk_interface: virtio
     vnc_bind_address: 0.0.0.0
@@ -154,7 +155,7 @@ post-processors:
   - type: compress
     format: gz
     keep_input_artifact: true
-    output: '{{user `output_directory`}}/{{build_name}}-{{user `build_number`}}.gz'
+    output: '{{user `output_directory`}}/{{user `vm_name`}}.gz'
   - type: manifest
     output: '{{user `manifest`}}'
     strip_path: true
@@ -169,4 +170,4 @@ post-processors:
       puppet_sha1: '{{user `puppet_sha1`}}'
       role: '{{user `role`}}'
       today: '{{user `today`}}'
-      output: '{{user `output_directory`}}/{{build_name}}-{{user `build_number`}}.gz'
+      output: '{{user `output_directory`}}/{{user `vm_name`}}.gz'

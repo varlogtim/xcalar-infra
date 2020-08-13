@@ -10,7 +10,8 @@ variables:
   iso_url: http://netstore/isos/CentOS_ISO/CentOS-7-x86_64-Minimal-2003.iso
   iso_checksum: 'md5:f99e2b01389c62a56bb0d3afdbc202f2'
   headless: "true"
-  build_number: '7'
+  build_number: '{{env `BUILD_NUMBER`}}'
+  vm_name: 'base-qemu'
   mirror_url: 'http://netstore/isos/centos/7'
   kickstart: ks7.cfg
   output_directory: '/mnt/ssd/images'
@@ -18,7 +19,7 @@ variables:
 builders:
   - type: qemu
     name: '{{ user `osid` }}-base-qemu'
-    vm_name: '{{build_name}}-{{user `build_number`}}'
+    vm_name: '{{user `vm_name`}}'
     accelerator: kvm
     iso_url: '{{ user `iso_url` }}'
     iso_checksum: '{{ user `iso_checksum` }}'
@@ -60,7 +61,7 @@ post-processors:
   - type: compress
     format: gz
     keep_input_artifact: true
-    output: '{{user `output_directory`}}/{{build_name}}-{{user `build_number`}}.gz'
+    output: '{{user `output_directory`}}/{{user `vm_name`}}.gz'
   - type: manifest
     output: '{{user `manifest`}}'
     strip_path: true
@@ -72,4 +73,4 @@ post-processors:
       output_directory: '{{user `output_directory`}}'
       puppet_sha1: '{{user `puppet_sha1`}}'
       today: '{{user `today`}}'
-      output: '{{user `output_directory`}}/{{build_name}}-{{user `build_number`}}.gz'
+      output: '{{user `output_directory`}}/{{user `vm_name`}}.gz'
