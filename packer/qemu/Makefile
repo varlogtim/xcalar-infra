@@ -20,6 +20,7 @@ OUTPUT_DIRECTORY ?= /mnt/ssd/images/test
 ROLE ?= jenkins_slave
 CLUSTER ?= jenkins-slave
 TARGET_OSID ?= el7
+DISK_SIZE ?= 128000
 
 COMMON_ARGS ?= \
 	-var "puppet_src=$(PUPPET_SRC)" \
@@ -31,6 +32,7 @@ COMMON_ARGS ?= \
 	-var "https_proxy=" \
 	-var "vm_name=$(@D)-$(BUILD_NUMBER)" \
 	-var "no_proxy=$(no_proxy)" \
+	-var "disk_size=$(DISK_SIZE)" \
 	-var "output_directory=$(OUTPUT_DIRECTORY)/$(@D)" \
 	-var "build_number=$(BUILD_NUMBER)"
 

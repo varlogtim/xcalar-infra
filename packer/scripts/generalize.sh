@@ -161,7 +161,7 @@ if have_package cloud-init; then
     rm -rfv ${ROOTFS}/var/lib/cloud/instance/*
     rm -fv ${ROOTFS}/var/lib/cloud/instance
     truncate -s 0 ${ROOTFS}/var/log/cloud*.log ${ROOTFS}/var/log/user-data*.log
-    if [ -z "$CLOUD" ] || [ "$CLOUD" = none ]; then
+    if [ -z "$CLOUD" ] || [ "$CLOUD" = nocloud ]; then
         cat >${ROOTFS}/etc/cloud/cloud.cfg.d/90-networking-disabled.cfg <<EOF
 network:
   config: disabled

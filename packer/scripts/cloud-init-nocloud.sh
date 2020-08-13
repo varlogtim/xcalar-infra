@@ -2,8 +2,10 @@
 
 set -e
 
+yum install --enablerepo='epel' -y cloud-init cloud-utils-growpart gdisk
+
 mkdir -p ${ROOTFS}/etc/cloud
-cat > ${ROOTFS}/etc/cloud/cloud.cfg << END
+cat >${ROOTFS}/etc/cloud/cloud.cfg <<END
 users:
  - default
 
@@ -72,12 +74,11 @@ datasource_list: [ NoCloud, None ]
 # vim:syntax=yaml
 END
 mkdir -p ${ROOTFS}/etc/cloud/cloud.cfg.d
-    cat > ${ROOTFS}/etc/cloud/cloud.cfg.d/90-networking-disabled.cfg <<EOF
+cat >${ROOTFS}/etc/cloud/cloud.cfg.d/90-networking-disabled.cfg <<EOF
 network:
   config: disabled
 EOF
 
-yum install -y cloud-init cloud-utils-growpart gdisk
 systemctl enable cloud-init
 
 exit 0
@@ -91,4 +92,3 @@ exit 0
 #    subnets:
 #      - type: dhcp6
 #EOF
-

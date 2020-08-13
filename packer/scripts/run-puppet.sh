@@ -9,13 +9,34 @@ while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
-        --puppet-archive|-p) PUPPET_TAR="$1"; shift;;
-        --hostname) MYHOSTNAME="$1"; shift;;
-        --role) export FACTER_role="$1"; shift;;
-        --cluster) export FACTER_cluster="$1"; shift;;
-        --datacenter) export FACTER_datacenter="$1"; shift;;
-        --environment) ENVIRONMENT="$1"; shift;;
-        *) echo >&2 "ERROR: Unrecognized command $cmd"; exit 1;;
+        --puppet-archive | -p)
+            PUPPET_TAR="$1"
+            shift
+            ;;
+        --hostname)
+            MYHOSTNAME="$1"
+            shift
+            ;;
+        --role)
+            export FACTER_role="$1"
+            shift
+            ;;
+        --cluster)
+            export FACTER_cluster="$1"
+            shift
+            ;;
+        --datacenter)
+            export FACTER_datacenter="$1"
+            shift
+            ;;
+        --environment)
+            ENVIRONMENT="$1"
+            shift
+            ;;
+        *)
+            echo >&2 "ERROR: Unrecognized command $cmd"
+            exit 1
+            ;;
     esac
 done
 
@@ -42,13 +63,13 @@ if [ -n "$MYHOSTNAME" ]; then
     hostnamectl set-hostname $MYHOSTNAME || true
     export HOSTNAME=$MYHOSTNAME
 fi
-cat <<EOF >> /etc/resolv.conf
+cat <<EOF >>/etc/resolv.conf
 nameserver 8.8.8.8
 nameserver 8.8.4.4
 EOF
 
 if [ -n "$CACHER_IP" ]; then
-    echo >> /etc/hosts
+    echo >>/etc/hosts
     echo "$CACHER_IP  cacher  # run-puppet" | tee -a /etc/hosts
     echo "proxy = http://${CACHER_IP}:3128" | tee -a /etc/yum.conf
 fi
@@ -61,18 +82,23 @@ tar xzf ${PUPPET_TAR} -C $PUPPETROOT
 cd $PUPPETROOT
 set +e
 (
-mkdir -p /etc/facter/facts.d
-cd /etc/facter/facts.d
-[ "${FACTER_role}x" != "x" ] && echo "role=${FACTER_role}" > role.txt
-[ "${FACTER_cluster}x" != "x" ] && echo "cluster=${FACTER_cluster}" > cluster.txt
-[ "${FACTER_datacenter}x" != "x" ] && echo "datacenter=${FACTER_datacenter}" > datacenter.txt
-[ "${FACTER_cloud}x" != "x" ] && echo "cloud=${FACTER_cloud}" > cloud.txt
+    mkdir -p /etc/facter/facts.d
+    cd /etc/facter/facts.d
+    [ "${FACTER_role}x" != "x" ] && echo "role=${FACTER_role}" >role.txt
+    [ "${FACTER_cluster}x" != "x" ] && echo "cluster=${FACTER_cluster}" >cluster.txt
+    [ "${FACTER_datacenter}x" != "x" ] && echo "datacenter=${FACTER_datacenter}" >datacenter.txt
+    [ "${FACTER_cloud}x" != "x" ] && echo "cloud=${FACTER_cloud}" >cloud.txt
 )
 env
 cat /etc/facter/facts.d/*
 
+COLOR_ARG=''
+if ((NOCOLOR)); then
+    COLOR_ARG=--color=false
+fi
+
 for retry in 1 2 3; do
-    puppet apply -t -v ./manifests/site.pp
+    puppet apply $COLOR_ARG -t -v ./manifests/site.pp
     rc=$?
     if [ $rc -eq 0 ] || [ $rc -eq 2 ]; then
         rc=0

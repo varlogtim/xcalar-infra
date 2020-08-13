@@ -123,22 +123,18 @@ provisioners:
       - CONTAINER_USER=jenkins
       - CONTAINER_HOME=/home/jenkins
       - LIBARCHIVE_VERSION=3.3.1-12.el7
+      - NOCOLOR=1
     execute_command: chmod +x {{ .Path }}; {{ .Vars }} {{.Path}}
     inline:
       - set -x
       - curl -fsSL $EL7_MIRROR_URL/centos-mirror.repo -o /etc/yum.repos.d/centos-mirror.repo && echo $EL7_MIRROR_URL > /etc/yum/vars/mirrorurl
       - yum install -y git222-core
-      - mkdir -p /etc/facter/facts.d/
-      - cd /etc/facter/facts.d/
-      - echo "role=$FACTER_role" > role.txt
-      - echo "cluster=$FACTER_cluster" > cluster.txt
       - cd /tmp/scripts
       - mkdir puppet
       - tar zxf puppet.tar.gz -C puppet
       - yum clean all --enablerepo='*' && rm -rf /var/cache/yum/*
       - bash -x run-puppet.sh
-        #- bash -x {{user `osid`}}-build.sh
-        #- bash -x cloud-init-nocloud.sh
+      - bash -x cloud-init-nocloud.sh
       - echo "[main]" > /etc/puppetlabs/puppet/puppet.conf
       - echo "server = {{user `puppet_host`}}.{{user `domain`}}" >> /etc/puppetlabs/puppet/puppet.conf
       - if [ "{{user `environment`}}" != "production" ]; then echo "environment = {{user `environment`}}" >> /etc/puppetlabs/puppet/puppet.conf; fi
@@ -151,6 +147,7 @@ provisioners:
   - type: shell
     environment_vars:
       - NODISABLE=puppet
+    execute_command: chmod +x {{ .Path }}; {{ .Vars }} {{.Path}}
     script: '{{ template_dir }}/../scripts/generalize.sh'
     expect_disconnect: true
     skip_clean: true
