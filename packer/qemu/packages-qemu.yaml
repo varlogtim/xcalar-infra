@@ -13,7 +13,7 @@ variables:
   iso_checksum: 'md5:489da6148a3480a9d4ef94eb895ef033'
   headless: "true"
   home: '{{env `HOME`}}'
-  puppet_src: '{{env `PUPPETSRCDIR`}}'
+  puppet_src: '{{env `PUPPET_SRC`}}'
   puppet_host: 'puppet'
   domain: 'int.xcalar.com'
   disk_size: "128000"

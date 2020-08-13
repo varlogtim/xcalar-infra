@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ((XTRACE)) || [[ $- == *x* ]]; then
+    set -x
+    export PS4='# [${PWD}] ${BASH_SOURCE#$PWD/}:${LINENO}: ${FUNCNAME[0]}() - ${container:+[$container] }[${SHLVL},${BASH_SUBSHELL},$?] '
+fi
 
 # Common set up
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,17 +27,26 @@ fi
 
 if [ -n "$XLRDIR" ]; then
     . doc/env/xc_aliases
-    if ! xcEnvEnter "$HOME/.local/lib/$JOB_NAME"; then
-        exit 1
+
+    if type -t xcEnvEnterDir >/dev/null; then
+        if ! xcEnvEnterDir "$XLRDIR/xcve"; then
+            exit 1
+        fi
+    else
+        if ! xcEnvEnter; then
+            exit 1
+        fi
     fi
     setup_proxy
+elif test -e bin/activate; then
+    source bin/activate
 else
     make
     source .venv/bin/activate
 fi
 
 # First look in local (Xcalar) repo for a script and fall back to the one in xcalar-infra
-for SCRIPT in "${XLRINFRADIR}/jenkins/${JOB_NAME}.sh"; do
+for SCRIPT in "${XLRINFRADIR}"/jenkins/"${JOB_NAME}".sh; do
     if test -x "$SCRIPT"; then
         break
     fi

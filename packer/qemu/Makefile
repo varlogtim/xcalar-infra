@@ -1,35 +1,37 @@
 SHELL = /bin/bash
 
-PUPPETSRCDIR ?= $(HOME)/puppet
+PUPPET_SRC ?= $(HOME)/puppet
 
 VPATH := $(shell pwd)
 
 PACKER ?= packer.io
 PACKER_BUILD := $(PACKER) build -force -on-error=abort
-GIT_COMMIT_1 ?= $(cd $(PUPPETSRCDIR) && git rev-parse --short HEAD)
-PUPPETSHA1 := $(GIT_COMMIT_1)
+GIT_COMMIT_1 ?= $(cd $(PUPPET_SRC) && git rev-parse --short HEAD)
+PUPPET_SHA1 ?= $(GIT_COMMIT_1)
 
 CACHER_IP  = $(shell getent hosts cacher | awk '{print $$1}')
 http_proxy ?= http://$(CACHER_IP):3128
 no_proxy := 10.,127.0.0.1,localhost,.localdomain,netstore,169.254.
-# We have to pass in an IP here because the host name doesn't
-# resolve inside the VM/container.
-#EL7_BASE_MD5=md5:c725eab04431dcc046719c92888d5c5e
 EL7_BASE_IMAGE=http://netstore/images/el7-base-qemu.qcow2.gz
 EL7_BASE_MD5=md5:0b21fb7fb1e65b208c478b6d28d18e0d
 BUILD_NUMBER ?= 6
-OUTDIR ?= /mnt/ssd/images
-OUTPUT_DIRECTORY ?= $(OUTDIR)
+OUTDIR ?= $(shell pwd)/
+OUTPUT_DIRECTORY ?= /mnt/ssd/images/test
+ROLE ?= jenkins_slave
+CLUSTER ?= jenkins-slave
+TARGET_OSID ?= el7
 
 COMMON_ARGS ?= \
-	-var "puppet_src=$(PUPPETSRCDIR)" \
-	-var "puppet_sha1=$(PUPPETSHA1)" \
+	-var "puppet_src=$(PUPPET_SRC)" \
+	-var "puppet_sha1=$(PUPPET_SHA1)" \
+	-var "role=$(ROLE)" \
+	-var "cluster=$(CLUSTER)" \
 	-var "cacher_ip=$(CACHER_IP)" \
 	-var "http_proxy=$(http_proxy)" \
 	-var "https_proxy=" \
 	-var "vm_name=$(@D)-$(BUILD_NUMBER)" \
 	-var "no_proxy=$(no_proxy)" \
-	-var "output_directory=$(OUTPUT_DIRECTORY)/$(@D)-$(BUILD_NUMBER)" \
+	-var "output_directory=$(OUTPUT_DIRECTORY)/$(@D)" \
 	-var "build_number=$(BUILD_NUMBER)"
 
 #%.img: %.json
@@ -71,6 +73,15 @@ el7-puppet-qemu/tdhtest: run-puppet-qemu.json
 	$(COMMON_ARGS) \
 	-var "osid=el7" \
 	-var "iso_url=$(EL7_BASE_IMAGE)" \
+	-var "iso_checksum=$(EL7_BASE_MD5)" $<
+
+el7-$(ROLE)-$(CLUSTER)-qemu/tdhtest: run-puppet-qemu.json
+	rm -fv $@
+	$(PACKER_BUILD) \
+	$(COMMON_ARGS) \
+	-var "osid=el7" \
+	-var "iso_url=$(EL7_BASE_IMAGE)" \
+	-var "vm_name=el7-$(ROLE)-$(CLUSTER)-qemu-$(BUILD_NUMBER)" \
 	-var "iso_checksum=$(EL7_BASE_MD5)" $<
 
 el7-jenkins_slave-qemu/tdhtest: run-puppet-qemu.json

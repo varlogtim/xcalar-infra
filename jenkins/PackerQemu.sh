@@ -11,7 +11,8 @@ export MANIFEST=$OUTDIR/packer-manifest.json
 export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
 export PROJECT=${PROJECT:-xdp-awsmp}
 
-export PUPPETSRCDIR=$PWD/puppet
+export PUPPET_SRC=$PWD/puppet
+export PUPPET_SHA1=$(cd $PUPPET_SRC && git rev-parse --short HEAD)
 export OUTPUT_DIRECTORY=/netstore/builds/byJob/${JOB_NAME}/${BUILD_NUMBER}
 export PACKER_NO_COLOR=1
 export CHECKPOINT_DISABLE=1
@@ -21,7 +22,9 @@ mkdir -p $OUTPUT_DIRECTORY
 . infra-sh-lib
 . aws-sh-lib
 
-export VAULT_TOKEN=$($XLRINFRADIR/bin/vault-auth-puppet-cert.sh --print-token)
+if [ -z "$VAULT_TOKEN" ]; then
+    export VAULT_TOKEN=$($XLRINFRADIR/bin/vault-auth-puppet-cert.sh --print-token)
+fi
 
 if [ -n "$JENKINS_URL" ]; then
     if test -e .venv/bin/python2; then
@@ -46,11 +49,14 @@ fi
 
 cd packer/qemu
 
-if ! test -e $(basename $MANIFEST); then
-    cp $MANIFEST . || true
-fi
+cp $MANIFEST . || true
 
-make el7-jenkins_slave-qemu/tdhtest OUTPUT_DIRECTORY=$OUTPUT_DIRECTORY OUTDIR=$OUTDIR PUPPETSRCDIR=$PUPPETSRCDIR OUTDIR=$OUTDIR
+export TARGET_OSID=${TARGET_OSID:-el7}
+export ROLE=${ROLE:-jenkins_slave}
+export CLUSTER=${CLUSTER:-jenkins-swarm}
+export TARGET=${TARGET_OSID}-${ROLE}-${CLUSTER}-qemu
+
+make ${TARGET}/tdhtest BUILD_NUMBER=$BUILD_NUMBER OUTPUT_DIRECTORY=$OUTPUT_DIRECTORY OUTDIR=$OUTDIR PUPPET_SRC=$PUPPET_SRC PUPPET_SHA1=$PUPPET_SHA1 VM_NAME="${TARGET}-${BUILD_NUMBER}" MANIFEST=$MANIFEST
 if test -e $(basename $MANIFEST); then
     cp $(basename $MANIFEST) $MANIFEST
 fi
