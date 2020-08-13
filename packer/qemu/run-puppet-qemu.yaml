@@ -3,8 +3,8 @@ variables:
   http_proxy: '{{ env `http_proxy` }}'
   https_proxy: '{{ env `https_proxy` }}'
   no_proxy: '{{ env `no_proxy` }}'
-  cluster: jenkins-swarm
   role: jenkins_slave
+  cluster: jenkins-swarm
   datacenter: xcalar-sjc
   ts: '{{ timestamp }}'
   osid: el7
@@ -31,7 +31,7 @@ builders:
     accelerator: kvm
     iso_url: '{{ user `iso_url` }}'
     iso_checksum: '{{ user `iso_checksum` }}'
-    output_directory: '{{user `output_directory`}}'
+    output_directory: '{{build_name}}'
     disk_size: '{{user `disk_size`}}'
     disk_image: true
     use_backing_file: true
@@ -104,7 +104,7 @@ provisioners:
       - FACTER_packer=1
       - FACTER_datacenter={{user `datacenter`}}
       - CACHER_IP={{user `cacher_ip`}}
-      - MYHOSTNAME={{user `cluster`}}-{{user `osid`}}.{{user `domain`}}
+      - MYHOSTNAME={{user `vm_name`}}.{{user `domain`}}
       - PUPPET_TAR=/tmp/scripts/puppet.tar.gz
       - FACTER_override=offline
       - EL7_MIRROR_URL={{user `mirrorurl`}}
@@ -128,6 +128,10 @@ provisioners:
       - set -x
       - curl -fsSL $EL7_MIRROR_URL/centos-mirror.repo -o /etc/yum.repos.d/centos-mirror.repo && echo $EL7_MIRROR_URL > /etc/yum/vars/mirrorurl
       - yum install -y git222-core
+      - mkdir -p /etc/facter/facts.d/
+      - cd /etc/facter/facts.d/
+      - echo "role=$FACTER_role" > role.txt
+      - echo "cluster=$FACTER_cluster" > cluster.txt
       - cd /tmp/scripts
       - mkdir puppet
       - tar zxf puppet.tar.gz -C puppet
@@ -154,7 +158,7 @@ provisioners:
 post-processors:
   - type: compress
     format: gz
-    keep_input_artifact: true
+    keep_input_artifact: false
     output: '{{user `output_directory`}}/{{user `vm_name`}}.gz'
   - type: manifest
     output: '{{user `manifest`}}'

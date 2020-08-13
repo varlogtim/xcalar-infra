@@ -23,7 +23,7 @@ builders:
     accelerator: kvm
     iso_url: '{{ user `iso_url` }}'
     iso_checksum: '{{ user `iso_checksum` }}'
-    output_directory: '{{user `output_directory`}}'
+    output_directory: '{{build_name}}'
     disk_size: '{{user `disk_size`}}'
     format: qcow2
     headless: "{{user `headless`}}"
@@ -71,6 +71,5 @@ post-processors:
       iso_url: '{{user `iso_url`}}'
       osid: '{{user `osid`}}'
       output_directory: '{{user `output_directory`}}'
-      puppet_sha1: '{{user `puppet_sha1`}}'
       today: '{{user `today`}}'
       output: '{{user `output_directory`}}/{{user `vm_name`}}.gz'
