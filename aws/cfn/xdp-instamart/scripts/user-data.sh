@@ -347,8 +347,14 @@ main() {
 
     # shellcheck disable=SC2046
     ENV_FILE=/var/lib/cloud/instance/ec2.env
+    CLOUD_ENV_FILE=/var/lib/cloud/instance/cloud.env
+
     if [ -e "$ENV_FILE" ]; then
         . $ENV_FILE
+    fi
+
+    if [ -e "$CLOUD_ENV_FILE" ]; then
+        . $CLOUD_ENV_FILE
     fi
 
     PREFIX=${PREFIX:-/opt/xcalar}

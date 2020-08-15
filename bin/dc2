@@ -16,7 +16,7 @@
 
 DC=$(basename $0)
 
-set -euo pipefail
+set -eo pipefail
 
 dc2_help() {
     cat << EOF

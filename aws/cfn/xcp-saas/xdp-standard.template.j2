@@ -230,8 +230,8 @@ Conditions:
   NoInstances: !Equals [!Ref ClusterSize, '0']
   KeepIp: !Not [!Equals [!Ref ClusterSize, '0']]
   CreateInstances: !Not [!Equals [!Ref ClusterSize, '0']]
-  CreateDNS: !Not [!Or [!Equals [!Ref HostedZoneName, ''], !Equals [!Ref CNAME, '']]]
   IsUsEast1: !Equals [!Ref 'AWS::Region', 'us-east-1']
+  CreateDNS: !Not [!Equals [!Ref CNAME, '' ]]
 {%- if enableExistingShare %}
   CreateNewShare: !Equals [!Ref ExistingShare, '']
 {%- endif %}
@@ -477,6 +477,9 @@ Resources:
           FromPort: 2049
           ToPort: 2049
           SourceSecurityGroupId: !Ref 'ClusterSG'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EfsSecurityGroup'
   EfsSharedRoot:
     Type: AWS::EFS::FileSystem
 {%- if enableExistingShare %}
@@ -511,6 +514,7 @@ Resources:
       Strategy: cluster
   ClusterASG:
     Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: [EfsMountTarget]
     Properties:
       PlacementGroup: !Ref 'PlacementGroup'
       TerminationPolicies:
@@ -589,8 +593,11 @@ Resources:
     Type: AWS::Route53::RecordSet
     Condition: CreateDNS
     Properties:
-      HostedZoneName: !Sub '${HostedZoneName}.'
-      Name: !Sub '${CNAME}.${HostedZoneName}.'
+      HostedZoneId: !FindInMap
+        - AccountLUT
+        - !Ref 'AWS::AccountId'
+        - HostedZoneId
+      Name: !Sub [ '${CNAME}.${HostedZoneName}.',{HostedZoneName: !FindInMap [AccountLUT, !Ref 'AWS::AccountId', 'HostedZoneName'] }]
       Type: CNAME
       TTL: 60
       ResourceRecords:
@@ -652,11 +659,12 @@ Resources:
                 set -x
                 echo "$(date +%TF%T%z) Running copylogs.sh" | logger --id -p "local0.info" -t copy-logs -s
                 eval $(ec2-tags -s -i)
+                set -a
                 source /var/lib/cloud/instance/ec2.env
 {%- if enableLifecycle %}
                 source /etc/sysconfig/lifecycled
 {%- endif %}
-                export AWS_DEFAULT_REGION="${AWS::Region}"
+                set +a
                 InstanceId=$(curl -s http://169.254.169.254/2018-09-24/meta-data/instance-id)
                 S3Uri=${!LOGBUCKET}${!LOGPREFIX}${!InstanceId}
                 for dir in /var/log /var/opt/xcalar /home/xcalar; do
@@ -755,6 +763,7 @@ Resources:
               content: !Sub
                 - |
                   AWS_DEFAULT_REGION=${AWS::Region}
+                  AWS_REGION=${AWS::Region}
                   CLUSTER_NAME=${AWS::StackName}
                   CLUSTERSIZE=${ClusterSize}
                   BUCKET=${Bucket}
@@ -766,7 +775,9 @@ Resources:
                   SSLKEYFILE=/etc/xcalar/host.key
                   SSLCRTFILE=/etc/xcalar/host.crt
                   NIC=${NIC}
+                  HOSTEDZONEID=${HostedZoneId}
                   HOSTEDZONENAME=${HostedZoneName}
+                  CERTSTORE=/xcalar/cloud/${HostedZoneName}
                   CNAME=${CNAME}
                   KINESISROLEARN=${KinesisRoleARN}
                   BASEURL={{ baseUrl }}/
@@ -778,6 +789,14 @@ Resources:
                   KinesisRoleARN: !GetAtt 'KinesisServiceRole.Arn'
                   NIC: !If [KeepIp, !Ref ClusterNIC, '']
                   NFSIp: !GetAtt 'EfsMountTarget.IpAddress'
+                  HostedZoneId: !FindInMap
+                    - AccountLUT
+                    - !Ref 'AWS::AccountId'
+                    - HostedZoneId
+                  HostedZoneName: !FindInMap
+                    - AccountLUT
+                    - !Ref 'AWS::AccountId'
+                    - HostedZoneName
 {%- if enableLifecycle %}
                   LogBucket: !ImportValue sharedinf-logbucket
 {%- endif %}
@@ -849,11 +868,21 @@ Resources:
                   start=$(date +%s)
                   export PATH=/opt/aws/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin
                   export AWS_DEFAULT_REGION=${AWS::Region}
-                  # The ec2-tags utility prints instance tags as key=value pairs suitable for parsing from bash
+                  # shellcheck disable=SC2046
                   set -a
-                  source /var/lib/cloud/instance/ec2.env
-                  eval $(ec2-tags -s -i)
+                  ENV_FILE=/var/lib/cloud/instance/ec2.env
+                  CLOUD_ENV_FILE=/var/lib/cloud/instance/cloud.env
+                  if [ -e "$ENV_FILE" ]; then
+                      . $ENV_FILE
+                  fi
+
+                  if [ -e "$CLOUD_ENV_FILE" ]; then
+                      . $CLOUD_ENV_FILE
+                  fi
                   set +a
+
+                  # The ec2-tags utility prints instance tags as key=value pairs suitable for parsing from bash
+                  eval $(ec2-tags -s -i)
                   systemctl daemon-reload
 {%- if enableLifecycle %}
                   systemctl enable --now lifecycled

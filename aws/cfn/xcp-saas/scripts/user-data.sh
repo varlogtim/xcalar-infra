@@ -2,11 +2,15 @@
 #
 # shellcheck disable=SC2086,SC2304,SC2034,SC2206,SC2207,SC2046
 
+echo >&2 "Starting user-data.sh"
+
 set -x
 LOGFILE=/var/log/user-data.log
 touch $LOGFILE
 chmod 0600 $LOGFILE
-if [ ! -t 1 ]; then
+if [ -t 1 ]; then
+    :
+else
     exec > >(tee -a $LOGFILE | logger -t user-data -s 2> /dev/console) 2>&1
 fi
 start=$(date +%s)
@@ -41,6 +45,7 @@ asg_healthy_instances() {
         --auto-scaling-group-names "$1" --query 'AutoScalingGroups[].Instances[?HealthStatus==`Healthy`]|[] | length(@)'
 }
 
+
 asg_capacity() {
     aws autoscaling describe-auto-scaling-groups \
         --auto-scaling-group-names "$1" --query 'AutoScalingGroups[][MinSize,MaxSize,DesiredCapacity]' --output text
@@ -48,7 +53,7 @@ asg_capacity() {
 
 expserver_config() {
    if [ -n "$AUTH_STACK_NAME" ]; then
-       XCE_EXPSERVER_CLOUD_AUTH_CONFIG="$(aws ssm get-parameter --region ${AWS_DEFAULT_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
+       XCE_EXPSERVER_CLOUD_AUTH_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
        sed --follow-symlinks -i '/^## Xcalar Cloud Auth Start/,/## Xcalar Cloud Auth End/d' /etc/default/xcalar
 
        echo '## Xcalar Cloud Auth Start' >> /etc/default/xcalar
@@ -56,7 +61,7 @@ expserver_config() {
        echo '## Xcalar Cloud Auth End' >> /etc/default/xcalar
    fi
    if [ -n "$MAIN_STACK_NAME" ]; then
-       XCE_EXPSERVER_CLOUD_MAIN_CONFIG="$(aws ssm get-parameter --region ${AWS_DEFAULT_REGION} --name "/xcalar/cloud/main/${MAIN_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
+       XCE_EXPSERVER_CLOUD_MAIN_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/main/${MAIN_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
        sed --follow-symlinks -i '/^## Xcalar Cloud Main Start/,/## Xcalar Cloud Main End/d' /etc/default/xcalar
 
        echo '## Xcalar Cloud Main Start' >> /etc/default/xcalar
@@ -80,6 +85,13 @@ mbfree() {
         return 1
     fi
     echo "$mb"
+}
+ssm_get_string() {
+    aws ssm get-parameter --query 'Parameter.Value' --output text --name "$@"
+}
+
+ssm_get_secret() {
+    aws ssm get-parameter --query 'Parameter.Value' --output text --with-decryption --name "$@"
 }
 
 # $1 = server:/path/to/share
@@ -330,11 +342,73 @@ file_size() {
     return 1
 }
 
-main() {
-    eval $(ec2-tags -s -i)
-    mkdir -p /var/tmp/xcalar-root
-    chown xcalar:xcalar /var/tmp/xcalar-root
+node_0() {
+    if [ -n "$NIC" ]; then
+        while true; do
+            eni_status=$(aws ec2 describe-network-interfaces --query 'NetworkInterfaces[].Status' --network-interface-ids ${NIC} --output text)
+            if [[ "$eni_status" == available ]]; then
+                if aws ec2 attach-network-interface --network-interface-id ${NIC} --instance-id ${INSTANCE_ID} --device-index 1; then
+                    echo >&2 "ENI $NIC attached to $INSTANCE_ID"
+                    break
+                fi
+            fi
+            eni_instance=$(aws ec2 describe-network-interfaces --query 'NetworkInterfaces[].Attachment.InstanceId' --network-interface-ids ${NIC} --output text)
+            if [[ "$eni_instance" == "$INSTANCE_ID" ]]; then
+                echo >&2 "ENI $NIC already attached"
+                break
+            fi
+            echo >&2 "Waiting for ENI $NIC that is $eni_status by $eni_instance .."
+            sleep 10
+        done
+    fi
+    if ! test -d ${XLRROOT}/jupyterNotebooks; then
+        rsync -avzr /var/opt/xcalar/ ${XLRROOT}/
+    fi
 
+    test -d $XLRROOT/config || mkdir -p $XLRROOT/config
+    (
+    # We don't want the sensitive parts in the log
+    set +x
+    if [ -n "${ADMIN_USERNAME}" ] && [ -n "${ADMIN_PASSWORD}" ]; then
+        /opt/xcalar/scripts/genDefaultAdmin.sh \
+            --username "${ADMIN_USERNAME}" \
+            --email "${ADMIN_EMAIL:-info@xcalar.com}" \
+            --password "${ADMIN_PASSWORD}" > /tmp/defaultAdmin.json \
+        && mv /tmp/defaultAdmin.json $XLRROOT/config/defaultAdmin.json
+    fi
+    chmod 0700 $XLRROOT/config
+    chmod 0600 $XLRROOT/config/defaultAdmin.json
+    if [ -n "$CERTSTORE" ]; then
+        CERTDIR=$XLRROOT/.cert
+        CERT=$CERTDIR/xcalar.crt
+        KEY=$CERTDIR/xcalar.key
+        mkdir -p -m 0700 $CERTDIR
+        get_ssm_x509 "$CERTSTORE" "$CRT" "$KEY"
+    fi
+    )
+    if [[ $SHARED_CONFIG = true ]]; then
+        mv $XCE_CONFIG $XLRROOT/default.cfg
+    fi
+
+    chown -R xcalar:xcalar $XLRROOT/
+    pidof caddy >/dev/null && kill -USR1 $(pidof caddy) || true
+}
+
+get_ssm_x509() {
+    local CERTSTORE="$1" CRT="$2" KEY="$3"
+
+    if [ -n "$CERTSTORE" ]; then
+        ssm_get_secret "${CERTSTORE}.crt" | base64 -d | gzip -dc > $CRT && \
+        ssm_get_secret "${CERTSTORE}.key" | base64 -d | gzip -dc > $KEY && \
+        chmod 0644 $CRT && \
+        chmod 0640 $KEY && \
+        chown root:xcalar $CRT $KEY
+        return $?
+    fi
+    return 1
+}
+
+osid_init() {
     RELEASE_NAME=$(rpm -qf /etc/system-release --qf '%{NAME}')
     RELEASE_VERSION=$(rpm -qf /etc/system-release --qf '%{VERSION}')
     case "$RELEASE_VERSION" in
@@ -363,11 +437,19 @@ main() {
             exit 1
             ;;
     esac
+}
+
+main() {
+    eval $(ec2-tags -s -i)
+    mkdir -p /var/tmp/xcalar-root
+    chown xcalar:xcalar /var/tmp/xcalar-root
+    osid_init
 
     # shellcheck disable=SC2046
     ENV_FILE=/var/lib/cloud/instance/ec2.env
     CLOUD_ENV_FILE=/var/lib/cloud/instance/cloud.env
 
+    set -a
     if [ -e "$ENV_FILE" ]; then
         . $ENV_FILE
     fi
@@ -375,15 +457,17 @@ main() {
     if [ -e "$CLOUD_ENV_FILE" ]; then
         . $CLOUD_ENV_FILE
     fi
+    set +a
 
+    set +x
     PREFIX=${PREFIX:-/opt/xcalar}
-    SSLKEYFILE=${SSLKEYFILE:-/etc/xcalar/host.key}
-    SSLCRTFILE=${SSLCRTFILE:-/etc/xcalar/host.crt}
+    SSLKEYFILE=${SSLKEYFILE:-/etc/xcalar/xcalar.key}
+    SSLCRTFILE=${SSLCRTFILE:-/etc/xcalar/xcalar.crt}
     SITE_DIR=$($PREFIX/bin/python3 -c 'import site; print(site.getsitepackages()[-1])')
     PTHFILE=${SITE_DIR}/mnt-xcalar-pysite.pth
 
     while [ $# -gt 0 ]; do
-        local cmd="$1"
+        cmd="$1"
         shift
         case "$cmd" in
             --nic)
@@ -414,6 +498,10 @@ main() {
                 TAG_VALUE="$1"
                 shift
                 ;;
+            --certstore)
+                CERTSTORE="$1"
+                shift
+                ;;
             --bucket)
                 BUCKET="$1"
                 shift
@@ -427,17 +515,21 @@ main() {
                 shift
                 ;;
             --ssl-cert)
-                SSLCRT="$1"
-                echo "$1" > $SSLCRTFILE
-                chown root:xcalar $SSLCRTFILE
-                chmod 0644 $SSLCRTFILE
+                if [ -n "$1" ]; then
+                    SSLCRT="$1"
+                    echo "$1" > $SSLCRTFILE
+                    chown root:xcalar $SSLCRTFILE
+                    chmod 0644 $SSLCRTFILE
+                fi
                 shift
                 ;;
             --ssl-key)
-                SSLKEY="$1"
-                echo "$1" > $SSLKEYFILE
-                chown xcalar:xcalar $SSLKEYFILE
-                chmod 0600 $SSLKEYFILE
+                if [ -n "$1" ]; then
+                    SSLKEY="$1"
+                    echo "$1" > $SSLKEYFILE
+                    chown xcalar:xcalar $SSLKEYFILE
+                    chmod 0600 $SSLKEYFILE
+                fi
                 shift
                 ;;
             --node-id)
@@ -481,19 +573,12 @@ main() {
                 ;;
         esac
     done
+    set -x
 
     CLUSTER_SIZE=${CLUSTER_SIZE:-1}
     XCE_CONFIG=${XCE_CONFIG:-/etc/xcalar/default.cfg}
     XCE_TEMPLATE=${XCE_TEMPLATE:-/etc/xcalar/template.cfg}
     EPHEMERAL=/ephemeral/data
-
-    if ((SYSTEMD)); then
-        if test -e /lib/systemd/system/xcalar-services.target; then
-            SYSTEMD_UNIT=xcalar-services.target
-        else
-            SYSTEMD_UNIT=xcalar.service
-        fi
-    fi
 
     INSTANCE_ID=$(imds /meta-data/instance-id)
     AVZONE=$(imds /meta-data/placement/availability-zone)
@@ -504,6 +589,7 @@ main() {
     echo "$LOCAL_IPV4	$LOCAL_HOSTNAME     $(hostname -s)" | tee -a /etc/hosts
 
     export AWS_DEFAULT_REGION="${AVZONE%[a-f]}"
+    export AWS_REGION=${AWS_REGION:-$AWS_DEFAULT_REGION}
 
     export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin:$PREFIX/bin
     echo "export PATH=$PATH" > /etc/profile.d/path.sh
@@ -523,6 +609,7 @@ main() {
                     NFS_OPTS="nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport"
                 fi
             else
+                yum install -y amazon-efs-utils
                 NFS_TYPE=efs
                 NFS_OPTS="_netdev"
             fi
@@ -545,9 +632,9 @@ main() {
             echo "ERROR: Failed to decode license"
             truncate -s 0 $XCE_LICENSE
         fi
-        touch $XCE_LICENSE
-        chown xcalar:xcalar $XCE_LICENSE
-        chmod 0600 $XCE_LICENSE
+        #touch $XCE_LICENSE
+        #chown xcalar:xcalar $XCE_LICENSE
+        #2chmod 0600 $XCE_LICENSE
     fi
 
     if [ -n "$TAG_KEY" ] && [ -z "$TAG_VALUE" ]; then
@@ -703,6 +790,14 @@ main() {
             PUBLIC_DNS_AND_IP="$(imds /meta-data/public-hostname) $(imds /meta-data/public-ipv4)"
         fi
         test -d $XLRROOT/config || mkdir -p $XLRROOT/config
+        if ! verify_ssl "$SSLCRTFILE" "$SSLKEYFILE"; then
+            log "Checking SSM $CERTSTORE for X509"
+            if get_ssm_x509 "$CERTSTORE" "$SSLCRTFILE" "$SSLKEYFILE"; then
+                log "Got certs from SSM"
+            else
+                log "Failed to get certs from SSM"
+            fi
+        fi
         if file_size $SSLCRTFILE 10 && file_size $SSLKEYFILE 10; then
             CRT_KEY=($XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.crt $XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.key)
             fix_multiline_cert < $SSLCRTFILE > "${CRT_KEY[0]}"
@@ -743,11 +838,11 @@ main() {
         fi
         chown xcalar:xcalar $PYSITE
         REQ=$XLRROOT/config/requirements.txt
-        CON=$PREFIX/share/doc/
+        CON=$PREFIX/share/doc/xcalar-python*/requirements.txt
         if test -e $XLRROOT/config/requirements.txt; then
             VENV=$(mktemp -d -t venv.XXXXXX)
             pyvenv $VENV $PREFIX/bin/python3
-            $VENV/bin/python -m pip install -t $PYSITE -r $XLRROOT/config/requirements.txt
+            $VENV/bin/python -m pip install -t $PYSITE -r $XLRROOT/config/requirements.txt -c $CON
         fi
     fi
 
@@ -789,6 +884,12 @@ main() {
     expserver_config
 
     log "Starting Xcalar"
+    if test -e /lib/systemd/system/xcalar-services.target; then
+        SYSTEMD_UNIT=xcalar-services.target
+    else
+        SYSTEMD_UNIT=xcalar.service
+    fi
+
 
     if ((SYSTEMD)); then
         systemctl start $SYSTEMD_UNIT
@@ -806,7 +907,7 @@ main() {
     fi
 
     log "All done with user-data.sh (rc=$rc)"
-    exit $rc
+    return $rc
 }
 
 main "$@"

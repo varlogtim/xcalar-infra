@@ -1,4 +1,5 @@
 enableLicense: true
-enableLifecycle: true
+enableLifecycle: false
 enableCloud: true
 enableDnsFailover: false
+useLocalLut: true
