@@ -120,6 +120,7 @@ provisioners:
       - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
       - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
       - mv /tmp/aws-discover-input-schema.sh /usr/bin/
+      - systemctl disable --now docker
         #- test -f /etc/profile.d/jdk.sh && rm -vf /etc/profile.d/zjava.sh || true
   - type: shell
     environment_vars:

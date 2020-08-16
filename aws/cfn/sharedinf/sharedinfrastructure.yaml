@@ -81,6 +81,17 @@ Resources:
           Value: !Sub '${AWS::StackName}-igw'
         - Key: StackName
           Value: !Ref 'AWS::StackName'
+  S3SampleBucket:
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-samplebucket-${AWS::AccountId}-${AWS::Region}
+      Tags:
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: Purpose
+          Value: SampleData
   S3WorkBucket:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
@@ -567,6 +578,11 @@ Outputs:
     Value: !Ref RouteTablePrivateB
     Export:
       Name: !Sub ${AWS::StackName}-privatertb
+  samplebucket:
+    Description: Shared Infrastructure Sample Data
+    Value: !Ref S3SampleBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-samplebucket
   workbucket:
     Description: Shared Infrastructure Work or Temp Bucket
     Value: !Ref S3WorkBucket
