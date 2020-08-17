@@ -20,6 +20,7 @@ cat >${XCUNIT}/ephemeral.conf<<EOF
 Wants=ephemeral-disk.service
 After=ephemeral-disk.service
 EOF
+sed -i 's/^Before=cloud.*$/After=basic.target/' /usr/lib/systemd/system/ephemeral-disk.service
 systemctl daemon-reload
 
 NOW=$(date +%s)
