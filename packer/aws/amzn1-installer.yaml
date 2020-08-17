@@ -45,7 +45,7 @@ builders:
         architecture: 'x86_64'
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}-{{split build_name "-" 2}}-*'
+        name: '{{user `baseos`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-*'
       owners: '{{user `baseos_owner`}}'
       most_recent: true
     instance_type: c5d.xlarge
@@ -60,9 +60,9 @@ builders:
     ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
     ami_description: '{{user `description`}} {{split build_name "-" 2 | upper}} ({{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
     run_tags:
-      Name: 'packer-{{build_name}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}'
+      Name: 'packer-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
     snapshot_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `today`}}'
+      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'

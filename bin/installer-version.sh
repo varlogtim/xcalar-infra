@@ -8,9 +8,9 @@
 JSON=$(mktemp -t installer-version-XXXXXX.json)
 DEFAULT_REGISTRY="${DEFAULT_REGISTRY:-registry.int.xcalar.com}"
 
-aws_ami2json(){
-    aws ec2 describe-images --image-ids "$@" --query 'Images[].Tags[]' | \
-        jq -r '{ami: map_values({(.Key): .Value})|add} * {ami: { ami_id: "'$1'"}}'
+aws_ami2json() {
+    aws ec2 describe-images --image-ids "$@" --query 'Images[].Tags[]' \
+        | jq -r '{ami: map_values({(.Key): .Value})|add} * {ami: { ami_id: "'$1'"}}'
 }
 
 # jq -r '.Parameters|to_entries|map_values({UsePreviousValue: false, ParameterKey: .key, ParameterValue: .value.Default})'
@@ -18,7 +18,7 @@ aws_ami2json(){
 
 json_field() {
     local res
-    res="$(jq -r "$1" < "$JSON" 2>/dev/null)"
+    res="$(jq -r "$1" <"$JSON" 2>/dev/null)"
     if [ "$res" = null ]; then
         return 1
     fi
@@ -28,13 +28,13 @@ json_field() {
 
 yaml2() {
     case "$1" in
-        yml|yaml) sed '/^$/d';;
-        *) cfn-flip;;
+        yml | yaml) sed '/^$/d' ;;
+        *) cfn-flip ;;
     esac
 }
 
 transform() {
-    cat <<-EOF | yaml2 $FORMAT > $JSON
+    cat <<-EOF | yaml2 $FORMAT >$JSON
 	${installer:+installer: "'$installer'"}
 	${installer_url:+installer_url: "'$installer_url'"}
 	${installer_version:+installer_version: "'$installer_version'"}
@@ -54,27 +54,98 @@ transform() {
 	${image_id:+image_id: "'$image_id'"}
 	${LICENSE_TYPE:+license_type: "'$LICENSE_TYPE'"}
 	${installer_tag:+installer_tag: "'$installer_tag'"}
+	${pkg_versions:+package_versions: }
+	${pkg_versions:+"$pkg_versions"}
 	EOF
     case "$FORMAT" in
-        yaml|yml) cat "$JSON";;
-        json) cat "$JSON";;
-        cli) jq -r "to_entries|map(\"--\(.key) \(.value|tostring)\")|.[]" $JSON;;
-        clieq) jq -r "to_entries|map(\"--\(.key)=\(.value|tostring)\")|.[]" $JSON;;
-        hcvar) jq -r "to_entries|map(\"-var \(.key)=\(.value|tostring)\")|.[]" $JSON;;
-        vars) jq -r "to_entries|map(\"--var \(.key)=\(.value|tostring)\")|.[]" $JSON;;
-        sh) jq -r "to_entries|map(\"\(.key|ascii_upcase)=\(.value|tostring)\")|.[]" $JSON;;
-        *) echo >&2 "ERROR: $0: Unknown format $FORMAT"; return 2;;
+        yaml | yml) cat "$JSON" ;;
+        json) cat "$JSON" ;;
+        cli) jq -r "to_entries|map(\"--\(.key) \(.value|tostring)\")|.[]" $JSON ;;
+        clieq) jq -r "to_entries|map(\"--\(.key)=\(.value|tostring)\")|.[]" $JSON ;;
+        hcvar) jq -r "to_entries|map(\"-var \(.key)=\(.value|tostring)\")|.[]" $JSON ;;
+        vars) jq -r "to_entries|map(\"--var \(.key)=\(.value|tostring)\")|.[]" $JSON ;;
+        sh) jq -r "to_entries|map(\"\(.key|ascii_upcase)=\(.value|tostring)\")|.[]" $JSON ;;
+        *)
+            echo >&2 "ERROR: $0: Unknown format $FORMAT"
+            return 2
+            ;;
     esac
     return $?
 }
 
+git_cat_file() {
+    local remote='ssh://gerrit.int.xcalar.com:29418/xcalar.git' git_ref='trunk' path_spec path
+    while [ $# -gt 1 ]; do
+        local cmd="$1"
+        shift
+        case "$cmd" in
+            -r | --remote)
+                remote="$1"
+                shift
+                ;;
+            -g | --git-ref)
+                git_ref="$1"
+                shift
+                ;;
+            -p | --path-spec)
+                path_spec="$1"
+                shift
+                ;;
+            -*)
+                echo >&2 "ERROR: Bad option for git_cat_file"
+                return 2
+                ;;
+            --) break ;;
+        esac
+    done
+    if [ -n "$path_spec" ]; then
+        set -- "$path_spec" "$@"
+    fi
+
+    local tmpdir rc
+    tmpdir="$(mktemp -d -t git_cat_file.XXXXXX)"
+    (
+        cd "$tmpdir"
+        if ! grep -q 'gerrit.int.xcalar.com' $HOME/.ssh/config 2>/dev/null; then
+            test -e $HOME/.ssh || mkdir -m 0700 $HOME/.ssh
+            chmod 0700 $HOME/.ssh
+            cat >>.ssh/config <<EOF
+Host gerrit gerrit.int.xcalar.com
+    Hostname gerrit.int.xcalar.com
+    Port 29418
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    IdentitiesOnly yes
+EOF
+            if [ -n "$container" ]; then
+                echo "    User ${HOSTUSER:-jenkins}" >>$HOME/.ssh/config
+            fi
+            chmod 0600 $HOME/.ssh/config
+        fi
+        if ! git archive --remote "$remote" "$git_ref" "$path_spec" >remote.tar 2>/dev/null; then
+            return 1
+        fi
+        if ! tar -xf remote.tar; then
+            return 1
+        fi
+        if test -f "$path_spec"; then
+            cat "$path_spec"
+        else
+            cat remote.tar
+        fi
+    )
+    rc=$?
+    rm -rf "$tmpdir"
+    return $rc
+}
+
 check_build_meta() {
-    if [[ "$1" =~ /prod/ ]]; then
+    if [[ $1 =~ /prod/ ]]; then
         installer_build_type=prod
-    elif [[ "$1" =~ /debug/ ]]; then
+    elif [[ $1 =~ /debug/ ]]; then
         installer_build_type=debug
     fi
-    if [[ "$1" =~ RC([0-9]+) ]]; then
+    if [[ $1 =~ RC([0-9]+) ]]; then
         installer_rc="${BASH_REMATCH[1]}"
     fi
     local full_link
@@ -86,18 +157,27 @@ check_build_meta() {
     installer_build_number=${vbi[1]}
     full_dir="$(dirname "$full_link")"
     sha_info="${full_dir}"/../BUILD_SHA
-    installer_byjob="$(grep -Eow 'byJob/([A-Za-z0-9_-]+)' <<< $full_link | sed -r 's@byJob/@@')"
+    installer_byjob="$(grep -Eow 'byJob/([A-Za-z0-9_-]+)' <<<$full_link | sed -r 's@byJob/@@')"
     if test -e "${sha_info}"; then
         XCE=($(head -1 "$sha_info" | awk '{print $1 $2 $3}' | tr '():' ' '))
         XD=($(tail -1 "$sha_info" | awk '{print $1 $2 $3}' | tr '():' ' '))
         installer_xce_branch=${XCE[1]}
         installer_xce_sha1=${XCE[2]}
+        if ! ((NO_GIT)); then
+            if ! pkg_versions="$(
+                set -o pipefail
+                git_cat_file --remote ssh://gerrit.int.xcalar.com:29418/xcalar.git --git-ref $installer_xce_sha1 --path-spec pkg/VERSIONS | sed -r 's/^/  /; s/=/: /'
+            )"; then
+                pkg_versions=''
+                NO_GIT=1
+            fi
+        fi
         installer_xd_branch=${XD[1]}
         installer_xd_sha1=${XD[2]}
         if [ -z "$installer_rc" ]; then
-            if [[ "$installer_xce_branch" =~ RC([0-9]+) ]]; then
+            if [[ $installer_xce_branch =~ RC([0-9]+) ]]; then
                 installer_rc="${BASH_REMATCH[1]}"
-            elif [[ "$installer_xd_branch" =~ RC([0-9]+) ]]; then
+            elif [[ $installer_xd_branch =~ RC([0-9]+) ]]; then
                 installer_rc="${BASH_REMATCH[1]}"
             fi
         fi
@@ -117,13 +197,14 @@ vaultv1() {
     tmpf=$(mktemp -t vault.XXXXXX)
     if http_code=$(curl -s -L -H "X-Vault-Request: true" -H "X-Vault-Token: $(vault print token)" "${VAULT_ADDR:-https://vault.service.consul:8200}"/v1/"${1#/}" -w '%{http_code}\n' -o "$tmpf"); then
         case "$http_code" in
-            20*) cat "$tmpf"
-                 rc=0
-                 ;;
-            400) rc=2;;
-            403) rc=3;;
-            40*) rc=4;;
-            *) rc=5;;
+            20*)
+                cat "$tmpf"
+                rc=0
+                ;;
+            400) rc=2 ;;
+            403) rc=3 ;;
+            40*) rc=4 ;;
+            *) rc=5 ;;
         esac
     fi
     if [ $rc -eq 0 ]; then
@@ -151,23 +232,43 @@ load_license() {
 main() {
     FORMAT=json
     ARGS=()
+    NO_GIT=1
     while [ $# -gt 0 ]; do
         local cmd="$1" maybe_installer
         shift
         case "$cmd" in
-            -h|--help) usage; return 0;;
-            --format=*) FORMAT="${cmd#--format=}";;
-            --format) FORMAT="$1"; shift;;
-            --license) LICENSE="$1"; shift;;
-            --license-file) LICENSE="$(cat "$1")"; shift;;
-            --license-type) LICENSE_TYPE="$1"; shift;;
-            --image_build_number=*) image_build_number="${cmd#--image_build_number=}";;
-            --image_build_number) image_build_number="$1"; shift;;
-            -*) die "Unknown command: $cmd";;
+            -h | --help)
+                usage
+                return 0
+                ;;
+            --format=*) FORMAT="${cmd#--format=}" ;;
+            --git-ops) NO_GIT=0 ;;
+            --format)
+                FORMAT="$1"
+                shift
+                ;;
+            --license)
+                LICENSE="$1"
+                shift
+                ;;
+            --license-file)
+                LICENSE="$(cat "$1")"
+                shift
+                ;;
+            --license-type)
+                LICENSE_TYPE="$1"
+                shift
+                ;;
+            --image_build_number=*) image_build_number="${cmd#--image_build_number=}" ;;
+            --image_build_number)
+                image_build_number="$1"
+                shift
+                ;;
+            -*) die "Unknown command: $cmd" ;;
             ami-*)
                 AMI_ID="$cmd"
                 ARGS+=("$AMI_ID")
-                if ! aws_ami2json "$AMI_ID" > $JSON; then
+                if ! aws_ami2json "$AMI_ID" >$JSON; then
                     die "Failed to query info for $AMI_ID"
                 fi
                 image_id=$AMI_ID
@@ -184,7 +285,7 @@ main() {
                     fi
                 done
                 ;;
-            /*|s3*|http*)
+            /* | s3* | http*)
                 if [[ $cmd =~ ^(http|s3) ]]; then
                     installer_url="$cmd"
                     ARGS+=("$installer_url")
@@ -197,7 +298,7 @@ main() {
                     ARGS+=("$installer")
                 fi
                 ;;
-            *) die "Unknown command: $cmd";;
+            *) die "Unknown command: $cmd" ;;
         esac
     done
     if [ -z "$LICENSE_DATA" ]; then
@@ -219,7 +320,7 @@ main() {
     if [ -n "$LICENSE" ]; then
         license="$LICENSE"
     elif [ -e "$LICENSE_DATA" ]; then
-        license="$(jq -r .license.${LICENSE_TYPE} < "$LICENSE_DATA" 2>/dev/null)"
+        license="$(jq -r .license.${LICENSE_TYPE} <"$LICENSE_DATA" 2>/dev/null)"
     else
         license="$(load_license $LICENSE_TYPE 2>/dev/null)"
     fi
@@ -241,46 +342,46 @@ ok_or_not() {
     shift
     if eval "$@"; then
         echo "ok $test_idx - $name" '(' "$@" ')'
-        ok=$(( ok + 1 ))
+        ok=$((ok + 1))
     else
         echo "not ok $test_idx - $name" '(' "$@" ')'
-        not_ok=$(( not_ok + 1 ))
+        not_ok=$((not_ok + 1))
     fi
-    test_idx=$((test_idx+1))
+    test_idx=$((test_idx + 1))
 }
 
 SHA1CHECK=$(sed '/^SHA1CHECK/d' "${BASH_SOURCE[0]}" | sha1sum | cut -d' ' -f1)
-SHA1CHECK_OK=9f80a5e55c917fa12844a89660d33ea548f446b1
+SHA1CHECK_OK=856e7b1ec028853e5883fe93081ba67fda1dc1fc
 # shellcheck disable=SC2016,SC2046,SC2034
-if [ -z "$IN_TEST" ] && ( [ "$1" = --test ] || [ "$SHA1CHECK" != "$SHA1CHECK_OK" ] ); then
+if [ -z "$IN_TEST" ] && ([ "$1" = --test ] || [ "$SHA1CHECK" != "$SHA1CHECK_OK" ]); then
     export IN_TEST=1
     (
-    echo "TAP 1.3"
-    echo "1..12"
-    test_idx=1 not_ok=0 ok=0
-    eval $(bash "${BASH_SOURCE[0]}" --format=sh /netstore/builds/byJob/BuildTrunk/4305/prod/xcalar-2.3.0-4305-installer)
-    rc=$?
-    ok_or_not '4305-is-loaded' test "\$rc" = 0
-    ok_or_not '4305-is-rc6' test "\$INSTALLER_TAG" = '2.3.0-4305-RC6'
-    ok_or_not '4305-docker-image' test "\$DOCKER_IMAGE" = "registry.int.xcalar.com/xcalar/xcalar:2.3.0-4305-RC6"
-    ok_or_not '4305-license-type' test "\$LICENSE_TYPE" = "rc"
-    ok_or_not '4305-xce-sha1' test "\$INSTALLER_XCE_SHA1" = '659b139b'
-    eval $(bash "${BASH_SOURCE[0]}" --format=sh /netstore/builds/byJob/BuildTrunk/4307/prod/xcalar-2.3.0-4307-installer)
-    rc=$?
-    ok_or_not '4307-is-loaded' test '$rc' = 0
-    ok_or_not '4307-is-not-rc' test '$INSTALLER_TAG' = '2.3.0-4307'
-    ok_or_not '4307-docker-image' test '$DOCKER_IMAGE' = "registry.int.xcalar.com/xcalar/xcalar:2.3.0-4307"
-    ok_or_not '4307-license-type' test '$LICENSE_TYPE' = "dev"
-    ok_or_not '4307-xd-sha1' test '$INSTALLER_XD_SHA1' = '9e187765'
+        echo "TAP 1.3"
+        echo "1..12"
+        test_idx=1 not_ok=0 ok=0
+        eval $(bash "${BASH_SOURCE[0]}" --format=sh /netstore/builds/byJob/BuildTrunk/4305/prod/xcalar-2.3.0-4305-installer)
+        rc=$?
+        ok_or_not '4305-is-loaded' test '$rc' = 0
+        ok_or_not '4305-is-rc6' test '$INSTALLER_TAG' = '2.3.0-4305-RC6'
+        ok_or_not '4305-docker-image' test '$DOCKER_IMAGE' = "registry.int.xcalar.com/xcalar/xcalar:2.3.0-4305-RC6"
+        ok_or_not '4305-license-type' test '$LICENSE_TYPE' = "rc"
+        ok_or_not '4305-xce-sha1' test '$INSTALLER_XCE_SHA1' = '659b139b'
+        eval $(bash "${BASH_SOURCE[0]}" --format=sh /netstore/builds/byJob/BuildTrunk/4307/prod/xcalar-2.3.0-4307-installer)
+        rc=$?
+        ok_or_not '4307-is-loaded' test '$rc' = 0
+        ok_or_not '4307-is-not-rc' test '$INSTALLER_TAG' = '2.3.0-4307'
+        ok_or_not '4307-docker-image' test '$DOCKER_IMAGE' = "registry.int.xcalar.com/xcalar/xcalar:2.3.0-4307"
+        ok_or_not '4307-license-type' test '$LICENSE_TYPE' = "dev"
+        ok_or_not '4307-xd-sha1' test '$INSTALLER_XD_SHA1' = '9e187765'
 
-    json_obj=$(installer-version.sh /netstore/builds/byJob/BuildTrunk/4309/prod/xcalar-2.3.0-4309-installer | jq -c -r '{installer_tag,docker_image,installer_build_type,installer_xd_sha1}')
-    rc=$?
-    ok_or_not '4309-is-loaded' test '$rc' = 0
-    ok_or_not '4309-json-check' test '"$json_obj"' = '"{\"installer_tag\":\"2.3.0-4309\",\"docker_image\":\"registry.int.xcalar.com/xcalar/xcalar:2.3.0-4309\",\"installer_build_type\":\"prod\",\"installer_xd_sha1\":\"97f2e1a0\"}"'
-    if [ "$not_ok" -gt 0 ] || [  "$ok" -ne 12 ]; then
-        die "Test failed ok=$ok , not_ok=$not_ok"
-    fi
-    )>&2
+        json_obj=$(installer-version.sh /netstore/builds/byJob/BuildTrunk/4309/prod/xcalar-2.3.0-4309-installer | jq -c -r '{installer_tag,docker_image,installer_build_type,installer_xd_sha1}')
+        rc=$?
+        ok_or_not '4309-is-loaded' test '$rc' = 0
+        ok_or_not '4309-json-check' test '"$json_obj"' = '"{\"installer_tag\":\"2.3.0-4309\",\"docker_image\":\"registry.int.xcalar.com/xcalar/xcalar:2.3.0-4309\",\"installer_build_type\":\"prod\",\"installer_xd_sha1\":\"97f2e1a0\"}"'
+        if [ "$not_ok" -gt 0 ] || [ "$ok" -ne 12 ]; then
+            die "Test failed ok=$ok , not_ok=$not_ok"
+        fi
+    ) >&2
     sed -r -i 's/^SHA1CHECK_OK=.*$/SHA1CHECK_OK='$SHA1CHECK'/' "${BASH_SOURCE[0]}"
     [ "$1" = --test ] && exit 0
     exec bash "${BASH_SOURCE[0]}" "$@"

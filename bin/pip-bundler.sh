@@ -9,7 +9,6 @@
 # this same script that can be called "on the other side" to
 # ./myreq/install.sh install -r requirements.txt
 
-
 set -eu
 
 DIR=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
@@ -44,16 +43,16 @@ die() {
 }
 
 pip() {
-     trace ${PY3:-python3} -m pip "$@"
+    trace $VIRTUAL_ENV/bin/python3 -m pip "$@"
 }
 
 newvenv() {
-    /opt/xcalar/bin/python3.6 -m venv $1 >&2 \
-    && . $1/bin/activate >&2 \
-    && hash -r \
-    && $1/bin/python -m pip install -U pip >&2 \
-    && $1/bin/python -m pip install -U setuptools wheel pip-tools >&2 \
-    && echo "$1"
+    $PY3 -m venv "$1" >&2 \
+        && $1/bin/python3 -m pip install -U pip >&2 \
+        && $1/bin/python3 -m pip install -U setuptools wheel pip-tools >&2 \
+        && . "$1"/bin/activate \
+        && hash -r \
+        && echo "$1"
 }
 
 do_bundle() {
@@ -63,11 +62,11 @@ do_bundle() {
             ARGS+=(-r requirements.txt)
         fi
         if test -e constraints.txt; then
-            ARGS+=(-c constraints.txt);
+            ARGS+=(-c constraints.txt)
         fi
     fi
     if test -d /netstore/infra/wheels; then
-        ARGS+=(--find-links http://netstore.int.xcalar.com/infra/wheels/index.html --find-links file:///netstore/infra/wheels --trusted-host netstore --trusted-host netstore.int.xcalar.com)
+        ARGS+=(--find-links http://netstore/infra/wheels/py${PYVER}/index.html --find-links file:///netstore/infra/wheels/index.html --trusted-host netstore --trusted-host netstore.int.xcalar.com)
     fi
 
     deactivate 2>/dev/null || true
@@ -91,29 +90,26 @@ sha256() {
 }
 
 usage() {
-    echo "usage: $1 [install|bundle] [--python /path/to/py3] [--pip /path/to/pip3] bartender.zip [regular pip-options]"
+    echo "usage: $1 [install|bundle] [--python /path/to/py3] [--pip /path/to/pip3] bundle.zip [regular pip-options]"
 }
-
 
 main() {
     local output=''
 
-    if [[ $0 =~ bundle ]] || [[ $0 =~ wheel ]]; then
-        BUNDLE=1
-    elif [[ $0 =~ install ]]; then
+    BUNDLE=1
+    if [[ $0 =~ install ]]; then
         INSTALL=1
+        BUNDLE=0
     fi
 
-    export TMPDIR="${TMPDIR:-/tmp/pip-bundle-$(id -u)}"
+    export TMPDIR="${TMPDIR:-/var/tmp/$(id -u)/pip-bundle}"
     # shellcheck disable=SC2064
     mkdir -p $TMPDIR/wheels $TMPDIR/cache
-    rm -rf $TMPDIR/venv
-
+    rm -rf $TMPDIR/venv-$$
 
     export PATH=$PATH:/opt/xcalar/bin
     hash -r
-    PY3="$(which python3.6)"
-    PIP="$PY3 -m pip"
+    PY3="$(which python3)"
     output='pip-bundler.tar.gz'
     install_target=''
     while [ $# -gt 0 ]; do
@@ -122,20 +118,49 @@ main() {
         case "$cmd" in
             install) INSTALL=1 ;;
             bundle) BUNDLE=1 ;;
-            -h | --help) usage; exit 0;;
-            -r | --requirements) req="$1"; shift ;;
-            -c | --constraints) con="$1"; shift;;
-            -i | --install) install_links="$1"; shift;;
-            -t | --target) install_target="$1"; shift;;
-            -o | --output) output="$1"; shift ;;
-            --pip) PIP="$1"; shift;;
-            -p | --python) PY3="$1"; shift;;
-            --) break;;
-            *) usage >&2
-               die 2 "Unknown command: $cmd"
-               ;;
+            -h | --help)
+                usage
+                exit 0
+                ;;
+            -r | --requirements)
+                req="$1"
+                shift
+                ;;
+            -c | --constraints)
+                con="$1"
+                shift
+                ;;
+            -i | --install)
+                install_links="$1"
+                shift
+                ;;
+            -t | --target)
+                install_target="$1"
+                shift
+                ;;
+            -o | --output)
+                output="$1"
+                shift
+                ;;
+            --pip)
+                PIP="$1"
+                shift
+                ;;
+            -p | --python)
+                PY3="$1"
+                shift
+                ;;
+            --) break ;;
+            *)
+                usage >&2
+                die 2 "Unknown command: $cmd"
+                ;;
         esac
     done
+    if [ -z "${PIP:-}" ]; then
+        PIP="$PY3 -m pip"
+    fi
+    PYVER="$($PY3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")"
     if [ -n "$output" ]; then
         output="$(readlink -f $output)"
     fi
@@ -151,11 +176,11 @@ main() {
     fi
     if [[ $req =~ .in$ ]]; then
         (
-        VENV=$(mktemp -d -t venv.XXXXXX)
-        newvenv $VENV
-        . $VENV/bin/activate
-        pip-compile -o $(basename $req .in)_constraints.txt $req
-        rm -rf $VENV
+            VENV=$(mktemp -d -t venv.XXXXXX)
+            newvenv $VENV
+            . $VENV/bin/activate
+            pip-compile -o $(basename $req .in)_constraints.txt $req
+            rm -rf $VENV
         )
     fi
 
@@ -175,11 +200,11 @@ main() {
                 mkdir -p "$install_target" || die 2 "Failed to create $install_target"
             fi
             cp requirements.txt constraints.txt $install_target
-            PIP="${PIP:-/opt/xcalar/bin/python3 -m pip}"
+            PIP="${PIP:-$PY3 -m pip}"
             PIP_ARGS=(-t $install_target --no-index --no-cache-dir --find-links file://${DIR}/wheels/ ${con:+-c $con})
             $PIP install "${PIP_ARGS[@]}" -U setuptools \
-            && $PIP install "${PIP_ARGS[@]}" ${req:+-r $req} \
-            && exit 0
+                && $PIP install "${PIP_ARGS[@]}" ${req:+-r $req} ${con:+-c $con} \
+                && exit 0
             exit 1
         elif [ -n "${VIRTUAL_ENV:-}" ] || [ $(id -u) -eq 0 ]; then
             USER_INSTALL=''
@@ -188,8 +213,8 @@ main() {
         fi
         do_install $USER_INSTALL -U pip
         do_install $USER_INSTALL -U setuptools
-        do_install $USER_INSTALL -U wheel -c ${con}
-        do_install $USER_INSTALL -r ${req} -c ${con}
+        do_install $USER_INSTALL -U wheel ${con:+-c $con}
+        do_install $USER_INSTALL -r ${req} ${con:+-c $con}
     elif ((BUNDLE)); then
         PACKAGES=$TMPDIR/packages
         WHEELS=$TMPDIR/wheels
@@ -198,7 +223,7 @@ main() {
         info "Building packages from $req ..."
         #----
         cp ${BASH_SOURCE[0]} $TMPDIR/install.sh
-        sort $req > $TMPDIR/requirements.txt
+        sort $req >$TMPDIR/requirements.txt
         if [ -e "$con" ]; then
             cp $con $TMPDIR/constraints.txt
         fi
@@ -213,7 +238,6 @@ main() {
         fi
     fi
 }
-
 
 main "$@"
 exit

@@ -4,8 +4,8 @@
 #
 # shellcheck disable=SC1091,SC2015,SC2086,SC1090,SC2164,SC2046,SC2162,SC2038
 
-if ((XTRACE)); then
-    export XTRACE
+if ((XTRACE)) || [[ $- == *x* ]]; then
+    export XTRACE=1
     export PS4='# [${PWD}] ${BASH_SOURCE#$PWD/}:${LINENO}: ${FUNCNAME[0]}() - ${container:+[$container] }[${SHLVL},${BASH_SUBSHELL},$?] '
     set -x
 fi
@@ -22,8 +22,9 @@ env_script_file() {
     echo "${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}"
 }
 
-say() {
+say() {(set +x 2>/dev/null
     echo >&2 "$*"
+    )
 }
 
 debug_run() {
@@ -45,8 +46,9 @@ debug() {
 }
 
 traceon() {
+    export XTRACE=1
+    export PS4='# [${PWD}] ${BASH_SOURCE#$PWD/}:${LINENO}: ${FUNCNAME[0]}() - ${container:+[$container] }[${SHLVL},${BASH_SUBSHELL},$?] '
     set -x
-    export PS4='# ${BASH_SOURCE}:${LINENO}: ${FUNCNAME[0]}() - [${SHLVL},${BASH_SUBSHELL},$?] '
 }
 
 info() {(set +x
