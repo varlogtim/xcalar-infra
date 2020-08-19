@@ -601,10 +601,16 @@ Resources:
       Type: CNAME
       TTL: 60
       ResourceRecords:
-        - !Sub
-          - "ec2-${IpDash}.${Domain}."
-          - IpDash: !If [KeepIp, !Join ['-', !Split [ '.', !Ref ClusterEIP ]], '0-0-0-0']
-            Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
+        - !If
+          - CreateInstances
+          - !Sub
+            - "ec2-${IpDash}.${Domain}."
+            - IpDash: !Join ['-', !Split [ '.', !Ref ClusterEIP ]]
+              Domain: !If [IsUsEast1, 'compute-1.amazonaws.com', !Sub '${AWS::Region}.compute.amazonaws.com']
+          - !FindInMap
+            - AccountLUT
+            - !Ref 'AWS::AccountId'
+            - Failover
   AssociateEIP:
     Type: AWS::EC2::EIPAssociation
     Condition: KeepIp
@@ -1182,6 +1188,7 @@ Resources:
                   - dynamodb:DescribeTable
                 Resource:
                   - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SessionTable}'
+
 {%- if enableLifecycle %}
               - Effect: Allow
                 Action:
