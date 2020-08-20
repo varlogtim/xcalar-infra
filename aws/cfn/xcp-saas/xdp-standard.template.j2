@@ -255,25 +255,25 @@ Mappings:
       HostedZoneId: 'ZOHHT2AHYTDDN'
       HostedZoneName: 'test.xcalar.cloud'
       Failover: 'redirector.test.xcalar.cloud'
-      Ip: '0.0.0.0'
+      Ip: '35.165.143.184'
     '559166403383':
       AccountName: 'xcalar'
       HostedZoneId: 'ZM6YP51I9IZCW'
       HostedZoneName: 'xcalar.rocks'
       Failover: 'redirector.xcalar.rocks'
-      Ip: '0.0.0.0'
+      Ip: '35.165.143.184'
     '876030232190':
       AccountName: 'xcpegasus'
       HostedZoneId: 'Z3OAJRCVE57A0G'
       HostedZoneName: 'xcalar.cloud'
       Failover: 'redirector.xcalar.cloud'
-      Ip: '0.0.0.0'
+      Ip: '35.165.143.184'
     '692270398054':
       AccountName: 'instamartqa'
       HostedZoneId: 'Z0035187TUPG2IUZ5175'
       HostedZoneName: 'qa.xcalar.io'
       Failover: 'redirector.qa.xcalar.io'
-      Ip: '0.0.0.0'
+      Ip: '35.165.143.184'
 {%- endif %}
   AWSAMIRegionMap:
 {%- for reg in ['us-east-1','us-west-2','us-east-2','us-west-1'] %}
@@ -654,8 +654,6 @@ Resources:
                   LIFECYCLE_HOOK_NAME=LifecycleTerminating
                   SAMPLEBUCKET=${SampleBucket}
                   APPBUCKET=${AppBucket}
-                  CLSPREFIX=${ClsPrefix}
-                  NSCLUSTER=${NsCluster}
                   LOGBUCKET=${LogBucket}
                   LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
                 - LogBucket: !ImportValue sharedinf-logbucket
@@ -1168,6 +1166,15 @@ Resources:
                   - route53:ListHostedZonesByName
                 Resource:
                   - '*'
+              - Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                Resource: !Sub
+                  - 'arn:aws:route53:::hostedzone/${HostedZoneId}'
+                  - HostedZoneId: !FindInMap
+                    - AccountLUT
+                    - !Ref 'AWS::AccountId'
+                    - HostedZoneId
               - Effect: Allow
                 Action:
                   - ssm:GetParametersByPath

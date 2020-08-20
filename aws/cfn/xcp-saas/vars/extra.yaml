@@ -1,5 +1,7 @@
-enableLicense: true
-enableLifecycle: false
-enableCloud: true
-enableDnsFailover: false
-useLocalLut: true
+enableLicense: True
+enableLifecycle: True
+enableCloud: True
+enableDnsFailover: False
+useLocalLut: True
+flavors:
+  - default

@@ -167,7 +167,7 @@ save_tmpdir() {
 }
 
 j2transform() {
-    if ! cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml | jinja2 "${J2DEFS[@]}" "$@"; then
+    if ! cat "$PROJDIR"/vars/*.yaml | jinja2 "${J2DEFS[@]}" "$@"; then
         return 1
     fi
     return 0
@@ -441,7 +441,7 @@ dc2_upload() {
     mkdir -p "$GENDIR"/scripts/
     for ii in "$PROJDIR"/scripts/*; do
         if [[ $ii =~ .j2$ ]]; then
-            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml "${USER_VARS_FILES[@]}" | jinja2 "${J2DEFS[@]}" "$ii" > $GENDIR/scripts/$(basename $ii .j2)
+            cat "$PROJDIR"/vars/*.yaml "${USER_VARS_FILES[@]}" | jinja2 "${J2DEFS[@]}" "$ii" > $GENDIR/scripts/$(basename $ii .j2)
         else
             cp $ii $GENDIR/scripts/
         fi
@@ -548,7 +548,7 @@ dc2_upload() {
                 *) TEMPLATEOUT=${TEMPLATE}-${flavor} ;;
             esac
             templateUrl="${BASE_URL}/${TEMPLATEOUT}.json"
-            cat "$TEMPLATEDIR"/vars/*.yaml "$PROJDIR"/vars/*.yaml "$TEMPLATEDIR"/flavor/${flavor}.yaml "$TMPDIR"/vars/*.yaml > $TMPDIR/allvars.yaml
+            cat "$PROJDIR"/vars/*.yaml "$TEMPLATEDIR"/flavor/${flavor}.yaml "$TMPDIR"/vars/*.yaml > $TMPDIR/allvars.yaml
 
             local templateJson=${GENDIR}/${TEMPLATEOUT}.json
             # shellcheck disable=SC2002

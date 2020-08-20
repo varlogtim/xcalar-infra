@@ -1,5 +1,3 @@
 createVpc: False
-enableLifecycle: False
-keepIp: True
 logGroup: False
 samAsg: False
