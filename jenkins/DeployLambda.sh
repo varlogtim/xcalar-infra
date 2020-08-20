@@ -2,6 +2,7 @@
 
 set -ex
 export AWS_DEFAULT_REGION=us-west-2
+export AWS_REGION="${REGION:-$AWS_DEFAULT_REGION}"
 export XLRINFRADIR=${XLRINFRADIR-$HOME/xcalar-infra}
 SAM_SAAS_DIR="$XLRINFRADIR/aws/lambdaFns/saas/sam-saas"
 
@@ -36,7 +37,8 @@ sam deploy --template-file packaged.yaml \
                                  SessionTable=${SESSION_TABLE_NAME} \
                                  CredsTable=${CREDS_TABLE_NAME} \
                                  UserStackPrefix=${USER_STACK_PREFIX} \
-                                 Role=${ROLE} Domain=${DOMAIN} StackName=${STACK_NAME})
+                                 Role=${ROLE} Domain=${DOMAIN} StackName=${STACK_NAME} \
+                                 Region=${REGION})
 
 
 

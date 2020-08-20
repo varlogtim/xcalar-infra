@@ -15,9 +15,10 @@ from util.cluster_util import node_status
 from constants.cluster_type import cluster_type_table
 
 # Intialize all service clients
-cfn_client = boto3.client('cloudformation', region_name='us-west-2')
-ec2_client = boto3.client('ec2', region_name='us-west-2')
-dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
+region = os.environ.get('REGION')
+cfn_client = boto3.client('cloudformation', region_name=region)
+ec2_client = boto3.client('ec2', region_name=region)
+dynamodb_client = boto3.client('dynamodb', region_name=region)
 domain = os.environ.get('DOMAIN')
 
 # XXX To-do Read from env variables

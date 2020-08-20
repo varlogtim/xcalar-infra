@@ -11,9 +11,10 @@ from util.user_util import get_user_info, reset_user_cfn, validate_user_instance
 from util.cfn_util import get_stack_info
 from util.billing_util import get_price
 # To-do all hard-coded values need to be read from enviornemnt variables
-dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
-cfn_client = boto3.client('cloudformation', region_name='us-west-2')
-ec2_client = boto3.client('ec2', region_name='us-west-2')
+region = os.environ.get('REGION')
+dynamodb_client = boto3.client('dynamodb', region_name=region)
+cfn_client = boto3.client('cloudformation', region_name=region)
+ec2_client = boto3.client('ec2', region_name=region)
 
 domain = os.environ.get('DOMAIN')
 user_table = os.environ.get('USER_TABLE')

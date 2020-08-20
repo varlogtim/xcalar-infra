@@ -30,6 +30,9 @@ Parameters:
   StackName:
     Type: String
     Default: ''
+  Region:
+    Type: String
+    Default: 'us-west-2'
 
 Resources:
   LibLayer:
@@ -93,6 +96,8 @@ Resources:
               Ref: Role
           DOMAIN:
               Ref: Domain
+          REGION:
+              Ref: Region
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -193,6 +198,8 @@ Resources:
               Ref: CredsTable
           DOMAIN:
               Ref: Domain
+          REGION:
+              Ref: Region
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -236,15 +243,15 @@ Resources:
       Layers:
         - !Ref LibLayer
       Events:
-        UploadFile:
+        UploadFileUrl:
           Type: Api
           Properties:
-            Path: /s3/upload
+            Path: /s3/uploadurl
             Method: post
-        UploadFileOptions:
+        UploadFileUrlOptions:
           Type: Api
           Properties:
-            Path: /s3/upload
+            Path: /s3/uploadurl
             Method: options
         DeleteFile:
           Type: Api
@@ -266,26 +273,16 @@ Resources:
           Properties:
             Path: /s3/describe
             Method: options
-        StartMultipartUpload:
+        PutCORSConfiguration:
           Type: Api
           Properties:
-            Path: /s3/multipart/start
+            Path: /s3/corsconfig
             Method: post
-        UploadPart:
+        PutCORSConfigurationOptions:
           Type: Api
           Properties:
-            Path: /s3/multipart/upload
-            Method: post
-        CompleteMultipartUpload:
-          Type: Api
-          Properties:
-            Path: /s3/multipart/complete
-            Method: post
-        AbortMultipartUpload:
-          Type: Api
-          Properties:
-            Path: /s3/multipart/abort
-            Method: post
+            Path: /s3/corsconfig
+            Method: options
       Environment:
         Variables:
           USER_TABLE:
@@ -296,6 +293,8 @@ Resources:
               Ref: CredsTable
           DOMAIN:
               Ref: Domain
+          REGION:
+              Ref: Region
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -312,7 +311,7 @@ Resources:
               Action:
                 - s3:PutObject
                 - s3:DeleteObject
-                - s3:AbortMultipartUpload
+                - s3:PutBucketCORS
               Resource:
                 !Sub 'arn:aws:s3:::${UserStackPrefix}*' # For test only
             - Effect: Allow

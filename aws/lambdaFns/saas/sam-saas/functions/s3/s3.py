@@ -9,10 +9,10 @@ from util.cfn_util import get_stack_info
 from util.user_util import get_user_info, check_user_credential
 
 # Intialize all service clients
-cfn_client = boto3.client('cloudformation', region_name='us-west-2')
-dynamodb_client = boto3.client('dynamodb', region_name='us-west-2')
+region = os.environ.get('REGION')
+cfn_client = boto3.client('cloudformation', region_name=region)
+dynamodb_client = boto3.client('dynamodb', region_name=region)
 domain = os.environ.get('DOMAIN')
-# XXX To-do Read from env variables
 user_table = os.environ.get('USER_TABLE')
 session_table = os.environ.get('SESSION_TABLE')
 creds_table = os.environ.get('CREDS_TABLE')
@@ -38,33 +38,29 @@ def get_bucket(user_name):
         })
     return stack_info['s3_url']
 
-def upload_file(upload_params):
+def get_upload_file_url(upload_params):
     user_name = upload_params['username']
     file_name = upload_params['fileName']
-    data = upload_params['data']
-    # TODO: varify user cookie and get access keys
+    fields = upload_params['fields']
+    conditions = upload_params['conditions']
     bucket_resp = get_bucket(user_name)
     if type(bucket_resp) != str:
         return bucket_resp
-    temp_file_path = '/tmp/' + file_name
-    s3_client = boto3.client('s3', region_name='us-west-2')#, aws_access_key_id='AKIAQUNDR55NZCQP53QX', aws_secret_access_key='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')
-    # Write to local storage might take some time
-    filehandle = open(temp_file_path, 'w')
-    filehandle.write(data)
-    filehandle.close()
-    s3_client.upload_file(temp_file_path, bucket_resp, file_name, ExtraArgs=None, Callback=None, Config=None)
+    expiration = 3600
+    s3_client = boto3.client('s3', region_name=region)
+    res_dict = s3_client.generate_presigned_post(bucket_resp, file_name, Fields=fields, Conditions=conditions, ExpiresIn=expiration)
     return _make_reply(200, {
-        'status': Status.OK
+        'status': Status.OK,
+        'responseDict': res_dict
     })
 
 def delete_file(delete_params):
     user_name = delete_params['username']
     file_name = delete_params['fileName']
-    # TODO: varify user cookie and get access keys
     bucket_resp = get_bucket(user_name)
     if type(bucket_resp) != str:
         return bucket_resp
-    s3_client = boto3.client('s3', region_name='us-west-2')#, aws_access_key_id='AKIAQUNDR55NZCQP53QX', aws_secret_access_key='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')
+    s3_client = boto3.client('s3', region_name=region)
     s3_client.delete_object(Bucket=bucket_resp, Key=file_name)
     return _make_reply(200, {
         'status': Status.OK
@@ -79,58 +75,23 @@ def bucket_info(user_name):
         'bucketName': bucket_resp
     })
 
-def create_multipart_upload(params):
-    user_name = params['username']
-    file_name = params['fileName']
+def put_cors_config(user_name):
+    # Hard code it here
+    cors_config = {
+		"CORSRules": [
+            {
+                "AllowedHeaders": ["*"],
+                "AllowedMethods": ["POST"],
+                "AllowedOrigins": ["*"],
+                "MaxAgeSeconds": 3000
+            }
+        ]
+	}
     bucket_resp = get_bucket(user_name)
     if type(bucket_resp) != str:
         return bucket_resp
-    s3_client = boto3.client('s3', region_name='us-west-2')
-    create_resp = s3_client.create_multipart_upload(Bucket=bucket_resp, Key=file_name)
-    return _make_reply(200, {
-        'status': Status.OK,
-        'uploadId': create_resp['UploadId']
-    })
-
-def upload_part(params):
-    user_name = params['username']
-    file_name = params['fileName']
-    upload_id = params['uploadId']
-    data = params['data']
-    part_number = params['partNumber']
-    bucket_resp = get_bucket(user_name)
-    if type(bucket_resp) != str:
-        return bucket_resp
-    s3_client = boto3.client('s3', region_name='us-west-2')
-    upload_resp = s3_client.upload_part(Body=data, Bucket=bucket_resp, Key=file_name, PartNumber=part_number, UploadId=upload_id)
-    return _make_reply(200, {
-        'status': Status.OK,
-        'ETag': upload_resp['ETag']
-    })
-
-def complete_multipart_upload(params):
-    user_name = params['username']
-    file_name = params['fileName']
-    upload_id = params['uploadId']
-    upload_info = params['uploadInfo']
-    bucket_resp = get_bucket(user_name)
-    if type(bucket_resp) != str:
-        return bucket_resp
-    s3_client = boto3.client('s3', region_name='us-west-2')
-    s3_client.complete_multipart_upload(Bucket=bucket_resp, Key=file_name, MultipartUpload=upload_info, UploadId=upload_id)
-    return _make_reply(200, {
-        'status': Status.OK
-    })
-
-def abort_multipart_upload(params):
-    user_name = params['username']
-    file_name = params['fileName']
-    upload_id = params['uploadId']
-    bucket_resp = get_bucket(user_name)
-    if type(bucket_resp) != str:
-        return bucket_resp
-    s3_client = boto3.client('s3', region_name='us-west-2')
-    s3_client.abort_multipart_upload(Bucket=bucket_resp, Key=file_name, UploadId=upload_id)
+    s3_client = boto3.client('s3', region_name=region)
+    s3_client.put_bucket_cors(Bucket=bucket_resp, CORSConfiguration=cors_config)
     return _make_reply(200, {
         'status': Status.OK
     })
@@ -162,27 +123,28 @@ def lambda_handler(event, context):
                 },
                 headers_origin)
         else:
-            return _make_reply(403, "Forbidden",  headers_origin)
+            return _make_reply(403, {
+                'error': "Forbidden"
+            },
+            headers_origin)
 
-        if path == '/s3/upload':
-            reply = upload_file(data)
+        if path == '/s3/uploadurl':
+            reply = get_upload_file_url(data)
         elif path == '/s3/delete':
             reply = delete_file(data)
         elif path == '/s3/describe':
             reply = bucket_info(data['username'])
-        elif path == '/s3/multipart/start':
-            reply = create_multipart_upload(data)
-        elif path == '/s3/multipart/upload':
-            reply = upload_part(data)
-        elif path == '/s3/multipart/complete':
-            reply = complete_multipart_upload(data)
-        elif path == '/s3/multipart/abort':
-            reply = abort_multipart_upload(data)
+        elif path == '/s3/corsconfig':
+            reply = put_cors_config(data['username'])
         else:
-            reply = _make_reply(400, "Invalid endpoint: %s" % path)
+            reply = _make_reply(400, {
+                'error': "Invalid endpoint: %s" % path
+            })
 
     except Exception as e:
         traceback.print_exc()
-        reply = _make_reply(400, "Exception has occured: {}".format(e))
+        reply = _make_reply(400, {
+            'error': "Exception has occured: {}".format(e)
+        })
     reply = _replace_headers_origin(reply, headers_origin)
     return reply
