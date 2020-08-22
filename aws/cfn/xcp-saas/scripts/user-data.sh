@@ -68,6 +68,7 @@ expserver_config() {
        printf "$XCE_EXPSERVER_CLOUD_MAIN_CONFIG" >> /etc/default/xcalar
        echo '## Xcalar Cloud Main End' >> /etc/default/xcalar
    fi
+   printf "JWT_SECRET=xcalarSsssh" >> /etc/default/xcalar
 }
 
 efsip() {
