@@ -6,7 +6,8 @@
             "title": "All CPU Idle Pct",
             "metrics": [
                 {
-                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, idle]"
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, idle]",
+                    "label": "iowait"
                 }
             ]
         },
@@ -14,7 +15,8 @@
             "title": "All CPU Sys Pct",
             "metrics": [
                 {
-                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, sys]"
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, sys]",
+                    "label": "sys"
                 }
             ]
         },
@@ -22,7 +24,17 @@
             "title": "All CPU User Pct",
             "metrics": [
                 {
-                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, usr]"
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, usr]",
+                    "label": "usr"
+                }
+            ]
+        },
+        {
+            "title": "All CPU Iowait Pct",
+            "metrics": [
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, iowait]",
+                    "label": "iowait"
                 }
             ]
         }

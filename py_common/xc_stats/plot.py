@@ -48,8 +48,6 @@ class FigureCfg(object):
         metrics = dikt.get('metrics', None)
         if not metrics:
             raise ValueError("missing or empty \"metrics\"")
-        if len(metrics) > 2:
-            raise ValueError("too many entries in \"metrics\" list")
 
     def get(self, key, default=None):
         """
@@ -154,15 +152,17 @@ def plot(*, fig_group, dsh, plotdir, start_ts, end_ts, tz, nodes=None):
                 fig,ax1 = plt.subplots(figsize=fcfg.get('figsize', (8.5, 5)))
                 ax1.set_xlabel(fcfg.get('xlabel', 'time (s)'))
                 ax1.set_title(fcfg.get('title', ''))
+                ax2 = None
 
-                y1color = fcfg.get('y1color', 'tab:blue')
+
+                y1color = fcfg.get('y1color', 'black')
                 ax1.set_ylabel(fcfg.get('y1label', ''), color=y1color)
                 ax1.tick_params(axis='y', labelcolor=y1color)
 
                 y2label = fcfg.get('y2label', None)
                 if y2label is not None:
                     ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-                    y2color = fcfg.get('y2color', 'tab:red')
+                    y2color = fcfg.get('y2color', 'red')
                     ax2.set_ylabel(y2label, color=y2color)
                     ax2.tick_params(axis='y', labelcolor=y2color)
 
@@ -196,13 +196,16 @@ def plot(*, fig_group, dsh, plotdir, start_ts, end_ts, tz, nodes=None):
                     xes = [datetime.datetime.fromtimestamp(pt[0], tz=tz) for pt in plot_points]
                     yes = [pt[1] for pt in plot_points]
 
+                    label = mcfg.get('label', 'Metric')
                     if mcfg.get('ploty2', False):
-                        ax2.plot(xes, yes, color=y2color)
+                        color = mcfg.get('color', y2color)
+                        ax2.plot(xes, yes, color=color, label=label)
                     else:
-                        ax1.plot(xes, yes, color=y1color)
-
+                        color = mcfg.get('color', y1color)
+                        ax1.plot(xes, yes, color=color, label=label)
 
                 fig.autofmt_xdate()
+                fig.legend(loc="lower left")
                 if y2label is not None:
                     fig.tight_layout()  # otherwise the right y-label is slightly clipped
                 pdf.savefig(fig)
