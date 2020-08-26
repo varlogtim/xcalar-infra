@@ -1,0 +1,114 @@
+{
+    "figsize": [22,5],
+    "figures": [
+        {
+            "figsize": [22,5],
+            "title": "Sys + Usr CPU Utilization",
+            "y1label": "CPU usr %%",
+            "y2label": "CPU sys %",
+            "y1color": "green",
+            "y2color": "red",
+            "y1range": [0, 101],
+            "y2range": [0, 101], 
+            "metrics": [
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, usr]"
+                },
+                {
+                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, sys]",
+                    "ploty2": true
+                }
+            ]
+        },
+        {
+            "figsize": [22,5],
+            "title": "System Swap",
+            "y1label": "Swap (bytes)",
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemMemoryCgXCEUsed]"
+                }
+            ]
+        },
+        {
+            "figsize": [22,5],
+            "title": "Xdb Used",
+            "y1label": "Xdb Used (bytes)",
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, XdbUsedBytes]"
+                }
+            ]
+        },
+        {
+            "figsize": [22,5],
+            "title": "System Memory",
+            "y1label": "Memory (bytes)",
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemMemoryUsed]"
+                }
+            ]
+        },
+        {
+            "figsize": [22,5],
+            "title": "Xcalar Paging",
+            "y1label": "Num Serialized Bytes",
+            "y2label": "Num De-serialized Bytes",
+            "metrics": [
+                {
+                    "xy_expr": "$.xcalar_internal_stats[*][timestamp, XdbMgr_12_numSerializedBytes]"
+                },
+                {
+                    "xy_expr": "$.xcalar_internal_stats[*][timestamp, XdbMgr_12_numDeserializedBytes]",
+                    "ploty2": true
+                }
+            ]
+        },
+        {
+            "title": "XCE vs XPU Memory",
+            "y1label": "SystemMemoryCgXCEUsed",
+            "y2label": "SystemMemoryCgXPUUsed",
+
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemMemoryCgXCEUsed]"
+                },
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemMemoryCgXPUUsed]",
+                    "ploty2": true
+                }
+            ]
+        },
+        {
+            "title": "XCE vs XPU CPU Utilization",
+            "y1label": "SystemCpuXCEUsage",
+            "y2label": "SystemCpuXPUUsage",
+
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemCpuXCEUsage]"
+                },
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemCpuXPUUsage]",
+                    "ploty2": true
+                }
+            ]
+        },
+        {
+            "title": "Network Bytes Sent and Recieved",
+            "y1label": "SystemNetworkRecvBytes",
+            "y2label": "SystemNetworkSendBytes",
+
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemNetworkRecvBytes]"
+                },
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemNetworkSendBytes]",
+                    "ploty2": true
+                }
+            ]
+        }
+    ]
+}

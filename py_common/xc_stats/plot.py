@@ -31,6 +31,8 @@ class FigureCfg(object):
             y1color: <str>,
             y2label: <str>,
             y2color: <str>,
+            y1range: (min, max),
+            y2range: (min, max),
 
             metrics: [
                 {xy_expr: <expr>},
@@ -157,6 +159,9 @@ def plot(*, fig_group, dsh, plotdir, start_ts, end_ts, tz, nodes=None):
 
                 y1color = fcfg.get('y1color', 'black')
                 ax1.set_ylabel(fcfg.get('y1label', ''), color=y1color)
+                y1range = fcfg.get('y1range', None)
+                if y1range:
+                    ax1.axis(ymin=y1range[0], ymax=y1range[1])
                 ax1.tick_params(axis='y', labelcolor=y1color)
 
                 y2label = fcfg.get('y2label', None)
@@ -164,6 +169,9 @@ def plot(*, fig_group, dsh, plotdir, start_ts, end_ts, tz, nodes=None):
                     ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
                     y2color = fcfg.get('y2color', 'red')
                     ax2.set_ylabel(y2label, color=y2color)
+                    y2range = fcfg.get('y2range', None)
+                    if y2range:
+                        ax2.axis(ymin=y2range[0], ymax=y2range[1])
                     ax2.tick_params(axis='y', labelcolor=y2color)
 
                 fig_points = points_per_fig.get(fidx)
