@@ -63,6 +63,39 @@
                     "color": "b"
                 }
             ]
+        },
+        {
+            "title": "Xcalar Paging",
+            "y1label": "Num Bytes",
+            "metrics": [
+                {
+                    "xy_expr": "$.xcalar_internal_stats[*][timestamp, XdbMgr_12_numSerializedBytes]",
+                    "label": "Serialized",
+                    "color": "b"
+                },
+                {
+                    "xy_expr": "$.xcalar_internal_stats[*][timestamp, XdbMgr_12_numDeserializedBytes]",
+                    "label": "Deserialized",
+                    "color": "r"
+                }
+            ]
+        },
+        {
+            "title": "Network Bytes Sent and Recieved",
+            "y1label": "Num Bytes",
+            "metrics": [
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemNetworkSendBytes]",
+                    "label": "NetworkSend",
+                    "color": "b"
+                },
+                {
+                    "xy_expr": "$.system_stats[*][timestamp, SystemNetworkRecvBytes]",
+                    "label": "NetworkRecv",
+                    "color": "r"
+                }
+            ]
         }
     ]
 }
+
