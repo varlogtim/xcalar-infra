@@ -132,7 +132,7 @@ Resources:
             MaxAge: 3000
       AccessControl: PublicRead
       WebsiteConfiguration:
-        ErrorDocument: index.html
+        ErrorDocument: 404.html
         IndexDocument: index.html
       Tags:
         - Key: StackName
@@ -161,7 +161,7 @@ Resources:
       AccessControl: PublicRead
       BucketName: !Sub ${AWS::StackName}-lambdabucket-${AWS::AccountId}-${AWS::Region}
       WebsiteConfiguration:
-        ErrorDocument: index.html
+        ErrorDocument: 404.html
         IndexDocument: index.html
       Tags:
         - Key: StackName
@@ -205,6 +205,128 @@ Resources:
         Value: !Ref AWS::StackName
       - Key: Purpose
         Value: ASGNotifications
+  ASGQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 60
+      Tags:
+      - Key: StackName
+        Value: !Ref AWS::StackName
+      - Key: Purpose
+        Value: ASGQueue
+
+  ASGQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Sid: allow-sns-messages
+          Effect: Allow
+          Principal: '*'
+          Action: sqs:SendMessage
+          Resource: '*'
+          Condition:
+            ArnEquals:
+              'aws:sourceArn': !Ref ASGNotifications
+      Queues:
+        - !Ref ASGQueue
+
+  ASGSQSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      Endpoint: !GetAtt 'ASGQueue.Arn'
+      Region: !Ref AWS::Region
+      TopicArn: !Ref 'ASGNotifications'
+      RawMessageDelivery: true
+
+  DumpEventToS3Fn:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          import os
+          import json
+          import boto3
+          import uuid
+          from datetime import datetime
+
+          s3_bucket = os.environ['S3BUCKET']
+          s3_prefix = os.environ['S3PREFIX']
+          def lambda_handler(event, context):
+              try:
+                  now = datetime.now()
+                  path = now.strftime('%Y/%m/%d/event-%Y%m%dT%H%M%S')
+                  uid = str(uuid.uuid4())
+                  s3 = boto3.resource('s3')
+                  s3.Object(s3_bucket, s3_prefix + '/' + path + '-' + uid + '.json').put(
+                      Body=json.dumps(event, indent=2))
+                  return 'Event stored'
+              except:
+                  raise
+      Handler: index.lambda_handler
+      Description: "Save any event to S3"
+      Environment:
+        Variables:
+          S3BUCKET: !Ref S3LogBucket
+          S3PREFIX: !Sub 'SQSLogs/${AWS::Region}/${AWS::AccountId}/'
+      Role: !GetAtt DumpEventToS3Role.Arn
+      Runtime: python3.6
+      Timeout: 60
+  DumpEventToS3LambdaLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${DumpEventToS3Fn}'
+  DumpEventToS3Permissions:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt DumpEventToS3Fn.Arn
+      Principal: '*'
+      SourceAccount: !Ref 'AWS::AccountId'
+      #SourceArn: !Ref ASGNotifications
+
+  DumpEventToS3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: "DumpEventToS3Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: "Allow"
+                Action:
+                  - "sqs:*"
+                Resource: '*'
+              - Effect: "Allow"
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3LogBucket}"
+              - Effect: "Allow"
+                Action:
+                  - s3:*Object
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3LogBucket}/*"
   GatewayAttach:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
@@ -427,38 +549,38 @@ Resources:
           Value: !Sub '${AWS::StackName}-natgwb'
         - Key: StackName
           Value: !Ref 'AWS::StackName'
-          #  S3Endpoint:
-          #    Type: AWS::EC2::VPCEndpoint
-          #    Properties:
-          #      PolicyDocument:
-          #        Statement:
-          #          - Sid: EFG123
-          #            Action: '*'
-          #            Effect: Allow
-          #            Resource: '*'
-          #            Principal: '*'
-          #      RouteTableIds:
-          #        - !Ref RouteTablePrivateA
-          #        - !Ref RouteTablePrivateB
-          #      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
-          #      VpcId: !Ref VPC
-          #      VpcEndpointType: Gateway
-          #      #  DynamoDbEndpoint:
-      #    Type: AWS::EC2::VPCEndpoint
-      #    Properties:
-      #      PolicyDocument:
-      #        Statement:
-      #          - Sid: EFG123
-      #            Action: '*'
-      #            Effect: Allow
-      #            Resource: '*'
-      #            Principal: '*'
-      #      RouteTableIds:
-      #        - !Ref RouteTablePrivateA
-      #        - !Ref RouteTablePrivateB
-      #      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
-      #      VpcId: !Ref VPC
-      #      VpcEndpointType: Gateway
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Sid: EFG123
+            Action: '*'
+            Effect: Allow
+            Resource: '*'
+            Principal: '*'
+      RouteTableIds:
+        - !Ref RouteTablePrivateA
+        - !Ref RouteTablePrivateB
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId: !Ref VPC
+      VpcEndpointType: Gateway
+  DynamoDbEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Sid: EFG123
+            Action: '*'
+            Effect: Allow
+            Resource: '*'
+            Principal: '*'
+      RouteTableIds:
+        - !Ref RouteTablePrivateA
+        - !Ref RouteTablePrivateB
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
+      VpcId: !Ref VPC
+      VpcEndpointType: Gateway
   EfsShare:
     Type: AWS::EFS::FileSystem
     Properties:
@@ -503,6 +625,19 @@ Outputs:
     Value: !Ref vpccidr
     Export:
       Name: !Sub ${AWS::StackName}-vpccidr
+  subnetprivatea:
+    Value: !Ref SubnetPrivateA
+    Export:
+      Name: !Sub ${AWS::StackName}-subprivatea
+  subnetprivateb:
+    Value: !Ref SubnetPrivateB
+    Export:
+      Name: !Sub ${AWS::StackName}-subprivateb
+  subnetpublicb:
+    Description: Subnet Public B
+    Value: !Ref SubnetPublicSharedB
+    Export:
+      Name: !Sub ${AWS::StackName}-subnetpublicb
   subnetpublica:
     Value: !Ref SubnetPublicSharedA
     Export:
