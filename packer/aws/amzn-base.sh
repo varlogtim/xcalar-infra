@@ -53,6 +53,7 @@ if ! packer.io build \
     -var manifest="$MANIFEST" \
     -var installer="$INSTALLER" \
     -var installer_url="$INSTALLER_URL" \
+    -var project=xcp-base \
     -var-file installer-version.json \
     -parallel-builds=1 $TEMPLATE; then
     exit 1

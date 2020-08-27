@@ -7,7 +7,7 @@ variables:
   baseos: 'amzn2-ami'
   build_number: '{{env `BUILD_NUMBER`}}'
   image_build_number: '{{env `IMAGE_BUILD_NUMBER`}}'
-  description: Xcalar Base Image
+  description: Xcalar Cloud Base Image
   destination_regions: '{{env `REGIONS`}}'
   device_name: /dev/xvda
   disk_size: '10'
@@ -17,7 +17,8 @@ variables:
   installer_url: '{{env `INSTALLER_URL`}}'
   installer_version: '1.0'
   installer_tag: ''
-  product: xdp-base
+  product: xcp
+  project: xcp-base
   region: '{{env `AWS_DEFAULT_REGION`}}'
   shared_with: '{{env `SHARED_WITH`}}'
   ssh_username: ec2-user
@@ -58,12 +59,12 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_tag`}}-{{user `today`}}'
+    ami_name: '{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_tag`}}-{{user `today`}}'
     ami_description: '{{user `description`}} {{split build_name "-" 2 | upper}} ({{user `installer_version`}}-{{user `installer_build_number`}} ({{user `today`}}))'
     run_tags:
-      Name: 'packer-{{build_name}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}'
+      Name: 'packer-{{build_name}}-{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}'
     snapshot_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
+      Name: '{{user `project`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
@@ -71,9 +72,10 @@ builders:
       Build: '{{user `installer_build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
+      Project: '{{user `project`}}'
     tags:
-      AMIName: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
+      AMIName: '{{user `project`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
+      Name: '{{user `project`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       SourceAMIVersion: '{{split .SourceAMIName "-" 3}}'
@@ -82,6 +84,7 @@ builders:
       Build: '{{user `installer_build_number`}}'
       Today: '{{user `today`}}'
       Product: '{{user `product`}}'
+      Project: '{{user `project`}}'
     launch_block_device_mappings:
       - device_name: '{{user `device_name`}}'
         volume_size: '{{user `disk_size`}}'
@@ -97,9 +100,15 @@ provisioners:
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     expect_disconnect: true
     inline:
+      - set -x
+      - yum remove -y java-1.7.0-openjdk-headless java-1.7.0-openjdk awscli python2.6
       - ln -sfn /usr/bin/python2.7 /usr/bin/python2
+      - yum install -y python3-devel python3-minimal
+      - curl -fL https://bootstrap.pypa.io/get-pip.py | python3
       - yum update -y --exclude kernel
       - amazon-linux-extras install -y kernel-ng
+      - while ps faux | grep '[d]racut'; do sleep 1; done
+      - sleep 30
       - reboot -h now
   - type: shell
     pause_before: "1m"
@@ -115,7 +124,7 @@ provisioners:
       - '{{ template_dir }}/../scripts/install-java8.sh'
       - '{{ template_dir }}/../scripts/packages-amzn.sh'
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
-      - '{{ template_dir }}/../scripts/install-pip-bundle.sh'
+        #- '{{ template_dir }}/../scripts/install-pip-bundle.sh'
       - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
       - '{{ template_dir }}/../scripts/install-docker.sh'
   - type: file
@@ -134,7 +143,6 @@ provisioners:
       - mv /tmp/aws-verify.sh /usr/bin/
       - yum clean all --enablerepo='*'
       - rm -rfv /var/cache/yum/* /var/tmp/yum*
-      - cloud-init clean
   - type: shell
     environment_vars:
       - OSID={{split build_name "-" 2}}
@@ -153,6 +161,7 @@ post-processors:
       installer_version: '{{user `installer_version`}}'
       license: '{{user `license`}}'
       product: '{{user `product`}}'
+      project: '{{user `project`}}'
       release: '{{user `release`}}'
       region: '{{user `region`}}'
       shared_with: '{{user `shared_with`}}'

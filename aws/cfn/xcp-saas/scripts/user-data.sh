@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# shellcheck disable=SC2086,SC2304,SC2034,SC2206,SC2207,SC2046
+# shellcheck disable=SC2086,SC2304,SC2034,SC2206,SC2207,SC2046,SC2155,SC2129
 
 echo >&2 "Starting user-data.sh"
 
@@ -11,14 +11,24 @@ chmod 0600 $LOGFILE
 if [ -t 1 ]; then
     :
 else
-    exec > >(tee -a $LOGFILE | logger -t user-data -s 2> /dev/console) 2>&1
+    exec > >(tee -a $LOGFILE | logger -t user-data -s 2>/dev/console) 2>&1
 fi
-start=$(date +%s)
+start=($(date +'%s %N'))
 
 log() {
-    local now=$(date +%s)
-    local dt=$((now - start))
-    logger --id -p "local0.info" -t user-data -s dt=\"$dt\" "$@"
+    local dt=$(dt)
+    logger --id -p "local0.info" -t user-data -s dt="${dt}" "$@"
+}
+
+dt() {
+    local now=($(date +'%s %N'))
+    local dt=$((now[0] - start[0]))
+    local dn=$((now[1] - start[1]))
+    if [ $dn -lt 0 ]; then
+        dn=$((1000000000 + dn))
+        dt=$((dt - 1))
+    fi
+    printf '%d.%.9d\n' ${dt} ${dn}
 }
 
 # Instance meta-data service v2
@@ -45,30 +55,29 @@ asg_healthy_instances() {
         --auto-scaling-group-names "$1" --query 'AutoScalingGroups[].Instances[?HealthStatus==`Healthy`]|[] | length(@)'
 }
 
-
 asg_capacity() {
     aws autoscaling describe-auto-scaling-groups \
         --auto-scaling-group-names "$1" --query 'AutoScalingGroups[][MinSize,MaxSize,DesiredCapacity]' --output text
 }
 
 expserver_config() {
-   if [ -n "$AUTH_STACK_NAME" ]; then
-       XCE_EXPSERVER_CLOUD_AUTH_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
-       sed --follow-symlinks -i '/^## Xcalar Cloud Auth Start/,/## Xcalar Cloud Auth End/d' /etc/default/xcalar
+    if [ -n "$AUTH_STACK_NAME" ]; then
+        XCE_EXPSERVER_CLOUD_AUTH_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/auth/${AUTH_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
+        sed --follow-symlinks -i '/^## Xcalar Cloud Auth Start/,/## Xcalar Cloud Auth End/d' /etc/default/xcalar
 
-       echo '## Xcalar Cloud Auth Start' >> /etc/default/xcalar
-       printf "$XCE_EXPSERVER_CLOUD_AUTH_CONFIG" >> /etc/default/xcalar
-       echo '## Xcalar Cloud Auth End' >> /etc/default/xcalar
-   fi
-   if [ -n "$MAIN_STACK_NAME" ]; then
-       XCE_EXPSERVER_CLOUD_MAIN_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/main/${MAIN_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
-       sed --follow-symlinks -i '/^## Xcalar Cloud Main Start/,/## Xcalar Cloud Main End/d' /etc/default/xcalar
+        echo '## Xcalar Cloud Auth Start' >>/etc/default/xcalar
+        printf "$XCE_EXPSERVER_CLOUD_AUTH_CONFIG" >>/etc/default/xcalar
+        echo '## Xcalar Cloud Auth End' >>/etc/default/xcalar
+    fi
+    if [ -n "$MAIN_STACK_NAME" ]; then
+        XCE_EXPSERVER_CLOUD_MAIN_CONFIG="$(aws ssm get-parameter --region ${AWS_REGION} --name "/xcalar/cloud/main/${MAIN_STACK_NAME}" --query "Parameter.Value" | sed -e 's/^"//' -e 's/"$//' -e 's/\\\\n/\\n/g')"
+        sed --follow-symlinks -i '/^## Xcalar Cloud Main Start/,/## Xcalar Cloud Main End/d' /etc/default/xcalar
 
-       echo '## Xcalar Cloud Main Start' >> /etc/default/xcalar
-       printf "$XCE_EXPSERVER_CLOUD_MAIN_CONFIG" >> /etc/default/xcalar
-       echo '## Xcalar Cloud Main End' >> /etc/default/xcalar
-   fi
-   printf "JWT_SECRET=xcalarSsssh" >> /etc/default/xcalar
+        echo '## Xcalar Cloud Main Start' >>/etc/default/xcalar
+        printf "$XCE_EXPSERVER_CLOUD_MAIN_CONFIG" >>/etc/default/xcalar
+        echo '## Xcalar Cloud Main End' >>/etc/default/xcalar
+    fi
+    printf "JWT_SECRET=xcalarSsssh" >>/etc/default/xcalar
 }
 
 efsip() {
@@ -139,7 +148,7 @@ mount_xlrroot() {
 
     if [ $rc -eq 0 ]; then
         sed -i '\@'$MOUNT'@d' /etc/fstab
-        echo "${NFSHOST}:/${NFSDIR} $MOUNT $NFS_TYPE  $NFS_OPTS 0 0" >> /etc/fstab
+        echo "${NFSHOST}:/${NFSDIR} $MOUNT $NFS_TYPE  $NFS_OPTS 0 0" >>/etc/fstab
         test -d $MOUNT || mkdir -p $MOUNT
         mountpoint -q $MOUNT || mount $MOUNT
         rc=$?
@@ -191,7 +200,7 @@ selfsigned_cert() {
     fi
 
     if ! openssl req -x509 -newkey rsa:4096 -sha256 -utf8 -days 365 -nodes -keyout $key -out $crt -config <(
-        cat << EOF
+        cat <<EOF
 [CA_default]
 copy_extensions = copy
 
@@ -250,9 +259,9 @@ generate_ssl() {
         rm -f $crt $key
     fi
     if ! selfsigned_cert "$@"; then
-        if /etc/ssl/certs/make-dummy-cert $certname > /dev/null; then
-            sed -n '/---BEGIN CERT/,/---END CERT/p' $certname > $crt
-            sed -n '/---BEGIN PRIVATE/,/---END PRIVATE/p' $certname > $key
+        if /etc/ssl/certs/make-dummy-cert $certname >/dev/null; then
+            sed -n '/---BEGIN CERT/,/---END CERT/p' $certname >$crt
+            sed -n '/---BEGIN PRIVATE/,/---END PRIVATE/p' $certname >$key
             rm -f $certname
         else
             return 1
@@ -312,7 +321,7 @@ systemd_haveunit() {
 }
 
 pyver() {
-    $1 -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor)"
+    $1 -c 'from __future__ import print_function; import sys; vi=sys.version_info; print("{}.{}".format(vi.major,vi.minor)'
 }
 
 pyvenv() {
@@ -322,8 +331,8 @@ pyvenv() {
     export PIP_FIND_LINKS=/var/lib/wheels-${pyver}
 
     $python -m venv $venv \
-    && $venv/bin/python -m pip install -U pip \
-    && $venv/bin/python -m pip install -U setuptools wheel pip-tools
+        && $venv/bin/python -m pip install -U pip \
+        && $venv/bin/python -m pip install -U setuptools wheel pip-tools
 }
 
 file_size() {
@@ -347,14 +356,14 @@ node_0() {
     if [ -n "$NIC" ]; then
         while true; do
             eni_status=$(aws ec2 describe-network-interfaces --query 'NetworkInterfaces[].Status' --network-interface-ids ${NIC} --output text)
-            if [[ "$eni_status" == available ]]; then
+            if [[ $eni_status == available ]]; then
                 if aws ec2 attach-network-interface --network-interface-id ${NIC} --instance-id ${INSTANCE_ID} --device-index 1; then
                     echo >&2 "ENI $NIC attached to $INSTANCE_ID"
                     break
                 fi
             fi
             eni_instance=$(aws ec2 describe-network-interfaces --query 'NetworkInterfaces[].Attachment.InstanceId' --network-interface-ids ${NIC} --output text)
-            if [[ "$eni_instance" == "$INSTANCE_ID" ]]; then
+            if [[ $eni_instance == "$INSTANCE_ID" ]]; then
                 echo >&2 "ENI $NIC already attached"
                 break
             fi
@@ -368,26 +377,26 @@ node_0() {
 
     test -d $XLRROOT/config || mkdir -p $XLRROOT/config
     (
-    # We don't want the sensitive parts in the log
-    set +x
-    if [ -n "${ADMIN_USERNAME}" ] && [ -n "${ADMIN_PASSWORD}" ]; then
-        /opt/xcalar/scripts/genDefaultAdmin.sh \
-            --username "${ADMIN_USERNAME}" \
-            --email "${ADMIN_EMAIL:-info@xcalar.com}" \
-            --password "${ADMIN_PASSWORD}" > /tmp/defaultAdmin.json \
-        && mv /tmp/defaultAdmin.json $XLRROOT/config/defaultAdmin.json
-    fi
-    chmod 0700 $XLRROOT/config
-    chmod 0600 $XLRROOT/config/defaultAdmin.json
-    if [ -n "$CERTSTORE" ]; then
-        CERTDIR=$XLRROOT/.cert
-        CERT=$CERTDIR/xcalar.crt
-        KEY=$CERTDIR/xcalar.key
-        mkdir -p -m 0700 $CERTDIR
-        get_ssm_x509 "$CERTSTORE" "$CRT" "$KEY"
-    fi
+        # We don't want the sensitive parts in the log
+        set +x
+        if [ -n "${ADMIN_USERNAME}" ] && [ -n "${ADMIN_PASSWORD}" ]; then
+            /opt/xcalar/scripts/genDefaultAdmin.sh \
+                --username "${ADMIN_USERNAME}" \
+                --email "${ADMIN_EMAIL:-info@xcalar.com}" \
+                --password "${ADMIN_PASSWORD}" >/tmp/defaultAdmin.json \
+                && mv /tmp/defaultAdmin.json $XLRROOT/config/defaultAdmin.json
+        fi
+        chmod 0700 $XLRROOT/config
+        chmod 0600 $XLRROOT/config/defaultAdmin.json
+        if [ -n "$CERTSTORE" ]; then
+            CERTDIR=$XLRROOT/.cert
+            CERT=$CERTDIR/xcalar.crt
+            KEY=$CERTDIR/xcalar.key
+            mkdir -p -m 0700 $CERTDIR
+            get_ssm_x509 "$CERTSTORE" "$CRT" "$KEY"
+        fi
     )
-    if [[ $SHARED_CONFIG = true ]]; then
+    if [[ $SHARED_CONFIG == true ]]; then
         mv $XCE_CONFIG $XLRROOT/default.cfg
     fi
 
@@ -399,11 +408,11 @@ get_ssm_x509() {
     local CERTSTORE="$1" CRT="$2" KEY="$3"
 
     if [ -n "$CERTSTORE" ]; then
-        ssm_get_secret "${CERTSTORE}.crt" | base64 -d | gzip -dc > $CRT && \
-        ssm_get_secret "${CERTSTORE}.key" | base64 -d | gzip -dc > $KEY && \
-        chmod 0644 $CRT && \
-        chmod 0640 $KEY && \
-        chown root:xcalar $CRT $KEY
+        ssm_get_secret "${CERTSTORE}.crt" | base64 -d | gzip -dc >$CRT \
+            && ssm_get_secret "${CERTSTORE}.key" | base64 -d | gzip -dc >$KEY \
+            && chmod 0644 $CRT \
+            && chmod 0640 $KEY \
+            && chown root:xcalar $CRT $KEY
         return $?
     fi
     return 1
@@ -518,7 +527,7 @@ main() {
             --ssl-cert)
                 if [ -n "$1" ]; then
                     SSLCRT="$1"
-                    echo "$1" > $SSLCRTFILE
+                    echo "$1" >$SSLCRTFILE
                     chown root:xcalar $SSLCRTFILE
                     chmod 0644 $SSLCRTFILE
                 fi
@@ -527,7 +536,7 @@ main() {
             --ssl-key)
                 if [ -n "$1" ]; then
                     SSLKEY="$1"
-                    echo "$1" > $SSLKEYFILE
+                    echo "$1" >$SSLKEYFILE
                     chown xcalar:xcalar $SSLKEYFILE
                     chmod 0600 $SSLKEYFILE
                 fi
@@ -593,7 +602,7 @@ main() {
     export AWS_REGION=${AWS_REGION:-$AWS_DEFAULT_REGION}
 
     export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin:$PREFIX/bin
-    echo "export PATH=$PATH" > /etc/profile.d/path.sh
+    echo "export PATH=$PATH" >/etc/profile.d/path.sh
 
     NFSHOST="${NFSMOUNT%%:*}"
     NFSDIR="${NFSMOUNT#$NFSHOST}"
@@ -623,11 +632,11 @@ main() {
     XCE_LICENSE=/etc/xcalar/XcalarLic.key
     if [ ! -s $XCE_LICENSE ] && [ -n "$LICENSE" ]; then
         if [[ $LICENSE =~ ^s3:// ]]; then
-            aws s3 cp $LICENSE - | base64 -d | gzip -dc > $XCE_LICENSE
+            aws s3 cp $LICENSE - | base64 -d | gzip -dc >$XCE_LICENSE
         elif [[ $LICENSE =~ ^https:// ]]; then
-            curl -fsSL "$LICENSE" | base64 -d | gzip -dc > $XCE_LICENSE
+            curl -fsSL "$LICENSE" | base64 -d | gzip -dc >$XCE_LICENSE
         else
-            echo "$LICENSE" | base64 -d | gzip -dc > $XCE_LICENSE
+            echo "$LICENSE" | base64 -d | gzip -dc >$XCE_LICENSE
         fi
         if [ ${PIPESTATUS[2]} -ne 0 ]; then
             echo "ERROR: Failed to decode license"
@@ -694,8 +703,8 @@ main() {
             fi
             sleep 2
         done
-        : > /etc/ssh/ssh_known_hosts
-        : > /etc/ansible/hosts
+        : >/etc/ssh/ssh_known_hosts
+        : >/etc/ansible/hosts
         MYNODE_ID=''
         for NODE_ID in $(seq 0 $((NUM_INSTANCES - 1))); do
             local localip="${IPS[$NODE_ID]}"
@@ -703,15 +712,15 @@ main() {
             local localfqdn="$localdns.$(dnsdomainname)"
             if [ "$LOCAL_IPV4" == "$localip" ]; then
                 MYNODE_ID="${MYNODE_ID:-$NODE_ID}"
-                echo "vm${NODE_ID}      ansible_connection=local" >> /etc/ansible/hosts
+                echo "vm${NODE_ID}      ansible_connection=local" >>/etc/ansible/hosts
             else
-                echo "vm${NODE_ID}      ansible_host=$localip" >> /etc/ansible/hosts
+                echo "vm${NODE_ID}      ansible_host=$localip" >>/etc/ansible/hosts
             fi
             sed -i "/$localip/d; /vm${NODE_ID}/d; /$localdns/d" /etc/hosts
-            echo "$localip   $localfqdn $localdns vm${NODE_ID}" >> /etc/hosts
+            echo "$localip   $localfqdn $localdns vm${NODE_ID}" >>/etc/hosts
             for ii in $localip $localfqdn $localdns vm${NODE_ID}; do
                 echo "Scanning $ii" >&2
-                ssh-keyscan $ii >> /etc/ssh/ssh_known_hosts
+                ssh-keyscan $ii >>/etc/ssh/ssh_known_hosts
             done
         done
         NODE_ID="${MYNODE_ID}"
@@ -721,8 +730,8 @@ main() {
     else
         IPS=("$LOCAL_IPV4")
         NODE_ID=0
-        echo "vm0   ansible_connection=local" > /etc/ansible/hosts
-        echo "$LOCAL_IPV4   $(hostname -f) $(hostname -s) vm0" >> /etc/hosts
+        echo "vm0   ansible_connection=local" >/etc/ansible/hosts
+        echo "$LOCAL_IPV4   $(hostname -f) $(hostname -s) vm0" >>/etc/hosts
     fi
 
     aws ec2 create-tags --resources $INSTANCE_ID \
@@ -784,12 +793,15 @@ main() {
     touch ${XCE_USER_HOME}/.hushlogin
     chown xcalar:xcalar $SSHDIR ${XCE_USER_HOME}/.hushlogin
     if [ $NODE_ID -eq 0 ]; then
+        log "Start ec2_attach_nic"
         if [ -n "$NIC" ]; then
             ec2_attach_nic "$NIC" "$INSTANCE_ID"
             PUBLIC_DNS_AND_IP="$(aws ec2 describe-network-interfaces --network-interface-ids $NIC --query 'NetworkInterfaces[].Association.[PublicDnsName,PublicIp]' --output text)"
         else
             PUBLIC_DNS_AND_IP="$(imds /meta-data/public-hostname) $(imds /meta-data/public-ipv4)"
         fi
+        log "End ec2_attach_nic"
+        log "Start SSL"
         test -d $XLRROOT/config || mkdir -p $XLRROOT/config
         if ! verify_ssl "$SSLCRTFILE" "$SSLKEYFILE"; then
             log "Checking SSM $CERTSTORE for X509"
@@ -801,8 +813,8 @@ main() {
         fi
         if file_size $SSLCRTFILE 10 && file_size $SSLKEYFILE 10; then
             CRT_KEY=($XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.crt $XLRROOT/config/${AWS_CLOUDFORMATION_STACK_NAME}.key)
-            fix_multiline_cert < $SSLCRTFILE > "${CRT_KEY[0]}"
-            fix_multiline_cert < $SSLKEYFILE > "${CRT_KEY[1]}"
+            fix_multiline_cert <$SSLCRTFILE >"${CRT_KEY[0]}"
+            fix_multiline_cert <$SSLKEYFILE >"${CRT_KEY[1]}"
             if ! verify_ssl "${CRT_KEY[@]}"; then
                 rm -f "${CRT_KEY[@]}"
                 CRT_KEY=($(cd $XLRROOT/config && generate_ssl $PUBLIC_DNS_AND_IP $AWS_CLOUDFORMATION_STACK_NAME))
@@ -814,10 +826,11 @@ main() {
             chown xcalar:xcalar "${CRT_KEY[@]}"
             chmod 0644 "${CRT_KEY[0]}"
             chmod 0600 "${CRT_KEY[1]}"
-            generate_caddy /etc/xcalar/Caddyfile.orig "${CRT_KEY[@]}" > $XLRROOT/config/Caddyfile.$$
+            generate_caddy /etc/xcalar/Caddyfile.orig "${CRT_KEY[@]}" >$XLRROOT/config/Caddyfile.$$
         else
-            generate_caddy /etc/xcalar/Caddyfile.orig > $XLRROOT/config/Caddyfile.$$
+            generate_caddy /etc/xcalar/Caddyfile.orig >$XLRROOT/config/Caddyfile.$$
         fi
+        log "End SSL"
         ssh-keygen -t rsa -N "" -f ${SSHDIR}/id_rsa -C "xcalar@$(hostname -f)"
         chown xcalar:xcalar ${SSHDIR}/id_rsa.pub
         cp -a ${SSHDIR}/id_rsa.pub $XLRROOT/config/authorized_keys
@@ -826,16 +839,16 @@ main() {
         /opt/xcalar/scripts/genDefaultAdmin.sh \
             --username "${ADMIN_USERNAME}" \
             --email "${ADMIN_EMAIL:-info@xcalar.com}" \
-            --password "${ADMIN_PASSWORD}" > /tmp/defaultAdmin.json \
+            --password "${ADMIN_PASSWORD}" >/tmp/defaultAdmin.json \
             && mv /tmp/defaultAdmin.json $XLRROOT/config/defaultAdmin.json
         chmod 0700 $XLRROOT/config
         chmod 0600 $XLRROOT/config/defaultAdmin.json $XLRROOT/config/*.key
         chown xcalar:xcalar $XLRROOT/config $XLRROOT/config/*
 
-        PYSITE=$(cat $PTHFILE 2> /dev/null || echo $XLRROOT/pysite)
+        PYSITE=$(cat $PTHFILE 2>/dev/null || echo $XLRROOT/pysite)
         mkdir -p $PYSITE
         if ! test -e $PTHFILE; then
-            echo $PYSITE > $PTHFILE
+            echo $PYSITE >$PTHFILE
         fi
         chown xcalar:xcalar $PYSITE
         REQ=$XLRROOT/config/requirements.txt
@@ -848,13 +861,13 @@ main() {
     fi
 
     ln -sfn $XLRROOT/config/Caddyfile /etc/xcalar/Caddyfile
-
+    log "Start wait for ephemeral"
     if rpm -q ephemeral-disk; then
         local dt=0
         until mountpoint -q $EPHEMERAL; do
             sleep 1
             dt=$((dt + 1))
-            log "Waiting for $EPHEMERAL ..."
+            log "$dt Waiting for $EPHEMERAL ..."
             if [ $dt -gt 120 ]; then
                 break
             fi
@@ -865,11 +878,13 @@ main() {
         XCE_XDBSERDESPATH=${XCE_XDBSERDESPATH:-${EPHEMERAL}/serdes}
     fi
     if [ ! -d "$XCE_XDBSERDESPATH" ]; then
-        if ! mkdir -m 0700 "$XCE_XDBSERDESPATH"; then
+        if ! mkdir -m 1777 "$XCE_XDBSERDESPATH"; then
             XCE_XDBSERDESPATH=''
         fi
     fi
+    log "End wait for ephemeral"
 
+    log "Start Xcalar Service"
     if [ -d "$XCE_XDBSERDESPATH" ]; then
         chown xcalar:xcalar "$XCE_XDBSERDESPATH"
         XCE_XDBSERDESMB=$(($(mbfree $XCE_XDBSERDESPATH) - 1000))
@@ -880,17 +895,15 @@ main() {
         fi
     fi
 
-    /opt/xcalar/scripts/genConfig.sh ${XCE_TEMPLATE} - "${IPS[@]}" > $XCE_CONFIG
+    /opt/xcalar/scripts/genConfig.sh ${XCE_TEMPLATE} - "${IPS[@]}" >$XCE_CONFIG
 
     expserver_config
 
-    log "Starting Xcalar"
     if test -e /lib/systemd/system/xcalar-services.target; then
         SYSTEMD_UNIT=xcalar-services.target
     else
         SYSTEMD_UNIT=xcalar.service
     fi
-
 
     if ((SYSTEMD)); then
         systemctl start $SYSTEMD_UNIT
@@ -898,6 +911,7 @@ main() {
         /etc/init.d/xcalar start
     fi
     rc=$?
+    log "End Xcalar Service ($rc)"
 
     cp -a $XLRROOT/config/authorized_keys $SSHDIR
 
@@ -908,7 +922,22 @@ main() {
     fi
 
     log "All done with user-data.sh (rc=$rc)"
+
+    collect_boot_metrics
     return $rc
+}
+
+collect_boot_metrics() {
+    (
+        cd /var/log
+        cloud-init collect-logs
+        mkdir -p cloud-init-logs
+        tar zxvf cloud-init.tar.gz -C cloud-init-logs/ --strip=1
+        rm -f cloud-init.tar.gz
+        systemd-analyze plot >boot.svg
+        systemd-analyze critical-chain >systemd-analyze-critical-chain.txt
+        systemd-analyze blame >systemd-analyze-blame.txt
+    )
 }
 
 main "$@"

@@ -4,10 +4,10 @@ variables:
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   baseos_owner: '559166403383'
-  baseos: 'xdp-base'
+  baseos: 'xcp-base'
   build_number: '{{env `BUILD_NUMBER`}}'
   image_build_number: '{{env `IMAGE_BUILD_NUMBER`}}'
-  description: Xcalar Data Platform
+  description: Xcalar Cloud Platform
   destination_regions: '{{env `REGIONS`}}'
   device_name: /dev/xvda
   disk_size: '8'
@@ -17,7 +17,8 @@ variables:
   bootstrap: '{{env `XLRINFRADIR`}}/aws/cfn/{{env `PROJECT`}}/scripts/user-data.sh'
   installer_version: '1.0'
   license: '{{env `LICENSE`}}'
-  product: xdp-standard
+  product: xcp
+  project: '{{env `PROJECT`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
   shared_with: '{{env `SHARED_WITH`}}'
   ssh_username: ec2-user
@@ -57,12 +58,12 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
+    ami_name: '{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
     ami_description: '{{user `description`}} {{split build_name "-" 2 | upper}} ({{user `installer_version`}}-{{user `installer_build_number`}} ({{user `build_number`}}-{{user `today`}}))'
     run_tags:
-      Name: 'packer-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
+      Name: 'packer-{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
     snapshot_tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
+      Name: '{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
@@ -71,8 +72,9 @@ builders:
       ImageBuild: '{{user `image_build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
+      Project: '{{user `project`}}'
     tags:
-      Name: '{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
+      Name: '{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}-{{user `build_number`}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
@@ -81,6 +83,7 @@ builders:
       ImageBuild: '{{user `image_build_number`}}'
       Release: '{{user `release`}}'
       Product: '{{user `product`}}'
+      Project: '{{user `project`}}'
     launch_block_device_mappings:
       - device_name: '{{user `device_name`}}'
         volume_size: '{{user `disk_size`}}'
@@ -141,6 +144,7 @@ post-processors:
       installer_version: '{{user `installer_version`}}'
       license: '{{user `license`}}'
       product: '{{user `product`}}'
+      project: '{{user `project`}}'
       release: '{{user `release`}}'
       region: '{{user `region`}}'
       shared_with: '{{user `shared_with`}}'

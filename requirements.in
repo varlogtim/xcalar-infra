@@ -27,7 +27,7 @@ python-consul
 PyYAML
 requests
 sceptre
-sentry-sdk==0.14.3
+sentry-sdk==0.16.2
 testinfra
 troposphere[policy]
 warrant

@@ -139,7 +139,7 @@ main() {
 
 
     set +e
-    if ! packer_do validate ${*/-color=*/} "$JSON_TEMPLATE" || ! packer_do build "$@" "$JSON_TEMPLATE"; then
+    if ! packer_do validate "$@" "$JSON_TEMPLATE" || ! packer_do build "$@" "$JSON_TEMPLATE"; then
         trap - EXIT
         echo "Failed! See $TMPDIR"
         exit 1

@@ -46,8 +46,11 @@ if [ -z "$TMPDIR" ]; then
     else
         export TMPDIR=/tmp/installer-$(id -u)
     fi
-    mkdir -m 1777 -p $TMPDIR
 fi
+test -d "$TMPDIR" || mkdir -p -m 1777 -p $TMPDIR
+export TMPDIR=$TMPDIR/installer-$(id -u)
+mkdir -p "$TMPDIR"
+trap "cd / && rm -rf $TMPDIR" EXIT
 
 download_file() {
     if [[ $1 =~ ^s3:// ]]; then
@@ -177,6 +180,6 @@ if [ -n "${POSTINSTALL}" ]; then
 fi
 
 
-sed -i '/# Provides:/a# Should-Start: cloud-final' /etc/init.d/xcalar
+#sed -i '/# Provides:/a# Should-Start: cloud-final' /etc/init.d/xcalar
 
 exit 0

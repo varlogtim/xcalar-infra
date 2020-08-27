@@ -82,30 +82,30 @@ Resources:
         - Key: StackName
           Value: !Ref 'AWS::StackName'
   S3SampleBucket:
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub ${AWS::StackName}-samplebucket-${AWS::AccountId}-${AWS::Region}
       Tags:
-        - Key: StackName
-          Value: !Ref AWS::StackName
-        - Key: Purpose
-          Value: SampleData
+      - Key: StackName
+        Value: !Ref AWS::StackName
+      - Key: Purpose
+        Value: SampleData
   S3WorkBucket:
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub ${AWS::StackName}-workbucket-${AWS::AccountId}-${AWS::Region}
       Tags:
-        - Key: StackName
-          Value: !Ref AWS::StackName
-        - Key: Purpose
-          Value: Scratch
+      - Key: StackName
+        Value: !Ref AWS::StackName
+      - Key: Purpose
+        Value: Scratch
   S3LogBucket:
     DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    UpdateReplacePolicy: Delete
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub ${AWS::StackName}-logbucket-${AWS::AccountId}-${AWS::Region}
@@ -117,7 +117,7 @@ Resources:
   S3AppBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    UpdateReplacePolicy: Delete
     Properties:
       BucketName: !Sub ${AWS::StackName}-appbucket-${AWS::AccountId}-${AWS::Region}
       CorsConfiguration:
@@ -154,7 +154,7 @@ Resources:
               AWS:
                 - '*'
   S3LambdaBucket:
-    UpdateReplacePolicy: Retain
+    UpdateReplacePolicy: Delete
     DeletionPolicy: Retain
     Type: AWS::S3::Bucket
     Properties:
@@ -184,6 +184,8 @@ Resources:
                 - '*'
   SharedLayer:
     Type: AWS::Lambda::LayerVersion
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
     Properties:
       CompatibleRuntimes:
         - python3.6
@@ -194,7 +196,15 @@ Resources:
       Description: Shared libs for python3
       LayerName: sharedpy3
       LicenseInfo: Misc.
-
+  ASGNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: SaaS Autoscaling Notifications
+      Tags:
+      - Key: StackName
+        Value: !Ref AWS::StackName
+      - Key: Purpose
+        Value: ASGNotifications
   GatewayAttach:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
@@ -608,6 +618,11 @@ Outputs:
     Value: !Ref S3LambdaBucket
     Export:
       Name: !Sub ${AWS::StackName}-lambdabucket
+  asgtopic:
+    Description: Autoscaling SNS topic
+    Value: !Ref ASGNotifications
+    Export:
+      Name: !Sub ${AWS::StackName}-asgtopic
   efs:
     Description: Shared Infrastructure EFS Store
     Value: !Ref EfsShare
