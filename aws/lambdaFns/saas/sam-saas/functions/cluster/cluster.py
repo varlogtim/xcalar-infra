@@ -313,6 +313,6 @@ def lambda_handler(event, context):
 
     except Exception as e:
         traceback.print_exc()
-        reply = _make_reply(400, "Exception has occured: {}".format(e))
+        reply = _make_reply(400, "Exception has occurred: {}".format(e))
     reply = _replace_headers_origin(reply, headers_origin)
     return reply

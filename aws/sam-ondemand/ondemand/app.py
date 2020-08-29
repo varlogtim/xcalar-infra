@@ -145,7 +145,7 @@ def lambda_handler(event, context):
             reply = _make_reply(400, "Invalid command: %s" % command, qp)
     except Exception as exc_info:
         print(exc_info)
-        reply = _make_reply(400, "Exception has occured: {}".format(exc_info),
+        reply = _make_reply(400, "Exception has occurred: {}".format(exc_info),
                            qp)
 
     return reply
