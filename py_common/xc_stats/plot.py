@@ -64,7 +64,7 @@ class MetricCfg(object):
 
         {
             "source": "_SYSTEM_STATS"|"_JOB_STATS"|"csv:name",
-        
+
             If "_SYSTEM_STATS" or "_JOB_STATS":
 
             "xy_expr": <expr>,
@@ -218,7 +218,7 @@ def load_system_stats(*, metrics_data, dsh, start_ts, end_ts, nodes):
                     raise ValueError("invalid metric config: {}".format(mcfg))
 
                 metrics_data.add_points(node=node , metric_id=metric_id, points=points)
-            
+
 
 def load_csv(*, metrics_data, metric_id, path, start_ts, end_ts, nodes):
     """
