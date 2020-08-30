@@ -6,21 +6,25 @@
             "y1label": "CPU Pct",
             "metrics": [
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.cpustats[?(CPU=all)][timestamp, idle]",
                     "color": "b",
                     "label": "idle"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.cpustats[?(CPU=all)][timestamp, sys]",
                     "color": "r",
                     "label": "sys"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.cpustats[?(CPU=all)][timestamp, usr]",
                     "color": "g",
                     "label": "usr"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.cpustats[?(CPU=all)][timestamp, iowait]",
                     "color": "y",
                     "label": "iowait"
@@ -32,21 +36,25 @@
             "y1label": "Memory",
             "metrics": [
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.system_stats[*][timestamp, SystemMemoryUsed]",
                     "label": "MemoryUsed",
                     "color": "y"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.system_stats[*][timestamp, SystemMemoryCgXCEUsed]",
                     "label": "XCEUsed",
                     "color": "g"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.system_stats[*][timestamp, SystemMemoryCgXPUUsed]",
                     "label": "XPUUsed",
                     "color": "b"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.system_stats[*][timestamp, SystemSwapUsed]",
                     "label": "SwapUsed",
                     "color": "r"
@@ -58,6 +66,7 @@
             "y1label": "Memory",
             "metrics": [
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.system_stats[*][timestamp, XDBUsedBytes]",
                     "label": "XDBUsed",
                     "color": "b"
@@ -69,11 +78,13 @@
             "y1label": "Num Bytes",
             "metrics": [
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.xcalar_internal_stats[*][timestamp, XdbMgr_12_numSerializedBytes]",
                     "label": "Serialized",
                     "color": "b"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.xcalar_internal_stats[*][timestamp, XdbMgr_12_numDeserializedBytes]",
                     "label": "Deserialized",
                     "color": "r"
@@ -85,11 +96,13 @@
             "y1label": "Num Bytes",
             "metrics": [
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.system_stats[*][timestamp, SystemNetworkSendBytes]",
                     "label": "NetworkSend",
                     "color": "b"
                 },
                 {
+                    "source": "_SYSTEM_STATS",
                     "xy_expr": "$.system_stats[*][timestamp, SystemNetworkRecvBytes]",
                     "label": "NetworkRecv",
                     "color": "r"
