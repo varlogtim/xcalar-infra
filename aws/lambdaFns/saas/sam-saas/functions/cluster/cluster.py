@@ -28,7 +28,7 @@ session_table = os.environ.get('SESSION_TABLE')
 creds_table = os.environ.get('CREDS_TABLE')
 
 cfn_role_arn = os.environ.get('CFN_ROLE_ARN')
-default_credit = '500'
+default_credit = '1000'
 
 IamCapabilities=[
                 'CAPABILITY_IAM',
