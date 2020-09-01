@@ -45,7 +45,6 @@ def node_status(base_url, time_out=5):
             'expServer': False,
             'usrnode': False,
             'mgmtd': False,
-            'jupyter': False,
             'sqldf': False
         },
         'status': 'down'
@@ -56,7 +55,6 @@ def node_status(base_url, time_out=5):
         'expServer': '/app/service/healthCheck',
         'usrnode': '/app/service/healthCheckUsrnode',
         'mgmtd': '/app/service/healthCheckMgmtd',
-        'jupyter': '/app/service/healthCheckJupyter',
         'sqldf': '/app/service/healthCheckSqldf'
     }
 
@@ -74,7 +72,7 @@ def node_status(base_url, time_out=5):
                          paths_by_service, True, result)
 
     if result['services']['expServer']:
-        for service in ['usrnode', 'mgmtd', 'jupyter', 'sqldf']:
+        for service in ['usrnode', 'mgmtd', 'sqldf']:
             running_services += \
                 poll_service(parsed_url, service,
                              paths_by_service, True, result)
