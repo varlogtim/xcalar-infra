@@ -7,6 +7,7 @@ myName=$(basename $0)
 XLRINFRADIR=${XLRINFRADIR-$HOME/xcalar-infra}
 PERSIST_COVERAGE_ROOT="${PERSIST_COVERAGE_ROOT:-/netstore/qa/coverage}"
 RUN_COVERAGE="${RUN_COVERAGE:-false}"
+export CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-${XLRINFRADIR}/misc/sqlrunner/template.cfg}"
 
 optClusterName=""
 optKeep=false
