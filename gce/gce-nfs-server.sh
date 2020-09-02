@@ -18,24 +18,29 @@ IMAGE_PROJECT="${IMAGE_PROJECT:-ubuntu-os-cloud}"
 CLUSTER="${CLUSTER:-$(id -un)-xcalar}"
 NAME="${CLUSTER}-nfs"
 
-say () {
+say() {
     echo >&2 "$*"
 }
 
-usage () {
+usage() {
     say "$0 [-f|--force] [-n server-name (default: $NAME)]"
     exit 1
 }
 
-
 while getopts "hfn:" opt "$@"; do
     case "$opt" in
-        f) FORCE=true;;
-        h) usage;;
-        n) NAME="$OPTARG";;
-        --) break;;
-        \?) say "Invalid option -$OPTARG"; exit 1;;
-        :) say "Option -$OPTARG requires an argument."; exit 1;;
+        f) FORCE=true ;;
+        h) usage ;;
+        n) NAME="$OPTARG" ;;
+        --) break ;;
+        \?)
+            say "Invalid option -$OPTARG"
+            exit 1
+            ;;
+        :)
+            say "Option -$OPTARG requires an argument."
+            exit 1
+            ;;
     esac
 done
 shift $((OPTIND - 1))

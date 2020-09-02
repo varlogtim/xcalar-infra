@@ -4,7 +4,7 @@ set -e
 SERVER="${SERVER:-zd.xcalar.net}"
 FILES=(gce-control.sh)
 
-TMPDIR=/tmp/`id -u`/deploy/$SERVER
+TMPDIR=/tmp/$(id -u)/deploy/$SERVER
 
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR/usr/local/bin"

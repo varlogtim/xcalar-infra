@@ -7,16 +7,16 @@ CLUSTER="${CLUSTER:-$(id -un)-xcalar}"
 SLEEP="${SLEEP:-10}"
 FORCE=false
 
-say () {
+say() {
     echo >&2 "$*"
 }
 
-usage () {
+usage() {
     say "$0 [-a|--all-disks] [-f|--force] cluster-name (default: $CLUSTER)"
     exit 1
 }
 
-warn_user () {
+warn_user() {
     local sleep_delay="${1}"
     local delay
     shift
@@ -25,7 +25,7 @@ warn_user () {
     say
     say "$*"
     say
-    for delay in `seq ${sleep_delay} -1 1`; do
+    for delay in $(seq ${sleep_delay} -1 1); do
         printf "%d ...\r" $delay >&2
         sleep 1
     done
@@ -36,11 +36,17 @@ while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
-        -f | --force) FORCE=true;;
-        -a | --all-disks) ARGS+=(--delete-disks=all);;
-        -h | --help) usage;;
-        -*) say "Invalid option: $cmd"; usage;;
-        *) CLUSTER="$cmd"; break;;
+        -f | --force) FORCE=true ;;
+        -a | --all-disks) ARGS+=(--delete-disks=all) ;;
+        -h | --help) usage ;;
+        -*)
+            say "Invalid option: $cmd"
+            usage
+            ;;
+        *)
+            CLUSTER="$cmd"
+            break
+            ;;
     esac
 done
 
@@ -54,7 +60,7 @@ else
     if ! $FORCE; then
         warn_user "${SLEEP}" "${INSTANCES[@]}"
     fi
-    say "Deleting ${INSTANCES[@]} ..."
+    say "Deleting ${INSTANCES[*]} ..."
     gcloud compute instances delete -q "${INSTANCES[@]}" "${ARGS[@]}"
 fi
 

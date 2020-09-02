@@ -5,7 +5,7 @@ ZONE="${ZONE:-xcalar-cloud}"
 DOMAIN="${DOMAIN:-xcalar.cloud}"
 DRYRUN="${DRYRUN-1}"
 
-usage () {
+usage() {
     echo "Usage: $0 (add|remove) NAME1 IP1 NAME2 IP2 ..."
     echo
     echo "Set the following variables to control which zone/domain to update"
@@ -18,36 +18,35 @@ usage () {
     exit 1
 }
 
-gdnsr () {
+gdnsr() {
     if [ "$DRYRUN" = 1 ]; then
         echo "dry-run: gcloud dns record-sets $* --zone ${ZONE}"
     else
         (
-        set -x
-        gcloud dns record-sets "$@" --zone "${ZONE}"
+            set -x
+            gcloud dns record-sets "$@" --zone "${ZONE}"
         )
     fi
 }
 
-gdnst () {
+gdnst() {
     gdnsr transaction "$@"
 }
 
-update () {
+update() {
     local record
     record=($(gcloud dns record-sets list --zone $ZONE | grep "^${1}.${DOMAIN}" | awk '{printf "%s\n%s\n",$3,$4}'))
     if [ ${#record[@]} -eq 2 ]; then
-        gdnst remove "${record[1]}" --name "${1}.${DOMAIN}" --ttl "${record[0]}"  --type A
+        gdnst remove "${record[1]}" --name "${1}.${DOMAIN}" --ttl "${record[0]}" --type A
     fi
     gdnst add "${2}" --name "${1}.${DOMAIN}" --ttl "${TTL}" --type A
 }
 
-abort () {
+abort() {
     gdnst abort
     echo >&2 "ERROR: Aborted gcloud dns transaction: $*"
     exit 1
 }
-
 
 if [ $# -eq 0 ]; then
     usage
@@ -57,11 +56,14 @@ OP="${1}"
 shift
 
 case "$OP" in
-    -h|--help) usage ;;
+    -h | --help) usage ;;
     add) ;;
     remove) ;;
     update) ;;
-    *) echo >&2 "Operation must be add, remove or update"; exit 1;;
+    *)
+        echo >&2 "Operation must be add, remove or update"
+        exit 1
+        ;;
 esac
 
 set -e
@@ -76,8 +78,8 @@ set +e
 
 while [ $# -ge 2 ]; do
     case "$OP" in
-        add|remove) gdnst "$OP" "$2" --name "${1}.${DOMAIN}" --ttl "$TTL" --type A;;
-        update) update "$1" "$2";;
+        add | remove) gdnst "$OP" "$2" --name "${1}.${DOMAIN}" --ttl "$TTL" --type A ;;
+        update) update "$1" "$2" ;;
     esac
     shift 2
 done

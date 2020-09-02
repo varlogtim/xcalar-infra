@@ -9,5 +9,5 @@ while read sz bucket; do
 done < <(gsutil du -s)
 
 echo
-echo   "GBs   : $total"
+echo "GBs   : $total"
 printf "Total : %.2f/month\n\n" $(echo "$total * 0.026" | bc)

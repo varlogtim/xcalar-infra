@@ -4,36 +4,35 @@ export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
 GCLOUD_SDK_URL="https://sdk.cloud.google.com"
 
 if [ "$(uname -s)" = Darwin ]; then
-    readlink_f () {
+    readlink_f() {
         (
-        target="$1"
+            target="$1"
 
-        cd "$(dirname $target)"
-        target="$(basename $target)"
-
-        # Iterate down a (possible) chain of symlinks
-        while [ -L "$target" ]
-        do
-            target="$(readlink $target)"
             cd "$(dirname $target)"
             target="$(basename $target)"
-        done
 
-        echo "$(pwd -P)/$target"
+            # Iterate down a (possible) chain of symlinks
+            while [ -L "$target" ]; do
+                target="$(readlink $target)"
+                cd "$(dirname $target)"
+                target="$(basename $target)"
+            done
+
+            echo "$(pwd -P)/$target"
         )
     }
 else
-    readlink_f () {
+    readlink_f() {
         readlink -f "$@"
     }
 fi
 
-say () {
+say() {
     echo >&2 "$*"
 }
 
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    say "usage: $0 <installer-url>|--no-installer <count (default: 3)> <cluster (default: `whoami`-xcalar)>"
+    say "usage: $0 <installer-url>|--no-installer <count (default: 3)> <cluster (default: $(whoami)-xcalar)>"
     exit 1
 fi
 export PATH="$PATH:$HOME/google-cloud-sdk/bin"
@@ -43,7 +42,7 @@ rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 if [ "$1" == "--no-installer" ]; then
     INSTALLER="$TMPDIR/noop-installer"
-    cat <<EOF > $INSTALLER
+    cat <<EOF >$INSTALLER
 #!/bin/bash
 
 echo "Done."
@@ -61,7 +60,7 @@ else
 fi
 INSTALLER_FNAME="$(basename $INSTALLER)"
 COUNT="${2:-3}"
-CLUSTER="${3:-`whoami`-xcalar}"
+CLUSTER="${3:-$(whoami)-xcalar}"
 CONFIG=/tmp/$CLUSTER-config.cfg
 UPLOADLOG=/tmp/$CLUSTER-manifest.log
 WHOAMI="$(whoami)"
@@ -71,18 +70,42 @@ DISK_TYPE="${DISK_TYPE:-pd-standard}"
 NETWORK="${NETWORK:-private}"
 INSTANCE_TYPE=${INSTANCE_TYPE:-n1-highmem-8}
 IMAGE="${IMAGE:-ubuntu-1404-lts-1485895114}"
-INSTANCES=($(set -o braceexpand; eval echo $CLUSTER-{1..$COUNT}))
-SWAP_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-swap-{1..$COUNT}))
-DATA_DISKS=($(set -o braceexpand; eval echo ${CLUSTER}-data-{1..$COUNT}))
+INSTANCES=($(
+    set -o braceexpand
+    eval echo $CLUSTER-{1..$COUNT}
+))
+SWAP_DISKS=($(
+    set -o braceexpand
+    eval echo ${CLUSTER}-swap-{1..$COUNT}
+))
+DATA_DISKS=($(
+    set -o braceexpand
+    eval echo ${CLUSTER}-data-{1..$COUNT}
+))
 DATA_SIZE="${DATA_SIZE:-10}"
 
 if [ -z "$DISK_SIZE" ]; then
     case "$INSTANCE_TYPE" in
-        n1-highmem-16) DISK_SIZE=400; RAM_SIZE=104;;
-        n1-highmem-8) DISK_SIZE=200; RAM_SIZE=52;;
-        n1-standard*) DISK_SIZE=80; RAM_SIZE=16;;
-        g1-*) DISK_SIZE=80; RAM_SIZE=16;;
-        *) DISK_SIZE=80; RAM_SIZE=16;;
+        n1-highmem-16)
+            DISK_SIZE=400
+            RAM_SIZE=104
+            ;;
+        n1-highmem-8)
+            DISK_SIZE=200
+            RAM_SIZE=52
+            ;;
+        n1-standard*)
+            DISK_SIZE=80
+            RAM_SIZE=16
+            ;;
+        g1-*)
+            DISK_SIZE=80
+            RAM_SIZE=16
+            ;;
+        *)
+            DISK_SIZE=80
+            RAM_SIZE=16
+            ;;
     esac
 fi
 
@@ -110,9 +133,9 @@ if ! command -v gcloud; then
 fi
 
 if test -f "$INSTALLER"; then
-    if [[ "$INSTALLER" =~ '/debug/' ]]; then
+    if [[ $INSTALLER =~ '/debug/' ]]; then
         INSTALLER_URL="repo.xcalar.net/builds/debug/$INSTALLER_FNAME"
-    elif [[ "$INSTALLER" =~ '/prod/' ]]; then
+    elif [[ $INSTALLER =~ '/prod/' ]]; then
         INSTALLER_URL="repo.xcalar.net/builds/prod/$INSTALLER_FNAME"
     else
         INSTALLER_URL="repo.xcalar.net/builds/$INSTALLER_FNAME"
@@ -131,12 +154,12 @@ if test -f "$INSTALLER"; then
     INSTALLER=http://${INSTALLER_URL}
 fi
 
-if [[ "${INSTALLER}" =~ ^http:// ]]; then
+if [[ ${INSTALLER} =~ ^http:// ]]; then
     if ! curl -Is "${INSTALLER}" | head -n 1 | grep -q '200 OK'; then
         say "Unable to access ${INSTALLER}"
         exit 1
     fi
-elif [[ "${INSTALLER}" =~ ^gs:// ]]; then
+elif [[ ${INSTALLER} =~ ^gs:// ]]; then
     if ! gsutil ls "${INSTALLER}" &>/dev/null; then
         say "Unable to access ${INSTALLER}"
         exit 1
@@ -181,36 +204,36 @@ if [ "$1" != "--no-installer" ]; then
     STARTUP_ARGS+=(startup-script=$DIR/gce-userdata.sh,config=$CONFIG)
 fi
 
-say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[@]} .."
+say "Launching ${#INSTANCES[@]} instances: ${INSTANCES[*]} .."
 set -x
 gcloud compute disks create --size=${SWAP_SIZE}GB --type=pd-ssd "${SWAP_DISKS[@]}"
 gcloud compute disks create --size=${DATA_SIZE}GB --type=pd-ssd "${DATA_DISKS[@]}"
-gcloud compute instances create ${INSTANCES[@]} ${ARGS[@]} \
+gcloud compute instances create "${INSTANCES[@]}" "${ARGS[@]}" \
     --machine-type ${INSTANCE_TYPE} \
     --network=${NETWORK} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size ${DISK_SIZE}GB \
     --metadata "installer=$INSTALLER,count=$COUNT,cluster=$CLUSTER,owner=$WHOAMI,email=$EMAIL" \
-    --tags=http-server,https-server ${STARTUP_ARGS[@]}  | tee $TMPDIR/gce-output.txt
+    --tags=http-server,https-server "${STARTUP_ARGS[@]}" | tee $TMPDIR/gce-output.txt
 res=${PIPESTATUS[0]}
 if [ "$res" -ne 0 ]; then
     exit $res
 fi
-gcloud compute ssh nfs --command 'sudo rm -rf /srv/share/nfs/cluster/'$CLUSTER
-for ii in `seq 1 $COUNT`; do
+gcloud compute ssh nfs --command "sudo rm -rf /srv/share/nfs/cluster/$CLUSTER"
+for ii in $(seq 1 $COUNT); do
     instance=${CLUSTER}-${ii}
     swap=${CLUSTER}-swap-${ii}
     gcloud compute instances attach-disk $instance --disk=$swap
     gcloud compute instances attach-disk $instance --disk=${CLUSTER}-data-${ii}
-    gcloud compute instances set-disk-auto-delete  $instance --disk=$swap
+    gcloud compute instances set-disk-auto-delete $instance --disk=$swap
 done
-for ii in `seq 1 $COUNT`; do
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdb >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null"
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkfs.ext4 -F /dev/sdc >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" && \
-    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && sudo mount $XC_DEMO_DATASET_DIR"
+for ii in $(seq 1 $COUNT); do
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkswap -f /dev/sdb >/dev/null" \
+        && gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdb none   swap    sw  0  0 | sudo tee -a /etc/fstab >/dev/null" \
+        && gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo swapon /dev/sdb >/dev/null"
+    gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkfs.ext4 -F /dev/sdc >/dev/null" \
+        && gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo /dev/sdc $XC_DEMO_DATASET_DIR   ext4 relatime 0  0 | sudo tee -a /etc/fstab >/dev/null" \
+        && gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p $XC_DEMO_DATASET_DIR && sudo mount $XC_DEMO_DATASET_DIR"
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "sudo mkdir -p /etc/apache2/ssl && curl -sSL http://repo.xcalar.net/XcalarInc_RootCA.crt | sudo tee /etc/apache2/ssl/ca.pem >/dev/null"
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XC_DEMO_DATASET_DIR=$XC_DEMO_DATASET_DIR | sudo tee -a /etc/default/xcalar"
     gcloud compute ssh ${CLUSTER}-${ii} --ssh-flag="-tt" --command "echo export XCE_MONITOR=1 | sudo tee -a /etc/default/xcalar"

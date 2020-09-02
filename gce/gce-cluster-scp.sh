@@ -17,17 +17,17 @@ IMAGE_PROJECT="${IMAGE_PROJECT:-ubuntu-os-cloud}"
 CLUSTER="${CLUSTER:-$(id -un)-xcalar}"
 NAME="${CLUSTER}-nfs"
 
-say () {
+say() {
     echo >&2 "$*"
 }
 
-usage () {
+usage() {
     say "$0 [-r server regexp] [-s source dir] [-d destdir]"
     say "Example: $0 -s ~/xcalar/src/data/qa/gdelt-small/ -d /tmp/gdelt/ -r 'blim-wellsfargo-.*'"
     exit 1
 }
 
-die () {
+die() {
     say "ERROR: $*"
     exit 1
 }
@@ -36,14 +36,20 @@ test $# -eq 0 && set -- -h
 
 while getopts "hfr:s:d:" opt "$@"; do
     case "$opt" in
-        f) FORCE=true;;
-        r) REGEXP="$OPTARG";;
-        s) SOURCE="$OPTARG";;
-        d) DEST="$OPTARG";;
-        h) usage;;
-        --) break;;
-        \?) say "Invalid option -$OPTARG"; exit 1;;
-        :) say "Option -$OPTARG requires an argument."; exit 1;;
+        f) FORCE=true ;;
+        r) REGEXP="$OPTARG" ;;
+        s) SOURCE="$OPTARG" ;;
+        d) DEST="$OPTARG" ;;
+        h) usage ;;
+        --) break ;;
+        \?)
+            say "Invalid option -$OPTARG"
+            exit 1
+            ;;
+        :)
+            say "Option -$OPTARG requires an argument."
+            exit 1
+            ;;
     esac
 done
 shift $((OPTIND - 1))
@@ -78,4 +84,3 @@ for HOST in "${INSTANCES[@]}"; do
     PIDS+=($!)
 done
 wait "${PIDS[@]}"
-

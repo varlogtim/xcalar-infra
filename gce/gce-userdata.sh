@@ -1,11 +1,11 @@
 #!/bin/bash
 
 command_exists() {
-    command -v "$@" > /dev/null 2>&1
+    command -v "$@" >/dev/null 2>&1
 }
 
 # Taken from GCloud's ubuntu package /usr/share/google/get_metadata_value
-get_metadata_value () {
+get_metadata_value() {
     if test -e /usr/share/google/get_metadata_value; then
         /usr/share/google/get_metadata_value "$1"
         return $?
@@ -27,11 +27,11 @@ get_metadata_value () {
 # and many intermittent errors when retry isn't used. When a cluster comes up
 # all the nodes tend to hit the source http server for the file, causing it to
 # temporarily be unavailable.
-safe_curl () {
+safe_curl() {
     curl -4 --location --retry 20 --retry-delay 3 --retry-max-time 60 "$@"
 }
 
-os_version () {
+os_version() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         case "$ID" in
@@ -55,9 +55,9 @@ os_version () {
     elif [ -e /etc/redhat-release ]; then
         ELVERSION="$(grep -Eow '([0-9\.]+)' /etc/redhat-release | cut -d'.' -f1)"
         if grep -q 'Red Hat' /etc/redhat-release; then
-                echo rhel${ELVERSION}
+            echo rhel${ELVERSION}
         elif grep -q CentOS /etc/redhat-release; then
-                echo el${ELVERSION}
+            echo el${ELVERSION}
         fi
     else
         echo >&2 "Unknown OS version"
@@ -65,7 +65,7 @@ os_version () {
     fi
 }
 
-do_install () {
+do_install() {
 
     user="$(id -un 2>/dev/null || true)"
 
@@ -93,9 +93,9 @@ do_install () {
         curl='busybox wget -qO-'
     fi
 
-    os_version > /var/tmp/os_version
+    os_version >/var/tmp/os_version
     case "$(os_version)" in
-        rhel*|el*)
+        rhel* | el*)
             $sh_c "yum remove -y xcalar xcalar-python27"
             gcsfuseRepo="/etc/yum.repos.d/gcsfuse.repo"
             if true; then
@@ -144,7 +144,6 @@ if [ -z "$CLUSTER" ]; then
     CLUSTER="${HOSTNAME_S%%-[0-9]*}"
 fi
 COUNT=$(get_metadata_value attributes/count)
-
 
 CLUSTERDIR=/mnt/nfs/cluster/$CLUSTER
 NFSMOUNT=/mnt/xcalar
@@ -212,13 +211,13 @@ LoadPlugin write_graphite
 if test -e /etc/redhat-release; then
     graphiteConfFile="/etc/collectd.d/collectd.conf"
     writeGraphite='
-Hostname'`hostname -f`'
+Hostname'$(hostname -f)'
 FQDNLookup false
 '"$writeGraphiteCommon"
 else
     graphiteConfFile="/etc/collectd/colectd.conf"
     writeGraphite="$writeGraphiteCommon"
-    $sh_c "sed -i -e \"s/localhost/`hostname -f`/\" $graphiteConfFile"
+    $sh_c "sed -i -e \"s/localhost/$(hostname -f)/\" $graphiteConfFile"
     $sh_c "sed -i -e \"s/FQDNLookup true/FQDNLookup false/\" $graphiteConfFile"
 fi
 
@@ -229,22 +228,22 @@ $sh_c 'service collectd start'
 WORKDIR=/var/tmp/gce-userdata
 mkdir -p "$WORKDIR"
 mkdir -p $NFSMOUNT/config
-safe_curl "$(get_metadata_value attributes/ldapConfig)" > $WORKDIR/ldapConfig.json
+safe_curl "$(get_metadata_value attributes/ldapConfig)" >$WORKDIR/ldapConfig.json
 if ! test -e /etc/redhat-release; then
-    sed -i -e  "s@/etc/pki/tls/cert.pem@/etc/ssl/certs/ca-certificates.crt@" $WORKDIR/ldapConfig.json
+    sed -i -e "s@/etc/pki/tls/cert.pem@/etc/ssl/certs/ca-certificates.crt@" $WORKDIR/ldapConfig.json
 fi
-if [[ "$HOSTNAME_S" == *1 ]]; then
+if [[ $HOSTNAME_S == *1 ]]; then
     cp $WORKDIR/ldapConfig.json $NFSMOUNT/config
 fi
-safe_curl "$(get_metadata_value attributes/installer)" > $WORKDIR/xcalar-installer
-get_metadata_value attributes/config > $WORKDIR/config
+safe_curl "$(get_metadata_value attributes/installer)" >$WORKDIR/xcalar-installer
+get_metadata_value attributes/config >$WORKDIR/config
 $sh_c 'mkdir -p /etc/xcalar'
-sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' $WORKDIR/config > $WORKDIR/config-nfs
+sed -e 's@^Constants.XcalarRootCompletePath=.*$@Constants.XcalarRootCompletePath='$NFSMOUNT'@g' $WORKDIR/config >$WORKDIR/config-nfs
 $sh_c "cp $WORKDIR/config-nfs /etc/xcalar/default.cfg"
 
 set +e
 set -x
-grep -v '#' /etc/default/xcalar > /etc/default/xcalar.default
+grep -v '#' /etc/default/xcalar >/etc/default/xcalar.default
 rm -f /etc/default/xcalar
 
 $sh_c 'service apache2 stop'
@@ -255,8 +254,8 @@ cat /etc/default/xcalar.default | tee -a /etc/default/xcalar
 $sh_c 'service rsyslog restart'
 cd ~xcalar || cd /var/tmp
 
-get_metadata_value attributes/license > /etc/xcalar/temp
-get_metadata_value attributes/license | base64 -d | gunzip > /etc/xcalar/XcalarLic.key
+get_metadata_value attributes/license >/etc/xcalar/temp
+get_metadata_value attributes/license | base64 -d | gunzip >/etc/xcalar/XcalarLic.key
 
 if [ "$ELVERSION" == 7 ] || systemctl cat xcalar.service >/dev/null 2>&1; then
     systemctl daemon-reload

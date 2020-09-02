@@ -7,7 +7,7 @@ NAME="$(basename ${BASH_SOURCE[0]})"
 export CLOUDSDK_COMPUTE_REGION=${CLOUDSDK_COMPUTE_REGION-us-central1}
 export CLOUDSDK_COMPUTE_ZONE=${CLOUDSDK_COMPUTE_ZONE-us-central1-f}
 
-usage () {
+usage() {
     cat <<EOF >&2
     usage: $NAME {start|stop} vm-name ...
 
@@ -19,7 +19,7 @@ EOF
     exit 1
 }
 
-gce_instances () {
+gce_instances() {
     local cmd="$1"
     local rc=1
     shift
@@ -54,7 +54,7 @@ fi
 
 cmd="$1"
 case "$cmd" in
-    -h|--help) usage ;;
+    -h | --help) usage ;;
     start) ;;
     stop) ;;
     list) ;;
