@@ -66,7 +66,9 @@ for ii in `seq 1 $NUM_ITERATIONS`; do
             restartXcalar "$cluster"
             anyfailed=0
         fi
+        echo "SUBTEST_START: $Test"
         time cloudXccli "$cluster" -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
+        echo "SUBTEST_END: $Test"
         rc=${PIPESTATUS[0]}
         if [ $rc -ne 0 ]; then
             funcstatsd "$Test" "FAIL" "$gitsha"

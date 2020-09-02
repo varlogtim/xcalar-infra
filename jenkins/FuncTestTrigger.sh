@@ -171,7 +171,9 @@ for jj in `seq 1 $NUM_ITERATIONS`; do
            fi
         fi
 
+        echo "SUBTEST_START: $Test"
         time xccli -c "functests run --allNodes --testCase $Test" 2>&1 | tee "$logfile"
+        echo "SUBTEST_END: $Test"
 
         rc=${PIPESTATUS[0]}
         if [ $rc -ne 0 ]; then
