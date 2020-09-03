@@ -3,4 +3,5 @@
 
 matplotlib==3.3.0
 jsonpath-rw-ext==1.2.2
+psutil==5.7.2
 pytz==2020.1

@@ -13,7 +13,12 @@ import json
 import logging
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+import multiprocessing
 import os
+import pprint
+import psutil
+import queue
+import threading
 import time
 
 from extract import JSONExtract
@@ -27,8 +32,9 @@ class MetricsData(object):
         self.id_to_cfg = {}
         self.node_id_to_points = {}
         self.nodes = set()
+        self.data_write_lock = threading.Lock()
 
-    def add_metric(self, *, metric_cfg):
+    def register_metric(self, *, metric_cfg):
         source = metric_cfg.source()
         metric_id = metric_cfg.metric_id()
         self.source_to_ids.setdefault(source, set()).add(metric_id)
@@ -46,9 +52,11 @@ class MetricsData(object):
     def add_points(self, *, node, metric_id, points):
         if not len(points):
             return
-        self.nodes.add(node)
         key = "{}:{}".format(node, metric_id)
-        self.node_id_to_points.setdefault(key, []).extend(points)
+        with self.data_write_lock:
+            # Thread safe.
+            self.nodes.add(node)
+            self.node_id_to_points.setdefault(key, []).extend(points)
 
     def get_points(self, *, node, metric_id):
         key = "{}:{}".format(node, metric_id)
@@ -100,6 +108,7 @@ class MetricCfg(object):
             return(source)
 
         raise ValueError("can't determine metric_id from {}".format(self.dikt))
+
 
 class FigureCfg(object):
     """
@@ -193,104 +202,261 @@ def load_json(path):
         with gzip.open(path) as fp:
             return json.load(fp)
 
-def load_system_stats(*, metrics_data, dsh, start_ts, end_ts, nodes):
+
+def put_points(*, node , metric_id, points, q):
+    max_points = 100 # XXXrs magic
+    start = 0
+    while True:
+        sendpoints = points[start:start+max_points]
+        if not sendpoints:
+            break
+        q.put({'node':node, 'metric_id':metric_id, 'points':sendpoints})
+        start += max_points
+
+
+def put_done(*, q):
+    q.put({'done':True})
+
+
+def load_system_stats_file(*, path, metrics_data, node, q):
+    """
+    Extract relevant data from a Xcalar system stats file.
+    """
+
+    je = JSONExtract(dikt=load_json(path))
+    for metric_id in metrics_data.ids_for_source(source="_SYSTEM_STATS"):
+        mcfg = metrics_data.cfg_for_id(metric_id=metric_id).dikt
+        if 'xy_expr' in mcfg:
+            points = je.extract_xy(xy_expr=mcfg.get('xy_expr'))
+
+        elif 'key_expr' in mcfg and 'val_expr' in mcfg:
+            points = je.extract_kv(key_expr=mcfg.get('key_expr'),
+                                   val_expr=mcfg.get('val_expr'))
+        else:
+            raise ValueError("invalid metric config: {}".format(mcfg))
+        put_points(node=node, metric_id=metric_id, points=points, q=q)
+
+
+def load_csv_file(*, metric_id, path, start_ts, end_ts, nodes, q):
+    """
+    Extract relevant data from a csv file.
+    Format is expected to be:
+        <node>,<timestamp>,<metric_value>
+    """
+
+    node_to_points = {}
+    with open(path) as fp:
+        for line in fp:
+            try:
+                node,ts,val = line.strip().split(',')
+            except ValueError:
+                continue
+            node = str(node)
+            if nodes and node not in nodes:
+                continue
+            ts = int(ts)
+            if ts < start_ts or ts > end_ts:
+                continue
+            try:
+                val = int(val)
+            except ValueError:
+                val = float(val)
+            node_to_points.setdefault(node, []).append((ts,val))
+
+    for node,points in node_to_points.items():
+        put_points(node=node, metric_id=metric_id, points=points, q=q)
+
+
+def file_loader(*, load_args, metrics_data, q):
+    """
+    Runs as a process.
+
+    Load args define which files to process.
+    Extracted metrics (points) are returned to parent
+    through the Queue and aggregated into the master
+    MetricsData instance.
+    """
+
+    for args in load_args:
+        source = args['source']
+        if source == "_SYSTEM_STATS":
+            load_system_stats_file(metrics_data=metrics_data,
+                                   path=args['path'],
+                                   node=args['node'],
+                                   q=q)
+            continue
+
+        if source == "_JOB_STATS":
+            raise Exception('_JOB_STATS not supported')
+
+        # Anything else is a csv file
+        load_csv_file(metric_id=args['metric_id'],
+                      path=args['path'],
+                      start_ts=args['start_ts'],
+                      end_ts=args['end_ts'],
+                      nodes=args['nodes'],
+                      q=q)
+    put_done(q=q)
+
+
+# This will run in a thread and safely merge data points
+# returned by the loader process.
+def get_points(*, metrics_data, p, q):
+    """
+    Runs as a thread.
+
+    Each get_points thread is paired with a file_loader process and
+    reads extracted points data from the "parent" end of the queue
+    until a "done" message is received.
+
+    Points data are added to the master MetricsData instance via
+    the thread-safe add_points() method.
+
+    When "done", is received (or if the queue times out) join the
+    file loader process and return.
+    """
+    while True:
+        try:
+            item = q.get(True, 600) # XXXrs ad-hoc 10min timeout
+            if "done" in item:
+                break
+            metrics_data.add_points(node=item['node'],
+                                    metric_id=item['metric_id'],
+                                    points=item['points'])
+        except queue.Empty:
+            break
+    p.join()
+
+
+def system_stats_load_args(*, dsh, start_ts, end_ts, nodes):
+    """
+    Return an array of argument structures which define the system stats
+    files that need to be loaded, and the arguments required to
+    extract the appropriate data.
+    """
 
     paths_by_node = XcalarStatsFileFinder(dsh=dsh).\
                         system_stats_files(start_ts=start_ts,
                                            end_ts=end_ts,
                                            nodes=nodes)
 
+    args = []
     for node in sorted(list(paths_by_node.keys())):
         for path in paths_by_node.get(node):
-            logger.info("processing: {}".format(path))
-            je = JSONExtract(dikt=load_json(path))
-
-            for metric_id in metrics_data.ids_for_source(source="_SYSTEM_STATS"):
-                mcfg = metrics_data.cfg_for_id(metric_id=metric_id).dikt
-
-                if 'xy_expr' in mcfg:
-                    points = je.extract_xy(xy_expr=mcfg.get('xy_expr'))
-
-                elif 'key_expr' in mcfg and 'val_expr' in mcfg:
-                    points = je.extract_kv(key_expr=mcfg.get('key_expr'),
-                                           val_expr=mcfg.get('val_expr'))
-                else:
-                    raise ValueError("invalid metric config: {}".format(mcfg))
-
-                metrics_data.add_points(node=node , metric_id=metric_id, points=points)
+            args.append({'source': '_SYSTEM_STATS', 'node':node, 'path':path})
+    return args
 
 
-def load_csv(*, metrics_data, metric_id, path, start_ts, end_ts, nodes):
+def csv_load_args(*, metric_id, path, start_ts, end_ts, nodes):
     """
-    Required format: <node>,<timestamp>,<value>
+    Return an array of argument structures which define the csv
+    files that need to be loaded, and the arguments required to
+    extract the appropriate data.
     """
+
+    args = []
     paths = []
-    # If path is a directory, iterate over all files
     if os.path.isdir(path):
+        # Path is a directory, so iterate over contained files for anything
+        # with .csv or .CSV suffix
         for fname in os.listdir(path):
             if not (fname.endswith(".csv") or fname.endswith(".CSV")):
                 continue
             paths.append(os.path.join(path,fname))
     else:
+        # Path is a single file.
         paths.append(path)
 
     for path in paths:
-        with open(path) as fp:
-            for line in fp:
-                try:
-                    node,ts,val = line.strip().split(',')
-                except ValueError:
-                    continue
-                node = str(node)
-                if nodes and node not in nodes:
-                    continue
-                ts = int(ts)
-                if ts < start_ts or ts > end_ts:
-                    continue
-                try:
-                    val = int(val)
-                except ValueError:
-                    val = float(val)
-                metrics_data.add_points(node=node, metric_id=metric_id, points=[(ts,val)])
+        args.append({'metric_id': metric_id,
+                     'path': path,
+                     'start_ts': start_ts,
+                     'end_ts': end_ts,
+                     'nodes': nodes})
+    return args
 
 
 def plot(*, fig_groups, dsh, plotdir,
             start_ts, end_ts, tz, nodes=None,
             csv_name_to_path):
 
-    # Scan all the metrics in all the figure groups and
-    # "register" with the MetricsData instance.
+    # Scan the configuration files to determine the specific metrics required
+    # to satisfy the needs of all the figures in all the figure groups and
+    # "register" the required metrics with the MetricsData instance.
+
     metrics_data = MetricsData()
     for fg_cfg in fig_groups:
         for fcfg in fg_cfg.figures():
             for mcfg in fcfg.metric_configs():
-                metrics_data.add_metric(metric_cfg=mcfg)
+                metrics_data.register_metric(metric_cfg=mcfg)
 
-    # Load up the data from the configured sources
+    # Using the metrics requirements, determine the files that need to be loaded.
 
+    load_args = []
     for source in metrics_data.sources():
         if source == "_SYSTEM_STATS":
             if not dsh:
                 raise ValueError("--dsh required to plot system stats")
-            load_system_stats(metrics_data=metrics_data,
-                              dsh=dsh,
-                              start_ts=start_ts,
-                              end_ts=end_ts,
-                              nodes=nodes)
+            load_args.extend(system_stats_load_args(dsh=dsh,
+                                                    start_ts=start_ts,
+                                                    end_ts=end_ts,
+                                                    nodes=nodes))
         elif "csv:" in source:
             foo,name = source.split(':')
             path = csv_name_to_path.get(name, None)
             if not path:
                 raise ValueError("no path for csv name: {}".format(name))
-            load_csv(metrics_data=metrics_data,
-                     metric_id=source, # XXXrs - special knowledge :/
-                     path=path,
-                     start_ts=start_ts,
-                     end_ts=end_ts,
-                     nodes=nodes)
+            load_args.extend(csv_load_args(metric_id=source, # XXXrs - special knowledge :/
+                                           path=path,
+                                           start_ts=start_ts,
+                                           end_ts=end_ts,
+                                           nodes=nodes))
         else:
             raise ValueError("unsupported metrics source: {}".format(source))
 
+
+    # load_args now contains an entry for each file that needs to be loaded.
+    # Divvy up the work across all our cores.
+
+    max_procs = psutil.cpu_count() # one process per core max
+    buckets = [[] for i in range(max_procs)]
+    for idx,args in enumerate(load_args):
+        buckets[idx%max_procs].append(args)
+
+    # Launch file loader processes from the main thread first.
+    # Once they're going, pair each one with it's own get_points thread.
+    # Must happen in this order or things can deadlock. :/
+    #
+    # (Apparently, this is a known limitation when mixing threads/processes.)
+
+    processes = []
+    for idx,load_args in enumerate(buckets):
+        if not len(load_args):
+            continue
+        logger.info("file_loader {} processing {} logs".format(idx, len(load_args)))
+        logger.debug("load_args: {}".format(pprint.pformat(load_args)))
+        q = multiprocessing.Queue()
+        p = multiprocessing.Process(target=file_loader,
+                                    kwargs={"metrics_data":metrics_data,
+                                            "load_args":load_args,
+                                            "q":q})
+        p.daemon = True # Hygenic!
+        p.start()
+        processes.append((p,q))
+
+    # Launch a get_points thread to service incoming data from each file_loader process.
+    threads = []
+    for (p,q) in processes:
+        t = threading.Thread(target=get_points,
+                             kwargs={"metrics_data":metrics_data, "p":p, "q":q})
+        t.daemon = True # Hygenic!
+        t.start()
+        threads.append(t)
+
+    # Join all the threads.
+    for t in threads:
+        logger.debug("joining: {}".format(t))
+        t.join()
 
     # All the data are now loaded into the MetricsData instance.
     # Proceed with the plotting...
@@ -301,6 +467,9 @@ def plot(*, fig_groups, dsh, plotdir,
         fg_name = fg_cfg.get('name', 'Unknown')
         for node in sorted(metrics_data.all_nodes()):
             outpath = os.path.join(plotdir, "{}_node{}.pdf".format(fg_name, node))
+
+            # XXXrs - FUTURE do each pdf page in a separate process?
+
             with PdfPages(outpath) as pdf:
                 logger.info("plotting: {}".format(outpath))
 
