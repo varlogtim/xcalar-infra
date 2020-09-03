@@ -48,7 +48,7 @@ prepare() {
         cd "$pkgname-$pkgver"
     fi
     local patch_file
-    for patch_file in $(ls $srcdir/*.patch $PKGBUILDdir/*.patch 2> /dev/null || true); do
+    for patch_file in $(ls $srcdir/*.patch $PKGBUILDdir/*.patch 2>/dev/null || true); do
         patch -p1 -i "$patch_file"
     done
     true
@@ -92,7 +92,7 @@ package() {
     else
         tool=$(basename "${sources[0]}") || exit 1
         tool="${tool%%.*}"
-        install -v -D ${pkgname}-${pkgver}*/${pkgname}-${pkgver} $pkgdir/usr/bin/${pkgname}
+        install -v -D ${pkgname}-${pkgver}*/${pkgname}-${pkgver} $pkgdir/${prefix:-/usr}/bin/${pkgname}
     fi
 }
 
@@ -122,7 +122,7 @@ fetch() {
     local json="${cache}/${dir}/${file}.json"
     mkdir -p "$(dirname $json)"
     if ! test -e "$json" || [ $((NOW - $(stat -c %Y $json))) -gt 600 ]; then
-        if ! curl -fsSL "$1" | jq -r . > "${json}.tmp"; then
+        if ! curl -fsSL "$1" | jq -r . >"${json}.tmp"; then
             return 1
         fi
         mv "${json}.tmp" "$json"
@@ -159,7 +159,6 @@ gh_latest() {
     curl -fsSL -H 'Accept: application/json' "https://github.com/$1/releases/latest" | sed -e 's/.*"tag_name":"\([^"]*\)".*/\1/'
     return ${PIPESTATUS[0]}
 }
-
 
 pkggenerate() {
     local pkg="${1#https://}"
@@ -198,7 +197,7 @@ pkggenerate() {
                 fi
             done
         fi
-        cat << EOF
+        cat <<EOF
 pkgname=('$pkgname')
 pkgver='$pkgver'
 pkgdesc='$pkgdesc'
@@ -261,8 +260,14 @@ pkgmain() {
                 ;;
             --no-debug) DEBUG=0 ;;
             --gen-fpm) GENFPM=1 ;;
-            --fpm) FPM="$1"; shift;;
-            -o|--output) OUTPUT="$1"; shift;;
+            --fpm)
+                FPM="$1"
+                shift
+                ;;
+            -o | --output)
+                OUTPUT="$1"
+                shift
+                ;;
             --prefix)
                 prefix="$1"
                 shift
@@ -271,7 +276,10 @@ pkgmain() {
                 PKGBUILD="$1"
                 shift
                 ;;
-            -h | --help) pkgusage ; exit 0;;
+            -h | --help)
+                pkgusage
+                exit 0
+                ;;
             -g | --generate)
                 PKGBUILD="${PKGBUILD:-PKGBUILD}"
                 pkggenerate "$1"
@@ -284,14 +292,17 @@ pkgmain() {
                 PKG="$1"
                 shift
                 PKGBUILD="${PKGBUILD:-PKGBUILD}"
-                pkggenerate "$PKG" > ${PKGBUILD}.$$ || die "Failed to generate PKGBUILD"
+                pkggenerate "$PKG" >${PKGBUILD}.$$ || die "Failed to generate PKGBUILD"
                 mv ${PKGBUILD}.$$ ${PKGBUILD}
                 ;;
             -f | --force)
                 FORCE=true
                 ;;
 
-            *) pkgusage; die "Unknown command: $cmd" ;;
+            *)
+                pkgusage
+                die "Unknown command: $cmd"
+                ;;
         esac
     done
     PKGBUILD="${PKGBUILD:-PKGBUILD}"
@@ -347,14 +358,14 @@ pkgmain() {
             die "SHA256 checksum failed for $filen"
         fi
         case "$filen" in
-            *.tar.xz|*.txz) tar Jxf "$filen" ;;
-            *.tar.gz|*.tgz) tar zxf "$filen" ;;
+            *.tar.xz | *.txz) tar Jxf "$filen" ;;
+            *.tar.gz | *.tgz) tar zxf "$filen" ;;
             *.tar.bz2) tar axf "$filen" ;;
             *.tar) tar xf "$filen" ;;
             *.tgz) tar axf "$filen" ;;
             *.zip) unzip -q -o "$filen" ;;
-            *.gz) gzip -dc "$filen" > "$(basename $filen .gz)" ;;
-            *.bz2) bzip2 -dc "$filen" > "$(basename $filen .bz2)" ;;
+            *.gz) gzip -dc "$filen" >"$(basename $filen .gz)" ;;
+            *.bz2) bzip2 -dc "$filen" >"$(basename $filen .bz2)" ;;
         esac
     done
 
@@ -378,7 +389,7 @@ pkgmain() {
         srcpkgdir=$srcdir
     fi
 
-    if type -t prepare > /dev/null; then
+    if type -t prepare >/dev/null; then
         info "Calling prepare ..."
         (
             set -e
@@ -389,7 +400,7 @@ pkgmain() {
             ((DEBUG)) && ls -la >&2 || true
         ) || die "Failed to prepare"
     fi
-    if type -t build > /dev/null; then
+    if type -t build >/dev/null; then
         info "Calling build ..."
         (
             set -e
@@ -399,7 +410,7 @@ pkgmain() {
             build
         ) || die "Failed to build"
     fi
-    if type -t check > /dev/null; then
+    if type -t check >/dev/null; then
         info "Calling check ..."
         (
             set -e
@@ -408,7 +419,7 @@ pkgmain() {
             check
         ) || die "Failed to check"
     fi
-    if type -t package > /dev/null; then
+    if type -t package >/dev/null; then
         info "Calling package ..."
         (
             cd $srcpkgdir
@@ -453,7 +464,8 @@ pkgmain() {
     else
         info "bundling ${pkgname}-rpm.tar.gz"
         run tar czf ${pkgname}-rpm.tar.gz -C $pkgdir ${prefix:-.}
-        printf '%q ' $FPM -s tar -t rpm "${fpmextra[@]}" "${rpmextra[@]}" $fpmopts $rpmopts "${FPM_COMMON[@]}" -C "$pkgdir${prefix}" ${pkgname}-rpm.tar.gz; echo
+        printf '%q ' $FPM -s tar -t rpm "${fpmextra[@]}" "${rpmextra[@]}" $fpmopts $rpmopts "${FPM_COMMON[@]}" -C "$pkgdir${prefix}" ${pkgname}-rpm.tar.gz
+        echo
     fi
     if test -e "${pkgdir}_deb"; then
         rootfs="${pkgdir}_deb"
@@ -467,7 +479,8 @@ pkgmain() {
     else
         info "bundling ${pkgname}-deb.tar.gz"
         run tar czf ${pkgname}-deb.tar.gz -C $rootfs ${prefix:-.}
-        printf '%q ' $FPM -s tar -t deb "${fpmextra[@]}" "${rpmextra[@]}" $fpmopts $debopts "${FPM_COMMON[@]}" -C "$rootfs${prefix}" ${pkgname}-deb.tar.gz; echo
+        printf '%q ' $FPM -s tar -t deb "${fpmextra[@]}" "${rpmextra[@]}" $fpmopts $debopts "${FPM_COMMON[@]}" -C "$rootfs${prefix}" ${pkgname}-deb.tar.gz
+        echo
     fi
 
     if ((DEBUG)); then

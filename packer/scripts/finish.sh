@@ -54,7 +54,6 @@ cleanup() {
         echo >&2 "Detected PACKER_BUILDER_TYPE=$PACKER_BUILDER_TYPE, deleting authorized_keys"
         rm -fv /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
     fi
-
     rm -rfv /var/lib/cloud/instances/*
 
     : >/var/log/lastlog

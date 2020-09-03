@@ -1,5 +1,7 @@
 #!/bin/bash
-
+#
+#
+# shellcheck disable=SC2086,SC2046,SC2207
 . infra-sh-lib
 
 AWS_AMI_OWNER_REDHAT=309956199498
@@ -50,7 +52,7 @@ aws_list_amzn2_images() { aws_list_images $AWS_AMI_AMAZON 'amzn2-ami-hvm-2.*-x86
 aws_list_ub14_images() { aws_list_images $AWS_AMI_OWNER_CANONICAL '*/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*' "$@" | aws_format_images; }
 aws_list_ub14_image_latest() { aws_list_ub14_images "$@" | aws_jq_images | head -1; }
 aws_share_ami() {
-    local image_id_and_snapshot= rc=
+    local image_id_and_snapshot rc
     image_id_and_snapshot=($(
         set -o pipefail
         aws ec2 describe-images --image-ids "$1" --output=json \
@@ -271,10 +273,6 @@ aws_config_ssh() {
     aws ec2 describe-instances | jq --arg yest $since -r '.Reservations[].Instances[] | select(.LaunchTime > $yest) | select(.State.Code != 48) | (.Tags[]//[]|select(.Key=="Name")|.Value) as $name | "Host \($name).aws\n\tHostname \(.PublicDnsName)\n"'
 }
 
-aws_describe_stack() {
-    aws cloudformation describe-stack-events --stack-name "${1:-${LOGNAME}-xcalar}" | jq -r '.StackEvents[]|[.Timestamp,.StackName,.ResourceStatus,.ResourceType]|@tsv' | column -t
-}
-
 aws_subnet_to_zone() {
     aws ec2 describe-subnets --subnet-ids $1 --query 'Subnets[0].AvailabilityZone' --output text
 }
@@ -297,6 +295,27 @@ aws_s3_list_for_delete() {
     else
         aws s3api list-objects-v2 --bucket "$1" ${2:+--prefix "$2"} | jq -r '{"Quiet": true, Objects: [ .Contents[]|{Key: .Key}]}'
     fi
+}
+
+aws_s3_nuke_bucket() {
+    local bucket="$1"
+    shift
+    local region
+    if ! region=$(aws_s3_region "$bucket"); then
+        echo >&2 "WARNING: Unable to get the bucket location. Assuming bucket doesn't exist"
+        return 0
+    fi
+    local objs
+    if objs="$(aws s3api --region $region list-objects-v2 --bucket "$bucket" | jq -r '{"Quiet": true, Objects: [ .Contents[]|{Key: .Key}]}')"; then
+        if [ -n "$objs" ]; then
+            if aws s3api --region $region delete-objects --bucket $bucket --delete "$objs"; then
+                echo >&2 "Deleted all objects in s3://$bucket"
+            fi
+        fi
+    else
+        echo >&2 "Unable to get list of objects in s3://$bucket"
+    fi
+    aws s3 --region $region rb s3://$bucket
 }
 
 aws_s3_region() {
@@ -369,6 +388,7 @@ aws_cfn_url() {
     echo "https://${AWS_DEFAULT_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_DEFAULT_REGION}#/stack/detail?stackId=$url"
 }
 
+## AWS Cloudformation
 aws_quickcreate() {
     test -n "${1:-}" || return 1
     local region=${AWS_DEFAULT_REGION:-us-west-2} templ='' url=''
@@ -382,9 +402,18 @@ aws_quickurl() {
     local s3Url="$1" stackName="${2:-$(id -un)-stack-$(date +%Y%m%d)}"
     # replace("/", "%2A")
     local region="${AWS_DEFAULT_REGION:-us-west-2}"
-    cat << EOF
+    cat <<EOF
 https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateUrl=${safeUrl}&stackName=${stackName}
 EOF
+}
+
+aws_cfn_list_updatable_stacks() {
+    local all_update_stacks=(CREATE_FAILED CREATE_COMPLETE ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE IMPORT_COMPLETE IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE)
+    aws cloudformation list-stacks --stack-status-filter "${all_update_stacks[@]}" "$@"
+}
+
+aws_describe_stack() {
+    aws cloudformation describe-stack-events --stack-name "${1:-${LOGNAME}-xcalar}" | jq -r '.StackEvents[]|[.Timestamp,.StackName,.ResourceStatus,.ResourceType]|@tsv' | column -t
 }
 
 cfn_template_default() {
@@ -393,7 +422,7 @@ cfn_template_default() {
         return 1
     fi
     case "$ext" in
-        json) jq -r ".Parameters.$2.Default" < "$1" ;;
+        json) jq -r ".Parameters.$2.Default" <"$1" ;;
         yml | yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default" ;;
         *)
             echo >&2 "Unknown file type: $1"
@@ -484,7 +513,7 @@ aws_cfn_template_default() {
         return 1
     fi
     case "$ext" in
-        json) jq -r ".Parameters.$2.Default" < "$1" ;;
+        json) jq -r ".Parameters.$2.Default" <"$1" ;;
         yml | yaml) cfn-flip "$1" | jq -r ".Parameters.$2.Default" ;;
         *)
             echo >&2 "Unknown file type: $1"
@@ -563,7 +592,7 @@ aws_s3_endpoint() {
     if ! bucket_location="$(aws s3api get-bucket-location --bucket $1 --query LocationConstraint --output text)"; then
         return 1
     fi
-    if [ "$bucket_location" == None ]; then
+    if [ "$bucket_location" = None ]; then
         bucket_location=''
     fi
     echo "s3${bucket_location:+.$bucket_location}.amazonaws.com/$1"
@@ -625,7 +654,7 @@ aws_s3_url() {
 
 aws_s3_configure() {
     aws configure set default.s3.signature_version s3v4
-    aws configure set default.s3.addressing_style path
+    aws configure set default.s3.addressing_style virtual
 }
 
 aws_s3_presign() {
@@ -658,7 +687,7 @@ aws_r53_upsert() {
     local action='UPSERT'
     local tmpf=$(mktemp -t r53XXXXXX.json)
     local yaml="${tmpf}.yaml"
-    cat > $yaml << EOF
+    cat >$yaml <<EOF
 Comment: 'Updated $(date +%Y%m%d)'
 Changes:
   - Action: UPSERT
@@ -670,11 +699,11 @@ Changes:
 EOF
     local val
     for val in "${@}"; do
-        cat >> $yaml << EOF
+        cat >>$yaml <<EOF
         - Value: '${val}'
 EOF
     done
-    cfn-flip < $yaml > $tmpf
+    cfn-flip <$yaml >$tmpf
     local rc
     aws route53 change-resource-record-sets --hosted-zone-id $zoneid --change-batch file://${tmpf} --query 'ChangeInfo.[Id,Status]' --output text
     rc=$?
@@ -774,7 +803,6 @@ aws_asg_detach() {
         && aws autoscaling detach-instances --auto-scaling-group-name $asg_name --should-decrement-desired-capacity --instance-ids "$@"
 }
 
-
 aws_ssm_update_base() {
     local name="$1" ami="$2" osid="$3"
     local key="${4:-/xcalar/cloud/images/xdp-base-latest/xdp-base-amzn2}"
@@ -782,10 +810,10 @@ aws_ssm_update_base() {
         --name "$key" \
         --value "$ami" \
         --tags \
-            Key=Name,Value="$name" \
-            Key=OSID,Value="$osid" \
-            ${BUILD_NUMBER:+Key=BuildNumber,Value=$BUILD_NUMBER} \
-            Key=Today,Value="$(date +%Y%m%d)"
+        Key=Name,Value="$name" \
+        Key=OSID,Value="$osid" \
+        ${BUILD_NUMBER:+Key=BuildNumber,Value=$BUILD_NUMBER} \
+        Key=Today,Value="$(date +%Y%m%d)"
 }
 
 aws_ssm_del_tags() {

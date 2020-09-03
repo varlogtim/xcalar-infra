@@ -13,8 +13,8 @@ astroid==2.4.2            # via pylint
 attrs==19.3.0             # via jsonschema, pytest
 awacs==0.9.8              # via troposphere
 aws-lambda-builders==1.0.0  # via aws-sam-cli
-aws-sam-cli==1.0.0        # via -r requirements.in
-aws-sam-translator==1.25.0  # via aws-sam-cli
+aws-sam-cli==1.1.0        # via -r requirements.in
+aws-sam-translator==1.26.0  # via aws-sam-cli
 azure-common==1.1.25      # via azure-storage-common
 azure-core==1.7.0         # via azure-storage-blob, azure-storage-queue
 azure-storage-blob==12.3.2  # via -r requirements.in
@@ -23,8 +23,8 @@ azure-storage-queue==12.1.2  # via -r requirements.in
 backcall==0.2.0           # via ipython
 binaryornot==0.4.4        # via cookiecutter
 bleach==3.1.5             # via nbconvert
-boto3==1.13.26            # via aws-sam-cli, aws-sam-translator, localstack, localstack-client, sceptre, serverlessrepo, warrant
-botocore==1.16.26         # via boto3, s3transfer
+boto3==1.14.48            # via aws-sam-cli, aws-sam-translator, localstack, localstack-client, sceptre, serverlessrepo, warrant
+botocore==1.17.48         # via boto3, s3transfer
 bump2version==1.0.0       # via bumpversion
 bumpversion==0.6.0        # via -r requirements.in
 certifi==2020.6.20        # via msrest, requests, sentry-sdk
@@ -160,7 +160,7 @@ wcwidth==0.2.5            # via prompt-toolkit
 webencodings==0.5.1       # via bleach
 websocket-client==0.57.0  # via docker
 werkzeug==1.0.1           # via flask
-wheel==0.34.2             # via aws-lambda-builders
+wheel==0.35.1             # via aws-lambda-builders
 whichcraft==0.6.1         # via cookiecutter
 wrapt==1.12.1             # via astroid
 yamllint==1.24.2          # via -r requirements.in

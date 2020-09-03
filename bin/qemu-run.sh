@@ -12,7 +12,7 @@ die() {
 }
 
 usage() {
-    cat << EOF
+    cat <<EOF
     usage: $(basename $0) [-smp #] [-mem #M] [--serial] [--image src.qcow2]
               [--clone clone.qcow2] [-f|--force (overwrite existing clone)]
               [--size #G ] [-vnc address] -- [-qemu-arg [key1=value1,key2=value2...]]
@@ -26,7 +26,7 @@ EOF
 
 freeport() {
     local start=$1
-    local end=$((start+20))
+    local end=$((start + 20))
     local port=
     for port in $(seq $start $end); do
         if ! nc -w 1 0.0.0.0 $port >/dev/null 2>&1; then
@@ -41,16 +41,37 @@ while [ $# -gt 0 ]; do
     cmd="$1"
     shift
     case "$cmd" in
-        --name) NAME="$1"; shift;;
-        -smp|-cpu|--cpu) SMP="$1" ; shift;;
-        -m|-mem|--mem) MEM="$1" ; shift;;
-        --image) IMAGE="$1"; shift;;
-        --clone) CLONE="$1" ; shift;;
-        -vnc|--vnc) VNC="$1"; shift;;
-        -f|--force) FORCE=true ;;
-        -h|--help) usage;;
-        --size) SIZE="$1"; shift;;
-        --serial) ARGS+=(-serial mon:stdio);;
+        --name)
+            NAME="$1"
+            shift
+            ;;
+        -smp | -cpu | --cpu)
+            SMP="$1"
+            shift
+            ;;
+        -m | -mem | --mem)
+            MEM="$1"
+            shift
+            ;;
+        --image)
+            IMAGE="$1"
+            shift
+            ;;
+        --clone)
+            CLONE="$1"
+            shift
+            ;;
+        -vnc | --vnc)
+            VNC="$1"
+            shift
+            ;;
+        -f | --force) FORCE=true ;;
+        -h | --help) usage ;;
+        --size)
+            SIZE="$1"
+            shift
+            ;;
+        --serial) ARGS+=(-serial mon:stdio) ;;
         --) break ;;
         --*) die "Unknown argument $cmd" ;;
         -*) die "Unknown argument $cmd" ;;
@@ -91,12 +112,12 @@ if test -e "${IMAGE_TO_USE}.name"; then
     NAME=$(cat "${IMAGE_TO_USE}.name")
 else
     NAME="${NAME:-$(basename $IMAGE_TO_USE .qcow2)}"
-    echo $NAME > "${IMAGE_TO_USE}.name"
+    echo $NAME >"${IMAGE_TO_USE}.name"
 fi
 
 if [ -z "$INSTANCE_ID" ]; then
     if ! [ -e "${IMAGE_TO_USE}.id" ]; then
-        uuidgen | cut -d- -f1 > "${IMAGE_TO_USE}.id" || die "Failed to write out instance-id"
+        uuidgen | cut -d- -f1 >"${IMAGE_TO_USE}.id" || die "Failed to write out instance-id"
     fi
     INSTANCE_ID=$(cat "${IMAGE_TO_USE}.id")
 fi
@@ -105,6 +126,8 @@ fi
 
 set -x
 exec qemu-system-x86_64 -name $NAME \
+    -nodefaults \
+    -enable-kvm \
     -nographic \
     -drive file=${IMAGE_TO_USE},if=virtio,cache=writeback,discard=ignore,format=qcow2 \
     -m ${MEM} \
@@ -113,6 +136,9 @@ exec qemu-system-x86_64 -name $NAME \
     -boot c ${VNC+-vnc $VNC} \
     -device virtio-net-pci,netdev=user.0 \
     -netdev user,id=user.0,hostfwd=tcp::$(freeport 2224)-:22 \
+    -chardev socket,id=mon0,path=/var/tmp/monitor-$(id -u)-$NAME,nodelay,server,nowait \
+    -mon chardev=mon0,id=qmon,mode=readline \
     -smbios "type=1,serial=ds=nocloud;h=${NAME}-${INSTANCE_ID}.int.xcalar.com;i=i-${INSTANCE_ID}" "${ARGS[@]}" "$@"
-    #-smbios "type=1,serial=ds=nocloud-net;h=${NAME}-${INSTANCE_ID}.int.xcalar.com;i=i-${INSTANCE_ID};s=http://10.10.4.6:80/" "${ARGS[@]}" "$@"
-    #-cdrom /root/packer/packer_cache/bbd74514a6e11bf7916adb6b0bde98a42ff22a8f853989423e5ac064f4f89395.iso
+#-smbios "type=1,serial=ds=nocloud-net;h=${NAME}-${INSTANCE_ID}.int.xcalar.com;i=i-${INSTANCE_ID};s=http://10.10.4.6:80/" "${ARGS[@]}" "$@"
+#-cdrom /root/packer/packer_cache/bbd74514a6e11bf7916adb6b0bde98a42ff22a8f853989423e5ac064f4f89395.iso
+#-chardev socket,id=mon0,port=55919,host=127.0.0.1,nodelay,server,nowait

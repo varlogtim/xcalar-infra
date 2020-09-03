@@ -514,7 +514,7 @@ Resources:
       Strategy: cluster
   ClusterASG:
     Type: AWS::AutoScaling::AutoScalingGroup
-    DependsOn: [EfsMountTarget]
+    DependsOn: EfsMountTarget
     Properties:
       PlacementGroup: !Ref 'PlacementGroup'
       TerminationPolicies:
@@ -626,6 +626,7 @@ Resources:
       NetworkInterfaceId: !Ref ClusterNIC
   ClusterNIC:
     Type: AWS::EC2::NetworkInterface
+    DependsOn: GatewayAttachment
     Condition: KeepIp
     Properties:
       SubnetId: !Ref Subnet
@@ -803,7 +804,6 @@ Resources:
                   HOSTEDZONENAME=${HostedZoneName}
                   CERTSTORE=/xcalar/cloud/${HostedZoneName}
                   CNAME=${CNAME}
-                  KINESISROLEARN=${KinesisRoleARN}
                   BASEURL={{ baseUrl }}/
                   SAMPLEBUCKET=${SampleBucket}
 {%- if enableLifecycle %}
@@ -811,7 +811,6 @@ Resources:
                   LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
 {%- endif %}
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
-                  KinesisRoleARN: !GetAtt 'KinesisServiceRole.Arn'
                   NIC: !If [KeepIp, !Ref ClusterNIC, '']
                   NFSIp: !GetAtt 'EfsMountTarget.IpAddress'
                   SampleBucket: !ImportValue sharedinf-samplebucket
@@ -982,31 +981,6 @@ Resources:
             log local0.info "Bootstrap returned $rc in dt=$dt seconds at $(date --utc +'%FT%T%z')"
             /opt/aws/bin/cfn-signal -e $rc --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
             exit $rc
-  KinesisServiceRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - 'kinesisanalytics.amazonaws.com'
-                - 'ec2.amazonaws.com'
-                - 'lambda.amazonaws.com'
-            Action:
-              - 'sts:AssumeRole'
-      Path: '/'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-      Policies:
-        - PolicyName: NoBrowsing
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Deny
-                Action: s3:ListAllMyBuckets
-                Resource: '*'
 {%- if enableLifecycle %}
   LifecycleHookTopic:
     Type: AWS::SNS::Topic
@@ -1067,19 +1041,13 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
-                  - kinesisanalytics:DiscoverInputSchema
-                  - kinesisanalyticsv2:DiscoverInputSchema
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - iam:GetRole
-                  - iam:PassRole
-                Resource: !GetAtt 'KinesisServiceRole.Arn'
-              - Effect: Allow
-                Action:
                   - ec2:DescribeRegions
                   - ec2:DescribeInstances
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:AttachNetworkInterface
+                  - ec2:DetachNetworkInterface
                   - autoscaling:DescribeAutoScalingGroups
+                  - elasticfilesystem:DescribeMountTargets
                 Resource:
                   - '*'
               - Effect: Allow
@@ -1098,6 +1066,12 @@ Resources:
                   - '*'
               - Effect: Allow
                 Action:
+                  - cloudformation:SignalResource
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}'
+
+              - Effect: Allow
+                Action:
                   - ec2:CreateTags
                   - ec2:DeleteTags
                 Resource:
@@ -1105,13 +1079,6 @@ Resources:
                 Condition:
                   StringEquals:
                     ec2:ResourceTag/aws:cloudformation:stack-name: !Ref 'AWS::StackName'
-              - Effect: Allow
-                Action:
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:AttachNetworkInterface
-                  - ec2:DetachNetworkInterface
-                Resource:
-                  - '*'
               - Effect: Allow
                 Action:
                   - autoscaling:CompleteLifecycleAction
@@ -1123,28 +1090,32 @@ Resources:
                 Condition:
                   StringEquals:
                     autoscaling:ResourceTag/aws:cloudformation:stack-name: !Ref 'AWS::StackName'
-              - Effect: Allow
+              - Sid: S3ListAccess
+                Effect: Allow
                 Action:
-                  - elasticfilesystem:DescribeMountTargets
-                Resource:
-                  - '*'
-              - Effect: Allow
-                Action:
-                  - s3:Get*
-                  - s3:List*
-                  - s3:HeadBucket
+                  - s3:ListBucket
                 Resource:
                   - !Sub
-                    - 'arn:aws:s3:::${Bucket}/*'
+                    - 'arn:aws:s3:::${Bucket}'
                     - Bucket: !ImportValue sharedinf-samplebucket
                   - !Sub
-                    - 'arn:aws:s3:::${Bucket}/*'
+                    - 'arn:aws:s3:::${Bucket}'
                     - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+              - Sid: S3ReadOnlyAccess
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
                   - !Sub
-                    - 'arn:aws:s3:::${Bucket}'
+                    - 'arn:aws:s3:::${Bucket}/*'
                     - Bucket: !ImportValue sharedinf-samplebucket
+              - Sid: S3ReadWriteAccess
+                Effect: Allow
+                Action:
+                  - s3:*Object
+                Resource:
                   - !Sub
-                    - 'arn:aws:s3:::${Bucket}'
+                    - 'arn:aws:s3:::${Bucket}/*'
                     - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
               - Effect: Allow
                 Action:
@@ -1263,8 +1234,5 @@ Outputs:
   LaunchTemplate:
     Description: Launch template for cluster
     Value: !Ref LaunchTemplate
-  KinesisRoleArn:
-    Description: Role to use for kinesis
-    Value: !GetAtt 'KinesisServiceRole.Arn'
 
 # vim: ft=yaml

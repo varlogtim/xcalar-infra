@@ -49,14 +49,16 @@ all: check
 	echo "$(LAMBDA_KEY)"
 
 check: $(GEN) $(VALIDATION) $(PARAMS) $(JSONS)
-	mkdir -p $(@D)
-	yamllint -c $(XLRINFRADIR)/.yamllint $(SHADOW)/*.cf.yaml
-	cfn-lint $(SHADOW)/*.cf.yaml
+	$(Q)mkdir -p $(@D)
+	$(Q)yamllint -c $(XLRINFRADIR)/.yamllint $(SHADOW)/*.cf.yaml
+	$(Q)cfn-lint $(SHADOW)/*.cf.yaml
 
 %.valid: %.template
-	mkdir -p $(@D)
-	cfn-lint $<
-	aws cloudformation validate-template --template-body file://$< > $@.tmp
+	$(Q)mkdir -p $(@D)
+	$(Q)echo "Cfn-linting $< ..."
+	$(Q)cfn-lint $<
+	$(Q)echo "Verifying template with AWS $< ..."
+	$(Q)aws cloudformation validate-template --template-body file://$< > $@.tmp
 	@mv $@.tmp $@
 
 %.params: %.valid

@@ -104,7 +104,7 @@ Resources:
       - Key: Purpose
         Value: Scratch
   S3LogBucket:
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Type: AWS::S3::Bucket
     Properties:
@@ -116,7 +116,7 @@ Resources:
           Value: Logs
   S3AppBucket:
     Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
       BucketName: !Sub ${AWS::StackName}-appbucket-${AWS::AccountId}-${AWS::Region}
@@ -155,7 +155,7 @@ Resources:
                 - '*'
   S3LambdaBucket:
     UpdateReplacePolicy: Delete
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     Type: AWS::S3::Bucket
     Properties:
       AccessControl: PublicRead
@@ -185,7 +185,7 @@ Resources:
   SharedLayer:
     Type: AWS::Lambda::LayerVersion
     UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     Properties:
       CompatibleRuntimes:
         - python3.6

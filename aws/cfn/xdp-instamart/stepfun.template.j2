@@ -52,9 +52,6 @@ Parameters:
   EfsMountTarget:
     Description: EFS Mount Target
     Type: String
-  KinesisRoleArn:
-    Description: Role for kinesis to assume
-    Type: String
   Subnet:
     Description: Subnet to launch into
     Type: String
@@ -402,13 +399,6 @@ Resources:
                   - !Sub "arn:aws:s3:::${ExistingBucket}"
                   - !Sub "arn:aws:s3:::${WorkBucket}"
                   - !Sub "arn:aws:s3:::${EventBucket}"
-  DataAppProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: "/"
-      Roles:
-        - !Ref 'Ec2SSMRole'
-
   AddS3Notification:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -501,12 +491,10 @@ Resources:
                 AWS_REGION=${AWS::Region}
                 WORKBUCKET=${WorkBucket}
                 BASEURL=${BaseURL}
-                KINESISROLEARN=${KinesisRoleArn}
               mode: '000644'
               owner: root
               group: root
     Properties:
-        #PlacementGroup: !Ref 'PlacementGroup'
       TerminationPolicies:
         - NewestInstance
       LaunchTemplate:
@@ -532,7 +520,6 @@ Resources:
   SamClusterASG:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      #PlacementGroup: !Ref 'PlacementGroup'
       TerminationPolicies:
         - NewestInstance
       LaunchTemplate:
@@ -548,41 +535,15 @@ Resources:
           Value: !Sub '${AWS::StackName}-node'
           PropagateAtLaunch: true
         - Key: FileSystemId
-{%- if enableExistingShare %}
-          Value: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
-{%- else %}
           Value: !Ref EfsSharedRoot
-{%- endif %}
           PropagateAtLaunch: true
         - Key: MountTarget
           Value: !Ref EfsMountTarget
           PropagateAtLaunch: true
-{%- if ami %}
-{%- if ami.Version %}
-        - Key: Version
-          Value: '{{ ami.Version }}'
-          PropagateAtLaunch: true
-{%- endif %}
-{%- if ami.Build %}
-        - Key: Build
-          Value: '{{ ami.Build }}'
-          PropagateAtLaunch: true
-{%- endif %}
-{%- if ami.ImageBuild %}
-        - Key: ImageBuild
-          Value: '{{ ami.ImageBuild }}'
-          PropagateAtLaunch: true
-{%- endif %}
-{%- if ami.Product %}
-        - Key: Product
-          Value: '{{ ami.Product }}'
-          PropagateAtLaunch: true
-{%- endif %}
-{%- endif %}
-#    CreationPolicy:
-#      ResourceSignal:
-#        Count: !Ref ClusterSize
-#        Timeout: PT10M
+          #CreationPolicy:
+          #  ResourceSignal:
+          #    Count: !Ref ClusterSize
+          #    Timeout: PT10M
     # WillReplace: true, means a new ASG is stood up and the old one is replaced if the new stack comes up
     UpdatePolicy:
       AutoScalingReplacingUpdate:
@@ -615,7 +576,6 @@ Resources:
           ParentStack: !Ref 'ParentStack'
           LaunchTemplate: !Ref LaunchTemplate
           LaunchTemplateVersion: !Ref LaunchTemplateVersion
-          KinesisRoleArn: !Ref KinesisRoleArn
           Email: !Ref NotificationEmail
           BaseURL: !Ref BaseURL
           EfsSharedRoot: !Ref EfsSharedRoot
@@ -692,7 +652,6 @@ Resources:
               BaseURL = os.environ['BaseURL']
               AdminPassword = os.environ['AdminPassword']
               AdminUsername = os.environ['AdminUsername']
-              KinesisRoleArn = os.environ['KinesisRoleArn']
               Region = os.environ['Region']
               now = datetime.datetime.now()
               instance_ids = event['InstanceIds'][:]
@@ -726,7 +685,6 @@ Resources:
       Description: "Send SSM Command to instance"
       Environment:
         Variables:
-          KinesisRoleArn: !Ref KinesisRoleArn
           Bucket: !Ref WorkBucket
           BaseURL: !Ref BaseURL
           Region: !Ref 'AWS::Region'

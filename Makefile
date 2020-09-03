@@ -43,8 +43,9 @@ venv: .updated
 	@echo "Syncing virtualenv in $(VENV) with packages in $(REQUIRES) ..."
 	@$(VENV)/bin/python -m pip install -U pip
 	@$(VENV)/bin/python -m pip install -U setuptools
-	@$(VENV)/bin/python -m pip install -U wheel pip-tools
-	@$(VENV)/bin/python -m pip install --no-index --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) --find-links $(NETSTORE_NFS)$(UNIV_WHEELS) --find-links http://$(NETSTORE_HOST)$(UNIV_WHEELS) --find-links http://$(NETSTORE_IP)$(UNIV_WHEELS) -r $(REQUIRES)
+	@$(VENV)/bin/python -m pip install -c $(REQUIRES) wheel pip-tools
+	@$(VENV)/bin/python -m pip install --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) --find-links http://$(NETSTORE_IP)$(WHEELS) -r $(REQUIRES)
+	@$(VENV)/bin/pip-sync --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) --find-links http://$(NETSTORE_IP)$(WHEELS) $(REQUIRES)
 	@$(TOUCH) $@
 
 recompile: $(VENV)/bin/pip-compile

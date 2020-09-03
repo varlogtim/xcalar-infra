@@ -301,7 +301,6 @@ Resources:
         InstanceType: !Ref InstanceType
         EventBucket: !Ref WorkBucket
         EventPrefix: '.events/'
-        KinesisRoleArn: !GetAtt 'KinesisServiceRole.Arn'
         ExistingBucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
         WorkBucket: !Ref WorkBucket
         NotificationEmail: !Ref NotificationEmail
@@ -814,7 +813,6 @@ Resources:
                   NIC=${NIC}
                   HOSTEDZONENAME=${HostedZoneName}
                   CNAME=${CNAME}
-                  KINESISROLEARN=${KinesisRoleARN}
                   BASEURL={{ baseUrl }}/
 {%- if enableLifecycle %}
                   LOGBUCKET=${LogBucket}
@@ -823,7 +821,6 @@ Resources:
 {%- endif %}
                   LOGPREFIX=/logs/${AWS::AccountId}/${AWS::StackName}/
                 - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
-                  KinesisRoleARN: !GetAtt 'KinesisServiceRole.Arn'
                   NIC: !If [KeepIp, !Ref ClusterNIC, '']
                   NFSIp: !GetAtt 'EfsMountTarget.IpAddress'
 {%- if enableLifecycle %}
@@ -961,31 +958,6 @@ Resources:
             log local0.info "Bootstrap returned $rc in dt=$dt seconds at $(date --utc +'%FT%T%z')"
             /opt/aws/bin/cfn-signal -e $rc --stack ${AWS::StackName} --resource ClusterASG --region ${AWS::Region}
             exit $rc
-  KinesisServiceRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - 'kinesisanalytics.amazonaws.com'
-                - 'ec2.amazonaws.com'
-                - 'lambda.amazonaws.com'
-            Action:
-              - 'sts:AssumeRole'
-      Path: '/'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-      Policies:
-        - PolicyName: NoBrowsing
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Deny
-                Action: s3:ListAllMyBuckets
-                Resource: '*'
 {%- if enableLifecycle %}
   LifecycleHookTopic:
     Type: AWS::SNS::Topic
@@ -1046,16 +1018,6 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
-                  - kinesisanalytics:DiscoverInputSchema
-                  - kinesisanalyticsv2:DiscoverInputSchema
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - iam:GetRole
-                  - iam:PassRole
-                Resource: !GetAtt 'KinesisServiceRole.Arn'
-              - Effect: Allow
-                Action:
                   - ec2:DescribeRegions
                   - ec2:DescribeInstances
                   - autoscaling:DescribeAutoScalingGroups
@@ -1109,8 +1071,8 @@ Resources:
                   - '*'
               - Effect: Allow
                 Action:
-                  - s3:Get*
-                  - s3:List*
+                  - s3:GetBucket*
+                  - s3:ListBucket
                   - s3:HeadBucket
                 Resource:
                   - !Sub
@@ -1119,14 +1081,11 @@ Resources:
                   - !Sub 'arn:aws:s3:::${WorkBucket}'
               - Effect: Allow
                 Action:
-                  - s3:ListMultipartUploads
-                  - s3:AbortMultipartUpload
-                  - s3:CreateMultipartUpload
-                  - s3:CompleteMultipartUpload
-                  - s3:GetObject
-                  - s3:GetObjectVersion
                   - s3:PutObject
-                  - s3:DeleteObject
+                  - s3:PutObjectAcl
+                Condition:
+                  StringEquals:
+                    s3:x-amz-acl: 'bucket-owner-full-control'
                 Resource:
                   - !Sub
                     - 'arn:aws:s3:::${Bucket}/*'
@@ -1139,7 +1098,29 @@ Resources:
                       AccountId: !Ref AWS::AccountId
                       StackName: !Ref AWS::StackName
 {%- endif %}
+              - Effect: Allow
+                Action:
+                  - s3:ListMultipartUploads
+                  - s3:AbortMultipartUpload
+                  - s3:CreateMultipartUpload
+                  - s3:CompleteMultipartUpload
+                  - s3:GetObject
+                  - s3:HeadObject
+                  - s3:DeleteObject
+                  - s3:ListObjects
+                  - s3:ListObjectsV2
+                  - s3:ListParts
+                Resource:
+                  - !Sub
+                    - 'arn:aws:s3:::${Bucket}/*'
+                    - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
+                  - !Sub 'arn:aws:s3:::${WorkBucket}/*'
 {%- if enableLifecycle %}
+                  - !Sub
+                    - 'arn:aws:s3:::${LogBucket}/logs/${AccountId}/${StackName}/*'
+                    - LogBucket: !ImportValue sharedinf-logbucket
+                      AccountId: !Ref AWS::AccountId
+                      StackName: !Ref AWS::StackName
               - Effect: Allow
                 Action:
                   - sns:Subscribe
@@ -1202,8 +1183,4 @@ Outputs:
   LaunchTemplate:
     Description: Launch template for cluster
     Value: !Ref LaunchTemplate
-  KinesisRoleArn:
-    Description: Role to use for kinesis
-    Value: !GetAtt 'KinesisServiceRole.Arn'
-
 # vim: ft=yaml
