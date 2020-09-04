@@ -52,7 +52,7 @@ class JenkinsAllJobIndex(object):
              'duration_ms': jbi.duration_ms(),
              'result': jbi.result()}
         """
-        self.logger.info("job_name: {} bnum: {}".format(job_name, bnum))
+        self.logger.debug("job_name: {} bnum: {}".format(job_name, bnum))
 
         # XXXrs - more fields?
         start_time_ms = data.get('start_time_ms', None)
@@ -98,7 +98,7 @@ class JenkinsAllJobIndex(object):
 
     def builds_by_time(self, *, start_time_ms, end_time_ms):
         query = {'$and': [{'start_time_ms': {'$gte': start_time_ms}},
-                          {'start_time_ms': {'$lte': end_time_ms}}]}
+                          {'start_time_ms': {'$lt': end_time_ms}}]}
 
         colls = self.jmdb.builds_by_time_collections(
                                     start_time_ms=start_time_ms,
@@ -155,25 +155,25 @@ class JenkinsJobDataCollection(object):
             data.pop('_id')
 
     def get_data(self, *, bnum):
-        self.logger.info("start bnum {}".format(bnum))
+        self.logger.debug("start bnum {}".format(bnum))
         # Return the data, if any.
         doc = self.coll.find_one({'_id': bnum})
         if self._no_data(doc=doc):
-            self.logger.info("return None")
+            self.logger.debug("return None")
             return None
-        self.logger.info("return match")
+        self.logger.debug("return match")
         return doc
 
     def get_data_by_build(self):
-        self.logger.info("start")
+        self.logger.debug("start")
         rtn = {}
         for doc in self.coll.find({}):
             doc_id = doc["_id"]
-            self.logger.info("_id: {}".format(doc_id))
+            self.logger.debug("_id: {}".format(doc_id))
             if self._no_data(doc=doc):
                 continue
             rtn[doc_id] = doc
-        self.logger.info("rtn: {}".format(rtn))
+        self.logger.debug("rtn: {}".format(rtn))
         return rtn
 
     def all_builds(self):
