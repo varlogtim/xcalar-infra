@@ -625,7 +625,7 @@ class Plugins(object):
     def __init__(self, *, pi_label):
         self.logger = logging.getLogger(__name__)
         plugins_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                   "plugins")
+                                   "update", "plugins")
         self.byjob = {}
         for name in os.listdir(plugins_dir):
             if not name.endswith('.py'):

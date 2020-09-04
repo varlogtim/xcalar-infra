@@ -16,7 +16,7 @@ ENV CLANG_LLVM_PROFDATA_PATH="/netstore/qa/coverage/clang7/bin/llvm-profdata"
 WORKDIR /usr/src/app
 
 # Context is set to xcalar-infra/ by dbuild
-COPY py_common/jenkins_aggregators/requirements.txt ./
+COPY py_common/jenkins_aggregators/update/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 RUN mkdir -p ./sql_perf
@@ -31,4 +31,4 @@ COPY coverage ./coverage/
 RUN mkdir -p ./py_common
 COPY py_common ./py_common/
 
-CMD ["./py_common/jenkins_aggregators/update.py"]
+CMD ["./py_common/jenkins_aggregators/update/update.py"]
