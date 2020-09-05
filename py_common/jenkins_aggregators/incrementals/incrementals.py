@@ -71,7 +71,6 @@ def write_data(*, outdir, date, hour, data):
 if __name__ == "__main__":
 
     import argparse
-    import pprint
     import pytz
 
     argParser = argparse.ArgumentParser()
@@ -79,19 +78,21 @@ if __name__ == "__main__":
     argParser.add_argument('--outdir', required=True, type=str,
                                 help='path to incrementals directory')
 
+    argParser.add_argument('--prior_days', default=None, type=int,
+                                help='defaults start_date to N days prior to today')
     argParser.add_argument('--start_ts', default=None, type=int,
                                 help='start timestamp (s)')
     argParser.add_argument('--end_ts', default=None, type=int,
                                 help='end timestamp (s)')
 
     argParser.add_argument('--start_date', default=None, type=str,
-                                help='start date (YYYY-MM-DD)')
+                                help='start date (YYYY-MM-DD) defaults to today')
     argParser.add_argument('--start_time', default=None, type=str,
-                                help='start time (HH:MM:SS)')
+                                help='start time (HH:MM:SS) defaults to 00:00:00')
     argParser.add_argument('--end_date', default=None, type=str,
-                                help='end date (YYYY-MM-DD)')
+                                help='end date (YYYY-MM-DD) defaults to start_date')
     argParser.add_argument('--end_time', default=None, type=str,
-                                help='end time (HH:MM:SS)')
+                                help='end time (HH:MM:SS) defaults to 23:59:59')
     argParser.add_argument('--tz', default="America/Los_Angeles", type=str,
                                 help='timezone for inputs')
 
@@ -99,13 +100,20 @@ if __name__ == "__main__":
 
     tz = pytz.timezone(args.tz)
     now = datetime.datetime.now(tz=tz)
-    today = "{}-{}-{}".format(now.year, now.month, now.day)
+
+    default_start_date = "{}-{}-{}".format(now.year, now.month, now.day)
+    default_end_date = None
+
+    if args.prior_days is not None:
+        default_end_date = default_start_date
+        prior = now-datetime.timedelta(days=args.prior_days)
+        default_start_date = "{}-{}-{}".format(prior.year, prior.month, prior.day)
 
     start_ts = args.start_ts
     if not start_ts:
         start_dt = args.start_date
         if not start_dt:
-            start_dt = today
+            start_dt = default_start_date
         tm = args.start_time
         if not tm:
             tm = "00:00:00"
@@ -114,6 +122,8 @@ if __name__ == "__main__":
     end_ts = args.end_ts
     if not end_ts:
         end_dt = args.end_date
+        if not end_dt:
+            end_dt = default_end_date
         if not end_dt:
             # Same as start date then
             end_dt = start_dt
