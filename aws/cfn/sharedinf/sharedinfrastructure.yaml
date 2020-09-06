@@ -253,15 +253,17 @@ Resources:
           import uuid
           from datetime import datetime
 
-          s3_bucket = os.environ['S3BUCKET']
-          s3_prefix = os.environ['S3PREFIX']
+          s3_bucket  = os.environ['S3BUCKET']
+          s3_prefix  = os.environ['S3PREFIX']
+          accountid  = os.environ['ACCOUNTID']
+          region     = os.environ['REGION']
           def lambda_handler(event, context):
               try:
                   now = datetime.now()
                   path = now.strftime('%Y/%m/%d/event-%Y%m%dT%H%M%S')
                   uid = str(uuid.uuid4())
                   s3 = boto3.resource('s3')
-                  s3.Object(s3_bucket, s3_prefix + '/' + path + '-' + uid + '.json').put(
+                  s3.Object(s3_bucket, f"{s3_prefix}/{path}-{region}-{accountid}-{uid}.json").put(
                       Body=json.dumps(event, indent=2))
                   return 'Event stored'
               except:
@@ -271,7 +273,9 @@ Resources:
       Environment:
         Variables:
           S3BUCKET: !Ref S3LogBucket
-          S3PREFIX: !Sub 'SQSLogs/${AWS::Region}/${AWS::AccountId}/'
+          S3PREFIX: !Sub 'SQSLogs/${AWS::Region}/${AWS::AccountId}'
+          ACCOUNTID: !Ref 'AWS::AccountId'
+          REGION: !Ref 'AWS::Region'
       Role: !GetAtt DumpEventToS3Role.Arn
       Runtime: python3.6
       Timeout: 60

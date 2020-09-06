@@ -339,7 +339,7 @@ aws_inventory() {
     if [ -z "$bucket" ]; then
         return 1
     fi
-    local subkey=$(aws s3 ls "$s3base" | awk '{print $2}' | grep 2018- | sort -h | tail -1)
+    local subkey=$(aws s3 ls "$s3base" | awk '{print $2}' | grep -E '20[12][89012]-' | sort -h | tail -1)
     if [ -z "$subkey" ]; then
         echo >&2 "No subkey found for bucket $1 in $s3base"
         return 1
