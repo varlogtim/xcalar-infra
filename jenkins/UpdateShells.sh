@@ -4,6 +4,7 @@ set -ex
 
 export AWS_DEFAULT_REGION=us-west-2
 export XLRINFRADIR=${XLRINFRADIR:-$PWD}
+SSM_KEY=/xcalar/cloud/cfn/template_url
 #have user name list, need find the stack id via tag
 #username list is ALL, update all
 EXIT_CODE=0
@@ -55,6 +56,7 @@ get_stack_param() {
     echo "$1" | jq -r '.[][0].Parameters[] | select(.ParameterKey=="'"$2"'") | .ParameterValue'
 }
 
+ssm put-parameter --tier Standard --type String --name "${SSM_KEY}" --value "${CFN_TEMPLATE_URL}"
 if [ "${USERNAME_LIST}" == "ALL" ]; then
     mapfile -t STACK_LIST < <(aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName, '${STACK_PREFIX}')]" | jq -r .[].StackId)
     if [ -z "${STACK_LIST[@]}" ]; then
