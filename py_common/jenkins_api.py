@@ -161,9 +161,17 @@ class JenkinsBuildInfo(object):
 
     def console(self):
         """
-        Return the console log for the job/build.
+        Return the timestamped console log for the job/build.
+        Timestamps will be offset seconds to three decimal precision (ms).
+        There's (apparently) no available format to dump the actual epoch
+        timestamp, so will need to construct that from build start time plus
+        offset.
+
+        http://jenkins.int.xcalar.com/job/XCETest/50096/timestamps/?appendlog
+
+        N.B.: assumes timestamp plugin in use
         """
-        text = self.japi.rest.cmd(uri="/job/{}/{}/logText/progressiveText/start=0"
+        text = self.japi.rest.cmd(uri="/job/{}/{}/timestamps/?appendlog"
                                       .format(self.job_name, self.build_number))
         return text
 
