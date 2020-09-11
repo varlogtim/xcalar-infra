@@ -26,6 +26,11 @@ from py_common.mongo import MongoDB
 #AGGREGATOR_PLUGINS = [{'class_name': 'XcTestHarnessLogParser',
 #                       'job_names': ['XCETest']}]
 
+
+class XcTestHarnessLogParserException(Exception):
+    pass
+
+
 class XcTestHarnessLogParser(JenkinsAggregatorBase):
     def __init__(self, *, job_name):
         """
@@ -66,7 +71,7 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
             number = fields[3]
 
         if subtest_id in data:
-            raise Exception("duplicate subtest ID: {}".format(subtest_id))
+            raise XcTestHarnessLogParserException("duplicate subtest ID: {}".format(subtest_id))
 
         data[subtest_id] = {'name': name,
                             'number': number,
