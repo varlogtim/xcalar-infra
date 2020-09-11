@@ -68,6 +68,8 @@ class PyTestLogParser(JenkinsAggregatorBase):
                 continue
 
             fields = line.split()
+            if len(fields) < 3:
+                continue
 
             '''
             5931.515  = 279 passed, 190 skipped, 1 deselected, 4 xfailed, 3 warnings in 2591.94s (0:43:11) =
@@ -83,7 +85,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
             '''
             if past_durations_marker:
                 # duration parsing
-                if len(fields) < 3 or fields[2] != "call":
+                if fields[2] != "call":
                     continue
 
                 duration_ms = int(float(fields[1][:-1])*1000)
@@ -94,9 +96,6 @@ class PyTestLogParser(JenkinsAggregatorBase):
                                      .format(subtest_id))
                     continue
                 subtest_data[subtest_id]['duration_ms'] = duration_ms
-
-            if len(fields) < 3:
-                continue
 
             # We're looking at test completion lines like:
             result = fields[2]

@@ -170,6 +170,7 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
             fields = line.split()
             if len(fields) < 2:
                 continue
+
             if fields[1] != "PASS:" and fields[1] != "FAIL:" and fields[1] != "SKIP:":
                 continue
 
