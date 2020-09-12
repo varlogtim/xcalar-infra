@@ -10,6 +10,7 @@
 import datetime
 import gzip
 import json
+import json_lines
 import logging
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -194,15 +195,6 @@ def get_ts(*, dt, tm, tz):
     return dt.timestamp()
 
 
-def load_json(path):
-    try:
-        with open(path) as fp:
-            return json.load(fp)
-    except:
-        with gzip.open(path) as fp:
-            return json.load(fp)
-
-
 def put_points(*, node , metric_id, points, q):
     max_points = 100 # XXXrs magic
     start = 0
@@ -223,18 +215,20 @@ def load_system_stats_file(*, path, metrics_data, node, q):
     Extract relevant data from a Xcalar system stats file.
     """
 
-    je = JSONExtract(dikt=load_json(path))
-    for metric_id in metrics_data.ids_for_source(source="_SYSTEM_STATS"):
-        mcfg = metrics_data.cfg_for_id(metric_id=metric_id).dikt
-        if 'xy_expr' in mcfg:
-            points = je.extract_xy(xy_expr=mcfg.get('xy_expr'))
+    with json_lines.open(path) as f:
+        for item in f:
+            je = JSONExtract(dikt=item)
 
-        elif 'key_expr' in mcfg and 'val_expr' in mcfg:
-            points = je.extract_kv(key_expr=mcfg.get('key_expr'),
-                                   val_expr=mcfg.get('val_expr'))
-        else:
-            raise ValueError("invalid metric config: {}".format(mcfg))
-        put_points(node=node, metric_id=metric_id, points=points, q=q)
+            for metric_id in metrics_data.ids_for_source(source="_SYSTEM_STATS"):
+                mcfg = metrics_data.cfg_for_id(metric_id=metric_id).dikt
+                if 'xy_expr' in mcfg:
+                    points = je.extract_xy(xy_expr=mcfg.get('xy_expr'))
+                elif 'key_expr' in mcfg and 'val_expr' in mcfg:
+                    points = je.extract_kv(key_expr=mcfg.get('key_expr'),
+                                        val_expr=mcfg.get('val_expr'))
+                else:
+                    raise ValueError("invalid metric config: {}".format(mcfg))
+                put_points(node=node, metric_id=metric_id, points=points, q=q)
 
 
 def load_csv_file(*, metric_id, path, start_ts, end_ts, nodes, q):

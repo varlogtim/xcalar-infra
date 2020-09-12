@@ -62,13 +62,13 @@
             ]
         },
         {
-            "title": "XDBUsedBytes",
+            "title": "XdbUsedBytes",
             "y1label": "Memory",
             "metrics": [
                 {
                     "source": "_SYSTEM_STATS",
-                    "xy_expr": "$.system_stats[*][timestamp, XDBUsedBytes]",
-                    "label": "XDBUsed",
+                    "xy_expr": "$.system_stats[*][timestamp, XdbUsedBytes]",
+                    "label": "XdbUsed",
                     "color": "b"
                 }
             ]
