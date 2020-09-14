@@ -64,7 +64,7 @@ if [ $NUM_AVAIL -lt $TOTAL_AVAIL ]; then
             aws dynamodb put-item --table-name ${STACK_INFO_TABLE} \
                                 --item '{
                                     "stack_id": {"S": "'"${STACK_ID}"'"},
-                                    "current_info": {"S": "${URL_PARAMS[@]"}
+                                    "current_info": {"S": "'"${URL_PARAMS[*]}"'"}
                                     }'
         fi
     done

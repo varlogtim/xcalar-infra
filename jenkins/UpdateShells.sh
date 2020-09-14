@@ -212,7 +212,7 @@ for STACK in "${UPDATE_STACK_LIST[@]}"; do
                 aws dynamodb put-item --table-name "${STACK_INFO_TABLE}" \
                                 --item '{
                                     "stack_id": {"S": "'"${STACK}"'"},
-                                    "current_info": {"S": "${URL_PARAMS[@]}"}
+                                    "current_info": {"S": "'"${URL_PARAMS[*]}"'"}
                                     }'
             else
                 aws dynamodb update-item --table-name "${STACK_INFO_TABLE}" \
@@ -220,7 +220,7 @@ for STACK in "${UPDATE_STACK_LIST[@]}"; do
                                     --update-expression "SET #P = :p, #C = :c" \
                                     --expression-attribute-names '{"#P":"prev_info", "#C":"current_info"}' \
                                     --expression-attribute-values '{":p":{"S":"'"${PREV_INFO}"'"},
-                                                                    ":c":{"S":"${URL_PARAMS[@]}"}}'
+                                                                    ":c":{"S":"'"${URL_PARAMS[*]}"'"}}'
             fi
         else
             echo "${STACK} is up to date"
