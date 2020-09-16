@@ -146,31 +146,29 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler()])
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--job", help="jenkins job name", required=False)
-    parser.add_argument("--bnum", help="jenkins build number", required=False)
+    parser.add_argument("--job", help="jenkins job name", default="FuncTestTrigger")
+    parser.add_argument("--bnum", help="jenkins build number", default="15352")
     parser.add_argument("--log", help="just print out the log", action="store_true")
     args = parser.parse_args()
 
     test_builds = []
-    if args.job and args.bnum:
-        builds = args.bnum.split(':')
-        if len(builds) == 1:
-            test_builds.append((args.job, args.bnum))
-        else:
-            for bnum in range(int(builds[0]), int(builds[1])+1):
-                test_builds.append((args.job, bnum))
+    builds = args.bnum.split(':')
+    if len(builds) == 1:
+        test_builds.append((args.job, args.bnum))
     else:
-        test_builds = [('FuncTestTrigger', '15352')] # These get used in lieu of any passed-in values
+        for bnum in range(int(builds[0]), int(builds[1])+1):
+            test_builds.append((args.job, bnum))
 
     japi = JenkinsApi(host='jenkins.int.xcalar.com')
 
     for job_name,build_number in test_builds:
-        print("checking job: {} build: {}".format(job_name, build_number))
         parser = FuncTestLogParser(job_name=job_name)
         jbi = JenkinsBuildInfo(job_name=job_name, build_number=build_number, japi=japi)
         log = jbi.console()
+        result = jbi.result()
         if args.log:
             print(log)
         else:
+            print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
             data = parser.update_build(bnum=build_number, jbi=jbi, log=jbi.console())
             pprint(data)

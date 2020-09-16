@@ -214,26 +214,24 @@ if __name__ == '__main__':
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--job", help="jenkins job name", required=False)
-    parser.add_argument("--bnum", help="jenkins build number", required=False)
+    parser.add_argument("--job", help="jenkins job name", default="XCETest")
+    parser.add_argument("--bnum", help="jenkins build number", default="49921")
     args = parser.parse_args()
 
     test_builds = []
-    if args.job and args.bnum:
-        builds = args.bnum.split(':')
-        if len(builds) == 1:
-            test_builds.append((args.job, args.bnum))
-        else:
-            for bnum in range(int(builds[0]), int(builds[1])+1):
-                test_builds.append((args.job, bnum))
+    builds = args.bnum.split(':')
+    if len(builds) == 1:
+        test_builds.append((args.job, args.bnum))
     else:
-        test_builds = [('XCETest', '49921')] # These get used in lieu of any passed-in values
+        for bnum in range(int(builds[0]), int(builds[1])+1):
+            test_builds.append((args.job, bnum))
 
     japi = JenkinsApi(host='jenkins.int.xcalar.com')
 
     for job_name,build_number in test_builds:
-        print("checking job: {} build: {}".format(job_name, build_number))
         parser = XcTestHarnessLogParser(job_name=job_name)
         jbi = JenkinsBuildInfo(job_name=job_name, build_number=build_number, japi=japi)
+        result = jbi.result()
+        print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
         data = parser.update_build(bnum=build_number, jbi=jbi, log=jbi.console())
         pprint(data)
