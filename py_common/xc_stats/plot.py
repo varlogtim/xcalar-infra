@@ -210,22 +210,20 @@ def put_done(*, q):
     q.put({'done':True})
 
 
-def load_system_stats_file(*, path, metrics_data, node, q):
+def load_system_stats_file(*, je, path, metrics_data, node, q):
     """
     Extract relevant data from a Xcalar system stats file.
     """
 
     with json_lines.open(path) as f:
-        for item in f:
-            je = JSONExtract(dikt=item)
-
+        for dikt in f:
             for metric_id in metrics_data.ids_for_source(source="_SYSTEM_STATS"):
                 mcfg = metrics_data.cfg_for_id(metric_id=metric_id).dikt
                 if 'xy_expr' in mcfg:
-                    points = je.extract_xy(xy_expr=mcfg.get('xy_expr'))
+                    points = je.extract_xy(xy_expr=mcfg.get('xy_expr'), dikt=dikt)
                 elif 'key_expr' in mcfg and 'val_expr' in mcfg:
                     points = je.extract_kv(key_expr=mcfg.get('key_expr'),
-                                        val_expr=mcfg.get('val_expr'))
+                                           val_expr=mcfg.get('val_expr'), dikt=dikt)
                 else:
                     raise ValueError("invalid metric config: {}".format(mcfg))
                 put_points(node=node, metric_id=metric_id, points=points, q=q)
@@ -270,11 +268,12 @@ def file_loader(*, load_args, metrics_data, q):
     through the Queue and aggregated into the master
     MetricsData instance.
     """
-
+    je = JSONExtract()
     for args in load_args:
         source = args['source']
         if source == "_SYSTEM_STATS":
-            load_system_stats_file(metrics_data=metrics_data,
+            load_system_stats_file(je = je,
+                                   metrics_data=metrics_data,
                                    path=args['path'],
                                    node=args['node'],
                                    q=q)

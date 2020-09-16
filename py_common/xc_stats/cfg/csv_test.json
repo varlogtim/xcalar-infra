@@ -13,7 +13,7 @@
                 },
                 {
                     "source": "_SYSTEM_STATS",
-                    "xy_expr": "$.cpustats[?(CPU=all)][timestamp, usr]",
+                    "xy_expr": "cpustats[?CPU='all'][timestamp, usr]",
                     "color": "g",
                     "label": "usr",
                     "ploty2": true

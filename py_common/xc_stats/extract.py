@@ -7,7 +7,7 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
-import jsonpath_rw_ext as jsonpath
+import jmespath
 
 """
 An "xy_expr" expression returns alternating x and y values when iterating over matches...
@@ -29,51 +29,68 @@ Both would result in:
 """
 class JSONExtract(object):
 
-    def __init__(self, *, dikt):
-        self.dikt = dikt
+    def __init__(self):
+        self._compiled = {'keys(@)': jmespath.compile('keys(@)')}
 
-    def _convertvals(self, vals):
-        it = iter(vals)
-        return list(zip(it, it))
+    def compiled(self, *, expr):
+        if expr not in self._compiled:
+            self._compiled[expr] = jmespath.compile(expr)
+        return self._compiled[expr]
 
-    def extract_xy(self, *, xy_expr):
+    def extract_xy(self, *, xy_expr, dikt):
+        expr = self.compiled(expr=xy_expr)
+        return expr.search(dikt)
+
+    def extract_kv(self, *, key_expr, val_expr, dikt):
+        '''
+        key_expr: identifies a document the keys of which become the
+                  first element in each returned pair
+
+        val_expr: for each key found in the document identified by key_expr,
+                  use the key to identify a sub document, or list of sub documents
+                  and val_expr to extract the value(s) to be returned as the second
+                  element in each returned pair(s)
+        '''
         vals = []
-        for match in jsonpath.parse(xy_expr).find(self.dikt):
-            vals.append(match.value)
-        return self._convertvals(vals)
 
-    def extract_kv(self, *, key_expr, val_expr, ):
-        vals = []
-        for m1 in jsonpath.parse(key_expr).find(self.dikt):
-            d1 = m1.value
-            for key,child in d1.items():
-                for m2 in jsonpath.parse(val_expr).find(child):
-                    vals.append(key)
-                    vals.append(m2.value)
-        return self._convertvals(vals)
+        kexpr = self.compiled(expr=key_expr)
+        vexpr = self.compiled(expr=val_expr)
+        keysfunc = self.compiled(expr='keys(@)')
+
+        keys_doc = kexpr.search(dikt)
+        keys = keysfunc.search(keys_doc)
+        for key in keys:
+            sub = keys_doc[key]
+            if isinstance(sub, list):
+                for dikt_item in sub:
+                    val = vexpr.search(dikt_item)
+                    vals.append([key, val])
+            else:
+                val = vexpr.search(sub)
+                vals.append([key, val])
+        return vals
 
 if __name__ == "__main__":
     test_data={
         'foo': {'1234':{'sys': 4, 'idle': 96},
                 '1235':{'sys': 5, 'idle': 95}},
-        'bar': {'bongo': {'1234':{'sys': 40, 'idle': 60},
-                          '1235':[{'sys': 50, 'idle': 50},
+        'bar': {'bongo': {'4567':{'sys': 40, 'idle': 60},
+                          '4568':[{'sys': 50, 'idle': 50},
                                   {'sys': 51, 'idle': 49}]}},
         'blah': [{'x': 1, 'y': 10},
                  {'x': 2, 'y': 20},
                  {'x': 3, 'y': 30}]
         }
 
-    je = JSONExtract(dikt=test_data)
-    print("expect [(1, 10), (2, 20), (3, 10)]")
-    print("got: {}".format(je.extract_xy(xy_expr="$.blah[*][x,y]")))
+    je = JSONExtract()
+    print("expect [[1, 10], [2, 20], [3, 30]]")
+    print("got: {}".format(je.extract_xy(xy_expr="blah[*][x,y]", dikt=test_data)))
 
-    print("expect [(1234, 4), (1235, 5)]")
-    print("got: {}".format(je.extract_kv(key_expr="$.foo", val_expr="$..sys")))
+    print("expect [[1234, 4], [1235, 5]]")
+    print("got: {}".format(je.extract_kv(key_expr="foo", val_expr="sys", dikt=test_data)))
 
-    print("expect [(1234, 60), (1235, 50), (1235, 49)]")
-    print("got: {}".format(je.extract_kv(key_expr="$.bar.bongo", val_expr="$..idle")))
+    print("expect [[4567, 60], [4568, 50], [4568, 49]]")
+    print("got: {}".format(je.extract_kv(key_expr="bar.bongo", val_expr="idle", dikt=test_data)))
 
     print("expect: {'x': 2, 'y': 20}")
-    for m in jsonpath.parse("$.blah[?(x=2)]").find(test_data):
-        print("got: {}".format(m.value))
+    print("got: {}".format(jmespath.search("blah[?x==`2`]", test_data)))
