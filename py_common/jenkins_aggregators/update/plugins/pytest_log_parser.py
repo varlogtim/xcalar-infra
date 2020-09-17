@@ -17,14 +17,8 @@ if __name__ == '__main__':
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.mongo import MongoDB
 
-# The AGGREGATOR_PLUGINS list registers aggregator plug-in classes with Jenkins jobs.
-# Each entry in the list is a dictionary of the form:
-#
-#   {'class': <class name>, 'job_names': [<jenkins job name>, ...]}
-
-# XXXrs - Disabled pending further review ENG-9840
-#AGGREGATOR_PLUGINS = [{'class_name': 'PyTestLogParser',
-#                       'job_names': ['XCETest']}]
+AGGREGATOR_PLUGINS = [{'class_name': 'PyTestLogParser',
+                       'job_names': ['XCETest', 'XCETestMemProfile']}]
 
 class PyTestLogParserException(Exception):
     pass
@@ -48,7 +42,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
         past_start_marker = False
         past_durations_marker = False
         subtest_data = {}
-        for line in log.splitlines():
+        for lnum, line in enumerate(log.splitlines()):
             '''
             3339.573  ============================= test session starts ==============================
             '''
@@ -89,7 +83,29 @@ class PyTestLogParser(JenkinsAggregatorBase):
                     continue
 
                 duration_ms = int(float(fields[1][:-1])*1000)
-                subtest_id = MongoDB.encode_key(fields[3])
+                subtest_id = MongoDB.encode_key(" ".join(fields[3:]))
+
+                # XXXrs - Gaah!
+                #
+                # The sub-test identifier emitted in the "durations" section can
+                # differ from the identifier emitted when that sub-test completes.
+                #
+                # Apply some ghastly ad-hoc transforms as a best-effort to
+                # get things to match up :/
+
+                if subtest_id not in subtest_data:
+                    # Sometimes the "/" in a path gets doubled...
+                    subtest_id = subtest_id.replace("//", "/")
+
+                if subtest_id not in subtest_data:
+                    # Sometimes a "more complete" path is emitted, trim it a bit at a time...
+                    sid_fields = subtest_id.split('/')
+                    while len(sid_fields) > 1:
+                        sid_fields.pop(0)
+                        sid = "/".join(sid_fields)
+                        if sid in subtest_data:
+                            subtest_id = sid
+                            break
 
                 if subtest_id not in subtest_data:
                     self.logger.warn("subtest_id {} in durations but not seen before"
@@ -98,10 +114,6 @@ class PyTestLogParser(JenkinsAggregatorBase):
                 subtest_data[subtest_id]['duration_ms'] = duration_ms
 
             # We're looking at test completion lines like:
-            result = fields[2]
-            if result not in ['PASSED', 'FAILED', 'SKIPPED', 'XFAIL']:
-                continue
-
             """
             3352.142  test_export.py::TestExport::testCombinations[table0-Default-csv-createRule0-splitRule3-every] SKIPPED [  4%]
             7521.393  io/test_csv.py::test_csv_parser[Easy_sanity_test-schemaFile] XFAIL       [ 31%]
@@ -109,17 +121,32 @@ class PyTestLogParser(JenkinsAggregatorBase):
             3714.433  test_operators.py::TestOperators::testSelectNoRowsAggregate PASSED       [ 49%]
             10981.859  io/test_export.py::test_multiple_parquet_telecom_prefixed FAILED         [ 98%]
             """
+
+            result_idx = None
+            for result in ['PASSED', 'FAILED', 'SKIPPED', 'XFAIL', 'XPASS']:
+                if result in fields:
+                    result_idx = fields.index(result)
+                    break
+
+            if result_idx is None:
+                continue
+
             try:
                 timestamp_ms = int(self.start_time_ms+(float(fields[0])*1000))
             except ValueError:
                 self.logger.exception("timestamp parse error: {}".format(line))
                 continue
 
-            subtest_id = MongoDB.encode_key(fields[1])
+            name = " ".join(fields[1:result_idx])
+            subtest_id = MongoDB.encode_key(name)
+            if not len(subtest_id):
+                self.logger.warn("missing subtest_id: {}".format(line))
+                continue
+
             if subtest_id in subtest_data:
-                raise PyTestLogParserException("duplicate subtest ID: {}".format(subtest_id))
-            subtest_data[subtest_id] = {'name': fields[1],
-                                        'result': fields[2],
+                raise PyTestLogParserException("duplicate subtest ID \'{}\': {}".format(subtest_id, line))
+            subtest_data[subtest_id] = {'name': name,
+                                        'result': fields[result_idx],
                                         'end_time_ms': timestamp_ms}
 
             """
@@ -156,6 +183,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--job", help="jenkins job name", default="XCETest")
     parser.add_argument("--bnum", help="jenkins build number", default="49922")
+    parser.add_argument("--log", help="just print out the log", action="store_true")
     args = parser.parse_args()
 
     test_builds = []
@@ -171,7 +199,11 @@ if __name__ == '__main__':
     for job_name,build_number in test_builds:
         parser = PyTestLogParser(job_name=job_name)
         jbi = JenkinsBuildInfo(job_name=job_name, build_number=build_number, japi=japi)
+        log = jbi.console()
         result = jbi.result()
-        print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
-        data = parser.update_build(bnum=build_number, jbi=jbi, log=jbi.console())
-        pprint(data)
+        if args.log:
+            print(log)
+        else:
+            print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
+            data = parser.update_build(bnum=build_number, jbi=jbi, log=jbi.console())
+            pprint(data)

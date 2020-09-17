@@ -316,16 +316,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-b", help="test mode build number", metavar="bnum",
                     dest='test_builds', action='append', default=[])
 parser.add_argument("-j", help="test mode job name", metavar="name",
-                    dest='test_job', default=None)
+                    dest='update_jobs', action='append', default=[])
 parser.add_argument("-p", help="path to test mode build info.json", metavar="path",
                     dest='test_data_path', default=None)
 args = parser.parse_args()
 
 test_mode = False
-if args.test_job or len(args.test_builds):
-    if not args.test_job and not len(args.test_builds):
+if len(args.test_builds):
+    if len(args.update_jobs) != 1:
         parser.print_help()
-        raise ValueError("To activate test mode, both test_job (-j)"
+        raise ValueError("To activate test mode, exactly one update_job (-j)"
                          " and at least one test_build (-b) are required")
     test_mode = True
     if not cfg.get('JENKINS_DB_NAME'):
@@ -346,12 +346,8 @@ try:
     logger.info("using jenkins_host {}".format(jenkins_host))
 
     force_default_job_update = False
-    job_list = args.test_job
+    job_list = args.update_jobs
     if not job_list:
-        job_list = cfg.get('UPDATE_JOB_LIST')
-    if job_list:
-        job_list = job_list.split(',')
-    else:
         logger.info("no job list, fetching all known jobs")
         japi = JenkinsApi(host=jenkins_host)
         job_list = japi.list_jobs()

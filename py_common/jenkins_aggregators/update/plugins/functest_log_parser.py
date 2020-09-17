@@ -17,14 +17,8 @@ if __name__ == '__main__':
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.mongo import MongoDB
 
-# The AGGREGATOR_PLUGINS list registers aggregator plug-in classes with Jenkins jobs.
-# Each entry in the list is a dictionary of the form:
-#
-#   {'class': <class name>, 'job_names': [<jenkins job name>, ...]}
-
-# XXXrs - Disabled pending further review ENG-9842
-#AGGREGATOR_PLUGINS = [{'class_name': 'FuncTestLogParser',
-#                       'job_names': ['FuncTestTrigger', 'XCEFuncTest']}]
+AGGREGATOR_PLUGINS = [{'class_name': 'FuncTestLogParser',
+                       'job_names': ['FuncTestTrigger', 'XCEFuncTest']}]
 
 
 class FuncTestLogParserException(Exception):
@@ -112,7 +106,7 @@ class FuncTestLogParser(JenkinsAggregatorBase):
                 if test_id not in subtest_data:
                     subtest_data[test_id] = {}
                 iteration = len(subtest_data[test_id].keys())+1
-                subtest_data[test_id][iteration] = cur_subtest
+                subtest_data[test_id][str(iteration)] = cur_subtest
                 cur_subtest = None
                 continue
 
