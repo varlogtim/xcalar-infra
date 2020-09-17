@@ -96,7 +96,7 @@ class JenkinsAllJobIndex(object):
                                      {'$addToSet': {'down': down_key}},
                                      upsert = True)
 
-    def builds_by_time(self, *, start_time_ms, end_time_ms):
+    def builds_by_time(self, *, start_time_ms, end_time_ms, full=False):
         query = {'$and': [{'start_time_ms': {'$gte': start_time_ms}},
                           {'start_time_ms': {'$lt': end_time_ms}}]}
 
@@ -109,7 +109,10 @@ class JenkinsAllJobIndex(object):
             if not docs:
                 continue
             for doc in docs:
-                doc.pop('_id')
+                if full:
+                    doc['collection_name'] = coll.name
+                else:
+                    doc.pop('_id')
                 builds.append(doc)
         return {'builds': builds}
 
