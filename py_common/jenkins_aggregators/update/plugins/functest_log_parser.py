@@ -39,11 +39,11 @@ class FuncTestLogParser(JenkinsAggregatorBase):
         try:
             return int(self.start_time_ms+(float(fields[0])*1000))
         except ValueError:
+            self.logger.error("SUBTEST PARSE ERROR")
             self.logger.exception("timestamp parse error: {}".format(line))
             return None
 
-
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Parse the log for sub-test info.
         """
@@ -77,6 +77,7 @@ class FuncTestLogParser(JenkinsAggregatorBase):
             if fields[1] == "SUBTEST_START:":
                 #print(line)
                 if cur_subtest is not None:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
                             "nested SUBTEST_START\n{}: {}".format(lnum, line))
 
@@ -90,11 +91,13 @@ class FuncTestLogParser(JenkinsAggregatorBase):
             if fields[1] == "SUBTEST_END:":
                 #print(line)
                 if cur_subtest is None:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
                             "SUBTEST_END before SUBTEST_START\n{}: {}"
                             .format(lnum, line))
 
                 if fields[2] != cur_subtest['name']:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
                             "unmatched SUBTEST_END for {} while cur_subtest {}\n{}: {}"
                             .format(fields[2], cur_subtest, lnum, line))
@@ -117,15 +120,25 @@ class FuncTestLogParser(JenkinsAggregatorBase):
                 try:
                     cnt = int(fields[2])
                 except ValueError:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
                             "non-integer NumTests value\n{}: {}".format(lnum, line))
                 if cnt > 1:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
                             "unexpected NumTests value\n{}: {}".format(lnum, line))
                 if cnt == 0:
                     cur_subtest['result'] = "Skip" # XXXrs ?!?
 
         return {'functest_subtests': subtest_data}
+
+
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
+        try:
+            return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+        except:
+            self.logger.error("SUBTEST PARSE ERROR")
+            raise
 
 
 # In-line "unit test"

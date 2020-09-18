@@ -32,7 +32,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
 
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Parse the log for sub-test info.
         """
@@ -108,6 +108,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
                             break
 
                 if subtest_id not in subtest_data:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     self.logger.warn("subtest_id {} in durations but not seen before"
                                      .format(subtest_id))
                     continue
@@ -134,16 +135,19 @@ class PyTestLogParser(JenkinsAggregatorBase):
             try:
                 timestamp_ms = int(self.start_time_ms+(float(fields[0])*1000))
             except ValueError:
+                self.logger.error("SUBTEST PARSE ERROR")
                 self.logger.exception("timestamp parse error: {}".format(line))
                 continue
 
             name = " ".join(fields[1:result_idx])
             subtest_id = MongoDB.encode_key(name)
             if not len(subtest_id):
+                self.logger.error("SUBTEST PARSE ERROR")
                 self.logger.warn("missing subtest_id: {}".format(line))
                 continue
 
             if subtest_id in subtest_data:
+                self.logger.error("SUBTEST PARSE ERROR")
                 raise PyTestLogParserException("duplicate subtest ID \'{}\': {}".format(subtest_id, line))
             subtest_data[subtest_id] = {'name': name,
                                         'result': fields[result_idx],
@@ -166,6 +170,14 @@ class PyTestLogParser(JenkinsAggregatorBase):
 
 
         return {'pytest_subtests': subtest_data} # XXXrs can there be multiple in the same log?
+
+
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
+        try:
+            return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+        except:
+            self.logger.error("SUBTEST PARSE ERROR")
+            raise
 
 
 # In-line "unit test"

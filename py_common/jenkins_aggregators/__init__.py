@@ -256,6 +256,9 @@ class JenkinsJobMetaCollection(object):
                                       {'$addToSet': {'builds': bnum}},
                                       upsert = True)
 
+        # Remove any retry entry
+        self.cancel_retry(bnum=bnum)
+
         # If we have branch data, add to the builds-by-branch list(s)
         git_branches = data.get('git_branches', {})
         for repo, branch in git_branches.items():
@@ -349,6 +352,9 @@ class JenkinsJobMetaCollection(object):
         if after is None:
             return False
         return time.time() < after
+
+    def cancel_retry(self, *, bnum):
+        self.coll.find_one_and_update({'_id': 'retry'}, {'$unset': {bnum:""}})
 
     def repos(self):
         # Return all known repos
@@ -647,7 +653,7 @@ class Plugins(object):
                 self.logger.debug("loaded: {}".format(mname))
                 self.logger.debug("{} defs: {}".format(pi_label, defs))
             except AttributeError as e:
-                self.logger.error("falied to find {} defs: {}".format(pi_label, mname))
+                self.logger.info("{} does not contain {}".format(mname, pi_label))
                 continue
 
             for info in defs:

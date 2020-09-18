@@ -65,6 +65,16 @@ class MongoDB(object):
     def collection(self, name):
         return self.db[name]
 
+    def collection_names(self):
+        return self.db.collection_names()
+
+    def job_meta_collection_names(self):
+        names = []
+        for name in self.db.collection_names():
+            if name.startswith('job_') and name.endswith('_meta'):
+                names.append(name)
+        return names
+
     @staticmethod
     def encode_key(key):
         return key.replace('.', '__dot__')

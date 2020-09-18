@@ -7,7 +7,7 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
-import datetime
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -33,22 +33,13 @@ logger = logging.getLogger(__name__)
 JMDB = JenkinsMongoDB()
 JENKINS_DB = JMDB.jenkins_db()
 
-def get_ts(*, dt, tm, tz):
-
-    (year, month, day) = dt.split("-")
-    (hour, minute, second) = tm.split(":")
-
-    dt = tz.localize(datetime.datetime(int(year), int(month), int(day),
-                                       int(hour), int(minute), int(second)))
-    return dt.timestamp()
-
-def ts_to_date_hour(*, ts):
+def ts_to_year_month(*, ts):
     """
-    Returns (<date_str>, <hr_str>)
-        where <date_str> is "YYYY-MM-DD" and <hr_str> is "00" through "23"
+    Returns (<year>, <month>)
+        where <year> is four-digit year and <month> is "00" through "12"
     """
-    dt = datetime.datetime.fromtimestamp(ts)
-    return ("{}-{:02d}-{:02d}".format(dt.year, dt.month, dt.day), "{:02d}".format(dt.hour))
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    return ("{}".format(dt.year), "{:02d}".format(dt.month))
 
 job_data_collections = {}
 def get_job_data_collection(*, job_name):
@@ -57,109 +48,71 @@ def get_job_data_collection(*, job_name):
                                                                   db=JENKINS_DB)
     return job_data_collections[job_name]
 
-def get_build_data(*, job_name, build_number):
-    jdc = get_job_data_collection(job_name=job_name)
-    return jdc.get_data(bnum=build_number)
-
-def write_data(*, outdir, date, hour, data):
-    os.makedirs(os.path.join(outdir, date), exist_ok=True)
-    outfile = os.path.join(outdir, date, "{}.json".format(hour))
-    logger.info("writing incremental: {}".format(outfile))
-    with open(outfile, "w+") as fp:
-        fp.write(json.dumps(data))
+def write_data(*, outdir, year, month, data):
+    for key,item in data.items():
+        os.makedirs(os.path.join(outdir, year, month), exist_ok=True)
+        outfile = os.path.join(outdir, year, month, "{}.json".format(key))
+        logger.info("writing incremental: {}".format(outfile))
+        with open(outfile, "w+") as fp:
+            fp.write(json.dumps(item))
 
 if __name__ == "__main__":
 
     import argparse
+    import time
+    from dateutil.relativedelta import relativedelta
     import pytz
 
     argParser = argparse.ArgumentParser()
-
     argParser.add_argument('--outdir', required=True, type=str,
                                 help='path to incrementals directory')
-
-    argParser.add_argument('--prior_days', default=None, type=int,
-                                help='defaults start_date to N days prior to today')
-    argParser.add_argument('--start_ts', default=None, type=int,
-                                help='start timestamp (s)')
-    argParser.add_argument('--end_ts', default=None, type=int,
-                                help='end timestamp (s)')
-
-    argParser.add_argument('--start_date', default=None, type=str,
-                                help='start date (YYYY-MM-DD) defaults to today')
-    argParser.add_argument('--start_time', default=None, type=str,
-                                help='start time (HH:MM:SS) defaults to 00:00:00')
-    argParser.add_argument('--end_date', default=None, type=str,
-                                help='end date (YYYY-MM-DD) defaults to start_date')
-    argParser.add_argument('--end_time', default=None, type=str,
-                                help='end time (HH:MM:SS) defaults to 23:59:59')
+    argParser.add_argument('--prior_months', default=0, type=int,
+                                help='process for this many additional prior months')
+    '''
     argParser.add_argument('--tz', default="America/Los_Angeles", type=str,
                                 help='timezone for inputs')
-
+    '''
     args = argParser.parse_args()
 
+    '''
     tz = pytz.timezone(args.tz)
-    now = datetime.datetime.now(tz=tz)
+    now = datetime.now(tz=tz)
+    '''
 
-    default_start_date = "{}-{}-{}".format(now.year, now.month, now.day)
-    default_end_date = None
+    now = datetime.now(timezone.utc)
 
-    if args.prior_days is not None:
-        default_end_date = default_start_date
-        prior = now-datetime.timedelta(days=args.prior_days)
-        default_start_date = "{}-{}-{}".format(prior.year, prior.month, prior.day)
+    if args.prior_months > 0:
+        prior = now-relativedelta(months=args.prior_months)
+        start_year = prior.year
+        start_month = prior.month
+    else:
+        start_year = now.year
+        start_month = now.month
 
-    start_ts = args.start_ts
-    if not start_ts:
-        start_dt = args.start_date
-        if not start_dt:
-            start_dt = default_start_date
-        tm = args.start_time
-        if not tm:
-            tm = "00:00:00"
-        start_ts = get_ts(dt=start_dt, tm=tm, tz=tz)
-
-    end_ts = args.end_ts
-    if not end_ts:
-        end_dt = args.end_date
-        if not end_dt:
-            end_dt = default_end_date
-        if not end_dt:
-            # Same as start date then
-            end_dt = start_dt
-        tm = args.end_time
-        if not tm:
-            tm = "23:59:59"
-        dt_str = "{} {}".format(end_dt, tm)
-        end_ts = get_ts(dt=end_dt, tm=tm, tz=tz)
-
+    # Midnight, first day of the start month/year
+    start = datetime(start_year, start_month, 1, hour=0, minute=0, second=0, tzinfo=timezone.utc)
+    logger.debug("start: {}".format(start))
+    start_ts = start.timestamp()
     logger.debug("start_ts: {}".format(start_ts))
-    logger.debug(ts_to_date_hour(ts=start_ts))
-    logger.debug("end_ts:   {}".format(end_ts))
-    logger.debug(ts_to_date_hour(ts=end_ts))
+
+    # End is now
+    end = datetime(now.year, now.month, now.day, hour=now.hour, minute=now.minute, second=now.second, tzinfo=timezone.utc)
+    logger.debug("end: {}".format(end))
+    end_ts = end.timestamp()
+    logger.debug("end_ts: {}".format(end_ts))
 
     """
-    Layout of output directory will be
-    First level is date, each date has one file per hour...
-        2020-08-27
-            00.json
-            01.json
-            02.json
-            ...
-            23.json
-        2020-08-28
-            00.json
-            01.json
-            ...
-            23.json
-        ...
+    Layout of output directory will be:
+        /some/root/<year>/<month>/<data_type>.json
 
-    Note: the directory/file date/time are (always) in UTC!
+        <data_type> is:
+            - builds - basic per-build data
+            - tpchTest - TPC-H test performance data
+            - functest_subtests - Functional test sub-test data
+            - and so on...
+
+        Data in all files are keyed by job_name and build_number.
     """
-
-
-    delta_t = end_ts - start_ts
-    now = datetime.datetime.now()
 
     """
     Use the start/end time to query for the list of completed builds.
@@ -183,47 +136,59 @@ if __name__ == "__main__":
         sys.exit(0)
     logger.info("Processing {} builds".format(len(blist)))
 
-    # Sort the build list by start time:w
+    # sub-blocks to extract from build data if they exist
 
-    cur_date = None
-    cur_hour = None
+    sub_blocks = ['functest_subtests',
+                  'pytest_subtests',
+                  'test_jdbc_subtests',
+                  'xc_test_harness_subtests',
+                  'tpchTest',
+                  'tpcdsTest',
+                  'coverage'] # XXXrs coverage takes different forms...
+
+    cur_year = None
+    cur_month = None
     cur_data = {}
     flush = False
 
+    # Sort the build list by start time
     for binfo in sorted(blist, key=lambda d: d['start_time_ms']):
         ts_ms = binfo.get('start_time_ms', None)
         if not ts_ms:
             continue
 
-        date, hour = ts_to_date_hour(ts=ts_ms/1000)
+        year, month = ts_to_year_month(ts=ts_ms/1000)
 
-        if not cur_date:
-            cur_date = date
-        elif date != cur_date:
-            flush = True
+        if not cur_year:
+            cur_year = year
+        flush = year != cur_year
 
-        if not cur_hour:
-            cur_hour = hour
-        elif hour != cur_hour:
-            flush = True
+        if not cur_month:
+            cur_month = month
+        flush = month != cur_month
 
-        if flush:
+        if flush and cur_data:
             write_data(outdir=args.outdir,
-                       date=cur_date,
-                       hour=cur_hour,
+                       year=cur_year,
+                       month=cur_month,
                        data=cur_data)
-            cur_date = date
-            cur_hour = hour
+            cur_year = year
+            cur_month = month
             cur_data = {}
             flush = False
 
         job_name = binfo.pop('job_name')
+        jdc = get_job_data_collection(job_name=job_name)
         build_number = binfo.pop('build_number')
-        build_data = get_build_data(job_name=job_name, build_number=build_number)
-        cur_data.setdefault(job_name, {})[build_number] = build_data
+        build_data = jdc.get_data(bnum=build_number)
+
+        for sub in sub_blocks:
+            if sub in build_data:
+                cur_data.setdefault(sub, {}).setdefault(job_name, {})[build_number] = build_data.pop(sub)
+        cur_data.setdefault('builds', {}).setdefault(job_name, {})[build_number] = build_data
 
     if cur_data:
         write_data(outdir=args.outdir,
-                   date=cur_date,
-                   hour=cur_hour,
+                   year=cur_year,
+                   month=cur_month,
                    data=cur_data)

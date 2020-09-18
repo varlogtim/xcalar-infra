@@ -65,6 +65,7 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
             number = fields[3]
 
         if subtest_id in data:
+            self.logger.error("SUBTEST PARSE ERROR")
             raise XcTestHarnessLogParserException("duplicate subtest ID: {}".format(subtest_id))
 
         data[subtest_id] = {'name': name,
@@ -140,7 +141,7 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
         self._init_subtest_data(data=data, result="SKIP", fields=fields)
 
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Parse the log for sub-test info.
         """
@@ -171,6 +172,7 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
             try:
                 timestamp_ms = int(self.start_time_ms+(float(fields[0])*1000))
             except ValueError:
+                self.logger.error("SUBTEST PARSE ERROR")
                 self.logger.exception("timestamp parse error: {}".format(line))
                 continue
 
@@ -190,9 +192,18 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
                                      timestamp_ms=timestamp_ms,
                                      fields=fields)
             except:
+                self.logger.error("SUBTEST PARSE ERROR")
                 self.logger.exception("parse error: {}".format(line))
 
         return {'xc_test_harness_subtests': subtest_data}
+
+
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
+        try:
+            return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+        except:
+            self.logger.error("SUBTEST PARSE ERROR")
+            raise
 
 
 # In-line "unit test"

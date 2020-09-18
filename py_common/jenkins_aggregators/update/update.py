@@ -120,6 +120,7 @@ class JenkinsJobAggregators(object):
                 self.logger.exception("exception processing bnum: {}".format(bnum))
                 if not self.job_meta_coll.schedule_retry(bnum=bnum):
                     self.job_data_coll.store_data(bnum=bnum, data=None)
+                    self.job_meta_coll.cancel_retry(bnum=bnum)
                 return False
 
             # TEST_MODE -----
@@ -167,6 +168,7 @@ class JenkinsJobAggregators(object):
                 self.logger.exception("exception processing bnum: {}".format(bnum))
                 if not self.job_meta_coll.schedule_retry(bnum=bnum):
                     self.job_data_coll.store_data(bnum=bnum, data=None)
+                    self.job_meta_coll.cancel_retry(bnum=bnum)
                 return False
 
         # Everybody gets the default aggregator
@@ -191,6 +193,7 @@ class JenkinsJobAggregators(object):
                 self.logger.exception("exception processing bnum: {}".format(bnum))
                 if not self.job_meta_coll.schedule_retry(bnum=bnum):
                     self.job_data_coll.store_data(bnum=bnum, data=None)
+                    self.job_meta_coll.cancel_retry(bnum=bnum)
                 return False
 
         merged_data = {}
@@ -212,6 +215,7 @@ class JenkinsJobAggregators(object):
                 self.logger.exception("exception processing bnum: {}".format(bnum))
                 if not self.job_meta_coll.schedule_retry(bnum=bnum):
                     self.job_data_coll.store_data(bnum=bnum, data=None)
+                    self.job_meta_coll.cancel_retry(bnum=bnum)
                 return False
 
             for k,v in data.items():
@@ -223,6 +227,7 @@ class JenkinsJobAggregators(object):
             self.logger.info("no data")
             # Make an entry indicating there are no data for this build.
             self.job_data_coll.store_data(bnum=bnum, data=None)
+            self.job_meta_coll.cancel_retry(bnum=bnum)
             return False
 
         # index_data may side-effect merged_data by extracting "private" stuff

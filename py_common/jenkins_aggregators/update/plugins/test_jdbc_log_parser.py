@@ -39,11 +39,12 @@ class TestJdbcLogParser(JenkinsAggregatorBase):
         try:
             return int(self.start_time_ms+(float(fields[0])*1000))
         except ValueError:
+            self.logger.error("SUBTEST PARSE ERROR")
             self.logger.exception("timestamp parse error: {}".format(line))
             return None
 
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
         """
         Parse the log for sub-test info.
         """
@@ -84,12 +85,14 @@ class TestJdbcLogParser(JenkinsAggregatorBase):
 
                 lkey = ":".join([test_name, linfo])
                 if lkey not in subtest_data:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     raise TestJdbcLogParserException("unmatched END at line {}: {}"
                                                      .format(lnum, line))
 
                 data = subtest_data[lkey]
                 start_time_ms = data.get("start_time_ms", None)
                 if not start_time_ms:
+                    self.logger.error("SUBTEST PARSE ERROR")
                     raise TestJdbcLogParserException("no start time in subtest_data: {}"
                                                      .format(data))
                 data["duration_ms"] = self._get_timestamp_ms(fields=fields)-start_time_ms
@@ -97,6 +100,13 @@ class TestJdbcLogParser(JenkinsAggregatorBase):
 
         return {'test_jdbc_subtests': subtest_data}
 
+
+    def update_build(self, *, bnum, jbi, log, test_mode=False):
+        try:
+            return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+        except:
+            self.logger.error("SUBTEST PARSE ERROR")
+            raise
 
 # In-line "unit test"
 if __name__ == '__main__':
