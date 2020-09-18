@@ -68,7 +68,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
             '''
             5931.515  = 279 passed, 190 skipped, 1 deselected, 4 xfailed, 3 warnings in 2591.94s (0:43:11) =
             '''
-            if past_durations_marker and fields[1] == '=' and fields[-1] == '=':
+            if past_durations_marker and fields[1][0] == '=' and fields[-1][-1] == '=':
                 past_start_marker = False
                 past_durations_marker = False
                 continue
@@ -177,7 +177,7 @@ if __name__ == '__main__':
     # It's log, it's log... :)
     logging.basicConfig(level=logging.INFO,
                         format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
-                        handlers=[logging.StreamHandler()])
+                        handlers=[logging.StreamHandler(sys.stdout)])
 
 
     parser = argparse.ArgumentParser()

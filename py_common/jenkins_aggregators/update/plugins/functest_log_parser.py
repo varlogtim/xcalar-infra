@@ -137,7 +137,7 @@ if __name__ == '__main__':
     # It's log, it's log... :)
     logging.basicConfig(level=logging.INFO,
                         format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
-                        handlers=[logging.StreamHandler()])
+                        handlers=[logging.StreamHandler(sys.stdout)])
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--job", help="jenkins job name", default="FuncTestTrigger")
