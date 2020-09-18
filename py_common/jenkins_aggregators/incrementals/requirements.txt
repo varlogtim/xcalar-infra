@@ -1,6 +1,6 @@
 # This file is required to exist for the docker build.
 # It's allowed to be empty.
 
+python-dateutil==2.8.1
 pymongo==3.8.0
-pytz==2019.1
 requests==2.22.0

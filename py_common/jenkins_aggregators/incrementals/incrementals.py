@@ -61,23 +61,13 @@ if __name__ == "__main__":
     import argparse
     import time
     from dateutil.relativedelta import relativedelta
-    import pytz
 
     argParser = argparse.ArgumentParser()
     argParser.add_argument('--outdir', required=True, type=str,
                                 help='path to incrementals directory')
     argParser.add_argument('--prior_months', default=0, type=int,
                                 help='process for this many additional prior months')
-    '''
-    argParser.add_argument('--tz', default="America/Los_Angeles", type=str,
-                                help='timezone for inputs')
-    '''
     args = argParser.parse_args()
-
-    '''
-    tz = pytz.timezone(args.tz)
-    now = datetime.now(tz=tz)
-    '''
 
     now = datetime.now(timezone.utc)
 
