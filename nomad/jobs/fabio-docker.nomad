@@ -1,5 +1,5 @@
 job "fabio" {
-  datacenters = ["xcalar-sjc"]
+  datacenters = ["[[.dc]]"]
   type        = "system"
 
   update {
@@ -19,7 +19,7 @@ job "fabio" {
       driver = "docker"
 
       config {
-        image        = "fabiolb/fabio"
+        image        = "fabiolb/fabio:latest"
         network_mode = "host"
         force_pull   = false
 

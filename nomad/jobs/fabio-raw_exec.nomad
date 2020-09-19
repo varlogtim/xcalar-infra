@@ -19,7 +19,7 @@ job "fabio" {
       driver = "raw_exec"
 
       config {
-        command = "fabio-1.5.13-go1.13.4-linux_amd64"
+        command = "[[.fabio.command]]"
 
         args = ["-insecure", "-cfg", "local/fabio.properties"]
       }
@@ -43,10 +43,10 @@ EOT
       }
 
       artifact {
-        source = "http://repo.xcalar.net/deps/fabio-1.5.13-go1.13.4-linux_amd64.tar.gz"
+        source = "[[.fabio.url]]"
 
         options {
-          checksum = "sha256:39983bfda3a211cb42dda9301cf7febd683104de16b27667dc091da883c8906a"
+          checksum = "[[.fabio.checksum]]"
         }
       }
 
