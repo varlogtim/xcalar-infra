@@ -31,7 +31,6 @@ logging.basicConfig(level=cfg.get('LOG_LEVEL'),
 logger = logging.getLogger(__name__)
 
 JMDB = JenkinsMongoDB()
-JENKINS_DB = JMDB.jenkins_db()
 
 def get_ts(*, dt, tm, tz):
 
@@ -53,8 +52,7 @@ def ts_to_date_hour(*, ts):
 job_data_collections = {}
 def get_job_data_collection(*, job_name):
     if job_name not in job_data_collections:
-        job_data_collections[job_name] = JenkinsJobDataCollection(job_name=job_name,
-                                                                  db=JENKINS_DB)
+        job_data_collections[job_name] = JenkinsJobDataCollection(job_name=job_name, jmdb=JMDB)
     return job_data_collections[job_name]
 
 def get_build_data(*, job_name, build_number):

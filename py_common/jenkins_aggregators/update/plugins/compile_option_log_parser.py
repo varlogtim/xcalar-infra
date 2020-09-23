@@ -16,16 +16,15 @@ if __name__ == '__main__':
 
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
 
-AGGREGATOR_PLUGINS = [{'class_name': 'TestJdbcLogParser',
+AGGREGATOR_PLUGINS = [{'class_name': 'CompileOptionsLogParser',
                        'job_names': ['__ALL__']}]
 
 
-class TestJdbcLogParserException(Exception):
+class CompileOptionsLogParserException(Exception):
     pass
 
 
-# N.B. This parser relies on logging modifications that were added Sep. 2020
-class TestJdbcLogParser(JenkinsAggregatorBase):
+class CompileOptionsLogParser(JenkinsAggregatorBase):
     def __init__(self, *, job_name):
         """
         Class-specific initialization.
@@ -36,67 +35,26 @@ class TestJdbcLogParser(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
 
 
-    def _get_timestamp_ms(self, *, fields):
-        try:
-            return int(self.start_time_ms+(float(fields[0])*1000))
-        except ValueError:
-            self.logger.exception("timestamp parse error: {}".format(line))
-            return None
-
-
     def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
         """
-        Parse the log for sub-test info.
+        Parse the log for analyzed core information
         """
         self.start_time_ms = jbi.start_time_ms()
         self.duration_ms = jbi.duration_ms()
 
-        subtest_data = {}
+        options = {}
 
         for lnum, line in enumerate(log.splitlines()):
 
-            if "======" not in line:
-                continue
+            # 104.033 COMPILE_OPTION: ENABLE_ASSERTIONS support is OFF
 
             fields = line.split()
+            if len(fields) < 2:
+                continue
+            if fields[1] == 'COMPILE_OPTION:':
+                options[fields[2]] = fields[-1]
 
-            # 524.922  2020-09-16 03:00:32,304 root  INFO     ============ START xcTest loop 1/1 ============
-            if "START" in fields and "loop" in fields:
-                sidx = fields.index("START")
-                lidx = fields.index("loop")
-                test_name = " ".join(fields[sidx+1:lidx])
-                linfo = fields[lidx+1]
-                lnum,lmax = linfo.split('/')
-
-                ts_ms = self._get_timestamp_ms(fields=fields)
-                lkey = ":".join([test_name, linfo])
-                subtest_data[lkey] = {'name': test_name,
-                                      'loop': lnum,
-                                      'loop_max': lmax,
-                                      'start_time_ms': ts_ms}
-
-            # 633.188  2020-09-16 03:02:20,570 root  INFO     ============ END xcTest loop 1/1 ============
-            if "END" in fields and "loop" in fields:
-                eidx = fields.index("END")
-                lidx = fields.index("loop")
-                test_name = " ".join(fields[sidx+1:lidx])
-                linfo = fields[lidx+1]
-                lnum,lmax = linfo.split('/')
-
-                lkey = ":".join([test_name, linfo])
-                if lkey not in subtest_data:
-                    raise TestJdbcLogParserException("unmatched END at line {}: {}"
-                                                     .format(lnum, line))
-
-                data = subtest_data[lkey]
-                start_time_ms = data.get("start_time_ms", None)
-                if not start_time_ms:
-                    raise TestJdbcLogParserException("no start time in subtest_data: {}"
-                                                     .format(data))
-                data["duration_ms"] = self._get_timestamp_ms(fields=fields)-start_time_ms
-
-
-        return {'test_jdbc_subtests': subtest_data}
+        return {'compile_options': options}
 
 
     def update_build(self, *, bnum, jbi, log, test_mode=False):
@@ -105,6 +63,7 @@ class TestJdbcLogParser(JenkinsAggregatorBase):
         except:
             self.logger.error("TEST PARSE ERROR")
             raise
+
 
 # In-line "unit test"
 if __name__ == '__main__':
@@ -118,8 +77,8 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler(sys.stdout)])
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--job", help="jenkins job name", default="BuildSqldfTestAggreagate")
-    parser.add_argument("--bnum", help="jenkins build number", default="19982")
+    parser.add_argument("--job", help="jenkins job name", default="XCETest")
+    parser.add_argument("--bnum", help="jenkins build number", default="50400")
     parser.add_argument("--log", help="just print out the log", action="store_true")
     args = parser.parse_args()
 
@@ -134,7 +93,7 @@ if __name__ == '__main__':
     japi = JenkinsApi(host='jenkins.int.xcalar.com')
 
     for job_name,build_number in test_builds:
-        parser = TestJdbcLogParser(job_name=job_name)
+        parser = CompileOptionsLogParser(job_name=job_name)
         jbi = JenkinsBuildInfo(job_name=job_name, build_number=build_number, japi=japi)
         log = jbi.console()
         result = jbi.result()

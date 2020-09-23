@@ -21,6 +21,8 @@ if __name__ == '__main__':
 from py_common.env_configuration import EnvConfiguration
 from py_common.mongo import JenkinsMongoDB, MongoDBKeepAliveLock, MongoDBKALockTimeout
 from py_common.jenkins_aggregators import JenkinsAllJobIndex
+from py_common.jenkins_aggregators import JenkinsJobMetaCollection
+from py_common.jenkins_aggregators import JenkinsJobDataCollection
 
 def get_ts(*, dt, tm, tz):
 
@@ -56,10 +58,10 @@ if __name__ == '__main__':
 
     argParser.add_argument("--job", default=[], type=str, action='append', dest='jobs',
                                 help="only consider builds from this (these) job(s)", metavar="name")
-    argParser.add_argument("--do_delete", action="store_true",
-                                help="do the deletes")
     argParser.add_argument("--detail", action="store_true",
                                 help="show build details")
+    argParser.add_argument("--force", action="store_true",
+                                help="force update without ask")
 
     argParser.add_argument('--prior_days', default=None, type=int,
                                 help='defaults start_date to N days prior to today')
@@ -115,12 +117,9 @@ if __name__ == '__main__':
     logger.debug("start: {}".format(ts_to_date(ts=start_ts, tz=tz)))
     logger.debug("end: {}".format(ts_to_date(ts=end_ts, tz=tz)))
 
-    # Find all jobs between start/end, and delete their job collection entries.
-    # This will cause re-parse of their data.
-    # Crude but effective.
+    # Find all builds between start/end times
 
     jmdb = JenkinsMongoDB()
-    db = jmdb.jenkins_db()
     alljob = JenkinsAllJobIndex(jmdb=jmdb)
     builds = alljob.builds_by_time(
                         full=True, # want ID and collection info for removal...
@@ -138,51 +137,46 @@ if __name__ == '__main__':
         job_name = build['job_name']
         job_to_builds.setdefault(job_name, []).append(build)
 
-    if not args.do_delete:
-        print("WOULD DELETE:")
+    for job_name, builds in job_to_builds.items():
+        if args.jobs and job_name not in args.jobs:
+            continue
+        bnums = [b['build_number'] for b in builds]
+        print("Job: {} =====".format(job_name))
+        if not args.detail:
+            print("{}".format(bnums))
+            print("=====")
+            continue
+
+        # Detail
+        job_coll = JenkinsJobDataCollection(job_name=job_name, jmdb=jmdb)
+        for bnum in bnums:
+            doc = job_coll.get_data(bnum=bnum)
+            print("Build: {} ---".format(job_name, bnum))
+            print(doc)
+        print("=====")
+
+    # See if user wants to proceed
+    if not args.force:
+        foo = input("Proceed (y/N): ")
+        if foo != 'y':
+            sys.exit(0)
+
+    print("proceeding...")
+
+    # Flag matching builds for re-parse
 
     for job_name, builds in job_to_builds.items():
         if args.jobs and job_name not in args.jobs:
             continue
+        bnums = [b['build_number'] for b in builds]
+        process_lock_name = "{}_process_lock".format(job_name)
+        process_lock_meta = {"reason": "locked by reparse_builds.py"}
+        process_lock = MongoDBKeepAliveLock(db=jmdb.jenkins_db(), name=process_lock_name)
+        try:
+            process_lock.lock(meta=process_lock_meta)
+        except MongoDBKALockTimeout as e:
+            raise Exception("timeout acquiring {}".format(process_lock_name))
 
-        if not args.detail:
-            if args.do_delete:
-                print("DELETING:")
-            bnums = [b['build_number'] for b in builds]
-            print("job: {} builds: {}".format(job_name, bnums))
-            if not args.do_delete:
-                continue
-
-        process_lock = None
-        if args.do_delete:
-            # Try to obtain the process lock
-            process_lock_name = "{}_process_lock".format(job_name)
-            process_lock_meta = {"reason": "locked by del_builds.py"}
-            process_lock = MongoDBKeepAliveLock(db=db, name=process_lock_name)
-            try:
-                process_lock.lock(meta=process_lock_meta)
-            except MongoDBKALockTimeout as e:
-                raise Exception("timeout acquiring {}".format(process_lock_name))
-
-        job_coll = db.collection("job_{}".format(job_name))
-        for build in builds:
-            bnum = build['build_number']
-            bbt_coll_name = build['collection_name']
-            bbt_id = build['_id']
-            if args.detail:
-                doc = job_coll.find_one({'_id': bnum})
-                print("=== {} === {} === {} === {} ===".format(job_name, bnum, bbt_coll_name, bbt_id))
-                print(doc)
-            if not args.do_delete:
-                continue
-            job_coll.find_one_and_delete({'_id': bnum})
-            bbt_coll = db.collection(bbt_coll_name)
-            bbt_coll.find_one_and_delete({'_id': bbt_id})
-            if args.detail:
-                print("DELETED")
-            else:
-                print("DELETED {} {}".format(job_name, bnum))
-
-        if args.do_delete:
-            process_lock.unlock()
-            process_lock = None
+        meta_coll = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb)
+        meta_coll.reparse(builds=bnums)
+        process_lock.unlock()

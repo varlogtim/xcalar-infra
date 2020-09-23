@@ -67,20 +67,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-
-    if args.up:
-        if not args.bnum:
-            raise ValueError("--up requires both --job and --bnum")
-        #print(pprint.pformat(jdq_client.upstream(job_name=args.job, bnum=args.bnum)))
-        sys.exit(0)
-
-
-    if args.down:
-        if not args.bnum:
-            raise ValueError("--down requires both --job and --bnum")
-        #print(pprint.pformat(jdq_client.downstream(job_name=args.job, bnum=args.bnum)))
-        sys.exit(0)
-
     query = {}
     for item in args.peq:
         #print("peq: {}".format(item))
@@ -139,11 +125,19 @@ if __name__ == '__main__':
     resp = jdq_client.find_builds(job_name = args.job,
                                   query = query,
                                   verbose = args.verbose)
+
     if not args.verbose:
         # Just a list of matching build numbers
         for bnum in resp:
             print(bnum)
         sys.exit(0)
+
+    for bnum in resp:
+        if args.up:
+            resp[bnum]['upstream'] = jdq_client.upstream(job_name=args.job, bnum=bnum)
+        if args.down:
+            resp[bnum]['downstream'] = jdq_client.downstream(job_name=args.job, bnum=bnum)
+
     if args.json:
         # Strict JSON for piping to other JSON consumers.
         print(json.dumps(resp))

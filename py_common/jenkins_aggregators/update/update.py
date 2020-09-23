@@ -78,12 +78,12 @@ class JenkinsJobAggregators(object):
         #         time has passed.
         self.freq_sec = cfg.get('JENKINS_AGGREGATOR_UPDATE_FREQ_SEC')
 
-        self.job_data_coll = JenkinsJobDataCollection(job_name=job_name, db=jmdb.jenkins_db())
-        self.job_meta_coll = JenkinsJobMetaCollection(job_name=job_name, db=jmdb.jenkins_db())
+        self.job_data_coll = JenkinsJobDataCollection(job_name=job_name, jmdb=jmdb)
+        self.job_meta_coll = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb)
         self.alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
         self.japi = JenkinsApi(host=self.jenkins_host)
 
-    def _update_build(self, *, bnum, test_mode=False, test_data_path=None):
+    def _update_build(self, *, bnum, test_mode=False, test_data_path=None, is_reparse=False):
         """
         Call all aggregators on the build.  Consolidate results
         and store to the DB.  All or nothing.  All aggregators
@@ -97,16 +97,6 @@ class JenkinsJobAggregators(object):
         """
         self.logger.info("process bnum: {}".format(bnum))
 
-        # Already have a data entry?
-        if self.job_data_coll.get_data(bnum=bnum) is not None:
-            self.logger.info("already seen, skipping...")
-            return False
-
-        # Waiting for retry timeout?
-        if self.job_meta_coll.retry_pending(bnum=bnum):
-            self.logger.info("retry pending, skipping...")
-            return False
-
         try:
             jbi = self.japi.get_build_info(job_name=self.job_name, build_number=bnum)
             # Don't update unless the build is known complete.
@@ -118,9 +108,9 @@ class JenkinsJobAggregators(object):
         except Exception as e:
             if not test_mode:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                    self.job_data_coll.store_data(bnum=bnum, data=None)
-                    self.job_meta_coll.cancel_retry(bnum=bnum)
+                if not is_reparse:
+                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
+                        self.job_data_coll.store_data(bnum=bnum, data=None)
                 return False
 
             # TEST_MODE -----
@@ -166,9 +156,9 @@ class JenkinsJobAggregators(object):
                     return False
             except Exception as e:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                    self.job_data_coll.store_data(bnum=bnum, data=None)
-                    self.job_meta_coll.cancel_retry(bnum=bnum)
+                if not is_reparse:
+                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
+                        self.job_data_coll.store_data(bnum=bnum, data=None)
                 return False
 
         # Everybody gets the default aggregator
@@ -191,9 +181,9 @@ class JenkinsJobAggregators(object):
                 console_log = jbi.console()
             except Exception as e:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                    self.job_data_coll.store_data(bnum=bnum, data=None)
-                    self.job_meta_coll.cancel_retry(bnum=bnum)
+                if not is_reparse:
+                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
+                        self.job_data_coll.store_data(bnum=bnum, data=None)
                 return False
 
         merged_data = {}
@@ -205,7 +195,7 @@ class JenkinsJobAggregators(object):
                            'test_mode': test_mode}
                 if agg.send_log_to_update:
                     params['log'] = console_log
-                self.logger.info("call update_build")
+                self.logger.info('calling aggregator: {}'.format(agg.agg_name))
                 data = agg.update_build(**params) or {}
 
             except JenkinsAggregatorDataUpdateTemporaryError as e:
@@ -213,9 +203,9 @@ class JenkinsJobAggregators(object):
                 # while trying to gather build information. 
                 # Bail, and try again in a bit (if we can).
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                    self.job_data_coll.store_data(bnum=bnum, data=None)
-                    self.job_meta_coll.cancel_retry(bnum=bnum)
+                if not is_reparse:
+                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
+                        self.job_data_coll.store_data(bnum=bnum, data=None)
                 return False
 
             for k,v in data.items():
@@ -223,7 +213,7 @@ class JenkinsJobAggregators(object):
                     raise Exception("duplicate key: {}".format(k))
                 merged_data[k] = v
 
-        if not merged_data:
+        if not merged_data and not is_reparse:
             self.logger.info("no data")
             # Make an entry indicating there are no data for this build.
             self.job_data_coll.store_data(bnum=bnum, data=None)
@@ -237,12 +227,17 @@ class JenkinsJobAggregators(object):
         #         might want custom post-aggregation "indexers" that
         #         are paired with the "aggregators".
         #
-        self.job_meta_coll.index_data(bnum=bnum, data=merged_data)
-        self.job_data_coll.store_data(bnum=bnum, data=merged_data)
-        self.alljob_idx.index_data(job_name=self.job_name, bnum=bnum, data=merged_data)
-        host_data_coll = JenkinsHostDataCollection(db=jmdb.jenkins_db(),
-                                                   host_name=merged_data['built_on'])
-        host_data_coll.store_data(job_name=self.job_name, bnum=bnum, data=merged_data)
+        self.job_meta_coll.index_data(bnum=bnum, data=merged_data,
+                                      is_reparse=is_reparse)
+        self.job_data_coll.store_data(bnum=bnum, data=merged_data,
+                                      is_reparse=is_reparse)
+        self.alljob_idx.index_data(job_name=self.job_name,
+                                   bnum=bnum, data=merged_data,
+                                   is_reparse=is_reparse)
+
+        host_data_coll = JenkinsHostDataCollection(jmdb=jmdb, host_name=merged_data['built_on'])
+        host_data_coll.store_data(job_name=self.job_name, bnum=bnum, data=merged_data,
+                                  is_reparse=is_reparse)
         self.logger.debug("end")
         return True
 
@@ -261,21 +256,24 @@ class JenkinsJobAggregators(object):
 
     def _do_updates(self, *, builds, test_mode=False,
                                      test_data_path=None,
-                                     force_default_job_update=False):
+                                     force_default_job_update=False,
+                                     is_reparse=False ):
         self.logger.info("builds: {}".format(builds))
         self.logger.info("test_mode: {}".format(test_mode))
         self.logger.info("test_data_path: {}".format(test_data_path))
+        self.logger.info("is_reparse: {}".format(is_reparse))
         updated = 0
         for bnum in builds:
             if self._update_build(bnum=bnum, test_mode=test_mode,
-                                  test_data_path=test_data_path):
+                                  test_data_path=test_data_path,
+                                  is_reparse=is_reparse):
                 updated += 1
         if updated:
             self.logger.debug("{} builds updated, call postprocessors".format(updated))
             self._postprocess_job(test_mode=test_mode)
         elif force_default_job_update:
             self._postprocess_job(test_mode=test_mode, default_only=True)
-        return
+        return updated
 
 
     def update_builds(self, *, test_builds=None,
@@ -289,17 +287,24 @@ class JenkinsJobAggregators(object):
                              test_data_path=test_data_path)
             return
 
-        completed_builds = set(self.job_data_coll.all_builds())
-        self.logger.debug("completed builds: {}".format(completed_builds))
-
-        last_build = self.japi.get_job_info(job_name=self.job_name).last_build_number()
-        if not last_build:
+        jobinfo = self.japi.get_job_info(job_name=self.job_name)
+        jenkins_first = jobinfo.first_build_number()
+        jenkins_last = jobinfo.last_build_number()
+        if not jenkins_first or not jenkins_last:
+            self.logger.error("missing first or last build for job {}".format(self.job_name))
             return
-        possible_builds = set([str(n) for n in range(1, last_build+1)])
-        candidate_builds = sorted(possible_builds.difference(completed_builds), key=nat_sort, reverse=True)
-        self._do_updates(builds=candidate_builds[:self.builds_max],
-                         force_default_job_update=force_default_job_update)
 
+        unseen = self.job_meta_coll.unseen_builds(first=jenkins_first, last=jenkins_last)
+        updated = self._do_updates(builds=unseen[:self.builds_max], force_default_job_update=force_default_job_update)
+
+        #extra = self.builds_max - updated
+        extra = 5
+
+        # We can do up to "extra" reparse.
+        if extra > 0:
+            reparse = self.job_meta_coll.reparse(rtnmax=extra)
+            if reparse:
+                self._do_updates(builds=reparse, is_reparse=True)
 
 # MAIN -----
 
@@ -312,7 +317,7 @@ cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
 # It's log, it's log... :)
 logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
-                    handlers=[logging.StreamHandler()])
+                    handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger(__name__)
 
 

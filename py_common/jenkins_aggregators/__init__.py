@@ -42,7 +42,7 @@ class JenkinsAllJobIndex(object):
         self.logger = logging.getLogger(__name__)
         self.jmdb = jmdb
 
-    def index_data(self, *, job_name, bnum, data):
+    def index_data(self, *, job_name, bnum, data, is_reparse=False):
         """
         Expects to find at least the following in data:
             {'parameters': jbi.parameters(),
@@ -67,7 +67,7 @@ class JenkinsAllJobIndex(object):
         self.logger.debug("job_entry: {}".format(job_entry))
 
         # Jobs by time
-        if start_time_ms is not None:
+        if start_time_ms is not None and not is_reparse:
             coll = self.jmdb.builds_by_time_collection(time_ms=start_time_ms)
             coll.create_index([('job_name', pymongo.ASCENDING),
                                ('build_number', pymongo.ASCENDING)],
@@ -139,19 +139,24 @@ class JenkinsJobDataCollection(object):
     """
     Interface to the per-job job data collection.
     """
-    def __init__(self, *, job_name, db):
+    def __init__(self, *, job_name, jmdb):
+        self.db = jmdb.jenkins_db()
         self.logger = logging.getLogger(__name__)
-        self.coll = db.collection("job_{}".format(job_name))
+        self.coll = self.db.collection("job_{}".format(job_name))
 
     def _no_data(self, *, doc):
         return not doc or 'NODATA' in doc
 
-    def store_data(self, *, bnum, data):
+    def store_data(self, *, bnum, data, is_reparse=False):
         """
         Store the passed data, or no-data marker if data is None
         """
         if data is None:
             self.coll.insert({'_id': bnum, 'NODATA':True})
+            return
+
+        if is_reparse:
+            self.coll.find_one_and_replace({'_id':bnum}, data)
         else:
             data['_id'] = bnum
             self.coll.insert(data)
@@ -192,10 +197,11 @@ class JenkinsHostDataCollection(object):
     """
     Interface to the per-host data collection.
     """
-    def __init__(self, *, host_name, db):
+    def __init__(self, *, host_name, jmdb):
+        self.db = jmdb.jenkins_db()
         self.logger = logging.getLogger(__name__)
         self.host_name = host_name
-        self.coll = db.collection("host_{}".format(host_name))
+        self.coll = self.db.collection("host_{}".format(host_name))
         self.coll.create_index([('job_name', pymongo.ASCENDING),
                                ('build_number', pymongo.ASCENDING)],
                                unique=True)
@@ -203,12 +209,13 @@ class JenkinsHostDataCollection(object):
     def _no_data(self, *, doc):
         return not doc or 'NODATA' in doc
 
-    def store_data(self, *, job_name, bnum, data):
+    def store_data(self, *, job_name, bnum, data, is_reparse=False):
         """
         Store the data.  Duh.
         """
-        if not data:
+        if not data or is_reparse:
             return
+
         # Only selected data items.
         store = {}
         store['job_name']=job_name
@@ -228,25 +235,24 @@ class JenkinsJobMetaCollection(object):
     ENV_PARAMS = {'JENKINS_AGGREGATOR_UPDATE_RETRY_MAX':
                     {'required': True,
                      'type': EnvConfiguration.NUMBER,
-                     'default': 3},
-                  'JENKINS_AGGREGATOR_UPDATE_RETRY_SEC':
-                    {'required': True,
-                     'type': EnvConfiguration.NUMBER,
-                     'default': 300} }
+                     'default': 3}}
 
-    def __init__(self, *, job_name, db):
+    def __init__(self, *, job_name, jmdb):
+        self.db = jmdb.jenkins_db()
         self.logger = logging.getLogger(__name__)
-        self.coll = db.collection("job_{}_meta".format(job_name))
+        self.coll = self.db.collection("job_{}_meta".format(job_name))
         cfg = EnvConfiguration(JenkinsJobMetaCollection.ENV_PARAMS)
         self.retry_max = cfg.get('JENKINS_AGGREGATOR_UPDATE_RETRY_MAX')
-        self.retry_sec = cfg.get('JENKINS_AGGREGATOR_UPDATE_RETRY_SEC')
 
-    def index_data(self, *, bnum, data):
+    def index_data(self, *, bnum, data, is_reparse=False):
         """
         Extract certain meta-data from the data set and "index".
         This is largly for the purpose of dashboard time efficiency.
         This may become obsolete when data are processed/indexed via
         Xcalar.
+
+        is_reparse is here for consistency with other similar
+        index/store methods, but is not presently used.
         """
         if not data:
             return # Nothing to do
@@ -258,6 +264,9 @@ class JenkinsJobMetaCollection(object):
 
         # Remove any retry entry
         self.cancel_retry(bnum=bnum)
+
+        # Remove any reparse entry
+        self.cancel_reparse(bnum=bnum)
 
         # If we have branch data, add to the builds-by-branch list(s)
         git_branches = data.get('git_branches', {})
@@ -289,9 +298,12 @@ class JenkinsJobMetaCollection(object):
                                           {'$addToSet': {'values': val}},
                                           upsert = True)
 
-    def store_data(self, *, key, data):
+    def store_data(self, *, key, data, is_reparse=False):
         """
         Store the passed data, or delete any existing if data is None
+
+        is_reparse is here for consistency with other similar
+        index/store methods, but is not presently used.
         """
         if data is None:
             self.coll.find_one_and_delete({'_id': key})
@@ -314,47 +326,106 @@ class JenkinsJobMetaCollection(object):
             return []
         return sorted(doc.get('builds', []))
 
+    def unseen_builds(self, *, first, last):
+        """
+        Return list of any "unseen" (no recorded data) build numbers between
+        first and last (inclusive)
+        """
+        build_range = set([str(i) for i in range(first, last+1)])
+        seen_builds = set(self.all_builds())
+        unseen = sorted([str(i) for i in (build_range-seen_builds)], key=nat_sort, reverse=True)
+        return unseen
+
     def schedule_retry(self, *, bnum):
         """
-        Called when an attempt to obtain update data encounters a
-        (presumably) temporary failure.  Will track the number of
-        try attempts already made, and update the "try after" timestamp
-        which prevents retrying "too fast".
+        If an attempt to obtain update data encounters a temporary
+        failure schedule_retry() is called.
 
-        Returns true if another try is allowed in the future,
-        false if retries are exhausted.
+        If schedule_retry() has not been called on the build previously,
+        the build will be added to the retry set, and its retry counter
+        will be set to 1. If the build is already in the set, its retry
+        counter is incremented.
+
+        If the retry counter exceeds the maximum threshold, the build is 
+        removed from the retry set and schedule_retry() returns FALSE and
+        the caller is expected to insert a NO DATA marker into the DB
+        for the build to suppress further update attempts.
+
+        Otherwise, schedule_retry() returns TRUE and the caller moves on.
         """
-        if self.retry_max <= 1:
+        bnum = str(bnum)
+        doc = self.coll.find_one_and_update(
+                        {'_id': 'retry'},
+                        {'$inc': {'{}.count'.format(bnum): 1}},
+                        upsert = True,
+                        return_document = ReturnDocument.AFTER)
+        item = doc[bnum]
+        if item['count'] > self.retry_max:
+            # Out of retries.  Caller should mark build as NO DATA
+            # to stop further update attempts.
+            self.coll.find_one_and_update(
+                        {'_id': 'retry'}, {'$unset': {bnum:""}})
             return False
-
-        doc = self.coll.find_one_and_update({'_id': 'retry'},
-                                            {'$inc': {'{}.count'.format(bnum): 1},
-                                             '$set': {'{}.after'.format(bnum):
-                                                 time.time()+self.retry_sec}},
-                                            upsert = True,
-                                            return_document = ReturnDocument.AFTER)
-
-        return doc[bnum]['count'] < self.retry_max
-
-    def retry_pending(self, *, bnum):
-        """
-        Return true if we have a retry entry for the build,
-        and it's telling us to retry at a later time.
-        """
-        doc = self.coll.find_one({'_id': 'retry', bnum:{'$exists': True}},
-                                 projection={bnum: True})
-        if not doc:
-            return False
-        count = doc[bnum].get('count', None)
-        if count is None or count >= self.retry_max:
-            return False
-        after = doc[bnum].get('after', None)
-        if after is None:
-            return False
-        return time.time() < after
+        # Another retry is allowed.  The caller can skip the build
+        # and allow the next update pass to make another attempt.
+        return True
 
     def cancel_retry(self, *, bnum):
-        self.coll.find_one_and_update({'_id': 'retry'}, {'$unset': {bnum:""}})
+        """
+        Remove the build from the retry set.
+        """
+        self.coll.find_one_and_update(
+                    {'_id': 'retry'}, {'$unset': {str(bnum):""}})
+
+    def reparse(self, *, builds=None, rtnmax=1):
+        """
+        If builds are given, add them to the "reparse" set and initialize
+        the reparse counter.
+
+        If no builds are given, scan the set, deleting any entries with
+        counter exceeding the maximum, and returning any others (up to
+        the maximum requested) while incrementing their counters.
+        """
+        if builds is None:
+            rtn = []
+            doc = self.coll.find_one({'_id': 'reparse'})
+            if not doc:
+                return(rtn)
+            doc.pop('_id')
+            cnt = 0
+            for bnum,item in doc.items():
+                if item['count'] > self.retry_max:
+                    self.coll.find_one_and_update(
+                        {'_id': 'reparse'}, {'$unset': {bnum:""}})
+                    continue
+
+                self.coll.find_one_and_update(
+                        {'_id': 'reparse'},
+                        {'$inc': {'{}.count'.format(bnum): 1}})
+                rtn.append(bnum)
+                if len(rtn) == rtnmax:
+                    break
+            return(sorted(rtn))
+
+        all_builds = self.all_builds()
+        for bnum in builds:
+            if bnum not in all_builds:
+                # We haven't parsed in the first place.
+                # No reparse needed.
+                continue
+            self.coll.find_one_and_update(
+                        {'_id': 'reparse'},
+                        {'$set': {'{}.count'.format(bnum): 1}},
+                        upsert = True,
+                        return_document = ReturnDocument.AFTER)
+        return
+
+    def cancel_reparse(self, *, bnum):
+        """
+        Remove the build from the reparse set.
+        """
+        self.coll.find_one_and_update(
+                        {'_id': 'reparse'}, {'$unset': {str(bnum): ""}})
 
     def repos(self):
         # Return all known repos
@@ -433,7 +504,7 @@ class JenkinsAggregatorBase(ABC):
     Base class for aggregating data and meta-data
     associated with a specific Jenkins job.
     """
-    def __init__(self, *, job_name, send_log_to_update = False):
+    def __init__(self, *, job_name, agg_name, send_log_to_update = False):
         """
         Initializer.
 
@@ -448,6 +519,7 @@ class JenkinsAggregatorBase(ABC):
         """
         self.logger = logging.getLogger(__name__)
         self.job_name = job_name
+        self.agg_name = agg_name
         self.send_log_to_update = send_log_to_update
 
     @abstractmethod
@@ -475,7 +547,8 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
     Used for all jobs.
     """
     def __init__(self, *, jenkins_host, job_name):
-        super().__init__(job_name=job_name)
+        super().__init__(job_name=job_name,
+                         agg_name=self.__class__.__name__)
         self.logger = logging.getLogger(__name__)
         self.japi = JenkinsApi(host=jenkins_host)
 
@@ -657,7 +730,7 @@ class Plugins(object):
                 continue
 
             for info in defs:
-                for job_name in info.get('job_names'):
+                for job_name in info.get('job_names', []):
                     mpath = info.get('module_path', None)
                     if mpath:
                         try:
@@ -668,14 +741,20 @@ class Plugins(object):
                             raise
                     cname = info.get('class_name')
                     cls = getattr(mod, cname)(job_name=job_name)
+                    self.logger.info('registering plugin {} for {}'.format(cname, job_name))
                     self.byjob.setdefault(job_name, []).append(cls)
 
     def by_job(self, *, job_name):
-        return self.byjob.get(job_name, [])
+        plugins = self.byjob.get(job_name, [])
+        plugins.extend(self.byjob.get('__ALL__', []))
+        self.logger.info("plugins by_job {}: {}".format(job_name, plugins))
+        return plugins
+
 
 class AggregatorPlugins(Plugins):
     def __init__(self):
         super().__init__(pi_label="AGGREGATOR_PLUGINS")
+
 
 class PostprocessorPlugins(Plugins):
     def __init__(self):
@@ -686,6 +765,7 @@ class PostprocessorPlugins(Plugins):
 if __name__ == '__main__':
     print("Compile check A-OK!")
 
+    '''
     cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})
 
     # It's log, it's log... :)
@@ -696,7 +776,41 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
 
     jmdb = JenkinsMongoDB()
+    meta_coll = JenkinsJobMetaCollection(job_name="TestJob", jmdb=jmdb)
+    print(meta_coll.schedule_retry(bnum=1))
+    meta_coll.cancel_retry(bnum=1)
+    print(meta_coll.schedule_retry(bnum=1))
+    print(meta_coll.schedule_retry(bnum=1))
+    print(meta_coll.schedule_retry(bnum=1))
+    print(meta_coll.schedule_retry(bnum=1))
+    print(meta_coll.schedule_retry(bnum=1))
+    print(meta_coll.schedule_retry(bnum=1))
+    print(meta_coll.schedule_retry(bnum=1))
+    print(meta_coll.schedule_retry(bnum=1))
+
+
+    meta_coll.reparse(builds=[1,2,3,10])
+    print(meta_coll.reparse())
+    meta_coll.cancel_reparse(bnum=3)
+    meta_coll.reparse(builds=[4,5,6])
+    print(meta_coll.reparse())
+    meta_coll.reparse(builds=[4])
+    meta_coll.cancel_reparse(bnum=6)
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+    print(meta_coll.reparse())
+
     logger.info('jmdb: {}'.format(jmdb))
     alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
     logging.info(alljob_idx)
     logging.info(alljob_idx.downstream_jobs(job_name='DailyTests-Trunk', bnum='153'))
+    '''

@@ -34,7 +34,7 @@ class ExampleAggregator(JenkinsAggregatorBase):
         Class-specific initialization.
         """
         # MUST call superclass initializer.
-        super().__init__(job_name=job_name)
+        super().__init__(job_name=job_name, agg_name=self.__class__.__name__)
         self.logger = logging.getLogger(__name__)
 
 

@@ -98,7 +98,8 @@ class XDUnitTestCoverageAggregator(JenkinsAggregatorBase):
         cfg = EnvConfiguration(XDUnitTestCoverageAggregator.ENV_PARAMS)
         self.coverage_file_name = cfg.get("XD_UNIT_TEST_COVERAGE_FILE_NAME")
         self.artifacts_root = cfg.get("XD_UNIT_TEST_ARTIFACTS_ROOT")
-        super().__init__(job_name=job_name)
+        super().__init__(job_name=job_name,
+                         agg_name=self.__class__.__name__)
 
     def update_build(self, *, bnum, jbi, log, test_mode=False):
         """
@@ -159,12 +160,11 @@ class XDUnitTestCoverageData(object):
         cfg = EnvConfiguration(XDUnitTestCoverageData.ENV_PARAMS)
         job_name = cfg.get("XD_UNIT_TEST_JOB_NAME")
 
-        # XXXrs - This is clunky!
-        # XXXrs - This should NOT communicate directly to the DB, but
-        #         should go through a REST client
-        db = JenkinsMongoDB().jenkins_db()
-        self.data = JenkinsJobDataCollection(job_name=job_name, db=db)
-        self.meta = JenkinsJobMetaCollection(job_name=job_name, db=db)
+        # XXXrs - This should NOT communicate directly with the DB, but
+        #         should go through a REST client.
+        jmdb = JenkinsMongoDB()
+        self.data = JenkinsJobDataCollection(job_name=job_name, jmdb=jmdb)
+        self.meta = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb)
 
         # XXXrs - TEMPORARY (!?!) initialize every time with static configuration.
         #         Eventually, this configuration should be managed elsewhere.

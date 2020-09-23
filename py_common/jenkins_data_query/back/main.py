@@ -62,7 +62,7 @@ def test_connection():
 def jenkins_jobs():
     jobs = []
     for job_name in jmdb.active_jobs():
-        jjmc = JenkinsJobMetaCollection(job_name=job_name, db=jdb)
+        jjmc = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb)
         jobs.append({'job_name': job_name,
                      'job_url': "http://{}/job/{}".format(jenkins_host, job_name),
                      'default_postprocessor_data': jjmc.get_data(key='default_postprocessor')})
@@ -193,12 +193,12 @@ def jenkins_job_parameters():
     # Find the latest build for the job in the DB and extract the parameter
     # names and return.
 
-    all_builds = JenkinsJobMetaCollection(job_name=job_name, db=jdb).all_builds()
+    all_builds = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb).all_builds()
     if not all_builds:
         return make_response(jsonify({}))
 
     latest_bnum = sorted([int(n) for n in all_builds])[-1]
-    latest = JenkinsJobDataCollection(job_name=job_name, db=jdb).get_data(bnum=str(latest_bnum))
+    latest = JenkinsJobDataCollection(job_name=job_name, jmdb=jmdb).get_data(bnum=str(latest_bnum))
     if not latest:
         return make_response(jsonify({}))
 

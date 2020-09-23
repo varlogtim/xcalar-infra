@@ -40,6 +40,7 @@ class XCEFuncTestCoverageAggregator(ClangCoverageAggregator):
         self.logger = logging.getLogger(__name__)
         cfg = EnvConfiguration(XCEFuncTestCoverageAggregator.ENV_PARAMS)
         super().__init__(job_name=job_name,
+                         agg_name=self.__class__.__name__,
                          coverage_file_name = cfg.get("XCE_FUNC_TEST_COVERAGE_FILE_NAME"),
                          artifacts_root = cfg.get("XCE_FUNC_TEST_ARTIFACTS_ROOT"))
 
@@ -65,12 +66,11 @@ class XCEFuncTestCoverageData(object):
         cfg = EnvConfiguration(XCEFuncTestCoverageData.ENV_PARAMS)
         job_name = cfg.get("XCE_FUNC_TEST_JOB_NAME")
 
-        # XXXrs - This is clunky.
-        # XXXrs - This should NOT communicate directly to the DB, but
-        #         should go through a REST client
-        db = JenkinsMongoDB().jenkins_db()
-        self.data = JenkinsJobDataCollection(job_name=job_name, db=db)
-        self.meta = JenkinsJobMetaCollection(job_name=job_name, db=db)
+        # XXXrs - This should NOT communicate directly with the DB, but
+        #         should go through a REST client.
+        jmdb = JenkinsMongoDB()
+        self.data = JenkinsJobDataCollection(job_name=job_name, jmdb=jmdb)
+        self.meta = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb)
 
         # XXXrs - TEMPORARY (!?!) initialize every time with static configuration.
         #         Eventually, this configuration should be managed elsewhere.

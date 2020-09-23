@@ -322,7 +322,8 @@ class SqlPerfResultsAggregator(JenkinsAggregatorBase):
         cfg = EnvConfiguration(SqlPerfResultsAggregator.ENV_PARAMS)
         self.artifacts_root = cfg.get('SQL_PERF_ARTIFACTS_ROOT')
         self.file_pats = file_pats
-        super().__init__(job_name=job_name)
+        super().__init__(job_name=job_name,
+                         agg_name=self.__class__.__name__)
 
     def update_build(self, *, bnum, jbi, log, test_mode=False):
         try:
@@ -387,9 +388,9 @@ class SqlPerfResultsData(object):
         """
         self.logger = logging.getLogger(__name__)
         self.job_name = job_name
-        jdb = JenkinsMongoDB().jenkins_db()
-        self.data = JenkinsJobDataCollection(job_name=self.job_name, db=jdb)
-        self.meta = JenkinsJobMetaCollection(job_name=self.job_name, db=jdb)
+        jmdb = JenkinsMongoDB()
+        self.data = JenkinsJobDataCollection(job_name=self.job_name, jmdb=jmdb)
+        self.meta = JenkinsJobMetaCollection(job_name=self.job_name, jmdb=jmdb)
         self.results_cache = {}
 
     def test_groups(self):

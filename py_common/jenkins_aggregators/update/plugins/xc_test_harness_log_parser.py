@@ -18,7 +18,7 @@ from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.mongo import MongoDB
 
 AGGREGATOR_PLUGINS = [{'class_name': 'XcTestHarnessLogParser',
-                       'job_names': ['XCETest', 'XCETestMemProfile']}]
+                       'job_names': ['__ALL__']}]
 
 
 class XcTestHarnessLogParserException(Exception):
@@ -30,7 +30,9 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
         """
         Class-specific initialization.
         """
-        super().__init__(job_name=job_name, send_log_to_update=True)
+        super().__init__(job_name=job_name,
+                         agg_name=self.__class__.__name__,
+                         send_log_to_update=True)
         self.logger = logging.getLogger(__name__)
 
 
@@ -65,7 +67,6 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
             number = fields[3]
 
         if subtest_id in data:
-            self.logger.error("SUBTEST PARSE ERROR")
             raise XcTestHarnessLogParserException("duplicate subtest ID: {}".format(subtest_id))
 
         data[subtest_id] = {'name': name,
@@ -172,7 +173,6 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
             try:
                 timestamp_ms = int(self.start_time_ms+(float(fields[0])*1000))
             except ValueError:
-                self.logger.error("SUBTEST PARSE ERROR")
                 self.logger.exception("timestamp parse error: {}".format(line))
                 continue
 
@@ -192,7 +192,6 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
                                      timestamp_ms=timestamp_ms,
                                      fields=fields)
             except:
-                self.logger.error("SUBTEST PARSE ERROR")
                 self.logger.exception("parse error: {}".format(line))
 
         return {'xc_test_harness_subtests': subtest_data}
@@ -202,7 +201,7 @@ class XcTestHarnessLogParser(JenkinsAggregatorBase):
         try:
             return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
         except:
-            self.logger.error("SUBTEST PARSE ERROR")
+            self.logger.error("TEST PARSE ERROR")
             raise
 
 

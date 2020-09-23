@@ -18,7 +18,7 @@ from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.mongo import MongoDB
 
 AGGREGATOR_PLUGINS = [{'class_name': 'FuncTestLogParser',
-                       'job_names': ['FuncTestTrigger', 'XCEFuncTest']}]
+                       'job_names': ['__ALL__']}]
 
 
 class FuncTestLogParserException(Exception):
@@ -31,7 +31,9 @@ class FuncTestLogParser(JenkinsAggregatorBase):
         """
         Class-specific initialization.
         """
-        super().__init__(job_name=job_name, send_log_to_update=True)
+        super().__init__(job_name=job_name,
+                         agg_name=self.__class__.__name__,
+                         send_log_to_update=True)
         self.logger = logging.getLogger(__name__)
 
 
@@ -39,7 +41,6 @@ class FuncTestLogParser(JenkinsAggregatorBase):
         try:
             return int(self.start_time_ms+(float(fields[0])*1000))
         except ValueError:
-            self.logger.error("SUBTEST PARSE ERROR")
             self.logger.exception("timestamp parse error: {}".format(line))
             return None
 
@@ -64,7 +65,7 @@ class FuncTestLogParser(JenkinsAggregatorBase):
                     cur_subtest['result'] = "Error"
                     cur_subtest['reason'] = " ".join(fields[3:])
                     continue
-                elif fields[1] == "SUBTEST_RESULT:":
+                elif fields[1] == "SUBTEST_RESULT:" or fields[1] == "TESTCASE_RESULT:":
                     cur_subtest['result'] = " ".join(fields[3:])
                     continue
                 else:
@@ -74,12 +75,10 @@ class FuncTestLogParser(JenkinsAggregatorBase):
                         cur_subtest['result'] = " ".join(fields[3:]) # XXXrs
                         continue
 
-            if fields[1] == "SUBTEST_START:":
-                #print(line)
+            if fields[1] == "SUBTEST_START:" or fields[1] == "TESTCASE_START:":
                 if cur_subtest is not None:
-                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
-                            "nested SUBTEST_START\n{}: {}".format(lnum, line))
+                            "nested TEST_START\n{}: {}".format(lnum, line))
 
                 test_name = fields[2]
                 test_id = MongoDB.encode_key(test_name)
@@ -88,18 +87,15 @@ class FuncTestLogParser(JenkinsAggregatorBase):
                                'start_time_ms': self._get_timestamp_ms(fields=fields)}
                 continue
 
-            if fields[1] == "SUBTEST_END:":
-                #print(line)
+            if fields[1] == "SUBTEST_END:" or fields[1] == "TESTCASE_END:":
                 if cur_subtest is None:
-                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
-                            "SUBTEST_END before SUBTEST_START\n{}: {}"
+                            "TEST_END before TEST_START\n{}: {}"
                             .format(lnum, line))
 
                 if fields[2] != cur_subtest['name']:
-                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
-                            "unmatched SUBTEST_END for {} while cur_subtest {}\n{}: {}"
+                            "unmatched TEST_END for {} while cur_subtest {}\n{}: {}"
                             .format(fields[2], cur_subtest, lnum, line))
 
                 ts_ms = self._get_timestamp_ms(fields=fields)
@@ -120,11 +116,9 @@ class FuncTestLogParser(JenkinsAggregatorBase):
                 try:
                     cnt = int(fields[2])
                 except ValueError:
-                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
                             "non-integer NumTests value\n{}: {}".format(lnum, line))
                 if cnt > 1:
-                    self.logger.error("SUBTEST PARSE ERROR")
                     raise FuncTestLogParserException(
                             "unexpected NumTests value\n{}: {}".format(lnum, line))
                 if cnt == 0:
@@ -137,7 +131,7 @@ class FuncTestLogParser(JenkinsAggregatorBase):
         try:
             return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
         except:
-            self.logger.error("SUBTEST PARSE ERROR")
+            self.logger.error("TEST PARSE ERROR")
             raise
 
 

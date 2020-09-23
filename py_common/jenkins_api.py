@@ -91,6 +91,18 @@ class JenkinsJobInfo(object):
             self.logger.error(err)
             raise JenkinsApiError(err)
 
+    def first_build_number(self):
+        """
+        Get the first known build number for a job.
+        """
+        first_build = self.data.get('firstBuild', None)
+        if not first_build:
+            self.logger.debug("no first build available")
+            return None
+        bnum = first_build.get('number', None)
+        self.logger.debug("return: {}".format(bnum))
+        return bnum
+
     def last_build_number(self):
         """
         Get the last known build number for a job.
@@ -350,10 +362,15 @@ if __name__ == '__main__':
     jobs = japi.list_jobs()
     print("All jobs: {}".format(jobs))
 
-    """
     jji = japi.get_job_info(job_name="SqlScaleTest")
     print(jji)
+    first_build = jji.first_build_number()
+    print("First build: {}".format(first_build))
     last_build = jji.last_build_number()
+    print("Last build: {}".format(last_build))
+
+
+    """
     jbi = japi.get_build_info(job_name = "SqlScaleTest",
                               build_number = last_build)
     print(jbi.console())

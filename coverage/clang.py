@@ -467,13 +467,14 @@ class ClangCoverageDir(object):
 class ClangCoverageAggregator(JenkinsAggregatorBase):
 
     def __init__(self, *, job_name,
+                          agg_name,
                           coverage_file_name,
                           artifacts_root):
 
         self.logger = logging.getLogger(__name__)
         self.coverage_file_name = coverage_file_name
         self.artifacts_root = artifacts_root
-        super().__init__(job_name=job_name)
+        super().__init__(job_name=job_name, agg_name=agg_name)
 
     def update_build(self, *, bnum, jbi, log, test_mode=False):
 
