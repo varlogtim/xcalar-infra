@@ -301,8 +301,7 @@ class JenkinsJobAggregators(object):
         unseen = self.job_meta_coll.unseen_builds(first=jenkins_first, last=jenkins_last)
         updated = self._do_updates(builds=unseen[:self.builds_max], force_default_job_update=force_default_job_update)
 
-        #extra = self.builds_max - updated
-        extra = 5
+        extra = self.builds_max - updated
 
         # We can do up to "extra" reparse.
         if extra > 0:

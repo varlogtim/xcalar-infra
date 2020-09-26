@@ -126,7 +126,9 @@ if __name__ == "__main__":
 
     # sub-blocks to extract from build data if they exist
 
-    sub_blocks = ['functest_subtests',
+    sub_blocks = ['compile_options',
+                  'analyzed_cores',
+                  'functest_subtests',
                   'pytest_subtests',
                   'test_jdbc_subtests',
                   'xc_test_harness_subtests',
