@@ -152,7 +152,14 @@ class JenkinsJobDataCollection(object):
         Store the passed data, or no-data marker if data is None
         """
         if data is None:
-            self.coll.insert({'_id': bnum, 'NODATA':True})
+            try:
+                self.coll.insert({'_id': bnum, 'NODATA':True})
+            except DuplicateKeyError as e:
+                # Either we're "fixing" old issues with failing to store
+                # NODATA entries in the meta index all_builds, or we're
+                # potentially overwriting real data with NODATA.  Just don't.
+                self.logger.error("attempting to store NODATA at duplicate bnum {}"
+                                  .format(bnum))
             return
 
         if is_reparse:
@@ -254,9 +261,6 @@ class JenkinsJobMetaCollection(object):
         is_reparse is here for consistency with other similar
         index/store methods, but is not presently used.
         """
-        if not data:
-            return # Nothing to do
-
         # Add to all_builds list
         self.coll.find_one_and_update({'_id': 'all_builds'},
                                       {'$addToSet': {'builds': bnum}},
@@ -267,6 +271,9 @@ class JenkinsJobMetaCollection(object):
 
         # Remove any reparse entry
         self.cancel_reparse(bnum=bnum)
+
+        if not data:
+            return # Nothing more to do.
 
         # If we have branch data, add to the builds-by-branch list(s)
         git_branches = data.get('git_branches', {})

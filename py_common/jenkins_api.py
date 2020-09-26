@@ -136,8 +136,9 @@ class JenkinsBuildInfo(object):
                                 job_name = self.job_name,
                                 build_number = self.build_number)
             if not self.data:
-                self.logger.info("no build data returned, using test data")
-                self.data = self.test_data
+                if self.test_data:
+                    self.logger.info("no build data returned, using test data")
+                    self.data = self.test_data
         except Exception as e:
             if not self.test_data:
                 raise e from None
