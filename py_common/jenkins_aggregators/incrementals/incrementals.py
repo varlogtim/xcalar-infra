@@ -27,18 +27,10 @@ cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.WARNING},
 # It's log, it's log... :)
 logging.basicConfig(level=cfg.get('LOG_LEVEL'),
                     format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
-                    handlers=[logging.StreamHandler()])
+                    handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger(__name__)
 
 JMDB = JenkinsMongoDB()
-
-def ts_to_year_month(*, ts):
-    """
-    Returns (<year>, <month>)
-        where <year> is four-digit year and <month> is "00" through "12"
-    """
-    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
-    return ("{}".format(dt.year), "{:02d}".format(dt.month))
 
 job_data_collections = {}
 def get_job_data_collection(*, job_name):
@@ -46,10 +38,14 @@ def get_job_data_collection(*, job_name):
         job_data_collections[job_name] = JenkinsJobDataCollection(job_name=job_name, jmdb=JMDB)
     return job_data_collections[job_name]
 
-def write_data(*, outdir, year, month, data):
+def write_data(*, outdir, year, month, day=None, data):
     for key,item in data.items():
-        os.makedirs(os.path.join(outdir, year, month), exist_ok=True)
-        outfile = os.path.join(outdir, year, month, "{}.json".format(key))
+        if day is not None:
+            os.makedirs(os.path.join(outdir, year, month, day), exist_ok=True)
+            outfile = os.path.join(outdir, year, month, day, "{}.json".format(key))
+        else:
+            os.makedirs(os.path.join(outdir, year, month), exist_ok=True)
+            outfile = os.path.join(outdir, year, month, "{}.json".format(key))
         logger.info("writing incremental: {}".format(outfile))
         with open(outfile, "w+") as fp:
             fp.write(json.dumps(item))
@@ -63,28 +59,51 @@ if __name__ == "__main__":
     argParser = argparse.ArgumentParser()
     argParser.add_argument('--outdir', required=True, type=str,
                                 help='path to incrementals directory')
-    argParser.add_argument('--prior_months', default=0, type=int,
-                                help='process for this many additional prior months')
+    argParser.add_argument('--daily', action='store_true',
+                                help='incremental period is daily')
+    argParser.add_argument('--monthly', action='store_true',
+                                help='incremental period is monthly')
+    argParser.add_argument('--prior', default=0, type=int,
+                                help='process for this many additional prior intervals')
     args = argParser.parse_args()
 
-    now = datetime.now(timezone.utc)
 
-    if args.prior_months > 0:
-        prior = now-relativedelta(months=args.prior_months)
+    if not args.daily and not args.monthly:
+        raise ValueError("one of --daily or --monthly is required")
+    if args.daily and args.monthly:
+        raise ValueError("only one of --daily or --monthly is allowed")
+
+    now = datetime.now(timezone.utc)
+    start_year = now.year
+    start_month = now.month
+
+    if args.monthly:
+        start_day = 1
+    else:
+        start_day = now.day
+
+    if args.daily and args.prior > 0:
+        prior = now-relativedelta(days=args.prior)
         start_year = prior.year
         start_month = prior.month
-    else:
-        start_year = now.year
-        start_month = now.month
+        start_day = prior.day
+    elif args.monthly and args.prior > 0:
+        prior = now-relativedelta(months=args.prior)
+        start_year = prior.year
+        start_month = prior.month
 
-    # Midnight, first day of the start month/year
-    start = datetime(start_year, start_month, 1, hour=0, minute=0, second=0, tzinfo=timezone.utc)
+    # Start is 00:00:00 of the start_day
+    start = datetime(start_year, start_month, start_day,
+                     hour=0, minute=0, second=0,
+                     tzinfo=timezone.utc)
     logger.debug("start: {}".format(start))
     start_ts = start.timestamp()
     logger.debug("start_ts: {}".format(start_ts))
 
     # End is now
-    end = datetime(now.year, now.month, now.day, hour=now.hour, minute=now.minute, second=now.second, tzinfo=timezone.utc)
+    end = datetime(now.year, now.month, now.day,
+                   hour=now.hour, minute=now.minute, second=now.second,
+                   tzinfo=timezone.utc)
     logger.debug("end: {}".format(end))
     end_ts = end.timestamp()
     logger.debug("end_ts: {}".format(end_ts))
@@ -92,6 +111,8 @@ if __name__ == "__main__":
     """
     Layout of output directory will be:
         /some/root/<year>/<month>/<data_type>.json
+        or
+        /some/root/<year>/<month>/<day>/<data_type>.json
 
         <data_type> is:
             - builds - basic per-build data
@@ -138,6 +159,7 @@ if __name__ == "__main__":
 
     cur_year = None
     cur_month = None
+    cur_day = None
     cur_data = {}
     flush = False
 
@@ -147,7 +169,10 @@ if __name__ == "__main__":
         if not ts_ms:
             continue
 
-        year, month = ts_to_year_month(ts=ts_ms/1000)
+        dt = datetime.fromtimestamp(ts_ms/1000, tz=timezone.utc)
+        year = "{}".format(dt.year)
+        month = "{:02d}".format(dt.month)
+        day = "{:02d}".format(dt.day)
 
         if not cur_year:
             cur_year = year
@@ -157,13 +182,21 @@ if __name__ == "__main__":
             cur_month = month
         flush = month != cur_month
 
+        if args.daily:
+            if not cur_day:
+                cur_day = day
+            flush = cur_day != day
+
         if flush and cur_data:
             write_data(outdir=args.outdir,
                        year=cur_year,
                        month=cur_month,
+                       day=cur_day,
                        data=cur_data)
             cur_year = year
             cur_month = month
+            if args.daily:
+                cur_day = day
             cur_data = {}
             flush = False
 
@@ -181,4 +214,5 @@ if __name__ == "__main__":
         write_data(outdir=args.outdir,
                    year=cur_year,
                    month=cur_month,
+                   day=cur_day,
                    data=cur_data)
