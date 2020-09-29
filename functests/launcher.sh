@@ -45,6 +45,10 @@ sleep 30
 find /var/opt/xcalar -type f -not -path '/var/opt/xcalar/support/*' -delete
 find /dev/shm -name "xcalar-*" -delete
 
+# ENG-9870 possible race condition restarting usrnode, cannot bind socket/port
+# adding netstat before restarting the cluster
+netstat -anop
+
 if [ "$CGROUPS_ENABLED" != "false" ]; then
     cgexec -g cpu,cpuacct,memory:${CGROUP_XCALAR_MW} --sticky $XLRDIR/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
 else
