@@ -366,22 +366,31 @@ class JenkinsMongoDB(object):
             operator = '$unset'
         else:
             expire += ttl
-        _id = "{}_alerts_expire".format(alert_group)
-        return coll.find_one_and_update({'_id': _id}, {operator:{alert_id: int(expire)}},
+
+        # Make it safe
+        alert_group = alert_group.replace(':', '__colon__')
+        alert_id = alert_id.replace(':', '__colon__')
+        grp_id = ":".join([alert_group, alert_id])
+        grp_id = MongoDB.encode_key(grp_id)
+        return coll.find_one_and_update({'_id': 'alerts_ttl'}, {operator:{grp_id: int(expire)}},
                                         upsert=True, return_document = ReturnDocument.AFTER)
 
-    def alerts_expired(self, *, alert_group):
+    def alerts_expired(self):
         coll = self.jenkins_db().collection('_jenkins_meta')
-        _id = "{}_alerts_expire".format(alert_group)
-        doc = coll.find_one({'_id': _id})
+        doc = coll.find_one({'_id': 'alerts_ttl'})
         expired = []
         if not doc:
             return expired
         doc.pop('_id')
         now = int(time.time())
-        for alert_id,expire in doc.items():
-            if expire <= now:
-                expired.append(alert_id)
+        for grp_id,expire in doc.items():
+            if expire > now:
+                continue
+            grp_id = MongoDB.decode_key(grp_id)
+            alert_group, alert_id = grp_id.split(':')
+            alert_group = alert_group.replace('__colon__', ':')
+            alert_id = alert_id.replace('__colon__', ':')
+            expired.append([alert_group, alert_id])
         return expired
 
 if __name__ == '__main__':

@@ -490,30 +490,14 @@ HERE
         data = <<HERE
 ---
 groups:
-- name: ubm_regression
+- name: alert_test
   rules:
-  - alert: UBMRegression
-    expr: ubm_regression > 0
-- name: sql_precheckin_regression
+  - alert: AlertTest
+    expr: alert_test > 0
+- name: corefile_detected
   rules:
-  - alert: SQLPrecheckinTPCHRegression
-    expr: sql_precheckin_tpch_regression > 0
-- name: sql_scale_tpds_regression
-  rules:
-  - alert: SQLScaleTPCDSRegression
-    expr: sql_scale_tpcds_regression > 0
-- name: sql_scale_tpch_regression
-  rules:
-  - alert: SQLScaleTPCHRegression
-    expr: sql_scale_tpch_regression > 0
-- name: xce_coverage_regression
-  rules:
-  - alert: XCECoverageRegression
-    expr: xce_coverage_regression > 0
-- name: xd_coverage_regression
-  rules:
-  - alert: XDCoverageRegression
-    expr: xd_coverage_regression > 0
+  - alert: CorefileDetected
+    expr: corefile_detected > 0
 HERE
       }
 
