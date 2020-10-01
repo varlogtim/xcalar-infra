@@ -98,12 +98,6 @@ def test_jdbc_cmds(*, tpctype, argsdict, imd):
 
     return (load_cmd, cmd)
 
-def subproc_start(*, cmd):
-    logger.info("START: {}".format(cmd))
-    args = ["unbuffer"]
-    args.extend(shlex.split(cmd))
-    return subprocess.Popen(args)
-
 def subprocs_done(*, subprocs):
     done = True
     for info in subprocs:
@@ -198,10 +192,10 @@ if __name__ == '__main__':
 
     subprocs = []
     for idx,cmd in enumerate(load_cmds):
-        p = subproc_start(cmd=cmd)
+        logger.debug("start load cmd: {}".format(cmd))
+        p = subprocess.Popen(shlex.split(cmd))
         subprocs.append({'proc': p, 'rc': None})
     while not SHUTDOWN and not subprocs_done(subprocs=subprocs):
-        #logger.debug("sleeping...")
         time.sleep(1)
     if SHUTDOWN:
         subprocs_stop(subprocs=subprocs)
@@ -213,10 +207,10 @@ if __name__ == '__main__':
 
     subprocs = []
     for idx,cmd in enumerate(test_cmds):
-        p = subproc_start(cmd=cmd)
+        logger.debug("start test cmd: {}".format(cmd))
+        p = subprocess.Popen(shlex.split(cmd))
         subprocs.append({'proc': p, 'rc': None})
     while not SHUTDOWN and not subprocs_done(subprocs=subprocs):
-        #logger.debug("sleeping...")
         time.sleep(1)
     if SHUTDOWN:
         subprocs_stop(subprocs=subprocs)
