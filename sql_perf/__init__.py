@@ -25,7 +25,6 @@ from py_common.env_configuration import EnvConfiguration
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
 from py_common.jenkins_aggregators import JenkinsJobMetaCollection
-from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
 from py_common.mongo import MongoDB, JenkinsMongoDB
 from py_common.sorts import nat_sort
 

@@ -31,6 +31,7 @@ from py_common.jenkins_aggregators import JenkinsJobPostprocessor
 from py_common.jenkins_aggregators import JenkinsAggregatorDataUpdateTemporaryError
 from py_common.jenkins_aggregators import AggregatorPlugins
 from py_common.jenkins_aggregators import PostprocessorPlugins
+from py_common.jenkins_aggregators.update.alerting import AlertManager
 from py_common.jenkins_api import JenkinsApi
 from py_common.mongo import JenkinsMongoDB, MongoDBKeepAliveLock, MongoDBKALockTimeout
 from py_common.sorts import nat_sort
@@ -347,9 +348,15 @@ if len(args.test_builds):
 jmdb = JenkinsMongoDB()
 logger.info("jmdb {}".format(jmdb))
 
+try:
+    # Clear any expired alerts
+    AlertManager().clear_expired()
+except Exception:
+    logger.error("Exception while clearing expired alerts",
+                 exc_info=True)
+
 process_lock = None
 try:
-
     aggregator_plugins = AggregatorPlugins()
     postprocessor_plugins = PostprocessorPlugins()
 

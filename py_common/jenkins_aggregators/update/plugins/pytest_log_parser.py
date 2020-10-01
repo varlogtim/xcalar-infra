@@ -176,8 +176,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
         try:
             return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
         except:
-            self.logger.error("TEST PARSE ERROR")
-            raise
+            self.logger.error("LOG PARSE ERROR", exc_info=True)
 
 
 # In-line "unit test"

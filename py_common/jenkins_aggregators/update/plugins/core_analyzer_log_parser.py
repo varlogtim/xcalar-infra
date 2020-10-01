@@ -15,6 +15,7 @@ if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
+from py_common.mongo import MongoDB
 
 AGGREGATOR_PLUGINS = [{'class_name': 'CoreAnalyzerLogParser',
                        'job_names': ['__ALL__']}]
@@ -87,7 +88,7 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
                     raise CoreAnalyzerLogParserException(
                             "Mismatch corefile_name {} {} expected {}"
                             .format(lnum, line, cur_core['corefile_name']))
-                key = cur_core.pop('corefile_name')
+                key = MongoDB.encode_key(cur_core.get('corefile_name'))
                 cores[key] = cur_core
                 cur_core = None
                 continue
@@ -99,8 +100,7 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
         try:
             return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
         except:
-            self.logger.error("TEST PARSE ERROR")
-            raise
+            self.logger.error("LOG PARSE ERROR", exc_info=True)
 
 
 # In-line "unit test"
