@@ -49,7 +49,7 @@ if [ "${!WRAP_USE_DOCKER}" != true ] && ALLPROG=("$(which $PROG | grep -v "$(rea
 fi
 safe_mkdir "$PHOME"
 safe_mkdir "$(dirname "$PLOG")"
-test -w "$PLOG" || sudo chown "$(id -u):$(id -g)" "$PLOG"
+test -e "$PLOG" && ( test -w "$PLOG" || sudo chown "$(id -u):$(id -g)" "$PLOG" )
 touch "$PLOG"
 
 

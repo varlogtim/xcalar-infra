@@ -14,7 +14,6 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
-sudo chown jenkins:jenkins $HOME/.config
 source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
 
@@ -54,7 +53,8 @@ funcstatsd() {
 
 export http_proxy=
 
-sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
+# ENG-10020 commented this out since we moved the test into containers
+#sudo sysctl -w net.ipv4.tcp_keepalive_time=60 net.ipv4.tcp_keepalive_intvl=30 net.ipv4.tcp_keepalive_probes=100
 
 gitsha=$(gitSha "$cluster")
 

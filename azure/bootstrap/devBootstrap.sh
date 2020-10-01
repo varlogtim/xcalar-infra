@@ -255,6 +255,15 @@ setup_instancestore () {
     echo "LV_SWAP_SIZE=MEMSIZE2X" >> /etc/sysconfig/ephemeral-disk
 
     sed -i 's/^ResourceDisk.Format=y/ResourceDisk.Format=n/g' /etc/waagent.conf
+
+    echo "Remove fstab and systemd unit for default /mnt/resource"
+    systemctl disable --now mnt-resource.mount
+    systemctl mask mnt-resource.mount
+    sed -i "/resource/d" /etc/fstab
+    # we're creating our own swap partition
+    systemctl disable --now temp-disk-swapfile.mount
+    systemctl mask temp-disk-swapfile.mount
+
     DISK="$1"
     INSTANCESTORE=$2
     if test -b "${DISK}1"; then
