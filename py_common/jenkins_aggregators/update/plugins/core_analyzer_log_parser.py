@@ -15,6 +15,7 @@ if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
 
 from py_common.jenkins_aggregators import JenkinsAggregatorBase
+from py_common.jenkins_aggregators.update.alerting import AlertManager
 from py_common.mongo import MongoDB
 
 AGGREGATOR_PLUGINS = [{'class_name': 'CoreAnalyzerLogParser',
@@ -98,7 +99,17 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
 
     def update_build(self, *, bnum, jbi, log, test_mode=False):
         try:
-            return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+            data = self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+            cores = data.get('analyzed_cores', None)
+            if cores:
+                alert_id="{}:{}".format(self.job_name, bnum)
+                description="Jenkins job {} build {} detected core files"\
+                            .format(self.job_name, bnum)
+                AlertManager().critical(alert_group="corefile_detected",
+                                        alert_id=alert_id,
+                                        description=description,
+                                        ttl=3600) # ample time to be noticed
+            return data
         except:
             self.logger.error("LOG PARSE ERROR", exc_info=True)
 

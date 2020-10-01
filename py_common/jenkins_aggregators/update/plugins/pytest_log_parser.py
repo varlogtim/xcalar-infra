@@ -110,7 +110,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
                             break
 
                 if subtest_id not in subtest_data:
-                    self.logger.error("TEST PARSE ERROR")
+                    self.logger.error("LOG PARSE ERROR")
                     self.logger.warn("subtest_id {} in durations but not seen before"
                                      .format(subtest_id))
                     continue
@@ -143,7 +143,7 @@ class PyTestLogParser(JenkinsAggregatorBase):
             name = " ".join(fields[1:result_idx])
             subtest_id = MongoDB.encode_key(name)
             if not len(subtest_id):
-                self.logger.error("TEST PARSE ERROR")
+                self.logger.error("LOG PARSE ERROR")
                 self.logger.warn("missing subtest_id: {}".format(line))
                 continue
 
