@@ -18,7 +18,7 @@ sys.path.append(os.environ.get('XLRINFRADIR', ''))
 from py_common.env_configuration import EnvConfiguration
 from py_common.jenkins_aggregators import JenkinsAllJobIndex
 from py_common.jenkins_aggregators import JenkinsJobDataCollection
-from py_common.mongo import JenkinsMongoDB
+from py_common.mongo import MongoDB, JenkinsMongoDB
 
 cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.WARNING},
                         'JENKINS_HOST': {'default': None},
@@ -207,6 +207,12 @@ if __name__ == "__main__":
 
         for sub in sub_blocks:
             if sub in build_data:
+                if sub == 'analyzed_cores':
+                    fixed = {}
+                    for key,item in build_data[sub].items():
+                        key = MongoDB.decode_key(key)
+                        fixed[key] = item
+                    build_data[sub] = fixed
                 cur_data.setdefault(sub, {}).setdefault(job_name, {})[build_number] = build_data.pop(sub)
         cur_data.setdefault('builds', {}).setdefault(job_name, {})[build_number] = build_data
 
