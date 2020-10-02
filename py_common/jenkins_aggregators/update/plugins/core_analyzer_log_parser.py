@@ -102,9 +102,10 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
             data = self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
             cores = data.get('analyzed_cores', None)
             if cores:
-                alert_id="{}:{}".format(self.job_name, bnum)
+                job_name = jbi.job_name
+                alert_id="{}:{}".format(job_name, bnum)
                 description="Jenkins job {} build {} detected core files"\
-                            .format(self.job_name, bnum)
+                            .format(job_name, bnum)
                 AlertManager().critical(alert_group="corefile_detected",
                                         alert_id=alert_id,
                                         description=description,

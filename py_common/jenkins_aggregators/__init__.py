@@ -525,6 +525,8 @@ class JenkinsAggregatorBase(ABC):
                                 Default is False.
         """
         self.logger = logging.getLogger(__name__)
+        # XXXrs - The job name is not reliable since when we configure
+        #         for __ALL__ jobs, that's what shows up here.
         self.job_name = job_name
         self.agg_name = agg_name
         self.send_log_to_update = send_log_to_update
@@ -605,6 +607,8 @@ class JenkinsPostprocessorBase(ABC):
         """
         self.logger = logging.getLogger(__name__)
         self.name = name
+        # XXXrs - The job name is not reliable since when we configure
+        #         for __ALL__ jobs, that's what shows up here.
         self.job_name = job_name
 
     @abstractmethod
