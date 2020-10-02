@@ -1,15 +1,25 @@
 #!/bin/bash
-set -e
+set -ex
 
 if [ $(id -u) != 0 ]; then
 	echo >&2 "ERROR: Must run as root"
 	exit 3
 fi
 
-CUDA_VERSION=${CUDA_VERSION:-10}
+CUDA_VERSION=${CUDA_VERSION:-10.1}
 BASE_URL="${BASE_URL:-https://storage.googleapis.com/repo.xcalar.net/deps/nvidia}"
-CUDA_COMPONENTS="${CUDA_COMPONENTS:-cuda_10.1.243_418.87.00_linux.run cudnn-10.0-linux-x64-v7.6.5.32.tgz}"
-PYTHON_PKGS="${PYTHON_PKGS:-tensorflow-gpu==1.13.1 pandas==0.22 keras==2.4.3}"
+case "$CUDA_VERSION" in
+    10.1)
+        CUDA_COMPONENTS="${CUDA_COMPONENTS:-cuda_10.1.243_418.87.00_linux.run cudnn-10.0-linux-x64-v7.6.5.32.tgz}"
+        PYTHON_PKGS="${PYTHON_PKGS:-tensorflow-gpu==1.13.1 pandas==0.22 keras==2.4.3}"
+        ;;
+    11.1)
+        CUDA_COMPONENTS="${CUDA_COMPONENTS:-cuda_11.1.0_455.23.05_linux.run cudnn-10.0-linux-x64-v7.6.5.32.tgz}"
+        PYTHON_PKGS="${PYTHON_PKGS:-tensorflow>=2.0 pandas==0.22 keras==2.4.3}"
+        ;;
+    *) echo >&2 "ERROR: Don't know how to install CUDA $CUDA_VERSION";;
+esac
+
 
 ## Install cuda deps
 TMP=$(mktemp -d -t cuda.XXXXXX)
@@ -21,8 +31,8 @@ for ii in $CUDA_COMPONENTS; do
 		cuda_*.run)
 			yum install -y dkms kernel-devel
 			bash "$ii" --silent --toolkit --driver
-			BN=$(basename $(readlink -f /usr/local/cuda))
-			echo "$(readlink -f /usr/local/cuda)/lib64" > /etc/ld.so.conf.d/${BN}.conf
+			BN=$(basename $(readlink -f /usr/local/cuda) | sed 's/\./-/g')
+            test -e /etc/ld.so.conf.d/${BN}.conf || echo "$(readlink -f /usr/local/cuda/lib64)" > /etc/ld.so.conf.d/${BN}.conf
 			ldconfig
 			;;
 		cudnn*.tgz)
@@ -40,5 +50,6 @@ set +e
 /usr/local/bin/nvidia-check.sh
 set -e
 ## Install new packages
-/opt/xcalar/bin/python3 -m pip install $PYTHON_PKGS \
-	-c <(sed '/tensorflow/d; /pandas/d' /opt/xcalar/share/doc/xcalar-python36-3.*/requirements.txt)
+/opt/xcalar/bin/python3 -m pip install --no-cache-dir -U pip
+/opt/xcalar/bin/python3 -m pip install --no-cache-dir $PYTHON_PKGS \
+	-c <(sed '/tensorflow/d; /pandas/d' /opt/xcalar/share/doc/xcalar-python3*/requirements.txt)
