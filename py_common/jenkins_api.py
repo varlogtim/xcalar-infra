@@ -64,10 +64,10 @@ class JenkinsApiError(Exception):
     pass
 
 class JenkinsREST(object):
-    def __init__(self, *, host):
+    def __init__(self, *, host, url_root):
         self.logger = logging.getLogger(__name__)
         self.host = host
-        self.url_root="https://{}".format(host)
+        self.url_root=url_root
 
     def cmd(self, *, uri):
         url = "{}{}".format(self.url_root, uri)
@@ -124,6 +124,7 @@ class JenkinsBuildInfo(object):
         self.logger = logging.getLogger(__name__)
         self.job_name = job_name
         self.build_number = build_number
+        self.build_url = "{}/job/{}/{}".format(japi.url_root, job_name, build_number)
         self.japi = japi
         self.test_data = test_data
         self.load()
@@ -265,7 +266,8 @@ class JenkinsApi(object):
     def __init__(self, *, host):
         self.logger = logging.getLogger(__name__)
         self.host = host
-        self.rest = JenkinsREST(host=host)
+        self.url_root="https://{}".format(host)
+        self.rest = JenkinsREST(host=host, url_root=self.url_root)
         self.job_info_cache = {}
         self.build_info_cache = {}
 

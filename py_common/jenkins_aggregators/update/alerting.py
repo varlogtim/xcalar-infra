@@ -20,30 +20,50 @@ class AlertManager(object):
         self.logger = logging.getLogger(__name__)
         self.jmdb = JenkinsMongoDB()
 
-    def _set_alert(self, *, alert_group, alert_id, description, ttl, severity):
+    def _set_alert(self, *, alert_group, alert_id, description, severity, ttl, labels=None):
         self.logger.debug("alert_id {}".format(alert_id))
+        self.logger.debug("description {}".format(description))
         self.logger.debug("severity {}".format(severity))
-        self.logger.debug("decription {}".format(description))
+        self.logger.debug("labels {}".format(labels))
         self.logger.debug("ttl {}".format(ttl))
+
         registry = CollectorRegistry()
-        g = Gauge(alert_group, description, ['severity', 'description'], registry=registry)
-        g.labels(severity=severity, description=description).set(1)
+
+        label_names = ['description', 'severity']
+        if labels is not None:
+            label_names.extend(list(labels.keys()))
+        else:
+            labels = {}
+        labels['description'] = description
+        labels['severity'] = severity
+
+        self.logger.debug("label_names: {}".format(label_names))
+        self.logger.debug("labels: {}".format(labels))
+
+        g = Gauge(alert_group, description, label_names, registry=registry)
+        g.labels(**labels).set(1)
         push_to_gateway(CFG.get('PUSHGATEWAY_URL'), job=alert_id, registry=registry)
         self.jmdb.alert_ttl(alert_group=alert_group, alert_id=alert_id, ttl=ttl)
 
-    def warning(self, *, alert_group, alert_id, description, ttl=ONE_DAY):
+    def info(self, *, alert_group, alert_id, description, ttl=ONE_DAY, labels=None):
+        args = locals()
+        args.pop('self')
+        args['severity'] = "info"
+        self._set_alert(**args)
+
+    def warning(self, *, alert_group, alert_id, description, ttl=ONE_DAY, labels=None):
         args = locals()
         args.pop('self')
         args['severity'] = "warning"
         self._set_alert(**args)
 
-    def error(self, *, alert_group, alert_id, description, ttl=ONE_DAY):
+    def error(self, *, alert_group, alert_id, description, ttl=ONE_DAY, labels=None):
         args = locals()
         args.pop('self')
         args['severity'] = "error"
         self._set_alert(**args)
 
-    def critical(self, *, alert_group, alert_id, description, ttl=ONE_DAY):
+    def critical(self, *, alert_group, alert_id, description, ttl=ONE_DAY, labels=None):
         args = locals()
         args.pop('self')
         args['severity'] = "critical"
@@ -101,6 +121,10 @@ if __name__ == '__main__':
                 description="Some warning alert", ttl=ttl)
     mgr.error(alert_group="alert_test", alert_id="alert3",
               description="Some error alert", ttl=ttl)
+    mgr.info(alert_group="alert_test", alert_id="alert4",
+             description="Info alert with extra labels", ttl=ttl,
+             labels={'foo':'bar', 'binky':'bongo', 'mary': 'had a little lamb'})
+
     sleep_seconds = ttl+5
     logger.debug("sleeping {}s...".format(sleep_seconds))
     time.sleep(sleep_seconds)

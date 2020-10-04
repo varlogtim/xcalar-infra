@@ -100,8 +100,24 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
     def update_build(self, *, bnum, jbi, log, test_mode=False):
         try:
             data = self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
-            cores = data.get('analyzed_cores', None)
-            if cores:
+        except:
+            self.logger.error("LOG PARSE ERROR", exc_info=True)
+
+        cores = data.get('analyzed_cores', None)
+        if cores:
+            send_alert = True
+            # Don't alert if we're running pre-checkin
+            for key,val in jbi.parameters().items():
+                if "REFSPEC" in key and "refs/changes" in val:
+                    send_alert = False
+                    break
+            if send_alert:
+                labels = {'URL':jbi.build_url}
+                for key,item in cores.items():
+                    label_name = item.get('corefile_name', 'UnknownName')
+                    label_name = label_name.replace('.', '_')
+                    labels[label_name] = item.get('term_with', 'UnknownCause')
+
                 job_name = jbi.job_name
                 alert_id="{}:{}".format(job_name, bnum)
                 description="Jenkins job {} build {} detected core files"\
@@ -109,10 +125,9 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
                 AlertManager().critical(alert_group="corefile_detected",
                                         alert_id=alert_id,
                                         description=description,
+                                        labels = labels,
                                         ttl=3600) # ample time to be noticed
-            return data
-        except:
-            self.logger.error("LOG PARSE ERROR", exc_info=True)
+        return data
 
 
 # In-line "unit test"
