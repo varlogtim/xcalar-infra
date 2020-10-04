@@ -174,7 +174,7 @@ if [ -n "$INSTALLER_URL" ]; then
     MD_ARGS+=",installer_url=$INSTALLER_URL"
 fi
 if [ -z "$NFS_SHARE" ]; then
-    NFS_SHARE="nfs:/srv/share/nfs/$CLUSTER"
+    NFS_SHARE="nfs:/srv/share/nfs/cluster/$CLUSTER"
     gcloud compute ssh nfs --ssh-flag="-tt" --command 'sudo mkdir -m 1777 -p /srv/share/nfs/cluster/'$CLUSTER
 fi
 if [ "$LOCAL_SSD" != 0 ]; then
