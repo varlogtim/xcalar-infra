@@ -30,7 +30,7 @@ base: gcp.json installer.json
 		gcp.json
 
 gpu: gcp.json installer.json
-	packer.io build $(FORCE) -var account_file=$(HOME)/.config/gcloud/abakshi-svc.json \
+	packer.io build $(FORCE) \
 		-var installer_url="$(INSTALLER_URL)" \
 		-var packer_dir=$(TLD)/packer \
 		-var disk_size=60 \
@@ -41,7 +41,7 @@ gpu: gcp.json installer.json
 		gcp.json
 
 std: gcp.json installer.json
-	packer.io build $(FORCE) -var account_file=$(HOME)/.config/gcloud/abakshi-svc.json \
+	packer.io build $(FORCE) \
 		-var installer_url="$(INSTALLER_URL)" \
 		-var packer_dir=$(TLD)/packer \
 		-var disk_size=60 \
@@ -52,7 +52,7 @@ std: gcp.json installer.json
 		gcp.json
 
 all: gcp.json installer.json
-	packer.io build $(FORCE) -var account_file=$(HOME)/.config/gcloud/abakshi-svc.json \
+	packer.io build $(FORCE) \
 		-var installer_url="$(INSTALLER_URL)" \
 		-var packer_dir=$(TLD)/packer \
 		-var disk_size=60 \
