@@ -97,6 +97,11 @@ if [[ $NODE_ID -eq 1 ]]; then
       sed -r 's/^[#]?forks.*/forks = 50/' > /etc/ansible/ansible.cfg
 fi
 
+if lspci | grep '3D controller' | grep -q 'NVIDIA'; then
+    echo >&2 "NVIDIA Detected"
+    modprobe -a nvidia || true
+    /usr/local/bin/nvidia-check.sh || true
+fi
 
 until test -e $XLRROOT/config/defaultAdmin.json; do
 	sleep 3

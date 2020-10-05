@@ -58,7 +58,8 @@ die() {
 
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "usage: [-i <installer-url>|--no-installer] [--image-id IMAGE_ID] [--nfs-share share] [-c|--count <count (default: 3)>] [--cluster <cluster (default: $(whoami)-xcalar)>]"
-    echo "      [--config config.cfg] [--startup-script gce-cloud-init.sh] [--license lic] ["
+    echo "      [--disk-size 60] [--disk-type pd-standard] [--local-ssd] [--no-local-ssd] [--nfs-share nfs:/srv/share/nfs/cluster/\$CLUSTER]"
+    echo "      [--config config.cfg] [--gpu nvidia-tesla-(p4|t4|v100)] [--gpu-count 1] [--startup-script gce-cloud-init.sh] [--license lic]"
     exit 0
 fi
 
@@ -80,6 +81,7 @@ LOCAL_SSD=${LOCAL_SSD:-1}
 IMAGE_FAMILY=${IMAGE_FAMILY:-xcalar-el7-std}
 IMAGE_PROJECT=${IMAGE_PROJECT:-$GCE_PROJECT}
 PREEMPTIBLE=${PREEMPTIBLE:-0}
+GPU_COUNT=1
 while [ $# -gt 0 ]; do
     cmd="$1"
     shift
@@ -92,6 +94,8 @@ while [ $# -gt 0 ]; do
         --name) NAME="$1"; shift;;
         -c|--count) COUNT="$1"; shift;;
         --instance-type) INSTANCE_TYPE="$1"; shift;;
+        --gpu) GPU="$1"; shift;;
+        --gpu-count) GPU_COUNT="$1"; shift;;
         --disk-size) DISK_SIZE="$1"; shift;;
         --disk-type) DISK_TYPE="$1"; shift;;
         --image-id) IMAGE="$1"; shift;;
@@ -134,6 +138,20 @@ XCE_XDBSERDESPATH="/ephemeral/data"
 if ! test -e "$CONFIG"; then
     CONFIG=${TMPDIR}/$CLUSTER-config-$$.cfg
     $DIR/../bin/genConfig.sh $CONFIG_TEMPLATE - "${INSTANCES[@]}" >$CONFIG
+fi
+if [ -n "$GPU" ]; then
+    case "$GPU" in
+        nvidia-*) ;;
+        *) echo >&2 "ERROR: Invalid gpu selection: $GPU!"; exit 1;;
+    esac
+    IMAGE_GPU=
+    if ! IMAGE_GPU="$(set -o pipefail; gcloud compute images describe-from-family "$IMAGE_FAMILY" --format=json | jq -r .labels.gpu)"; then
+        die "Must specify GPU enabled image-family"
+    fi
+    if [ -z "$IMAGE_GPU" ]; then
+        die "Must specify GPU enabled image-family"
+    fi
+    ARGS+=(--accelerator count=$GPU_COUNT,type=$GPU --maintenance-policy=TERMINATE)
 fi
 
 if [ -n "$IMAGE_FAMILY" ]; then
