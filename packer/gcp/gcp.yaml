@@ -13,7 +13,7 @@ variables:
   source_image_family: ''
   image_family: 'xcalar'
   gpu: 'nvidia-tesla-t4'
-  cuda_version: '10.1'
+  cuda_version: '10.0'
   installer_url: http://repo.xcalar.net/builds/prod/xcalar-2.3.2-4754-installer
   installer: /netstore/builds/ReleaseCandidates/xcalar-2.3.2-RC16/prod/xcalar-2.3.2-4754-installer
   installer_version: "2.3.2"

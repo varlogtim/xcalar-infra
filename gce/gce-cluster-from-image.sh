@@ -59,7 +59,7 @@ die() {
 if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "usage: [-i <installer-url>|--no-installer] [--image-id IMAGE_ID] [--nfs-share share] [-c|--count <count (default: 3)>] [--cluster <cluster (default: $(whoami)-xcalar)>]"
     echo "      [--disk-size 60] [--disk-type pd-standard] [--local-ssd] [--no-local-ssd] [--nfs-share nfs:/srv/share/nfs/cluster/\$CLUSTER]"
-    echo "      [--config config.cfg] [--gpu nvidia-tesla-(p4|t4|v100)] [--gpu-count 1] [--startup-script gce-cloud-init.sh] [--license lic]"
+    echo "      [--config config.cfg] [--gpu nvidia-tesla-(p4|t4|v100)] [--gpu-count 1] [--startup-script gce-cloud-init.sh] [--license lic] -- EXTRA_GCLOUD_ARGS"
     exit 0
 fi
 
@@ -71,14 +71,12 @@ mkdir -p "$TMPDIR"
 
 CONFIG_TEMPLATE="${CONFIG_TEMPLATE:-$DIR/../bin/template.cfg}"
 COUNT="${COUNT:-3}"
-INSTANCE_TYPE=${INSTANCE_TYPE:-n2-highmem-8}
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 DISK_TYPE="${DISK_TYPE:-pd-standard}"
 DISK_SIZE=${DISK_SIZE:-60}
 NETWORK="${NETWORK:-private}"
 STARTUP_SCRIPT="${STARTUP_SCRIPT:-$DIR/gce-cloud-init.sh}"
 LOCAL_SSD=${LOCAL_SSD:-1}
-IMAGE_FAMILY=${IMAGE_FAMILY:-xcalar-el7-std}
 IMAGE_PROJECT=${IMAGE_PROJECT:-$GCE_PROJECT}
 PREEMPTIBLE=${PREEMPTIBLE:-0}
 GPU_COUNT=1
@@ -93,6 +91,7 @@ while [ $# -gt 0 ]; do
         -i|--installer) INSTALLER="$1"; shift;;
         --name) NAME="$1"; shift;;
         -c|--count) COUNT="$1"; shift;;
+        --machine-type) INSTANCE_TYPE="$1"; shift;;
         --instance-type) INSTANCE_TYPE="$1"; shift;;
         --gpu) GPU="$1"; shift;;
         --gpu-count) GPU_COUNT="$1"; shift;;
@@ -116,6 +115,21 @@ if [ -z "$CLUSTER" ]; then
 fi
 if [ -z "$NAME" ]; then
     NAME=$CLUSTER
+fi
+
+if [ -z "$IMAGE_FAMILY" ]; then
+    if [ -n "$GPU" ]; then
+        IMAGE_FAMILY=xcalar-el7-gpu
+    else
+        IMAGE_FAMILY=xcalar-el7-std
+    fi
+fi
+
+if [ -z "$INSTANCE_TYPE" ] && [[ "$*" =~ custom ]]; then
+    :
+else
+    echo >&2 "WARNING: No --instance-type specified not --custom-*"
+    INSTANCE_TYPE="n1-standard-8"
 fi
 
 MD_ARGS="name=$NAME,cluster=$CLUSTER"
@@ -211,7 +225,7 @@ fi
 say "Launching ${#INSTANCES[*]} instances: ${INSTANCES[*]} .."
 
 gcloud compute instances create "${INSTANCES[@]}" \
-    --machine-type $INSTANCE_TYPE \
+    ${INSTANCE_TYPE:+ --machine-type $INSTANCE_TYPE} \
     --boot-disk-type $DISK_TYPE \
     --boot-disk-size ${DISK_SIZE}GB \
     --network $NETWORK \

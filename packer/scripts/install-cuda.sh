@@ -1,14 +1,19 @@
 #!/bin/bash
 set -ex
 
+DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 if [ $(id -u) != 0 ]; then
 	echo >&2 "ERROR: Must run as root"
 	exit 3
 fi
 
-CUDA_VERSION=${CUDA_VERSION:-10.1}
+CUDA_VERSION=${CUDA_VERSION:-10.0}
 BASE_URL="${BASE_URL:-https://storage.googleapis.com/repo.xcalar.net/deps/nvidia}"
 case "$CUDA_VERSION" in
+    10.0)
+        CUDA_COMPONENTS="${CUDA_COMPONENTS:-cuda_10.0.130_410.48_linux.run cudnn-10.0-linux-x64-v7.6.5.32.tgz}"
+        PYTHON_PKGS="${PYTHON_PKGS:-tensorflow-gpu==1.13.1 pandas==0.22 keras==2.4.3}"
+        ;;
     10.1)
         CUDA_COMPONENTS="${CUDA_COMPONENTS:-cuda_10.1.243_418.87.00_linux.run cudnn-10.0-linux-x64-v7.6.5.32.tgz}"
         PYTHON_PKGS="${PYTHON_PKGS:-tensorflow-gpu==1.13.1 pandas==0.22 keras==2.4.3}"
@@ -44,7 +49,11 @@ done
 cd -
 rm -rf "$TMP"
 
-curl -fsSL https://storage.googleapis.com/repo.xcalar.net/scripts/nvidia-check.sh -o /usr/local/bin/nvidia-check.sh
+cp $DIR/nvidia-check.sh /usr/local/bin/nvidia-check.sh
+cp $DIR/nvidia-check.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable nvidia-check.service
+
 chmod +x /usr/local/bin/nvidia-check.sh
 set +e
 /usr/local/bin/nvidia-check.sh
