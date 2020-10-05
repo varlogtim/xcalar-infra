@@ -224,7 +224,8 @@
             "inline": [
                 "yum install -y pciutils dkms kernel-headers yum-utils",
                 "export TMPDIR=/mnt/tmp CUDA_VERSION={{user `cuda_version`}}",
-                "bash -x /var/tmp/packer/scripts/install-cuda.sh"
+                "bash -x /var/tmp/packer/scripts/install-cuda.sh",
+                "/opt/xcalar/bin/python3 -c 'from tensorflow.python.client import device_lib; device_lib.list_local_devices()'"
             ]
         },
         {
