@@ -87,6 +87,12 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
                     raise CoreAnalyzerLogParserException(
                             "Mismatch corefile_name {} {} expected {}"
                             .format(lnum, line, cur_core['corefile_name']))
+
+                # Trim off any path prefix
+                corefile_name = cur_core.get('corefile_name')
+                if '/' in corefile_name:
+                    cur_core['corefile_name'] = corefile_name.split('/')[-1]
+
                 key = MongoDB.encode_key(cur_core.get('corefile_name'))
                 cores[key] = cur_core
                 cur_core = None
