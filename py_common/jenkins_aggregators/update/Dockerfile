@@ -13,6 +13,11 @@ ENV JENKINS_HOST="jenkins.int.xcalar.com"
 ENV CLANG_LLVM_COV_PATH="/netstore/qa/coverage/clang7/bin/llvm-cov"
 ENV CLANG_LLVM_PROFDATA_PATH="/netstore/qa/coverage/clang7/bin/llvm-profdata"
 
+# Tell the stats_plotter aggregator where to find the plotter utility
+# and what to plot
+ENV PLOTTER_PATH="/usr/src/app/py_common/xc_stats/plot.py"
+ENV DEFAULT_PLOT_CFG_PATH="/usr/src/app/py_common/xc_stats/cfg/cpu_mem_pag_net.json"
+
 WORKDIR /usr/src/app
 
 # Context is set to xcalar-infra/ by dbuild
