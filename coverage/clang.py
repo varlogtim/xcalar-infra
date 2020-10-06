@@ -476,8 +476,9 @@ class ClangCoverageAggregator(JenkinsAggregatorBase):
         self.artifacts_root = artifacts_root
         super().__init__(job_name=job_name, agg_name=agg_name)
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
 
+        bnum = jbi.build_number
         dir_path = os.path.join(self.artifacts_root, bnum)
         coverage_dir = ClangCoverageDir(coverage_dir=dir_path)
         try:

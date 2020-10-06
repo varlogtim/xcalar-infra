@@ -44,7 +44,7 @@ class TestJdbcLogParser(JenkinsAggregatorBase):
             return None
 
 
-    def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
+    def _do_update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         """
         Parse the log for sub-test info.
         """
@@ -99,9 +99,11 @@ class TestJdbcLogParser(JenkinsAggregatorBase):
         return {'test_jdbc_subtests': subtest_data}
 
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         try:
-            return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+            return self._do_update_build(jbi=jbi, log=log,
+                                         is_reparse=is_reparse,
+                                         test_mode=test_mode)
         except:
             self.logger.error("LOG PARSE ERROR", exc_info=True)
 
@@ -141,5 +143,5 @@ if __name__ == '__main__':
             print(log)
         else:
             print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
-            data = parser.update_build(bnum=build_number, jbi=jbi, log=jbi.console())
+            data = parser.update_build(jbi=jbi, log=jbi.console())
             pprint(data)

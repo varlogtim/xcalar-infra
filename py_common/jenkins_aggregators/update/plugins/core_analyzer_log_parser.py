@@ -7,6 +7,7 @@
 # Please refer to the included "COPYING" file for terms and conditions
 # regarding the use and redistribution of this software.
 
+import datetime
 import logging
 import os
 import sys
@@ -37,13 +38,10 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
 
 
-    def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
+    def _do_update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         """
         Parse the log for analyzed core information
         """
-        self.start_time_ms = jbi.start_time_ms()
-        self.duration_ms = jbi.duration_ms()
-
         cores = {}
         cur_core = None
 
@@ -97,28 +95,40 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
         return {'analyzed_cores': cores}
 
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         try:
-            data = self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+            data = self._do_update_build(jbi=jbi, log=log,
+                                         is_reparse=is_reparse,
+                                         test_mode=test_mode)
         except:
             self.logger.error("LOG PARSE ERROR", exc_info=True)
 
         cores = data.get('analyzed_cores', None)
-        if cores:
+        if not is_reparse and cores:
             send_alert = True
+
             # Don't alert if we're running pre-checkin
             for key,val in jbi.parameters().items():
                 if "REFSPEC" in key and "refs/changes" in val:
                     send_alert = False
                     break
+
             if send_alert:
-                labels = {'URL':jbi.build_url}
+                ts = int(jbi.start_time_ms()/1000)
+                dt = datetime.datetime.fromtimestamp(ts)
+                date_str = "{}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
+                           .format(dt.year, dt.month, dt.day,
+                                   dt.hour, dt.minute, dt.second)
+
+                labels = {'Date': date_str, 'URL':jbi.build_url}
+
                 for key,item in cores.items():
                     label_name = item.get('corefile_name', 'UnknownName')
                     label_name = label_name.replace('.', '_')
                     labels[label_name] = item.get('term_with', 'UnknownCause')
 
                 job_name = jbi.job_name
+                bnum = jbi.build_number
                 alert_id="{}:{}".format(job_name, bnum)
                 description="Jenkins job {} build {} detected core files"\
                             .format(job_name, bnum)
@@ -166,5 +176,5 @@ if __name__ == '__main__':
             print(log)
         else:
             print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
-            data = parser.update_build(bnum=build_number, jbi=jbi, log=jbi.console())
+            data = parser.update_build(jbi=jbi, log=jbi.console())
             pprint(data)

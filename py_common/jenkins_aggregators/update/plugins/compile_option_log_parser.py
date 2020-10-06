@@ -35,13 +35,10 @@ class CompileOptionsLogParser(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
 
 
-    def _do_update_build(self, *, bnum, jbi, log, test_mode=False):
+    def _do_update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         """
-        Parse the log for analyzed core information
+        Parse the log for compile option information.
         """
-        self.start_time_ms = jbi.start_time_ms()
-        self.duration_ms = jbi.duration_ms()
-
         options = {}
 
         for lnum, line in enumerate(log.splitlines()):
@@ -57,9 +54,11 @@ class CompileOptionsLogParser(JenkinsAggregatorBase):
         return {'compile_options': options}
 
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         try:
-            return self._do_update_build(bnum=bnum, jbi=jbi, log=log, test_mode=test_mode)
+            return self._do_update_build(jbi=jbi, log=log,
+                                         is_reparse=is_reparse,
+                                         test_mode=test_mode)
         except:
             self.logger.error("LOG PARSE ERROR", exc_info=True)
 
@@ -100,5 +99,5 @@ if __name__ == '__main__':
             print(log)
         else:
             print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
-            data = parser.update_build(bnum=build_number, jbi=jbi, log=jbi.console())
+            data = parser.update_build(jbi=jbi, log=jbi.console())
             pprint(data)

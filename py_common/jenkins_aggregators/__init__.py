@@ -532,13 +532,12 @@ class JenkinsAggregatorBase(ABC):
         self.send_log_to_update = send_log_to_update
 
     @abstractmethod
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         """
         Aggregate and return build-related data and meta-data.
         Every aggregator must implement the update_build() method.
 
         Required Parameters:
-            bnum: build number
             jbi:  JenkinsBuildInfo instance (if not available will be passed as None)
             log:  the associated console log if requested via send_log_to_update
                   initializer parameter.  Will be set to None if not requested.
@@ -561,9 +560,10 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
         self.japi = JenkinsApi(host=jenkins_host)
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
 
-        self.logger.debug("start bnum: {}".format(bnum))
+        self.logger.debug("start job: {} bnum: {}"
+                          .format(jbi.job_name, jbi.build_number))
         rtn = {}
         if jbi is None:
             self.logger.error("no build info passed, so return empty")

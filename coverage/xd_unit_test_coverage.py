@@ -100,11 +100,12 @@ class XDUnitTestCoverageAggregator(JenkinsAggregatorBase):
         super().__init__(job_name=job_name,
                          agg_name=self.__class__.__name__)
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         """
         Return coverage info for a specific build.
         """
         try:
+            bnum = jbi.build_number
             path = os.path.join(self.artifacts_root, bnum, self.coverage_file_name)
             self.logger.debug("path: {}".format(path))
             xdutc = XDUnitTestCoverage(path=path)

@@ -49,10 +49,10 @@ class SystemStatsPlotter(JenkinsAggregatorBase):
         self.tmpdir = None
 
 
-    def _update_build(self, *, bnum, jbi, test_mode=False):
+    def _update_build(self, *, jbi, is_reparse=False, test_mode=False):
 
         # Generate the path to the expected artifacts directory
-        artifacts_dir = "/netstore/qa/jenkins/{}/{}".format(jbi.job_name, bnum)
+        artifacts_dir = "/netstore/qa/jenkins/{}/{}".format(jbi.job_name, jbi.build_number)
         dsh_tarfile_path = os.path.join(artifacts_dir,
                                 "var_opt_xcalar_DataflowStatsHistory.tar.gz")
         self.logger.info("tarfile: {}".format(dsh_tarfile_path))
@@ -91,12 +91,12 @@ class SystemStatsPlotter(JenkinsAggregatorBase):
         return {'stats_plots': plotdir}
 
 
-    def update_build(self, *, bnum, jbi, log=None, test_mode=False):
+    def update_build(self, *, jbi, log=None, is_reparse=False, test_mode=False):
         try:
-            rtn = self._update_build(bnum=bnum, jbi=jbi)
+            rtn = self._update_build(jbi=jbi)
         except:
             self.logger.error("exception while attempting to plot statistics"
-                              " for {} {}".format(jbi.job_name, bnum),
+                              " for {} {}".format(jbi.job_name, jbi.build_number),
                               exc_info=True)
             rtn = {}
         return rtn
@@ -132,5 +132,5 @@ if __name__ == '__main__':
         jbi = JenkinsBuildInfo(job_name=job_name, build_number=build_number, japi=japi)
         result = jbi.result()
         print("checking job: {} build: {} result: {}".format(job_name, build_number, result))
-        data = plotter.update_build(bnum=build_number, jbi=jbi)
+        data = plotter.update_build(jbi=jbi)
         pprint(data)

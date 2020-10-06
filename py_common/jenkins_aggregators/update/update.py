@@ -84,7 +84,7 @@ class JenkinsJobAggregators(object):
         self.alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
         self.japi = JenkinsApi(host=self.jenkins_host)
 
-    def _update_build(self, *, bnum, test_mode=False, test_data_path=None, is_reparse=False):
+    def _update_build(self, *, bnum, is_reparse=False, test_mode=False, test_data_path=None):
         """
         Call all aggregators on the build.  Consolidate results
         and store to the DB.  All or nothing.  All aggregators
@@ -125,6 +125,7 @@ class JenkinsJobAggregators(object):
             # data either defined in an external file (possibly keyed
             # by build number so that multiple builds can have different
             # "fake" data) or defined below as a static blob.
+
             fake_data = {'building': False,
                          "actions": [ {"parameters": [{"name": "XCE_GIT_BRANCH", "value": "trunk"},
                                                       {"name": "XD_GIT_BRANCH", "value": "trunk"},
@@ -193,9 +194,9 @@ class JenkinsJobAggregators(object):
         merged_data = {}
         for agg in aggregators:
             try:
-                params =  {'bnum': bnum,
-                           'jbi': jbi,
+                params =  {'jbi': jbi,
                            'log': None,
+                           'is_reparse': is_reparse,
                            'test_mode': test_mode}
                 if agg.send_log_to_update:
                     params['log'] = console_log

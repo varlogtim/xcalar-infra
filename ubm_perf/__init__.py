@@ -322,9 +322,11 @@ class UbmPerfResultsAggregator(JenkinsAggregatorBase):
         super().__init__(job_name=job_name,
                          agg_name=self.__class__.__name__)
 
-    def update_build(self, *, bnum, jbi, log, test_mode=False):
+    def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
+        job_name = jbi.job_name
+        bnum = jbi.build_number
         try:
-            dir_path = os.path.join(self.artifacts_root, self.job_name, bnum)
+            dir_path = os.path.join(self.artifacts_root, job_name, bnum)
             self.logger.debug("path is {}".format(dir_path))
             results = UbmPerfResults(bnum=bnum, dir_path=dir_path)
         except UbmTestNoResultsError:
