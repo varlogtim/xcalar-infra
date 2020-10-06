@@ -19,6 +19,7 @@ region = os.environ.get('REGION')
 cfn_client = boto3.client('cloudformation', region_name=region)
 ec2_client = boto3.client('ec2', region_name=region)
 dynamodb_client = boto3.client('dynamodb', region_name=region)
+ssm_client = boto3.client('ssm', region_name=region)
 domain = os.environ.get('DOMAIN')
 
 # XXX To-do Read from env variables
@@ -26,6 +27,7 @@ user_table = os.environ.get('USER_TABLE')
 billing_table = os.environ.get('BILLING_TABLE')
 session_table = os.environ.get('SESSION_TABLE')
 creds_table = os.environ.get('CREDS_TABLE')
+ssm_key = os.environ.get('SSM_KEY')
 
 cfn_role_arn = os.environ.get('CFN_ROLE_ARN')
 default_credit = '1000'
@@ -50,6 +52,17 @@ def get_available_stack(user_name):
                     }
                     ret_struct['tags'].append({'Key':'Owner', 'Value': user_name})
                     return ret_struct
+
+def is_test_cluster(cfn_id):
+    stack = cfn_client.describe_stacks(StackName=cfn_id)['Stacks']
+    if len(stack) == 0:
+        return None
+    else:
+        stack_info = stack[0]
+        for i in range(len(stack_info['Tags'])):
+            tag = stack['Tags'][i]
+            if 'Value' in tag and tag['Key'] == 'Env' and tag['Value'] == 'test':
+                return True
 
 def start_cluster(user_name, cluster_params):
     # if the user has a cfn stack
@@ -98,29 +111,65 @@ def start_cluster(user_name, cluster_params):
             param.pop('ParameterValue', None)
             param['UsePreviousValue']=True
 
-    if is_new == False:
-        response = cfn_client.update_stack(
-            StackName=cfn_id,
-            UsePreviousTemplate=True,
-            Parameters=stack_params,
-            Capabilities=IamCapabilities,
-            RoleARN=cfn_role_arn
-        )
-    else:
-        cfn_client.update_stack(
-            StackName=cfn_id,
-            UsePreviousTemplate=True,
-            Parameters=stack_params ,
-            Capabilities=IamCapabilities,
-            RoleARN=cfn_role_arn,
-            Tags=tags
-        )
-        updates = {
-            'cfn_id': {
-                'S': cfn_id
+    is_test_cluster = is_test_cluster(cfn_id):
+    if is_test_cluster is None:
+        error = 'Stack %s not found' % cfn_id
+        return _make_reply(200, {
+                'status': Status.STACK_NOT_FOUND,
+                'error': error
+            })
+    elif is_test_cluster:
+        if is_new == False:
+            response = cfn_client.update_stack(
+                StackName=cfn_id,
+                UsePreviousTemplate=True,
+                Parameters=stack_params,
+                Capabilities=IamCapabilities,
+                RoleARN=cfn_role_arn
+            )
+        else:
+            cfn_client.update_stack(
+                StackName=cfn_id,
+                UsePreviousTemplate=True,
+                Parameters=stack_params ,
+                Capabilities=IamCapabilities,
+                RoleARN=cfn_role_arn,
+                Tags=tags
+            )
+            updates = {
+                'cfn_id': {
+                    'S': cfn_id
+                }
             }
-        }
-        response = update_user_info(dynamodb_client, user_info, updates, user_table)
+            response = update_user_info(dynamodb_client, user_info, updates, user_table)
+    else:
+        template = ssm_client.get_parameter(Name='string')['Parameter']['Value']
+        if is_new == False:
+            response = cfn_client.update_stack(
+                StackName=cfn_id,
+                TemplateURL=template,
+                UsePreviousTemplate=False,
+                Parameters=stack_params,
+                Capabilities=IamCapabilities,
+                RoleARN=cfn_role_arn
+            )
+        else:
+            cfn_client.update_stack(
+                StackName=cfn_id,
+                TemplateURL=template,
+                UsePreviousTemplate=False,
+                Parameters=stack_params ,
+                Capabilities=IamCapabilities,
+                RoleARN=cfn_role_arn,
+                Tags=tags
+            )
+            updates = {
+                'cfn_id': {
+                    'S': cfn_id
+                }
+            }
+            response = update_user_info(dynamodb_client, user_info, updates, user_table)
+
 
     return _make_reply(_http_status(response), {
         'status': Status.OK

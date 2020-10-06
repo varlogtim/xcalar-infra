@@ -4,7 +4,6 @@ set -ex
 
 export AWS_DEFAULT_REGION=us-west-2
 export XLRINFRADIR=${XLRINFRADIR:-$PWD}
-SSM_KEY=/xcalar/cloud/cfn/template_url
 #have user name list, need find the stack id via tag
 #username list is ALL, update all
 EXIT_CODE=0
@@ -56,7 +55,10 @@ get_stack_param() {
     echo "$1" | jq -r '.[][0].Parameters[] | select(.ParameterKey=="'"$2"'") | .ParameterValue'
 }
 
-aws ssm put-parameter --tier Standard --type String --name "${SSM_KEY}" --value "${CFN_TEMPLATE_URL}" --overwrite
+get_stack_tag() {
+    echo "$1" | jq -r '.[][0].Tags[] | select(.Key=="'"$2"'") | .Value'
+}
+
 if [ "${USERNAME_LIST}" == "ALL" ]; then
     mapfile -t STACK_LIST < <(aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName, '${STACK_PREFIX}')]" | jq -r .[].StackId)
     if [ -z "${STACK_LIST[@]}" ]; then
@@ -199,10 +201,20 @@ for STACK in "${UPDATE_STACK_LIST[@]}"; do
                                     ParameterKey=HostedZoneName,ParameterValue=${HOSTED_ZONE_NAME}
                                     ParameterKey=AdminUsername,ParameterValue=${ADMIN_USERNAME}
                                     ParameterKey=AdminPassword,ParameterValue=${ADMIN_PASSWORD})
-            aws cloudformation update-stack --stack-name "${STACK}" \
-                                            --no-use-previous-template \
-                                            "${URL_PARAMS[@]}" --role-arn "${ROLE}" \
-                                            --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+            if [ "$IS_TEST_CLUSTER" = "true" ]; then
+                OWNER=$(get_stack_tag "$RET" Owner)
+                DEPLOYMENT=$(get_stack_tag "$RET" deployment)
+                aws cloudformation update-stack --stack-name "${STACK}" \
+                                                --no-use-previous-template \
+                                                "${URL_PARAMS[@]}" --tags Key=Owner,Value="${OWNER}" Key=deployment,Value=${DEPLOYMENT} Key=Env,Value=test \
+                                                --role-arn "${ROLE}" \
+                                                --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+            else
+                aws cloudformation update-stack --stack-name "${STACK}" \
+                                                --no-use-previous-template \
+                                                "${URL_PARAMS[@]}" --role-arn "${ROLE}" \
+                                                --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+            fi
             PREV_INFO=$(aws dynamodb get-item --table "${STACK_INFO_TABLE}" \
                         --key '{"stack_id":{"S":"'"${STACK}"'"}}' | jq -r .Item.current_info.S)
             #Assue only template url and iamge id will change.

@@ -33,6 +33,9 @@ Parameters:
   Region:
     Type: String
     Default: 'us-west-2'
+  SSMKey:
+    Type: String
+    Default: '/xcalar/cloud/cfn/template_url'
 
 Resources:
   LibLayer:
@@ -98,6 +101,8 @@ Resources:
               Ref: Domain
           REGION:
               Ref: Region
+          SSM_KEY:
+              Ref: SSMKey
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -147,6 +152,10 @@ Resources:
               Action:
                 - cognito-identity:GetCredentialsForIdentity
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:parameter/${SSMKey}'
   BillingFunction:
     Type: AWS::Serverless::Function
     Properties:

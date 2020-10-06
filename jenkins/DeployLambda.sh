@@ -38,7 +38,7 @@ sam deploy --template-file packaged.yaml \
                                  CredsTable=${CREDS_TABLE_NAME} \
                                  UserStackPrefix=${USER_STACK_PREFIX} \
                                  Role=${ROLE} Domain=${DOMAIN} StackName=${STACK_NAME} \
-                                 Region=${REGION})
+                                 Region=${REGION} SSMKey=${SSM_KEY})
 
 
 
