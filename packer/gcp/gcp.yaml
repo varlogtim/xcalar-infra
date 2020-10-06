@@ -145,17 +145,22 @@ provisioners:
     inline:
       - yum update -y
       - yum install -y epel-release nfs-utils yum-utils
-      - groupadd -g 1001 xcalar
-      - useradd -m -s /bin/bash -g 1001 -u 1001 xcalar
+      - groupadd -g 10010 xcalar || groupmod -g 10010 xcalar
+      - useradd -m -s /bin/bash -g 10010 -u 10010 xcalar
+      - usermod -g 10010 -u 10010 xcalar
+      - chown -R 10010:10010 /home/xcalar /var/tmp/xcalar-root /var/tmp/xcalar /var/opt/xcalar /var/log/xcalar || true
       - yum groupinstall -y 'Development tools'
       - yum localinstall -y http://repo.xcalar.net/xcalar-release-el7.rpm
       - yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
       - yum install -y --enablerepo='xcalar-*' optgdb9 ephemeral-disk dkms kernel-headers nfs-utils pciutils ansible consul nomad
       - alternatives --install /usr/local/bin/gdb gdb /opt/gdb9/bin/gdb 1000 --slave /usr/local/bin/gdbserver gdbserver /opt/gdb9/bin/gdbserver  --slave /usr/local/bin/gcore gcore /opt/gdb9/bin/gcore --slave /usr/bin/local/gdb-add-index gdb-add-index /opt/gdb9/bin/gdb-add-index
+      - systemctl disable ephemeral-disk.service
       - firewall-cmd --add-service=ssh --add-service=https --add-service=http || true
       - firewall-cmd --add-port=8500/tcp --add-port=8500/udp || true
       - firewall-cmd --reload
       - firewall-cmd --runtime-to-permanent || true
+      - bash -x /var/tmp/packer/scripts/scsi-mod.sh
+      - bash -x /var/tmp/packer/scripts/install-cloud-init.sh
       - curl -s https://s3.amazonaws.com/download.draios.com/stable/install-sysdig | bash
       - exit 0
 
@@ -172,6 +177,10 @@ provisioners:
     inline:
       - export TMPDIR=/mnt/tmp
       - curl -o $TMPDIR/installer.sh -f -L "$INSTALLER_URL"
+      - systemctl disable ephemeral-disk
+      - mkdir -p /etc/systemd/system/xcalar.service.d
+      - cp /var/tmp/packer/scripts/ephemeral.conf /etc/systemd/system/xcalar.service.d/
+      - systemctl daemon-reload
       - bash -x $TMPDIR/installer.sh --nostart --nostartonboot
       - /opt/xcalar/bin/python3 -m pip install --no-cache-dir -U pip
       - /opt/xcalar/bin/python3 -m pip install --no-cache-dir $PYTHON_PKGS -c <(sed '/tensorflow/d; /pandas/d' /opt/xcalar/share/doc/xcalar-python36-3.*/requirements.txt)
@@ -197,9 +206,11 @@ provisioners:
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -E -S /bin/bash -x ''{{.Path}}'''
     inline:
-      - rm -rf /var/tmp/yum* /var/tmp/* /var/cache/yum/* /tmp/installer.sh
+      - rm -rf /var/tmp/yum* /var/tmp/* /var/cache/yum/*
       - mkdir -p /var/tmp/xcalar-root /var/tmp/xcalar /mnt/xcalar /ephemeral/data
       - chown xcalar:xcalar /var/tmp/xcalar-root /var/tmp/xcalar
       - umount /mnt/tmp || true
       - rm -rf /mnt/tmp || true
+      - rm -f /.xcalar-init
+      - truncate -s 0 /etc/machine-id /var/log/wtmp /var/log/messages /var/log/cloud-init* /var/log/audit/* /var/log/auth.log
       - exit 0

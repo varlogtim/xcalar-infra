@@ -3,6 +3,10 @@
 metadata() { curl -fsL --connect-timeout 1 -H "Metadata-Flavor:Google" http://metadata.google.internal/computeMetadata/v1/"$1"; }
 attr() { metadata "instance/attributes/$1"; }
 
+if test -e /.xcalar-init; then
+    exit 0
+fi
+
 if ! NAME=$(metadata instance/name); then
   NAME=$(hostname -s)
 fi
@@ -19,8 +23,10 @@ if ! EPHEMERAL=$(attr ephemeral_disk); then
     EPHEMERAL=/ephemeral/data
 fi
 if LICENSE="$(attr license)"; then
-    echo "$LICENSE" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
-    chown xcalar:xcalar /etc/xcalar/XcalarLic.key
+    if [ -n "$LICENSE" ]; then
+        echo "$LICENSE" | base64 -d | gzip -dc > /etc/xcalar/XcalarLic.key
+        chown xcalar:xcalar /etc/xcalar/XcalarLic.key
+    fi
 fi
 
 LOCALCFG=/etc/xcalar/localcfg.cfg
@@ -113,4 +119,12 @@ cat $XLRROOT/config/*.pub >> ~xcalar/.ssh/authorized_keys
 chmod 0600 ~xcalar/.ssh/authorized_keys
 chown -R xcalar:xcalar ~xcalar/.ssh
 
+systemctl daemon-reload
+systemctl enable xcalar
 systemctl start xcalar
+rc=$?
+if [ $rc -eq 0 ]; then
+    echo "Successfully started xcalar"
+fi
+touch /.xcalar-init
+exit $rc

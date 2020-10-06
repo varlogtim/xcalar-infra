@@ -75,11 +75,11 @@ BUILD_NUMBER="${BUILD_NUMBER:-1}"
 DISK_TYPE="${DISK_TYPE:-pd-standard}"
 DISK_SIZE=${DISK_SIZE:-60}
 NETWORK="${NETWORK:-private}"
-STARTUP_SCRIPT="${STARTUP_SCRIPT:-$DIR/gce-cloud-init.sh}"
 LOCAL_SSD=${LOCAL_SSD:-1}
 IMAGE_PROJECT=${IMAGE_PROJECT:-$GCE_PROJECT}
 PREEMPTIBLE=${PREEMPTIBLE:-0}
 GPU_COUNT=1
+USER_DATA="${USER_DATA:-$DIR/gce-cloud-init.sh}"
 while [ $# -gt 0 ]; do
     cmd="$1"
     shift
@@ -103,6 +103,7 @@ while [ $# -gt 0 ]; do
         --config-template) test -f "$1" && CONFIG_TEMPLATE="$1" || die "$1 doesn't exist"; shift;;
         --config) test -f "$1" && CONFIG="$1" || die "$1 doesn't exist"; shift;;
         --preemptible) PREEMPTIBLE=1;;
+        --user-data) test -f "$1" && USER_DATA="$1" || die "$1 doesn't exist"; shift;;
         --startup-script) test -f "$1" && STARTUP_SCRIPT="$1" || die "$1 doesn't exist"; shift;;
         --license) test -n "$1" && XCE_LICENSE="$1" || die "$1 doesn't exist"; shift;;
         --nfs-share) NFS_SHARE="$1"; shift;;
@@ -125,15 +126,30 @@ if [ -z "$IMAGE_FAMILY" ]; then
     fi
 fi
 
-if [ -z "$INSTANCE_TYPE" ] && [[ "$*" =~ custom ]]; then
-    :
-else
-    echo >&2 "WARNING: No --instance-type specified not --custom-*"
-    INSTANCE_TYPE="n1-standard-8"
+if [ -z "$INSTANCE_TYPE" ]; then
+    if [[ "$*" =~ custom ]]; then
+        echo >&2 "INFO: Instance type not specified, using custom settings"
+    else
+        INSTANCE_TYPE="n1-standard-8"
+        echo >&2 "WARN: No --instance-type specified no --custom-* flags. Using $INSTANCE_TYPE"
+    fi
+elif [[ "$*" =~ custom ]]; then
+    echo >&2 "WARN: Specified both --instance-type and --custom-* flags. Removing $INSTANCE_TYPE"
+    unset INSTANCE_TYPE
 fi
 
 MD_ARGS="name=$NAME,cluster=$CLUSTER"
-MDF_ARGS="startup-script=$STARTUP_SCRIPT"
+if [ -e "$USER_DATA" ]; then
+    MDF_ARGS+="user-data=$USER_DATA"
+    CLOUD_INIT=1
+fi
+if [ -e "$STARTUP_SCRIPT" ]; then
+    MDF_ARGS+="startup-script=$STARTUP_SCRIPT"
+fi
+
+if ! test -e "$STARTUP_SCRIPT" && ! test -e "$USER_DATA"; then
+    die "Must specify either --startup-script or --user-data"
+fi
 
 EMAIL="${BUILD_USER_EMAIL:-$(git config user.email)}"
 USERID="${BUILD_USER_ID:-$(id -un)}"
