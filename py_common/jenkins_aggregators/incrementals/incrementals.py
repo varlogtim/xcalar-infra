@@ -154,6 +154,7 @@ if __name__ == "__main__":
                   'test_jdbc_subtests',
                   'xc_test_harness_subtests',
                   'xd_unit_test_testcases',
+                  'xd_func_test_testcases',
                   'tpchTest',
                   'tpcdsTest',
                   'coverage'] # XXXrs coverage takes different forms...
