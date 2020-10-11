@@ -58,7 +58,7 @@ class XDFuncTestLogParser(JenkinsAggregatorBase):
             cur['duration_ms'] = ts_ms - cur['start_time_ms']
             cur['result'] = result
             self.user_to_iters.setdefault(user, []).append(cur)
-        self.user_to_cur_iter[user] = None
+            self.user_to_cur_iter.pop(user)
 
 
     def _do_update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
@@ -107,8 +107,10 @@ class XDFuncTestLogParser(JenkinsAggregatorBase):
 
                 ts_ms, user = self._ts_ms_user(fields=fields)
                 iters = self.user_to_iters.get(user, None) or []
-                self.user_to_iters[user] = None
-                self.user_to_cur_iter[user] = None
+                if user in self.user_to_iters[user]:
+                    self.user_to_iters.pop(user)
+                if user in self.user_to_cur_iter:
+                    self.user_to_cur_iter.pop(user)
                 count = fields[7]
                 seed = fields[-1]
 
@@ -134,7 +136,7 @@ class XDFuncTestLogParser(JenkinsAggregatorBase):
                         cur['duration_ms'] = ts_ms - cur['start_time_ms']
                         cur['result'] = result
                         self.user_to_iters.setdefault(user, []).append(cur)
-                        self.user_to_cur_iter[user] = None
+                self.user_to_cur_iter = {}
 
                 for user in self.user_to_iters.keys():
                     iters = self.user_to_iters.get(user)
@@ -144,6 +146,7 @@ class XDFuncTestLogParser(JenkinsAggregatorBase):
                                          "result": result,
                                          "count": len(iters),
                                          "seed": "UNKNOWN"})
+                self.user_to_iters = {}
 
             '''
             121.401 admin1 JSHandle:Running the 0/500 iterations
