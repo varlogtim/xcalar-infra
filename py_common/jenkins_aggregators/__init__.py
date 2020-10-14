@@ -9,19 +9,13 @@
 __all__=[]
 
 from abc import ABC, abstractmethod
-import copy
-import json
 import logging
 import os
 import pymongo
 from pymongo.errors import DuplicateKeyError
 from pymongo import ReturnDocument
-import re
-import signal
 import sys
 import time
-import smtplib
-from email.message import EmailMessage
 
 if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))

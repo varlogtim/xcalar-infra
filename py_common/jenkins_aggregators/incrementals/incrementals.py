@@ -156,6 +156,7 @@ if __name__ == "__main__":
                   'xd_unit_test_testcases',
                   'xd_func_test_testcases',
                   'xd_test_suite_testcases',
+                  'expserver_test_testcases',
                   'tpchTest',
                   'tpcdsTest',
                   'coverage'] # XXXrs coverage takes different forms...

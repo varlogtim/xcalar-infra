@@ -35,9 +35,6 @@ class XDTestSuiteLogParser(JenkinsAggregatorBase):
                          agg_name=self.__class__.__name__,
                          send_log_to_update=True)
         self.logger = logging.getLogger(__name__)
-        self.user_to_cur_iter = {}
-        self.user_to_iters = {}
-        self.functests_data = {}
 
 
     def _get_timestamp_ms(self, *, fields):
@@ -54,11 +51,7 @@ class XDTestSuiteLogParser(JenkinsAggregatorBase):
         """
         self.start_time_ms = jbi.start_time_ms()
 
-        tests_data = {}
-        cur_test = None
-        start_time_ms = None
-        pass_summary_next = False
-        pass_duration_next = False
+        testcase_data = {}
 
         for lnum, line in enumerate(log.splitlines()):
 
@@ -110,7 +103,7 @@ class XDTestSuiteLogParser(JenkinsAggregatorBase):
                 assert(fields[-1][-1] == 's')
                 duration = float(fields[-1][:-1])
                 cur_test['duration_ms'] = int(duration*1000)
-                tests_data[cur_test.pop("number")] = cur_test
+                testcase_data[cur_test.pop("number")] = cur_test
                 cur_test = None
                 start_time_ms = None
                 continue
@@ -129,14 +122,14 @@ class XDTestSuiteLogParser(JenkinsAggregatorBase):
                 fail_time_ms = self._get_timestamp_ms(fields=fields)
                 idx = fields.index("failed")
                 reason = " ".join(fields[idx+1:])
-                tests_data[tnum] = {"name": " ".join(fields[6:idx])[1:-1],
-                                    "result": "fail",
-                                    "start_time_ms": start_time_ms,
-                                    "duration_ms": fail_time_ms - start_time_ms,
-                                    "reason": reason}
+                testcase_data[tnum] = {"name": " ".join(fields[6:idx])[1:-1],
+                                       "result": "fail",
+                                       "start_time_ms": start_time_ms,
+                                       "duration_ms": fail_time_ms - start_time_ms,
+                                       "reason": reason}
                 continue
 
-        return {'xd_test_suite_testcases': tests_data}
+        return {'xd_test_suite_testcases': testcase_data}
 
 
     def update_build(self, *, jbi, log, is_reparse=False, test_mode=False):

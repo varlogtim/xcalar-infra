@@ -14,7 +14,6 @@ import os
 import pprint
 from pymongo.errors import DuplicateKeyError
 from pymongo import ReturnDocument
-import re
 import signal
 import sys
 import time
