@@ -683,29 +683,26 @@ void *
 calloc(size_t nmemb, size_t usrSize) {
     size_t totalSize = nmemb * usrSize;
     void *buf = memalignInt(sizeof(void *), totalSize);
-
+    if (buf == NULL) {
+        return(buf);
+    }
     memset(buf, 0, totalSize);
     return(buf);
 }
 
 void *
 realloc(void *origBuf, size_t newUsrSize) {
-    if (origBuf == NULL) {
-        return(memalignInt(sizeof(void *), newUsrSize));
-    } else {
-        ElmHdr *hdr;
-        void *newBuf;
-        hdr = *(ElmHdr **)(origBuf - sizeof(void *));
-        if (!isInit) {
-            initialize();
-        }
-
-        newBuf = memalignInt(sizeof(void *), newUsrSize);
-        memcpy(newBuf, origBuf, MIN(newUsrSize, hdr->usrDataSize));
-        free(origBuf);
-
+    ElmHdr *hdr;
+    void *newBuf = memalignInt(sizeof(void *), newUsrSize);
+    if (origBuf == NULL || newBuf == NULL) {
         return(newBuf);
     }
+
+    hdr = *(ElmHdr **)(origBuf - sizeof(void *));
+    memcpy(newBuf, origBuf, MIN(newUsrSize, hdr->usrDataSize));
+    free(origBuf);
+
+    return(newBuf);
 }
 
 void
