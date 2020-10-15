@@ -1,10 +1,10 @@
 ---
-min_packer_version: '1.5.4'
+min_packer_version: '1.6.4'
 variables:
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   baseos_owner: '137112412989'
-  baseos: 'amzn2-ami'
+  baseos: 'amzn2-ami-'
   build_number: '{{env `BUILD_NUMBER`}}'
   image_build_number: '{{env `IMAGE_BUILD_NUMBER`}}'
   description: Xcalar Cloud Base Image
@@ -17,8 +17,8 @@ variables:
   installer_url: '{{env `INSTALLER_URL`}}'
   installer_version: '1.0'
   installer_tag: ''
-  product: xcp
-  project: xcp-base
+  project: '{{env `PROJECT`}}'
+  product: '{{env `PRODUCT`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
   shared_with: '{{env `SHARED_WITH`}}'
   ssh_username: ec2-user
@@ -47,7 +47,7 @@ builders:
         architecture: 'x86_64'
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}-*'
+        name: '{{user `baseos`}}*'
       owners: '{{user `baseos_owner`}}'
       most_recent: true
     instance_type: c5d.xlarge
@@ -59,12 +59,12 @@ builders:
     force_deregister: true
     force_delete_snapshot: true
     shutdown_behavior: terminate
-    ami_name: '{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_tag`}}-{{user `today`}}'
+    ami_name: '{{user `project`}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `today`}}'
     ami_description: '{{user `description`}} {{split build_name "-" 2 | upper}} ({{user `installer_version`}}-{{user `installer_build_number`}} ({{user `today`}}))'
     run_tags:
-      Name: 'packer-{{build_name}}-{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `installer_build_number`}}'
+      Name: 'packer-{{build_name}}-{{user `project`}}-{{split build_name "-" 2}}-{{user `installer_tag`}}-{{user `installer_build_number`}}'
     snapshot_tags:
-      Name: '{{user `project`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
+      Name: '{{user `project`}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       OSID: '{{split build_name "-" 2}}'
@@ -74,8 +74,8 @@ builders:
       Product: '{{user `product`}}'
       Project: '{{user `project`}}'
     tags:
-      AMIName: '{{user `project`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
-      Name: '{{user `project`}}-{{split build_name "-" 2}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
+      AMIName: '{{user `project`}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{user `today`}}'
+      Name: '{{user `project`}}-{{user `product`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-{{split .SourceAMIName "-" 3}}-{{user `today`}}'
       SourceAMI: '{{.SourceAMI}}'
       SourceAMIName: '{{.SourceAMIName}}'
       SourceAMIVersion: '{{split .SourceAMIName "-" 3}}'
@@ -107,11 +107,11 @@ provisioners:
       - curl -fL https://bootstrap.pypa.io/get-pip.py | python3
       - yum update -y --exclude kernel
       - amazon-linux-extras install -y kernel-ng
-      - while ps faux | grep '[d]racut'; do sleep 1; done
-      - sleep 30
-      - reboot -h now
+      - while pgrep -af '[d]racut'; do sleep 1; done
+      - systemctl reboot
+      - exit 0
   - type: shell
-    pause_before: "1m"
+    pause_before: '20s'
     environment_vars:
       - OSID={{split build_name "-" 2}}
       - CLOUD=aws
@@ -124,12 +124,8 @@ provisioners:
       - '{{ template_dir }}/../scripts/install-java8.sh'
       - '{{ template_dir }}/../scripts/packages-amzn.sh'
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
-        #- '{{ template_dir }}/../scripts/install-pip-bundle.sh'
       - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
       - '{{ template_dir }}/../scripts/install-docker.sh'
-  - type: file
-    source: '{{ template_dir }}/../scripts/aws-verify.sh'
-    destination: /tmp/aws-verify.sh
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     inline:
@@ -138,9 +134,6 @@ provisioners:
       - yum remove -y xcalar-platform xcalar || true
       - source /etc/profile.d/zjava.sh || true
       - test -x $JAVA_HOME/bin/java || exit 1
-      - chmod 0755 /tmp/aws-verify.sh
-      - chown root:root /tmp/aws-verify.sh
-      - mv /tmp/aws-verify.sh /usr/bin/
       - yum clean all --enablerepo='*'
       - rm -rfv /var/cache/yum/* /var/tmp/yum*
   - type: shell

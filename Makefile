@@ -22,8 +22,11 @@ PYTHON      ?= /opt/xcalar/bin/python3
 TOUCH        = /usr/bin/touch
 OSID        ?= $(shell osid)
 PYVER       := $(shell $(PYTHON) -c "from __future__ import print_function; import sys; vi=sys.version_info; print(\"{}.{}\".format(vi.major,vi.minor))")
-WHEELS      ?= /infra/wheels/py$(PYVER)-$(OSID)
-UNIV_WHEELS := /infra/wheels/py$(PYVER)
+WHEELS      ?= /infra/wheels
+UNIV_WHEELS := /infra/wheels/manylinux
+
+PIP_FIND = --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) \
+	--find-links http://$(NETSTORE_HOST)$(WHEELS)/index.html  --find-links http://$(NETSTORE_IP)$(WHEELS)/index.html
 
 TOUCH ?= /usr/bin/touch
 
@@ -44,9 +47,15 @@ venv: .updated
 	@$(VENV)/bin/python -m pip install -U pip
 	@$(VENV)/bin/python -m pip install -U setuptools
 	@$(VENV)/bin/python -m pip install -c $(REQUIRES) wheel pip-tools
-	@$(VENV)/bin/python -m pip install --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) --find-links http://$(NETSTORE_IP)$(WHEELS) -r $(REQUIRES)
-	@$(VENV)/bin/pip-sync --trusted-host $(NETSTORE_HOST) --trusted-host $(NETSTORE_IP) --find-links $(NETSTORE_NFS)$(WHEELS) --find-links http://$(NETSTORE_HOST)$(WHEELS) --find-links http://$(NETSTORE_IP)$(WHEELS) $(REQUIRES)
+	@if $(VENV)/bin/python -m pip show ansible 2>/dev/null | grep -q 'Version: 2.9'; then \
+		rm -rf $(VENV)/lib/python*/site-packages/ansible/__init__.py; \
+		$(VENV)/bin/python -m pip uninstall -y -q ansible; \
+	fi
+	@$(VENV)/bin/python -m pip install $(PIP_FIND) -r $(REQUIRES)
 	@$(TOUCH) $@
+
+sync:
+	@$(VENV)/bin/pip-sync $(PIP_FIND) $(REQUIRES)
 
 recompile: $(VENV)/bin/pip-compile
 	$(VENV)/bin/pip-compile -v

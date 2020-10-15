@@ -19,6 +19,7 @@ packer_do() {
         -var "installer_build_number=$INSTALLER_BUILD_NUMBER" \
         -var "build_number=$BUILD_NUMBER" \
         -var "installer_url=$INSTALLER_URL" \
+        ${BASEOS:+-var "baseos=$BASEOS"} \
         ${RELEASE+-var "release=$RELEASE"} \
         ${INSTALLER_RC+-var "rc=$INSTALLER_RC"} \
         ${REGIONS+-var "destination_regions=$REGIONS"} \
@@ -67,6 +68,10 @@ main() {
             --provider)
                 PROVIDER="$2"
                 shift 2
+                ;;
+            --project)
+                PROJECT="$2"
+                shift
                 ;;
             --osid)
                 OSID="$2"

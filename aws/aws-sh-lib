@@ -151,6 +151,29 @@ aws_show_images() {
         ] |@tsv" | aws_format_output
 }
 
+aws_copy_image() {
+    local region="$1" image_id="$2"
+    if [ "$region" = "${AWS_DEFAULT_REGION}" ]; then
+        say "Can't copy to the same region as AWS_DEFAULT_REGION is set to"
+        return 1
+    fi
+    local tags new_image_id token name
+    token=$(uuidgen | cut -d'-' -f1)
+    tags=$(mktemp -t tags.XXXXXX.json)
+    name=$(aws ec2 describe-images --region $AWS_DEFAULT_REGION --image-ids $image_id --query 'Images[0].Name' --output text)
+    aws ec2 describe-images --region $AWS_DEFAULT_REGION --image-ids $image_id --query 'Images[].Tags[]' | tee $tags
+    if ! new_image_id=$(aws ec2 copy-image --name "$name" --region $region --client-token $token --source-region $AWS_DEFAULT_REGION \
+        --source-image-id "$image_id" --query 'ImageId' --output text); then
+        say "Failed to copy $image_id to $region"
+        return 1
+    fi
+    if ! aws ec2 wait image-available --image-ids $new_image_id --region $region; then
+        say "Failed to copy image"
+        return 1
+    fi
+    aws ec2 create-tags --region $region --resources $new_image_id --tags "$(cat $tags)" && rm $tags
+}
+
 aws_delete_image() {
     if [ $# -eq 0 ]; then
         echo >&2 "ERROR: Must specify image-ids"
@@ -297,7 +320,7 @@ aws_s3_list_for_delete() {
     fi
 }
 
-aws_s3_nuke_bucket() {
+aws_s3_empty_bucket() {
     local bucket="$1"
     shift
     local region
@@ -306,16 +329,29 @@ aws_s3_nuke_bucket() {
         return 0
     fi
     local objs
-    if objs="$(aws s3api --region $region list-objects-v2 --bucket "$bucket" | jq -r '{"Quiet": true, Objects: [ .Contents[]|{Key: .Key}]}')"; then
+    local tmpfile token
+    tmpfile=$(mktemp -t s3.XXXXXX)
+    #if objs="$(aws s3api --region $region list-objects-v2 --bucket "$bucket" | jq -r '{"Quiet": true, Objects: [ .Contents[]|{Key: .Key}]}')"; then
+    while aws s3api --region $region list-objects-v2 --bucket "$bucket" ${token:+ --starting-token="$token"} --max-items 200 > "$tmpfile"; do
+        objs="$(jq -r '{"Quiet": true, Objects: [ .Contents[]|{Key: .Key}]}' "$tmpfile")"
         if [ -n "$objs" ]; then
             if aws s3api --region $region delete-objects --bucket $bucket --delete "$objs"; then
                 echo >&2 "Deleted all objects in s3://$bucket"
+                break
             fi
         fi
-    else
-        echo >&2 "Unable to get list of objects in s3://$bucket"
-    fi
-    aws s3 --region $region rb s3://$bucket
+        token="$(jq -r '.NextToken' "$tmpfile")"
+        if [ -z "$token" ]; then
+            break
+        fi
+    done
+    rm -f "$tmpfile"
+}
+
+aws_s3_nuke_bucket() {
+    local bucket="$1"
+    aws_s3_empty_bucket "$bucket"
+    aws s3 rb s3://$bucket
 }
 
 aws_s3_region() {
@@ -403,7 +439,7 @@ aws_quickurl() {
     # replace("/", "%2A")
     local region="${AWS_DEFAULT_REGION:-us-west-2}"
     cat <<EOF
-https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateUrl=${safeUrl}&stackName=${stackName}
+https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/quickcreate?templateUrl=${s3Url}&stackName=${stackName}
 EOF
 }
 
@@ -610,6 +646,28 @@ aws_s3_sync() {
         set -x
         aws s3 sync --metadata-directive REPLACE --content-disposition inline --cache-control 'no-cache, no-store, must-revalidate, max-age=0, no-transform' "$@"
     )
+}
+
+s3_sync() {
+    local args=(--metadata-directive REPLACE)
+    while [ $# -gt 0 ]; do
+        local cmd="$1"
+        shift
+        case "$cmd" in
+            -h|--help)
+                echo >&2 "s3_sync [--no-cache] [--public] [--inline] [--mime-type] path1 path2 ..."
+                return 0
+                ;;
+            --no-cache) args+=(--cache-control 'no-cache,no-store,must-revalidate,max-age=0,no-transform');;
+            --public) args+=(--acl public-read);;
+            --inline) args+=(--content-disposition inline);;
+            --) break;;
+            -*) echo >&2 "Unknown flag: $cmd"; return 1;;
+            /*|s3://*) set -- "$cmd" "$@"; break;;
+            *) set -- "$cmd" "$@"; break;;
+        esac
+    done
+    aws s3 sync "${args[@]}" "$@"
 }
 
 aws_s3_sync_public() {
@@ -834,3 +892,68 @@ aws_ssm_get_tags() {
 aws_set_bucket_object_owner() {
     aws s3api put-bucket-ownership-controls --bucket "${1#s3://}" --ownership-controls '{"Rules":  [{"ObjectOwnership": "'${2:-BucketOwnerPreferred}'"}]}'
 }
+
+
+# Useful for when you got a yaml with
+#---
+#- foo: bar
+# and you want it in parameters format
+#
+# cfn-flip < kv.yaml | aws_json_kv_to_params
+aws_json_kv_to_params() {
+    jq -r '.|to_entries|map_values({ParameterKey: .key, ParameterValue: .value})'
+}
+
+# Convert CloudFormation [{ParamKey: "foo", ParamValue: "bar"},...] to [ { "foo": "bar" ,...}]'
+# which can then be easily cfn-flip'd into yaml
+
+# aws_json_params_to_kv < params.json | cfn-flip
+aws_json_params_to_kv() {
+    jq -r '[.[]|{ (.ParameterKey): (.ParameterValue)}]'
+}
+
+aws_tags_to_kv() {
+    jq -r 'map({(.Key): .Value})|add'
+}
+
+aws_my_region() {
+    curl -s http://169.254.169.254/latest/meta-data/placement/region
+}
+
+aws_my_instance_id() {
+    curl -s http://169.254.169.254/latest/meta-data/instance-id
+}
+
+aws_my_tags() {
+    aws ec2 --region "$(aws_my_region)" describe-instances --instance-ids "$(aws_my_instance_id)" \
+        --query 'Reservations[0].Instances[0].Tags' | jq -r 'map({(.Key): .Value})|add'
+}
+
+cfn-download-specification() {
+    mkdir -p $(dirname "$1")
+    curl -fsSL "$1" https://dnwj8swjjbsbt.cloudfront.net/latest/gzip/"$(basename $1)" | gzip -dc > "$1"
+}
+
+cfn-find() {
+    local json=/var/tmp/cfn-$(id -u)/CloudFormationResourceSpecification.json
+    test -e "$json" || cfn-download-specification "$json" || return 1
+    local cmd mode='ResourceTypes'
+    while [ $# -gt 0 ]; do
+        cmd="$1"
+        shift
+        case "$cmd" in
+            -r) mode='ResourceTypes';;
+            -p) mode='PropertyTypes';;
+            AWS::*) jq -r '.'$mode'."'$cmd'"' $json;;
+            *::*) jq -r '.'$mode'."AWS::'$cmd'"' $json;;
+        esac
+    done
+}
+
+cfn_replace_userdata() {
+    local user_data_file="$1"
+    local jpath=${2:-'.Resources.LaunchTemplate.Metadata."AWS::CloudFormation::Init".configure_app.files["/var/lib/cloud/scripts/vendor/bootstrap_override.sh"]'}
+    jq --rawfile a $user_data_file -r  "${jpath}={mode: \"000755\", group: \"root\", owner: \"root\" , content: { \"Fn::Join\": [ \"\", [\$a]]}}" #| del(.Resources.LaunchTemplate.Metadata."AWS::CloudFormation::Init".configure_app.files["/var/lib/cloud/scripts/vendor/bootstrap.sh"].source)
+}
+
+

@@ -1,10 +1,10 @@
 ---
-min_packer_version: '1.5.4'
+min_packer_version: '1.6.4'
 variables:
   aws_access_key: '{{env `AWS_ACCESS_KEY_ID`}}'
   aws_secret_key: '{{env `AWS_SECRET_ACCESS_KEY`}}'
   baseos_owner: '559166403383'
-  baseos: 'xcp-base'
+  baseos: 'xcalar-base-image-amzn2'
   build_number: '{{env `BUILD_NUMBER`}}'
   image_build_number: '{{env `IMAGE_BUILD_NUMBER`}}'
   description: Xcalar Cloud Platform
@@ -17,7 +17,7 @@ variables:
   bootstrap: '{{env `XLRINFRADIR`}}/aws/cfn/{{env `PROJECT`}}/scripts/user-data.sh'
   installer_version: '1.0'
   license: '{{env `LICENSE`}}'
-  product: xcp
+  product: '{{env `PRODUCT`}}'
   project: '{{env `PROJECT`}}'
   region: '{{env `AWS_DEFAULT_REGION`}}'
   shared_with: '{{env `SHARED_WITH`}}'
@@ -26,6 +26,8 @@ variables:
   uid: '1000'
   release: '{{env `RELEASE`}}'
   manifest: '{{template_dir}}/packer-manifest.json'
+  environment: '{{env `ENVIRONMENT`}}'
+  rootfs: '{{template_dir}}/../xcalar/rootfs'
 builders:
   - type: amazon-ebs
     name: amazon-ebs-amzn2
@@ -46,7 +48,7 @@ builders:
         architecture: 'x86_64'
         root-device-type: ebs
         block-device-mapping.volume-type: gp2
-        name: '{{user `baseos`}}-{{split build_name "-" 2}}-{{user `installer_version`}}-*'
+        name: '{{user `baseos`}}*'
       owners: '{{user `baseos_owner`}}'
       most_recent: true
     instance_type: c5d.xlarge
@@ -95,36 +97,50 @@ builders:
       - device_name: /dev/sdc
         virtual_name: ephemeral1
 provisioners:
+  - type: file
+    source: '{{user `bootstrap` }}'
+    destination: '/tmp/bootstrap.sh'
+  - type: shell-local
+    environment_vars:
+      - BOOTSTRAP={{user `bootstrap`}}
+      - TEMPLATEDIR={{ template_dir }}
+      - ROOTFS={{user `rootfs`}}
+    inline:
+      - set -e
+      - rm -f $TEMPLATEDIR/rootfs.tar
+      - mkdir -p $ROOTFS/opt/xcalar/scripts/
+      - rm -f $ROOTFS/opt/xcalar/scripts/bootstrap.sh
+      - cp -f $BOOTSTRAP $ROOTFS/opt/xcalar/scripts/bootstrap.sh
+      - tar czvf $TEMPLATEDIR/rootfs.tar --owner=root --group=root --dereference -C $ROOTFS .
+      - exit 0
   - type: shell
     environment_vars:
       - OSID={{split build_name "-" 2}}
       - CLOUD=aws
       - INSTALLER_URL={{user `installer_url`}}
       - LICENSE={{user `license`}}
+      - ENVIRONMENT={{user `environment`}}
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     scripts:
       - '{{ template_dir }}/../scripts/install-xcalar.sh'
       - '{{ template_dir }}/../scripts/fixup-jupyter.sh'
   - type: file
-    source: '{{ template_dir }}/../../aws/aws-discover-input-schema.sh'
-    destination: /tmp/aws-discover-input-schema.sh
-  - type: file
-    source: '{{ template_dir }}/../scripts/genDefaultAdmin.sh'
-    destination: /tmp/genDefaultAdmin.sh
-  - type: file
-    source: '{{ user `bootstrap` }}'
-    destination: /tmp/bootstrap.sh
+    source: '{{ template_dir }}/rootfs.tar'
+    destination: /tmp/rootfs.tar
+    generated: true
   - type: shell
     execute_command: '{{.Vars}} /usr/bin/sudo -H -E bash ''{{.Path}}'''
     inline:
-      - chmod +x /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh /tmp/aws-discover-input-schema.sh
-      - chown root:root /tmp/genDefaultAdmin.sh /tmp/bootstrap.sh /tmp/aws-discover-input-schema.sh
+      - sed -i -r 's/stunnel_check_cert_hostname.*/stunnel_check_cert_hostname = false/' /etc/amazon/efs/efs-utils.conf
       - ln -sfn /usr/bin/python2.7 /usr/bin/python2
-      - mv /tmp/genDefaultAdmin.sh /opt/xcalar/scripts/
-      - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
-      - mv /tmp/aws-discover-input-schema.sh /usr/bin/
+      - tar zxvf /tmp/rootfs.tar -C /
       - systemctl disable --now docker
-        #- test -f /etc/profile.d/jdk.sh && rm -vf /etc/profile.d/zjava.sh || true
+      - mkdir -p /opt/xcalar/scripts /var/lib/cloud/scripts/vendor/
+      - echo "Copying bootstrap into place"
+      - mv /tmp/bootstrap.sh /var/lib/cloud/scripts/vendor/
+      - chown root:root /var/lib/cloud/scripts/vendor/bootstrap.sh
+      - chmod 0750 /var/lib/cloud/scripts/vendor/bootstrap.sh
+      - exit 0
   - type: shell
     environment_vars:
       - OSID={{split build_name "-" 2}}
@@ -149,4 +165,3 @@ post-processors:
       region: '{{user `region`}}'
       shared_with: '{{user `shared_with`}}'
       today: '{{user `today`}}'
-

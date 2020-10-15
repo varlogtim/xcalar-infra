@@ -14,10 +14,6 @@ cleanup() {
 
     sed -i '/^proxy/d' /etc/yum.conf
 
-    if command -v cloud-init >/dev/null; then
-        cloud-init clean || true
-    fi
-
     truncate -s 0 \
         /var/log/secure \
         /var/log/messages \

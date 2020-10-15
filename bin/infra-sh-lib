@@ -511,6 +511,33 @@ interface_ip() {
     return 1
 }
 
+hashilatest() {
+    local version
+    if version="$(curl -fsSL https://releases.hashicorp.com/$1/ | grep -Eow "${1}_[0-9\.]+" | sort -rV | head -1)"; then
+        echo "${version#${1}_}"
+        return 0
+    fi
+    return 1
+}
+
+hashiurl() {
+    local tool="$1" version="$2"
+    shift 2
+    if [ -z "$version" ]; then
+        if ! version="$(hashilatest $tool)"; then
+            return 1
+        fi
+    fi
+    local target="$(uname -s)"
+    target="${target,,}"
+    local arch="amd64"
+    case "$(uname -m)" in
+        x86_64) arch=amd64;;
+        *) echo >&2 "Unknown architecture: $(uname -m)"; return 1;;
+    esac
+    echo "https://releases.hashicorp.com/${tool}/${version}/${tool}_${version}_${target}_${arch}.zip"
+}
+
 download_hashitool() {
     local tool="$1"
     local version="$2"
@@ -518,9 +545,21 @@ download_hashitool() {
         echo >&2 "$tool already exists"
         return 1
     fi
-    curl -fsSL "http://repo.xcalar.net/deps/${tool}_${version}_linux_amd64.zip" -o ${tool}-$$.zip >&2 \
-        && unzip -o -q ${tool}-$$.zip >&2 \
-        && rm -vf ${tool}-$$.zip
+    local target="$(uname -s)"
+    target="${target,,}"
+    local arch="amd64"
+    case "$(uname -m)" in
+        x86_64) arch=amd64;;
+        *) echo >&2 "Unknown architecture: $(uname -m)"; return 1;;
+    esac
+
+    if ! curl -fsSL "http://repo.xcalar.net/deps/${tool}_${version}_${target}_${arch}.zip" -o ${tool}-$$.zip >/dev/null 2>&1; then
+        if ! curl -fsSL "$(hashiurl "$tool" $version)" -o ${tool}-$$.zip; then
+            return 1
+        fi
+    fi
+    unzip -o -q ${tool}-$$.zip >&2 \
+    && rm -vf ${tool}-$$.zip
 }
 
 download_packer() {
@@ -608,6 +647,10 @@ packer_manifest_all() {
     done
     cat $tmpdir/allamis.yaml
     rm -rf $tmpdir
+}
+
+packer_uuid_from_ami() {
+    jq -r ".builds[]|select(.artifact_id | contains('$1'))|.packer_run_uuid" < "${2:-packer_manifest.json}"
 }
 
 # Reformats packer_manifest_all to be more CloudFormation/yaml friendly:

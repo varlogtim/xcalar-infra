@@ -7,22 +7,10 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aw
 XCE_CONFDIR="${XCE_CONFDIR:-/etc/xcalar}"
 OSID=${OSID:-$(osid)}
 
-EPHEMERAL=/ephemeral/data
-
-if ! rpm -q ephemeral-disk; then
-    yum install -y ephemeral-disk --enablerepo='xcalar-*'
-fi
-systemctl enable ephemeral-disk
-XCUNIT=/etc/systemd/system/xcalar.service.d
-mkdir -p $XCUNIT
-cat >${XCUNIT}/ephemeral.conf<<EOF
-[Unit]
-Wants=ephemeral-disk.service
-After=ephemeral-disk.service
-EOF
-sed -i 's/^Before=cloud.*$/After=basic.target/' /usr/lib/systemd/system/ephemeral-disk.service
+yum localinstall -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-41.noarch.rpm || true
+EPHEMERAL=${EPHEMERAL:-/ephemeral/data}
 systemctl daemon-reload
-
+systemctl disable ephemeral-disk
 NOW=$(date +%s)
 if test -x /usr/bin/ephemeral-disk; then
     /usr/bin/ephemeral-disk || true
@@ -118,9 +106,9 @@ fi
 echo >&2 "Setting up cgroups"
 /opt/xcalar/bin/cgconfig-setup.sh
 
-echo '/mnt/xcalar/pysite' > /opt/xcalar/lib/python3.6/site-packages/mnt-xcalar-pysite.pth
-mkdir -p /var/opt/xcalar/pysite
-chown xcalar:xcalar /var/opt/xcalar/pysite
+#echo '/mnt/xcalar/pysite' > /opt/xcalar/lib/python3.6/site-packages/mnt-xcalar-pysite.pth
+#mkdir -p /var/opt/xcalar/pysite
+#chown xcalar:xcalar /var/opt/xcalar/pysite
 
 LICENSE_FILE="${XCE_CONFDIR}/XcalarLic.key"
 if [ -z "$LICENSE" ] && [ -n "$LICENSE_URL" ]; then
@@ -179,6 +167,9 @@ if [ -n "${POSTINSTALL}" ]; then
     fi
 fi
 
+
+yum clean all --enablerepo='*'
+rm -rf /var/tmp/yum* /var/cache/yum/*
 
 #sed -i '/# Provides:/a# Should-Start: cloud-final' /etc/init.d/xcalar
 

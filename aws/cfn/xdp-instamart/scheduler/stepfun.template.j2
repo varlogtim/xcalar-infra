@@ -1,8 +1,10 @@
 ---
-AWSTemplateFormatVersion: '2010-09-09'
-Transform: 'AWS::Serverless-2016-10-31'
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
 
-Description: Step function support for Xcalar Lambda Schedules
+Description: >-
+  Xcalar Cloud Export Scheduler ({{ installer_tag }} [{{flavor}}/{{ENVIRONMENT}}] {{ localtime }})
+
 Parameters:
   AdminUsername:
     Description: Username of the Administrator
@@ -18,7 +20,7 @@ Parameters:
   InstanceType:
     Type: String
     Description: Instance Type to launch
-    Default: 'r5d.xlarge'
+    Default: "r5d.xlarge"
   LaunchTemplate:
     Type: String
     Description: Template used for lanching Ec2 nodes
@@ -28,12 +30,13 @@ Parameters:
   NotificationEmail:
     Type: String
     Description: Email address to be notified once work completes
+    Default: ""
   EventBucket:
     Type: String
     Description: Bucket to monitor
   EventPrefix:
     Type: String
-    Description: 'Prefix in bucket to monitor. Eg, s3://Bucket/Prefix/'
+    Description: "Prefix in bucket to monitor. Eg, s3://Bucket/Prefix/"
   ExistingBucket:
     Type: String
     Description: Your source bucket
@@ -49,43 +52,39 @@ Parameters:
   EfsSharedRoot:
     Description: EFS to use for Xcalar Shared Roots
     Type: String
-  EfsMountTarget:
-    Description: EFS Mount Target
+  EfsAccessPoint:
+    Description: EFS Access Point
     Type: String
   Subnet:
     Description: Subnet to launch into
     Type: String
+  ClusterASG:
+    Description: Parent autoscaling group
+    Type: String
+
+Conditions:
+  HaveEmail: !Not [!Equals [!Ref NotificationEmail, ""]]
+
 Mappings:
-  SourceCode:
+  LambdaSourceCode:
 {%- for region in ['us-west-2','us-west-1','us-east-1','us-east-2'] %}
     {{region}}:
-      S3Bucket: '{{ lambda[region]["lambdabucket"] }}'
-      KeyPrefix: '{{ lambdakey }}'
+      Bucket: '{{ lambda[region]["lambdabucket"] }}'
+      Key: '{{ lambdakey }}'
       Layer: '{{ lambda[region]["lambdalayer"] }}'
 {%- endfor %}
-Globals:
-  Function:
-    Runtime: python3.6
-    Timeout: 60
-    Handler: index.handler
-    Layers:
-      - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
-    Environment:
-      Variables:
-        StackName: !Ref 'AWS::StackName'
-        Region: !Ref 'AWS::Region'
-        StackId: !Ref 'AWS::StackId'
-        ParentStack: !Ref 'ParentStack'
 Resources:
   SNSTopic:
     Type: AWS::SNS::Topic
+  SNSEMailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HaveEmail
     Properties:
-      Subscription:
-        - Endpoint: !Ref NotificationEmail
-          Protocol: "email"
-
+      Endpoint: !Ref NotificationEmail
+      Protocol: "email"
+      TopicArn: !Ref SNSTopic
   StatesExecutionRole:
-    Type: "AWS::IAM::Role"
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -104,7 +103,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - "sns:Publish"
-                Resource: !Ref SNSTopic
+                Resource:
+                  - !Ref SNSTopic
               - Effect: Allow
                 Action:
                   - logs:CreateLogDelivery
@@ -115,7 +115,8 @@ Resources:
                   - logs:PutResourcePolicy
                   - logs:DescribeResourcePolicies
                   - logs:DescribeLogGroups
-                Resource: '*'
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
               - Effect: Allow
                 Action:
                   - "lambda:InvokeFunction"
@@ -126,7 +127,7 @@ Resources:
                   - !GetAtt RunSSMCommands.Arn
                   - !GetAtt CheckSSMCommandStatus.Arn
   AddS3NotificationRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -140,10 +141,35 @@ Resources:
       Path: /
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      Path: /
+      Policies:
+        - PolicyName: AddS3NotificationPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketPolicy
+                  - s3:PutBucketPolicy
+                  - s3:GetBucketLocation
+                  - s3:GetBucketNotification
+                  - s3:PutBucketNotification
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${EventBucket}'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${EventBucket}/*'
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource:
+                  - !Ref SNSTopic
 
   ScheduleUpdateTrigger:
-    Type: 'Custom::LambdaTrigger'
+    Type: "Custom::LambdaTrigger"
     DependsOn: ScheduleUpdateCallPermission
     Properties:
       ServiceToken: !GetAtt 'AddS3Notification.Arn'
@@ -152,33 +178,8 @@ Resources:
       Prefix: !Ref EventPrefix
       Suffix: '.json'
 
-      #  SamScheduleManager:
-      #    Type: 'AWS::Serverless::Function'
-      #    Properties:
-      #      Handler: schedule.update_handler
-      #      CodeUri: ./lambda
-      #      Events:
-      #        BucketEvent1:
-      #          Type: S3
-      #          Properties:
-      #            Bucket: !Ref EventBucket
-      #            Filter:
-      #              S3Key:
-      #                Rules:
-      #                  - Name: prefix
-      #                    Value: !Ref EventPrefix
-      #                  - Name: suffix
-      #                    Value: '.json'
-      #            Events:
-      #              - 's3:ObjectCreated:*'
-      #              - 's3:ObjectRemoved:*'
-      #  SamScheduleManagerLogs:
-      #    Type: AWS::Logs::LogGroup
-      #    Properties:
-      #      LogGroupName: !Sub /aws/lambda/${SamScheduleManager}
-      #
   ScheduleUpdateRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -193,7 +194,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
       Policies:
         - PolicyName: S3Access
           PolicyDocument:
@@ -214,9 +214,38 @@ Resources:
                   - 's3:GetObject'
                 Resource:
                   - !Sub 'arn:aws:s3:::${EventBucket}/${EventPrefix}/*'
+  ScheduleUpdateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Bucket]
+        S3Key: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Key]
+      Layers:
+        - !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Layer]
+      Handler: schedule.update_handler
+      Role: !GetAtt ScheduleUpdateRole.Arn
+      Runtime: python3.6
+      Timeout: 100
+      Environment:
+        Variables:
+          StackName: !Ref 'AWS::StackName'
+          Region: !Ref 'AWS::Region'
+          StackId: !Ref 'AWS::StackId'
+          BaseURL: !Ref BaseURL
+          ParentStack: !Ref ParentStack
+          EventBucket: !Ref EventBucket
+          EventPrefix: !Ref EventPrefix
+          StateMachineArn: !Ref DataAppStateMachine
+          EventRoleArn: !GetAtt ScheduleExecuteEventRole.Arn
+{% if logGroup %}
+  ScheduleUpdateFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ScheduleUpdateFunction}
+{% endif %}
 
   ScheduleExecuteEventRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -227,7 +256,7 @@ Resources:
                 - events.amazonaws.com
             Action:
               - 'sts:AssumeRole'
-      Path: /
+      Path: "/"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
@@ -239,17 +268,25 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'states:StartExecution'
-                  - 'states:*'
+                  - 'states:StopExecution'
+                  - 'states:DescribeStateMachine'
                 Resource:
                   - !Ref 'DataAppStateMachine'
+                  - !Sub
+                    - 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${DataAppStateMachineName}:*'
+                    - DataAppStateMachineName:
+                        Fn::GetAtt: [ DataAppStateMachine, Name ]
               - Effect: Allow
                 Action:
                   - 'iam:PassRole'
                   - 'iam:GetRole'
-                Resource: '*'
-
+                Resource:
+                  - !GetAtt LambdaRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
   ScheduleUpdateCallPermission:
-    Type: 'AWS::Lambda::Permission'
+    Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref ScheduleUpdateFunction
       Action: 'lambda:InvokeFunction'
@@ -258,7 +295,7 @@ Resources:
       SourceArn: !Sub 'arn:aws:s3:::${EventBucket}'
 
   StepStartCallPermission:
-    Type: 'AWS::Lambda::Permission'
+    Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref StepStartFunction
       Action: 'lambda:InvokeFunction'
@@ -283,6 +320,7 @@ Resources:
             Principal:
               Service:
                 - lambda.amazonaws.com
+      Path: /
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
@@ -340,75 +378,16 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${EventBucket}/${EventPrefix}/*"
 
-  Ec2SSMRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Action:
-              - sts:AssumeRole
-            Principal:
-              Service:
-                - ec2.amazonaws.com
-            Effect: Allow
-      Path: "/"
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-      Policies:
-        - PolicyName: "Ec2ProxyClusterPolicy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "kms:DescribeCustomKeyStores"
-                  - "kms:ListKeys"
-                  - "kms:Decrypt"
-                  - "kms:DescribeKey"
-                  - "kms:ConnectCustomKeyStore"
-                  - "kms:ListGrants"
-                  - "ec2:DescribeInstances"
-                  - "cloudformation:DescribeStackResource*"
-                  - "autoscaling:DescribeAutoScalingGroups"
-                  - "elasticfilesystem:DescribeMountTargets"
-                  - "autoscaling:CompleteLifecycleAction"
-                Resource: "*"
-              - Effect: "Allow"
-                Action:
-                  - s3:ListBucket
-                Resource:
-                  - !Sub "arn:aws:s3:::${ExistingBucket}"
-                  - !Sub "arn:aws:s3:::${WorkBucket}"
-                  - !Sub "arn:aws:s3:::${EventBucket}"
-              - Effect: "Allow"
-                Action:
-                  - 's3:GetObject'
-                  - "s3:PutObject"
-                  - 's3:CreateMultipartUpload'
-                  - 's3:FinishMultipartUpload'
-                  - 's3:DeleteObject'
-                Resource:
-                  - !Sub "arn:aws:s3:::${ExistingBucket}/*"
-                  - !Sub "arn:aws:s3:::${WorkBucket}/*"
-              - Effect: "Allow"
-                Action:
-                  - 's3:Get*'
-                Resource:
-                  - !Sub "arn:aws:s3:::${ExistingBucket}"
-                  - !Sub "arn:aws:s3:::${WorkBucket}"
-                  - !Sub "arn:aws:s3:::${EventBucket}"
   AddS3Notification:
-    Type: 'AWS::Lambda::Function'
+    Type: AWS::Lambda::Function
     Properties:
       Code:
-        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket ]
-        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
+        S3Bucket: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Bucket ]
+        S3Key: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Key]
+      Layers:
+        - !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Layer]
       Handler: add_notification.lambda_handler
       Role: !GetAtt AddS3NotificationRole.Arn
-      Layers:
-        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
       Runtime: python3.6
       Timeout: 60
 {% if logGroup %}
@@ -418,45 +397,15 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${AddS3Notification}
 {% endif %}
 
-  ScheduleUpdateFunction:
-    Type: 'AWS::Lambda::Function'
-    Properties:
-      Code:
-        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket]
-        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
-      Handler: schedule.update_handler
-      Role: !GetAtt ScheduleUpdateRole.Arn
-      Layers:
-        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
-      Runtime: python3.6
-      Timeout: 100
-      Environment:
-        Variables:
-          StackName: !Ref 'AWS::StackName'
-          Region: !Ref 'AWS::Region'
-          StackId: !Ref 'AWS::StackId'
-          BaseURL: !Ref BaseURL
-          ParentStack: !Ref ParentStack
-          EventBucket: !Ref EventBucket
-          EventPrefix: !Ref EventPrefix
-          StateMachineArn: !Ref DataAppStateMachine
-          EventRoleArn: !GetAtt ScheduleExecuteEventRole.Arn
-{% if logGroup %}
-  ScheduleUpdateFunctionLogs:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub /aws/lambda/${ScheduleUpdateFunction}
-{% endif %}
-
   StepStartFunction:
-    Type: 'AWS::Lambda::Function'
+    Type: AWS::Lambda::Function
     Properties:
       Code:
-        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket]
-        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
-      Handler: schedule.startstep_handler
+        S3Bucket: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Bucket]
+        S3Key: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Key]
       Layers:
-        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
+        - !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Layer]
+      GHandler: schedule.startstep_handler
       Description: "Launches a statemachine"
       Environment:
         Variables:
@@ -525,9 +474,9 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref SamLaunchTemplate
         Version: !GetAtt SamLaunchTemplate.LatestVersionNumber
-      MinSize: !Ref 0
-      MaxSize: !Ref 0
-      DesiredCapacity: !Ref 0
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
       VPCZoneIdentifier:
         - !Ref 'Subnet'
       Tags:
@@ -537,8 +486,8 @@ Resources:
         - Key: FileSystemId
           Value: !Ref EfsSharedRoot
           PropagateAtLaunch: true
-        - Key: MountTarget
-          Value: !Ref EfsMountTarget
+        - Key: EfsAccessPoint
+          Value: !Ref EfsAccessPoint
           PropagateAtLaunch: true
           #CreationPolicy:
           #  ResourceSignal:
@@ -555,14 +504,14 @@ Resources:
 {%- endif %}
 
   LaunchCluster:
-    Type: "AWS::Lambda::Function"
+    Type: AWS::Lambda::Function
     Properties:
       Code:
-        S3Bucket: !FindInMap [SourceCode, !Ref 'AWS::Region', S3Bucket]
-        S3Key: !FindInMap [SourceCode, !Ref 'AWS::Region', KeyPrefix]
-      Handler: schedule.launchcluster_handler
+        S3Bucket: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Bucket]
+        S3Key: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Key]
       Layers:
-        - !FindInMap [SourceCode, !Ref 'AWS::Region', Layer]
+        - !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Layer]
+      Handler: schedule.launchcluster_handler
       Description: "Creates cluster to perform DataApp processing"
       Environment:
         Variables:
@@ -573,13 +522,13 @@ Resources:
           StackName: !Ref 'AWS::StackName'
           Region: !Ref 'AWS::Region'
           StackId: !Ref 'AWS::StackId'
-          ParentStack: !Ref 'ParentStack'
+          ParentStack: !Ref ParentStack
           LaunchTemplate: !Ref LaunchTemplate
           LaunchTemplateVersion: !Ref LaunchTemplateVersion
           Email: !Ref NotificationEmail
           BaseURL: !Ref BaseURL
           EfsSharedRoot: !Ref EfsSharedRoot
-          EfsMountTarget: !Ref EfsMountTarget
+          EfsAccessPoint: !Ref EfsAccessPoint
           Subnet: !Ref Subnet
       Role: !GetAtt LambdaRole.Arn
       Runtime: python3.6
@@ -593,7 +542,7 @@ Resources:
 
 
   CheckClusterStatus:
-    Type: "AWS::Lambda::Function"
+    Type: AWS::Lambda::Function
     Properties:
       Code:
         ZipFile: |
@@ -635,7 +584,7 @@ Resources:
 
 
   RunSSMCommands:
-    Type: "AWS::Lambda::Function"
+    Type: AWS::Lambda::Function
     Properties:
       Code:
         ZipFile: |
@@ -746,11 +695,11 @@ Resources:
   CheckSSMCommandStatusLogs:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${CheckSSMCommandStatus}
+      LogGroupName: !Sub '/aws/lambda/${CheckSSMCommandStatus}'
 {% endif %}
 
   TerminateEC2:
-    Type: "AWS::Lambda::Function"
+    Type: AWS::Lambda::Function
     Properties:
       Code:
         ZipFile: |
@@ -793,7 +742,7 @@ Resources:
   TerminateEC2Logs:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${TerminateEC2}
+      LogGroupName: !Sub '/aws/lambda/${TerminateEC2}'
 {% endif %}
 
 
@@ -814,7 +763,7 @@ Resources:
       #    TableName: "Create-Golden-AMI-Metadata"
 
   DataAppStateMachine:
-    Type: "AWS::StepFunctions::StateMachine"
+    Type: AWS::StepFunctions::StateMachine
     Properties:
       DefinitionString: !Sub |
           {
@@ -930,11 +879,48 @@ Resources:
               }
             }
           }
-      RoleArn: !GetAtt [ StatesExecutionRole, Arn ]
+      RoleArn: !GetAtt StatesExecutionRole.Arn
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-stepfun'
         - Key: StackName
           Value: !Ref 'AWS::StackName'
 
+Outputs:
+  DataAppStateMachine:
+    Description: URL of your new Xcalar Cluster
+    Value: !Ref DataAppStateMachine
+  SNSTopic:
+    Description: SNSTopic for notifications
+    Value: !Ref SNSTopic
+  FnTerminateEc2:
+    Value: !GetAtt TerminateEC2.Arn
+  FnLaunchCluster:
+    Value: !GetAtt LaunchCluster.Arn
+  FnCheckClusterStatus:
+    Value: !GetAtt CheckClusterStatus.Arn
+  FnRunSSMCommands:
+    Value: !GetAtt RunSSMCommands.Arn
+  FnCheckSSMCommand:
+    Value: !GetAtt CheckSSMCommandStatus.Arn
+  FnLaunchCluster:
+    Value: !GetAtt LaunchCluster.Arn
+  FnStepStartFunction:
+    Value: !GetAtt StepStartFunction.Arn
+  FnScheduleUpdateFunction:
+    Value: !GetAtt ScheduleUpdateFunction.Arn
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: xcalar-export-scheduler
+    Description: >
+      Configures and schedules batch export from Xcalar to S3
+    Author: Xcalar Inc
+    SpdxLicenseId: APL2
+    LicenseUrl: LICENSE.txt
+    ReadmeUrl: README-SAR.md
+    Labels: ['xcalar', 'scheduler', 'lambda', 'exports', 'etl']
+    HomePageUrl: https://xcalar.com
+    SemanticVersion: 1.0.0
+    SourceCodeUrl: https://github.com/xcalarinc/xcalar-export-scheduler
 # vim: ft=yaml.cloudformation

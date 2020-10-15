@@ -19,7 +19,7 @@ mbfree() {
 
 
 set -a
-eval $(ec2-tags -s -i)
+eval $(ec2-tags -s)
 set +a
 
 IPS=($(ec2_find_cluster ClusterName ${CLUSTERNAME}))

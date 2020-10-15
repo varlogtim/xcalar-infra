@@ -84,17 +84,32 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+[ -n "$NAME" ] || die "Must specify vm name"
+
 [ -n "$IMAGE" ] || die "No image specified. Use --image, optionally combined with --clone"
+
+NAME_SHA="$(sha256sum <<< "$NAME" | cut -d' ' -f1)"
+IMAGE_DIR=/var/tmp/$(id -u)/qemu-images
+VM_DIR=/var/tmp/$(id -u)/qemu-vms/$NAME
+
+mkdir -p $IMAGE_DIR
 
 if [ -r "$IMAGE" ]; then
     IMAGE_TO_USE="$IMAGE"
 elif [[ $IMAGE =~ ^http[s]?:// ]]; then
-    IMAGE_TO_USE="$(basename "${IMAGE%\?*}")"
-    echo >&2 "NOTE: Downloading $IMAGE_TO_USE from $IMAGE"
-    curl -fsSL "$IMAGE" -o "$IMAGE_TO_USE"
+    IMAGE_URI_SHA="$(sha256sum <<< "$IMAGE" | cut -d' ' -f1)"
+    IMAGE_BASE="$(basename "${IMAGE%\?*}")"
+    IMAGE_EXT="${IMAGE_BASE##*.}"
+    IMAGE_DOWNLOAD="$IMAGE_DIR/${IMAGE_URI_SHA}.${IMAGE_EXT}"
+    if ! test -e "$IMAGE_DOWNLOAD"; then
+        echo >&2 "NOTE: Downloading $IMAGE to $IMAGE_DOWNLOAD"
+        curl -fsSL "$IMAGE" -o "$IMAGE_DOWNLOAD"
+    fi
+    CLONE="$VM_DIR/${NAME}.qcow2"
 else
     die "Image $IMAGE not found"
 fi
+
 
 if [ -n "$CLONE" ]; then
     if ! [ -e "$CLONE" ] || $FORCE; then

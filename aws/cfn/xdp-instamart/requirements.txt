@@ -2,10 +2,9 @@ attrs
 aws-lambda-builders
 aws-sam-cli
 aws-sam-translator
-awscli
 boto3
 botocore
-crhelper
+cfn-lint
 click
 cookiecutter
 dateparser

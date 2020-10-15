@@ -40,6 +40,9 @@ install_ssm_agent() {
     else
         status amazon-ssm-agent || true
     fi
+    yum locallinstall -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
+
+
 }
 
 install_osid() {
@@ -129,9 +132,7 @@ install_sysdig() {
 
 main() {
     install_osid
-    install_lego
     install_ssm_agent
-    #fix_networking
 
     echo 'exclude=kernel-debug* *.i?86 *.i686' >> /etc/yum.conf
 
@@ -145,6 +146,8 @@ main() {
         deltarpm curl wget tar gzip htop fuse jq nfs-utils iftop iperf3 sysstat python2-pip \
         lvm2 util-linux bash-completion nvme-cli nvmetcli libcgroup at python-devel \
         libnfs-utils stunnel pigz bash-completion-extras freetds
+
+    sed -i -r 's/stunnel_check_cert_hostname.*$/stunnel_check_cert_hostname = false/' /etc/amazon/efs/efs-utils.conf
 
     yum install -y --enablerepo='xcalar-deps-common' --enablerepo='epel' \
         ec2tools ephemeral-disk tmux ccache restic lifecycled consul consul-template node_exporter \
@@ -161,6 +164,7 @@ main() {
     blkid
 
     echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aws/bin:/opt/mssql-tools/bin' > /etc/profile.d/path.sh
+    echo -e 'CHECKPOINT_DISABLE=1\nexport CHECKPOINT_DISABLE' | tee /etc/profile.d/checkpoint.sh
     . /etc/profile.d/path.sh
 
     case "$OSID" in

@@ -96,6 +96,7 @@ chmod +x /usr/bin/runner.sh
 bash -x batch.sh 2>&1 | tee -a /var/log/user-data-batch.log
 exit $?
 '''
+
     response = client.run_instances(
         LaunchTemplate={
             'LaunchTemplateId': LaunchTemplate,

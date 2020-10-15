@@ -13,10 +13,7 @@ cleanup() {
     fi
 
     sed -i '/^proxy/d' /etc/yum.conf
-
-    if command -v cloud-init >/dev/null; then
-        cloud-init clean || true
-    fi
+    echo "CHECKPOINT_DISABLE=1" | tee -a /etc/environment
 
     truncate -s 0 \
         /var/log/secure \
@@ -31,25 +28,20 @@ cleanup() {
         /var/log/cfn-* \
         /var/log/cloud-init* \
         /var/log/user-data* \
-        /var/log/nomad \
         /var/log/boot.log* \
-        /var/log/grubby* \
-        /var/log/spooler \
-        /var/log/tallylog \
-        /var/log/tuned/* \
         /var/log/xcalar/* \
         /var/log/audit/audit.log.*
 
     systemctl stop systemd-journald || true
     sed -i -r 's/^#?Storage=.*$/Storage=persistent/' /etc/systemd/journald.conf
-    rm -rfv \
+    rm -fv \
         /var/log/sa/* \
-        /var/log/journal/* \
+        /var/log/journal/*/* \
         /var/log/chrony/* \
         /var/log/amazon/{efs,ssm}/*
 
     rm -fv /etc/hostname /root/.bash_history /home/*/.bash_history
-    rm -rfv /root/.{pip,cache} /home/*/.{pip,cache}
+    rm -rfv /root/.pip /root/.cache /home/*/.pip /home/*/.cache
     if [[ $PACKER_BUILDER_TYPE =~ amazon ]] || [[ $PACKER_BUILDER_TYPE =~ azure ]]; then
         echo >&2 "Detected PACKER_BUILDER_TYPE=$PACKER_BUILDER_TYPE, deleting authorized_keys"
         rm -fv /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
@@ -68,10 +60,9 @@ df -h
 
 cleanup
 
-rm -rfv /tmp/*
-touch /.unconfigured
+rm -rfv /tmp/* /var/tmp/*
 rm -fv /etc/udev/rules.d/*-persistent-*.rules
-
+systemd-tmpfiles --create /etc/tmpfiles.d/xcalar.conf || true
 export HISTSIZE=0
 export HISTFILESIZE=0
 history -c
@@ -80,5 +71,4 @@ if test -e /usr/sbin/waagent; then
     echo >&2 "Running Azure deprovisioner ..."
     /usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync
 fi
-sync
 exit 0

@@ -131,8 +131,6 @@ if [ "$CLOUD" = gce ]; then
     fi
 elif [ "$CLOUD" = aws ]; then
     yum install -y --enablerepo='xcalar*' ephemeral-disk
-    systemctl daemon-reload
-    systemctl enable ephemeral-disk
     ephemeral-disk
     if ! command -v ec2-tags; then
         curl -fsSL http://repo.xcalar.net/deps/ec2-tags-v3 > /usr/local/bin/ec2-tags-v3
@@ -141,8 +139,6 @@ elif [ "$CLOUD" = aws ]; then
     fi
 elif [ "$CLOUD" = azure ]; then
     yum install -y --enablerepo='xcalar*' ephemeral-disk
-    systemctl daemon-reload
-    systemctl enable ephemeral-disk
     ephemeral-disk
 fi
 

@@ -59,6 +59,7 @@ transform() {
 	EOF
     case "$FORMAT" in
         yaml | yml) cat "$JSON" ;;
+        sdb)  jq -r '{ Name:"'${image_id:-$installer}'", Attributes: to_entries|map({Name: (.key|tostring), Value: (.value|tostring), Replace: true})}' $JSON ;;
         json) cat "$JSON" ;;
         cli) jq -r "to_entries|map(\"--\(.key) \(.value|tostring)\")|.[]" $JSON ;;
         clieq) jq -r "to_entries|map(\"--\(.key)=\(.value|tostring)\")|.[]" $JSON ;;
@@ -185,9 +186,18 @@ check_build_meta() {
 }
 
 usage() {
-    cat <<-EOF
-    usage: $0 [--format=(cli|clieq|vars|hcvar|json|yml|sh)] [--image_build_number=#] ami-id or \
-            /path/to/installer or directly use S3
+    cat <<-'EOF'
+	usage: $0 [--format=(sdb|cli|clieq|vars|hcvar|json|yml|sh)] [--image_build_number=#] ami-id or \
+	        /path/to/installer or directly use S3
+
+	        ## Store in sdb
+	        aws sdb batch-put-attributes --domain amis --items "$(installer-version.sh --format=sdb ami-12345)"
+	        aws sdb select --select-expression 'select * from amis where installer_version = "2.4.1"'
+
+	        #
+	        some-tool $(installer-version.sh --format=clieq ami-1234)
+	        produces: some-tool --installer-version=2.4.1 ...
+
 	EOF
 }
 
@@ -351,7 +361,7 @@ ok_or_not() {
 }
 
 SHA1CHECK=$(sed '/^SHA1CHECK/d' "${BASH_SOURCE[0]}" | sha1sum | cut -d' ' -f1)
-SHA1CHECK_OK=856e7b1ec028853e5883fe93081ba67fda1dc1fc
+SHA1CHECK_OK=8dbaae78ebd8f11e6abf22ce00f9eb3627789a9d
 # shellcheck disable=SC2016,SC2046,SC2034
 if [ -z "$IN_TEST" ] && ([ "$1" = --test ] || [ "$SHA1CHECK" != "$SHA1CHECK_OK" ]); then
     export IN_TEST=1
