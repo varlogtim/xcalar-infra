@@ -38,6 +38,15 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
         self.logger = logging.getLogger(__name__)
 
 
+    def _store_cur_core(self, *, cores, cur_core):
+        # Trim off any path prefix
+        corefile_name = cur_core.get('corefile_name')
+        if '/' in corefile_name:
+            cur_core['corefile_name'] = corefile_name.split('/')[-1]
+        key = MongoDB.encode_key(cur_core.get('corefile_name'))
+        cores[key] = cur_core
+
+
     def _do_update_build(self, *, jbi, log, is_reparse=False, test_mode=False):
         """
         Parse the log for analyzed core information
@@ -54,9 +63,11 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
             # 2847.711 #### Analyzing buildOut/src/bin/usrnode/usrnode core.usrnode.7703 #####
             if '####' in fields[1] and fields[2] == 'Analyzing':
                 if cur_core is not None:
-                    raise CoreAnalyzerLogParserException(
-                            "Analysis header before analysis footer {}"
-                            .format(lnum, line))
+                    self.logger.error("LOG PARSE ERROR")
+                    self.logger.error("Analysis header before analysis footer line {}: {}"
+                                      .format(lnum, line))
+                    self.logger.error("Previous: {}".format(cur_core))
+                    self._store_cur_core(cores=cores, cur_core=cur_core)
 
                 cur_core = {'bin_path': fields[3], 'corefile_name': fields[4]}
                 continue
@@ -74,27 +85,27 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
             # 2848.003 #### Done with buildOut/src/bin/usrnode/usrnode core.usrnode.7703 #####
             if '####' in fields[1] and fields[2] == 'Done' and fields[3] == 'with':
                 if cur_core is None:
-                    raise CoreAnalyzerLogParserException(
-                            "Analysis footer before analysis header {} {}"
+                    self.logger.error("LOG PARSE ERROR")
+                    self.logger.error(
+                            "Analysis footer before analysis header line {}: {}"
                             .format(lnum, line))
+                    cur_core = {'bin_path': fields[4], 'corefile_name': fields[5]}
 
                 if fields[4] != cur_core['bin_path']:
-                    raise CoreAnalyzerLogParserException(
-                            "Mismatch bin_path {} {} expected {}"
-                            .format(lnum, line, cur_core['bin_path']))
+                    self.logger.error("LOG PARSE ERROR")
+                    self.logger.error(
+                            "Mismatch bin_path {} expected on line {}: {}"
+                            .format(cur_core['bin_path'], lnum, line))
+                    cur_core = {'bin_path': fields[4], 'corefile_name': fields[5]}
 
                 if fields[5] != cur_core['corefile_name']:
-                    raise CoreAnalyzerLogParserException(
-                            "Mismatch corefile_name {} {} expected {}"
-                            .format(lnum, line, cur_core['corefile_name']))
+                    self.logger.error("LOG PARSE ERROR")
+                    self.logger.error(
+                            "Mismatch corefile_name {} expected on line {}: {}"
+                            .format(cur_core['corefile_name'], lnum, line))
+                    cur_core = {'bin_path': fields[4], 'corefile_name': fields[5]}
 
-                # Trim off any path prefix
-                corefile_name = cur_core.get('corefile_name')
-                if '/' in corefile_name:
-                    cur_core['corefile_name'] = corefile_name.split('/')[-1]
-
-                key = MongoDB.encode_key(cur_core.get('corefile_name'))
-                cores[key] = cur_core
+                self._store_cur_core(cores=cores, cur_core=cur_core)
                 cur_core = None
                 continue
 
@@ -109,40 +120,50 @@ class CoreAnalyzerLogParser(JenkinsAggregatorBase):
         except:
             self.logger.error("LOG PARSE ERROR", exc_info=True)
 
+        if data is None:
+            return None
+
         cores = data.get('analyzed_cores', None)
-        if not is_reparse and cores:
-            send_alert = True
+        if not cores:
+            self.logger.info("no cores detected")
+            return data
 
-            # Don't alert if we're running pre-checkin
-            for key,val in jbi.parameters().items():
-                if "REFSPEC" in key and "refs/changes" in val:
-                    send_alert = False
-                    break
+        if is_reparse:
+            self.logger.info("suppressing alert on reparse")
+            return data
 
-            if send_alert:
-                ts = int(jbi.start_time_ms()/1000)
-                dt = datetime.datetime.fromtimestamp(ts)
-                date_str = "{}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
-                           .format(dt.year, dt.month, dt.day,
-                                   dt.hour, dt.minute, dt.second)
+        # Don't alert if we're running pre-checkin
+        for key,val in jbi.parameters().items():
+            if "REFSPEC" in key and "refs/changes" in val:
+                send_alert = False
+                self.logger.info("suppressing alert on change refspec: {}"
+                                 .format(val))
+                return data
 
-                labels = {'Date': date_str, 'URL':jbi.build_url}
+        self.logger.info("sending alert")
+        ts = int(jbi.start_time_ms()/1000)
+        dt = datetime.datetime.fromtimestamp(ts)
+        date_str = "{}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}"\
+                   .format(dt.year, dt.month, dt.day,
+                           dt.hour, dt.minute, dt.second)
 
-                for key,item in cores.items():
-                    label_name = item.get('corefile_name', 'UnknownName')
-                    label_name = label_name.replace('.', '_')
-                    labels[label_name] = item.get('term_with', 'UnknownCause')
+        labels = {'Date': date_str, 'URL':jbi.build_url}
 
-                job_name = jbi.job_name
-                bnum = jbi.build_number
-                alert_id="{}:{}".format(job_name, bnum)
-                description="Jenkins job {} build {} detected core files"\
-                            .format(job_name, bnum)
-                AlertManager().critical(alert_group="corefile_detected",
-                                        alert_id=alert_id,
-                                        description=description,
-                                        labels = labels,
-                                        ttl=3600) # ample time to be noticed
+        for key,item in cores.items():
+            label_name = item.get('corefile_name', 'UnknownName')
+            label_name = label_name.replace('.', '_')
+            labels[label_name] = item.get('term_with', 'UnknownCause')
+
+        job_name = jbi.job_name
+        bnum = jbi.build_number
+        alert_id="{}:{}".format(job_name, bnum)
+        description="Jenkins job {} build {} detected core files"\
+                    .format(job_name, bnum)
+        AlertManager().critical(alert_group="corefile_detected",
+                                alert_id=alert_id,
+                                description=description,
+                                labels = labels,
+                                ttl=3600) # ample time to be noticed
         return data
 
 
@@ -158,8 +179,8 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler(sys.stdout)])
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--job", help="jenkins job name", default="ControllerTest")
-    parser.add_argument("--bnum", help="jenkins build number", default="306")
+    parser.add_argument("--job", help="jenkins job name", default="XCETest")
+    parser.add_argument("--bnum", help="jenkins build number", default="50949")
     parser.add_argument("--log", help="just print out the log", action="store_true")
     args = parser.parse_args()
 
