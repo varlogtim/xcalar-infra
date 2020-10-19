@@ -49,6 +49,25 @@ find /dev/shm -name "xcalar-*" -delete
 # adding netstat before restarting the cluster
 netstat -anop
 
+joinBy() { local IFS="$1"; shift; echo "$*"; }
+
+if [ "$CGROUPS_ENABLED" != "false" ]; then
+    childnode_paths=("/sys/fs/cgroup/cpu,cpuacct/xcalar.slice/xcalar-usrnode.service" "/sys/fs/cgroup/memory/xcalar.slice/xcalar-usrnode.service")
+
+    export XCE_CHILDNODE_PATHS=$(joinBy ':' "${childnode_paths[@]}")
+    export XCE_CGROUP_CONTROLLER_MAP="memory%/sys/fs/cgroup/memory:cpu%/sys/fs/cgroup/cpu,cpuacct:cpuacct%/sys/fs/cgroup/cpu,cpuacct"
+    export XCE_CGROUP_CONTROLLERS="memory cpu cpuacct"
+    export XCE_CGROUP_UNIT_PATH="xcalar.slice/xcalar-usrnode.service"
+    export XCE_CHILDNODE_SCOPES="sys_xpus-sched0 sys_xpus-sched1 sys_xpus-sched2 usr_xpus-sched0 usr_xpus-sched1 usr_xpus-sched2"
+
+    MY_UID=$(id -u)
+    MY_GID=$(id -g)
+
+    for node_path in "${childnode_paths[@]}"; do
+        sudo /bin/chown -R "$MY_UID":"$MY_GID" "$node_path"
+    done
+fi
+
 if [ "$CGROUPS_ENABLED" != "false" ]; then
     cgexec -g cpu,cpuacct,memory:${CGROUP_XCALAR_MW} --sticky $XLRDIR/bin/xcmgmtd $XCE_CONFIG >> $XCE_LOGDIR/xcmgmtd.out 2>&1 </dev/null &
 else
