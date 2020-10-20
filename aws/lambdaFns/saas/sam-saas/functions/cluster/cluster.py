@@ -53,7 +53,7 @@ def get_available_stack(user_name):
                     ret_struct['tags'].append({'Key':'Owner', 'Value': user_name})
                     return ret_struct
 
-def check_test_cluster(cfn_id):
+def is_test_cluster(cfn_id):
     stack = cfn_client.describe_stacks(StackName=cfn_id)['Stacks']
     if len(stack) == 0:
         return None
@@ -111,7 +111,7 @@ def start_cluster(user_name, cluster_params):
             param.pop('ParameterValue', None)
             param['UsePreviousValue']=True
 
-    is_test_cluster = check_test_cluster(cfn_id):
+    is_test_cluster = is_test_cluster(cfn_id):
     if is_test_cluster is None:
         error = 'Stack %s not found' % cfn_id
         return _make_reply(200, {
