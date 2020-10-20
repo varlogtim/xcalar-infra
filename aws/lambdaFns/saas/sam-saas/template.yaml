@@ -155,7 +155,7 @@ Resources:
             - Effect: Allow
               Action:
                 - ssm:GetParameter
-              Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:parameter/${SSMKey}'
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SSMKey}'
   BillingFunction:
     Type: AWS::Serverless::Function
     Properties:

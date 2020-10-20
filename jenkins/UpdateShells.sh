@@ -201,9 +201,9 @@ for STACK in "${UPDATE_STACK_LIST[@]}"; do
                                     ParameterKey=HostedZoneName,ParameterValue=${HOSTED_ZONE_NAME}
                                     ParameterKey=AdminUsername,ParameterValue=${ADMIN_USERNAME}
                                     ParameterKey=AdminPassword,ParameterValue=${ADMIN_PASSWORD})
+            OWNER=$(get_stack_tag "$RET" Owner)
+            DEPLOYMENT=$(get_stack_tag "$RET" deployment)
             if [ "$IS_TEST_CLUSTER" = "true" ]; then
-                OWNER=$(get_stack_tag "$RET" Owner)
-                DEPLOYMENT=$(get_stack_tag "$RET" deployment)
                 aws cloudformation update-stack --stack-name "${STACK}" \
                                                 --no-use-previous-template \
                                                 "${URL_PARAMS[@]}" --tags Key=Owner,Value="${OWNER}" Key=deployment,Value=${DEPLOYMENT} Key=Env,Value=test \
@@ -212,7 +212,8 @@ for STACK in "${UPDATE_STACK_LIST[@]}"; do
             else
                 aws cloudformation update-stack --stack-name "${STACK}" \
                                                 --no-use-previous-template \
-                                                "${URL_PARAMS[@]}" --role-arn "${ROLE}" \
+                                                "${URL_PARAMS[@]}" --tags Key=Owner,Value="${OWNER}" Key=deployment,Value=${DEPLOYMENT} \
+                                                --role-arn "${ROLE}" \
                                                 --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
             fi
             PREV_INFO=$(aws dynamodb get-item --table "${STACK_INFO_TABLE}" \

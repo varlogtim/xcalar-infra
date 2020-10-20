@@ -60,9 +60,10 @@ def check_test_cluster(cfn_id):
     else:
         stack_info = stack[0]
         for i in range(len(stack_info['Tags'])):
-            tag = stack['Tags'][i]
+            tag = stack_info['Tags'][i]
             if 'Value' in tag and tag['Key'] == 'Env' and tag['Value'] == 'test':
                 return True
+    return False
 
 def start_cluster(user_name, cluster_params):
     # if the user has a cfn stack
@@ -143,7 +144,7 @@ def start_cluster(user_name, cluster_params):
             }
             response = update_user_info(dynamodb_client, user_info, updates, user_table)
     else:
-        template = ssm_client.get_parameter(Name='string')['Parameter']['Value']
+        template = ssm_client.get_parameter(Name=ssm_key)['Parameter']['Value']
         if is_new == False:
             response = cfn_client.update_stack(
                 StackName=cfn_id,
