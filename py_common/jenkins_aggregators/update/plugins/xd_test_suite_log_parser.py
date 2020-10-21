@@ -51,6 +51,11 @@ class XDTestSuiteLogParser(JenkinsAggregatorBase):
         """
         self.start_time_ms = jbi.start_time_ms()
 
+        cur_test = None
+        start_time_ms = None
+        pass_summary_next = False
+        pass_duration_next = False
+
         testcase_data = {}
 
         for lnum, line in enumerate(log.splitlines()):

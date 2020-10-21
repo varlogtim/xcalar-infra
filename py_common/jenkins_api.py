@@ -214,6 +214,13 @@ class JenkinsBuildInfo(object):
     def duration_ms(self):
         return self.data.get('duration', None)
 
+    def end_time_ms(self):
+        start = self.start_time_ms()
+        dur = self.duration_ms()
+        if start is None or dur is None:
+            return None
+        return start+dur
+
     def upstream(self):
         """
         Returns a list of dictionaries identifying upstream build(s):
@@ -391,7 +398,8 @@ if __name__ == '__main__':
     print("\tparameters: {}".format(jbi.parameters()))
     print("\tbuilt on: {}".format(jbi.built_on()))
     print("\tstart time (ms): {}".format(jbi.start_time_ms()))
-    print("\tduration: {}".format(jbi.duration_ms()))
+    print("\tduration (ms): {}".format(jbi.duration_ms()))
+    print("\tend time (ms): {}".format(jbi.end_time_ms()))
     print("\tresult: {}".format(jbi.result()))
     print("\tupstream: {}".format(jbi.upstream()))
     print("\tlast 20 build done status:")

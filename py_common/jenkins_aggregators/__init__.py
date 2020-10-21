@@ -44,17 +44,26 @@ class JenkinsAllJobIndex(object):
              'built_on': jbi.built_on(),
              'start_time_ms': jbi.start_time_ms(),
              'duration_ms': jbi.duration_ms(),
+             'end_time_ms': jbi.end_time_ms(),
              'result': jbi.result()}
         """
         self.logger.debug("job_name: {} bnum: {}".format(job_name, bnum))
 
-        # XXXrs - more fields?
         start_time_ms = data.get('start_time_ms', None)
+        duration_ms = data.get('duration_ms', None)
+
+        # end time was not originally supported, so might be missing
+        # manufacture it if needed
+        end_time_ms = data.get('end_time_ms', None)
+        if end_time_ms is None and start_time_ms is not None and duration_ms is not None:
+            end_time_ms = start_time_ms + duration_ms
+
         built_on = data.get('built_on', None)
         job_entry = {'job_name': job_name,
                      'build_number': bnum,
                      'start_time_ms': start_time_ms,
-                     'duration_ms': data.get('duration_ms', None),
+                     'duration_ms': duration_ms,
+                     'end_time_ms': end_time_ms,
                      'built_on': built_on,
                      'result': data.get('result', None)}
 
@@ -217,12 +226,21 @@ class JenkinsHostDataCollection(object):
         if not data or is_reparse:
             return
 
+        # end time was not originally supported, so might be missing
+        # manufacture it if needed
+        start_time_ms = data.get('start_time_ms', None)
+        duration_ms = data.get('duration_ms', None)
+        end_time_ms = data.get('end_time_ms', None)
+        if end_time_ms is None and start_time_ms is not None and duration_ms is not None:
+            end_time_ms = start_time_ms + duration_ms
+
         # Only selected data items.
         store = {}
         store['job_name']=job_name
         store['build_number']=bnum
-        store['start_time_ms'] = data['start_time_ms']
-        store['duration_ms'] = data['duration_ms']
+        store['start_time_ms'] = start_time_ms
+        store['duration_ms'] = duration_ms
+        store['end_time_ms'] = end_time_ms
         store['result'] = data['result']
         try:
             self.coll.insert(store)
@@ -572,6 +590,7 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
                    'built_on': jbi.built_on(),
                    'start_time_ms': jbi.start_time_ms(),
                    'duration_ms': jbi.duration_ms(),
+                   'end_time_ms': jbi.end_time_ms(),
                    'result': jbi.result()}
             upstream = jbi.upstream()
             if upstream:

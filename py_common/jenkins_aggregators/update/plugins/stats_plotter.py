@@ -29,8 +29,8 @@ AGGREGATOR_PLUGINS = [{'class_name': 'SystemStatsPlotter',
 
 
 cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO},
-                        'PLOTTER_PATH': {'required': True},
-                        'DEFAULT_PLOT_CFG_PATH': {'required': True}})
+                        'PLOTTER_PATH': {'default': None},
+                        'DEFAULT_PLOT_CFG_PATH': {'default': None}})
 
 
 class SystemStatsPlotterException(Exception):
@@ -47,9 +47,16 @@ class SystemStatsPlotter(JenkinsAggregatorBase):
                          agg_name=self.__class__.__name__)
         self.logger = logging.getLogger(__name__)
         self.tmpdir = None
+        self.plotter_path = cfg.get('PLOTTER_PATH')
+        self.plot_cfg_path = cfg.get('DEFAULT_PLOT_CFG_PATH')
+        if not self.plotter_path or not self.plot_cfg_path:
+            self.logger.warning("plotter not configured")
 
 
     def _update_build(self, *, jbi, is_reparse=False, test_mode=False):
+
+        if not self.plotter_path or not self.plot_cfg_path:
+            return {}
 
         # Generate the path to the expected artifacts directory
         artifacts_dir = "/netstore/qa/jenkins/{}/{}".format(jbi.job_name, jbi.build_number)
@@ -80,11 +87,9 @@ class SystemStatsPlotter(JenkinsAggregatorBase):
         plotdir = os.path.join(artifacts_dir, 'plots')
 
         # Call the plot utility
-        plotter_path = cfg.get('PLOTTER_PATH')
-        cfg_path = cfg.get('DEFAULT_PLOT_CFG_PATH')
         cmd = "{} --dsh {} --plotdir {} --cfg {} --start_ts {} --end_ts {}"\
-              .format(plotter_path, dsh_dir,
-                      plotdir, cfg_path, start_ts, end_ts)
+              .format(self.plotter_path, dsh_dir,
+                      plotdir, self.plot_cfg_path, start_ts, end_ts)
         self.logger.info("cmd: {}".format(cmd))
         subprocess.run(shlex.split(cmd)).check_returncode()
 
