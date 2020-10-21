@@ -47,6 +47,7 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 methods = ('GET', 'POST')
 
 # All Jobs Modes
+DOWNSTREAM = 'Downstream'
 JOBS_STATS = 'All Jobs Stats'
 TOTAL_BUILDS = 'Total Builds Trends'
 PASS_PCT = 'Pass Pct. Trends'
@@ -388,8 +389,6 @@ def _map_result(result):
 def _job_table(*, job_names, parameter_names, from_ms, to_ms):
 
     rows = []
-    # Redundant job name must be in table for reference when construcing
-    # Jenkins link-out URL :/
     columns = [{"text":"Job Name", "type":"string"},
                {"text":"Build No.", "type":"string"},
                {"text":"Start Time", "type":"time"},
@@ -405,7 +404,11 @@ def _job_table(*, job_names, parameter_names, from_ms, to_ms):
     for job_name in job_names:
         resp = jdq_client.find_builds(job_name=job_name,
                                       query=query,
-                                      verbose=True)
+                                      projection={'start_time_ms': 1,
+                                                  'duration_ms': 1,
+                                                  'built_on': 1,
+                                                  'result': 1,
+                                                  'parameters': 1})
         for bnum,item in resp.items():
             duration_s = int(item.get('duration_ms', 0)/1000)
             vals = [job_name,
@@ -416,6 +419,41 @@ def _job_table(*, job_names, parameter_names, from_ms, to_ms):
                     _map_result(item.get('result'))]
             for name in parameter_names:
                 vals.append(item.get('parameters', {}).get(name, "N/A"))
+            rows.append(vals)
+    return [{"columns": columns, "rows": rows, "type" : "table"}]
+
+
+def _downstream_jobs_table(*, job_name, build_number):
+
+    rows = []
+    columns = [{"text":"Job Name", "type":"string"},
+               {"text":"Build No.", "type":"string"},
+               {"text":"Start Time", "type":"time"},
+               {"text":"Duration (s)", "type":"time"},
+               {"text":"Built On", "type": "string"},
+               {"text":"Result", "type":"string"}]
+
+    down = jdq_client.downstream(job_name=job_name, bnum=build_number)
+    if down and 'downstream' in down:
+        for item in down['downstream']:
+            name = item.get('job_name')
+            bnum = item.get('build_number')
+            detail = jdq_client.find_builds(job_name=name,
+                                            query={'_id': bnum},
+                                            projection={'duration_ms': 1,
+                                                        'start_time_ms': 1,
+                                                        'built_on': 1,
+                                                        'result': 1})
+            if bnum not in detail:
+                continue
+            detail = detail[bnum]
+            duration_s = int(detail.get('duration_ms', 0)/1000)
+            vals = [name,
+                    int(bnum),
+                    detail.get('start_time_ms', 0),
+                    duration_s,
+                    detail.get('built_on', 'unknown'),
+                    _map_result(detail.get('result'))]
             rows.append(vals)
     return [{"columns": columns, "rows": rows, "type" : "table"}]
 
@@ -491,6 +529,12 @@ def query_metrics():
         results = _jobs_trends_table(table_mode=PASS_PCT)
     elif PASS_DUR in table_mode:
         results = _jobs_trends_table(table_mode=PASS_DUR)
+    elif DOWNSTREAM in table_mode:
+        if len(fields) < 3:
+            abort(404, Exception('invalid downstream target {}'
+                                 .format(target)))
+        results = _downstream_jobs_table(job_name=fields[1],
+                                         build_number=fields[2])
     else:
         parameter_names = []
         if len(fields) == 2:

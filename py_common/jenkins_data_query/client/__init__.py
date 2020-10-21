@@ -81,15 +81,13 @@ class JDQClient(object):
         params = {'job_name': job_name, 'build_number': bnum}
         return self._cmd(uri = '/jenkins_downstream', params = params)
 
-    def find_builds(self, *, job_name, query, verbose=False):
+    def find_builds(self, *, job_name, query, projection=None):
         params = {'job_name': job_name, 'query': json.dumps(query)}
-        if not verbose:
-            params['projection'] = json.dumps({'_id': 1})
+        if projection is not None:
+            params['projection'] = json.dumps(projection)
 
         rtn = self._cmd(uri = '/jenkins_find_builds', params = params)
-        if verbose:
-            return rtn
-        return rtn.keys()
+        return rtn
 
     def builds_by_time(self, *, start_time_ms, end_time_ms):
         params = {'start_time_ms': start_time_ms, 'end_time_ms': end_time_ms}
@@ -109,6 +107,6 @@ if __name__ == '__main__':
     logger = logging.getLogger(__name__)
 
     client = JDQClient(host='cvraman3.int.xcalar.com', port=4000)
-    print(pprint.pformat(client.downstream(job_name="DailyTests-Trunk", bnum=144)))
     print(pprint.pformat(client.parameter_names(job_name="DailyTests-Trunk")))
     print(pprint.pformat(client.job_info()))
+    print(pprint.pformat(client.downstream(job_name="DailyTests-Trunk", bnum=144)))

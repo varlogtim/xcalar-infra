@@ -122,9 +122,13 @@ if __name__ == '__main__':
     elif args.before:
         query['start_time_ms'] = {'$lt': _days_ago_ms(args.before)}
 
+    projection = None
+    if not args.verbose:
+        projection = {'_id': 1} # We're gonna strip everything anyhow...
+
     resp = jdq_client.find_builds(job_name = args.job,
                                   query = query,
-                                  verbose = args.verbose)
+                                  projection = projection)
 
     if not args.verbose:
         # Just a list of matching build numbers
@@ -136,7 +140,7 @@ if __name__ == '__main__':
         if args.up:
             resp[bnum]['upstream'] = jdq_client.upstream(job_name=args.job, bnum=bnum)
         if args.down:
-            resp[bnum]['downstream'] = jdq_client.downstream(job_name=args.job, bnum=bnum)
+            resp[bnum]['downstream'] = jdq_client.downstream(job_name=args.job, bnum=bnum)['downstream']
 
     if args.json:
         # Strict JSON for piping to other JSON consumers.
