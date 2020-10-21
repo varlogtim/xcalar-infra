@@ -533,8 +533,10 @@ def query_metrics():
         if len(fields) < 3:
             abort(404, Exception('invalid downstream target {}'
                                  .format(target)))
-        results = _downstream_jobs_table(job_name=fields[1],
-                                         build_number=fields[2])
+        job_name = _parse_multi(fields[1])
+        build_number = _parse_multi(fields[2])
+        results = _downstream_jobs_table(job_name=job_name,
+                                         build_number=build_number)
     else:
         parameter_names = []
         if len(fields) == 2:
