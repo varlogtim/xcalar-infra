@@ -46,12 +46,14 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 
 methods = ('GET', 'POST')
 
-# All Jobs Modes
-DOWNSTREAM = 'Downstream'
+# Table Modes
 JOBS_STATS = 'All Jobs Stats'
 TOTAL_BUILDS = 'Total Builds Trends'
 PASS_PCT = 'Pass Pct. Trends'
 PASS_DUR = 'Pass Duration Trends'
+DOWNSTREAM = 'Downstream'
+HOST_UTIL = 'Host Utilization'
+HOST_HISTORY = 'Host History'
 
 @app.route('/', methods=methods)
 @cross_origin()
@@ -139,6 +141,11 @@ def _timeserie_results(*, target, from_ms, to_ms):
 
 
     logger.info("mode: {} name: {}".format(mode, name))
+    # XXXrs - FUTURE will store end_time_ms so may have a query
+    #         to show all builds overlapping time frame, not just
+    #         starting in time frame.  This might mean fabricating
+    #         lines with start/end at frame boundries but which
+    #         "continue" beyond...
     resp = jdq_client.builds_by_time(start_time_ms=from_ms, end_time_ms=to_ms)
     logger.debug("resp: {}".format(resp))
 
@@ -194,11 +201,15 @@ def _timeserie_results(*, target, from_ms, to_ms):
         """
     return results
 
+
 def _all_jobs_table(*, from_ms, to_ms):
 
     # Only show info for active jobs...
     active_jobs = jdq_client.job_names()
 
+    # XXXrs - FUTURE will store end_time_ms so may have a query
+    #         to show all builds overlapping time frame, not just
+    #         starting in time frame.
     resp = jdq_client.builds_by_time(start_time_ms=from_ms, end_time_ms=to_ms)
     job_info = {}
     job_info_empty = {'pass_cnt':0,
@@ -392,7 +403,7 @@ def _job_table(*, job_names, parameter_names, from_ms, to_ms):
     columns = [{"text":"Job Name", "type":"string"},
                {"text":"Build No.", "type":"string"},
                {"text":"Start Time", "type":"time"},
-               {"text":"Duration (s)", "type":"time"},
+               {"text":"Duration (s)", "type":"number"},
                {"text":"Built On", "type": "string"},
                {"text":"Result", "type":"string"}]
     for name in parameter_names:
@@ -429,34 +440,127 @@ def _downstream_jobs_table(*, job_name, build_number):
     columns = [{"text":"Job Name", "type":"string"},
                {"text":"Build No.", "type":"string"},
                {"text":"Start Time", "type":"time"},
-               {"text":"Duration (s)", "type":"time"},
+               {"text":"Duration (s)", "type":"number"},
                {"text":"Built On", "type": "string"},
                {"text":"Result", "type":"string"}]
 
     down = jdq_client.downstream(job_name=job_name, bnum=build_number)
-    if down and 'downstream' in down:
-        for item in down['downstream']:
-            name = item.get('job_name')
-            bnum = item.get('build_number')
-            detail = jdq_client.find_builds(job_name=name,
-                                            query={'_id': bnum},
-                                            projection={'duration_ms': 1,
-                                                        'start_time_ms': 1,
-                                                        'built_on': 1,
-                                                        'result': 1})
-            if bnum not in detail:
-                continue
-            detail = detail[bnum]
-            duration_s = int(detail.get('duration_ms', 0)/1000)
-            vals = [name,
-                    int(bnum),
-                    detail.get('start_time_ms', 0),
-                    duration_s,
-                    detail.get('built_on', 'unknown'),
-                    _map_result(detail.get('result'))]
-            rows.append(vals)
+    if not down or 'downstream' not in down:
+        return [{"columns": columns, "rows": rows, "type" : "table"}]
+    ds_items = down.get('downstream', [])
+    if not ds_items:
+        return [{"columns": columns, "rows": rows, "type" : "table"}]
+    for item in ds_items:
+        name = item.get('job_name')
+        bnum = item.get('build_number')
+        detail = jdq_client.find_builds(job_name=name,
+                                        query={'_id': bnum},
+                                        projection={'duration_ms': 1,
+                                                    'start_time_ms': 1,
+                                                    'built_on': 1,
+                                                    'result': 1})
+        if bnum not in detail:
+            continue
+        detail = detail[bnum]
+        duration_s = int(detail.get('duration_ms', 0)/1000)
+        vals = [name,
+                int(bnum),
+                detail.get('start_time_ms', 0),
+                duration_s,
+                detail.get('built_on', 'unknown'),
+                _map_result(detail.get('result'))]
+        rows.append(vals)
     return [{"columns": columns, "rows": rows, "type" : "table"}]
 
+def _host_util_table(*, from_ms, to_ms):
+
+    period_ms = to_ms-from_ms
+
+    rows = []
+    columns = [{"text":"Host Name", "type":"string"},
+               {"text":"Builds", "type":"number"},
+               {"text":"Total Build Time (s)", "type":"number"},
+               {"text":"Utilization %", "type":"number"}]
+
+    builds = jdq_client.builds_active_between(
+                        start_time_ms=from_ms, end_time_ms=to_ms)
+
+    host_data = {}
+    for build in builds['builds']:
+        '''
+        Builds look like:
+
+            {'build_number': '891',
+             'built_on': 'kvmhost5-megavm1',
+             'duration_ms': 4058802,
+             'end_time_ms': 1603335618236,
+             'job_name': 'UbmPerfTest',
+             'result': 'SUCCESS',
+             'start_time_ms': 1603331559434}
+        '''
+        host = build['built_on']
+        bstart_ms = build['start_time_ms']
+        bend_ms = build['end_time_ms']
+        data = host_data.setdefault(host, {'builds': 0,
+                                           'build_time_ms': 0})
+        start_ms = max(from_ms, bstart_ms)
+        end_ms = min(to_ms, bend_ms)
+        data['builds'] += 1
+        data['build_time_ms'] += (end_ms-start_ms)
+
+    for host in jdq_client.host_names():
+        if host not in host_data:
+            rows.append([host, 0, 0, 0])
+            continue
+        data = host_data[host]
+        ttime_ms = data['build_time_ms']
+        util_pct = (ttime_ms/period_ms)*100
+        rows.append([host, data['builds'], int(ttime_ms/1000), util_pct])
+    return [{"columns": columns, "rows": rows, "type" : "table"}]
+
+
+def _host_history_table(*, host_names, from_ms, to_ms):
+
+    period_ms = to_ms-from_ms
+
+    rows = []
+    columns = [{"text":"Host Name", "type":"string"},
+               {"text":"Job Name", "type":"string"},
+               {"text":"Build No.", "type":"string"},
+               {"text":"Start Time", "type":"time"},
+               {"text":"Duration (s)", "type":"number"},
+               {"text":"Result", "type":"string"}]
+
+    builds = jdq_client.builds_active_between(
+                        start_time_ms=from_ms, end_time_ms=to_ms)
+
+    host_builds = {}
+    for build in builds['builds']:
+        '''
+        Builds look like:
+
+            {'build_number': '891',
+             'built_on': 'kvmhost5-megavm1',
+             'duration_ms': 4058802,
+             'end_time_ms': 1603335618236,
+             'job_name': 'UbmPerfTest',
+             'result': 'SUCCESS',
+             'start_time_ms': 1603331559434}
+        '''
+        host = build['built_on']
+        if host not in host_names:
+            continue
+
+        job_name = build['job_name']
+        build_num = build['build_number']
+        bstart_ms = build['start_time_ms']
+        bduration_s = int(build['duration_ms']/1000)
+        result = _map_result(build['result'])
+
+        rows.append([host, job_name, build_num,
+                     bstart_ms, bduration_s, result])
+
+    return [{"columns": columns, "rows": rows, "type" : "table"}]
 
 @app.route('/query', methods=methods)
 @cross_origin(max_age=600)
@@ -537,6 +641,12 @@ def query_metrics():
         build_number = _parse_multi(fields[2])
         results = _downstream_jobs_table(job_name=job_name,
                                          build_number=build_number)
+    elif HOST_UTIL in table_mode:
+        results = _host_util_table(from_ms=from_ts_ms, to_ms=to_ts_ms)
+    elif HOST_HISTORY in table_mode:
+        results = _host_history_table(host_names=_parse_multi(fields[1]),
+                                      from_ms=from_ts_ms,
+                                      to_ms=to_ts_ms)
     else:
         parameter_names = []
         if len(fields) == 2:

@@ -305,6 +305,20 @@ class JenkinsMongoDB(object):
         db = self.jenkins_db()
         return [db.collection('_builds_by_time_{}'.format(i)) for i in idxs]
 
+    def all_builds_by_time_collections(self):
+        """
+        Return the list of all builds_by_time collection names
+
+        It is the responsibility of the caller to iterate over the
+        collections and merge search results.
+        """
+        db = self.jenkins_db()
+        names = []
+        for name in db.collection_names():
+            if name.startswith('_builds_by_time_'):
+                names.append(db.collection(name))
+        return names
+
     def downstream_jobs(self):
         """
         Return the downstream jobs collection.
@@ -401,6 +415,8 @@ if __name__ == '__main__':
                     format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                     handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
+    jmdb = JenkinsMongoDB()
+    print(jmdb.all_builds_by_time_collections())
 
     """
     jmdb = JenkinsMongoDB()

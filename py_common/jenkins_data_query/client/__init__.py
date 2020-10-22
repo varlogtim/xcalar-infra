@@ -93,8 +93,14 @@ class JDQClient(object):
         params = {'start_time_ms': start_time_ms, 'end_time_ms': end_time_ms}
         return self._cmd(uri = '/jenkins_builds_by_time', params = params)
 
+    def builds_active_between(self, *, start_time_ms, end_time_ms):
+        params = {'start_time_ms': start_time_ms, 'end_time_ms': end_time_ms}
+        return self._cmd(uri = '/jenkins_builds_active_between', params = params)
+
 if __name__ == '__main__':
     import pprint
+    import time
+
     print("Compile check, A-OK!")
 
     cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.DEBUG}})
@@ -110,3 +116,11 @@ if __name__ == '__main__':
     print(pprint.pformat(client.parameter_names(job_name="DailyTests-Trunk")))
     print(pprint.pformat(client.job_info()))
     print(pprint.pformat(client.downstream(job_name="DailyTests-Trunk", bnum=144)))
+
+    now_ms = int(time.time()*1000)
+    day_ms = 24*60*60*1000
+    start_ms = now_ms-day_ms
+
+    builds = client.builds_active_between(start_time_ms=start_ms, end_time_ms=now_ms)
+    print(pprint.pformat(builds))
+    print(len(builds['builds']))

@@ -100,6 +100,11 @@ class JenkinsAllJobIndex(object):
                                      upsert = True)
 
     def builds_by_time(self, *, start_time_ms, end_time_ms, full=False):
+        '''
+        Return all builds that started between start and end times.
+        '''
+        # Build start time after period start time AND
+        # build start time before period end time
         query = {'$and': [{'start_time_ms': {'$gte': start_time_ms}},
                           {'start_time_ms': {'$lt': end_time_ms}}]}
 
@@ -108,6 +113,28 @@ class JenkinsAllJobIndex(object):
                                     end_time_ms=end_time_ms)
         builds = []
         for coll in colls:
+            docs = coll.find(query)
+            if not docs:
+                continue
+            for doc in docs:
+                if full:
+                    doc['collection_name'] = coll.name
+                else:
+                    doc.pop('_id')
+                builds.append(doc)
+        return {'builds': builds}
+
+    def builds_active_between(self, *, start_time_ms, end_time_ms, full=False):
+        '''
+        Return all builds that were active between the start and end time.
+        '''
+        # Build start time before period end time AND
+        # build end time after period start time
+        query = {'$and': [{'start_time_ms': {'$lte': end_time_ms}},
+                          {'end_time_ms': {'$gte': start_time_ms}}]}
+
+        builds = []
+        for coll in self.jmdb.all_builds_by_time_collections():
             docs = coll.find(query)
             if not docs:
                 continue
@@ -788,6 +815,34 @@ class PostprocessorPlugins(Plugins):
 # In-line "unit test"
 if __name__ == '__main__':
     print("Compile check A-OK!")
+
+    import pprint
+
+    jmdb = JenkinsMongoDB()
+    jaji = JenkinsAllJobIndex(jmdb=jmdb)
+    now_ms = int(time.time()*1000)
+    day_ms = 24*60*60*1000
+    end_ms = now_ms-day_ms
+    start_ms = end_ms-day_ms
+    builds = jaji.builds_active_between(
+                            start_time_ms=start_ms,
+                            end_time_ms=end_ms)
+
+    for build in builds['builds']:
+        bstart_ms = build['start_time_ms']
+        bend_ms = build['end_time_ms']
+        if bstart_ms < start_ms and bend_ms < start_ms:
+            raise Exception("EARLY: start {} end {} bstart {} bend {}"
+                            .format(start_ms, end_ms, bstart_ms, bend_ms))
+        if bstart_ms > end_ms and bend_ms > end_ms:
+            raise Exception("LATE: start {} end {} bstart {} bend {}"
+                            .format(start_ms, end_ms, bstart_ms, bend_ms))
+        if bstart_ms < start_ms:
+            print("Starts before!")
+        if bend_ms > end_ms:
+            print("Ends after!")
+
+        print(pprint.pformat(build))
 
     '''
     cfg = EnvConfiguration({'LOG_LEVEL': {'default': logging.INFO}})

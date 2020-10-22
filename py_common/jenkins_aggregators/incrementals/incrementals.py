@@ -129,10 +129,11 @@ if __name__ == "__main__":
 
         {'build_number': '3734',
          'built_on': 'jenkins-slave-el7-n12-1',
-         'duration_ms': 67,
          'job_name': 'PrecheckinVerifyTrigger',
          'result': 'SUCCESS',
-         'start_time_ms': 1599249540937}
+         'start_time_ms': 1599249540937,
+         'duration_ms': 67,
+         'end_time_ms': 1599249541004}
 
     """
     alljob = JenkinsAllJobIndex(jmdb=JMDB)

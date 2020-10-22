@@ -183,6 +183,16 @@ def jenkins_builds_by_time():
                                     start_time_ms=start_time_ms,
                                     end_time_ms=end_time_ms)))
 
+@app.route('/jenkins_builds_active_between', methods=methods)
+@cross_origin()
+def jenkins_builds_active_between():
+    start_time_ms = int(request.args.get('start_time_ms', 0))
+    end_time_ms = int(request.args.get('end_time_ms', time.time()*1000))
+    alljob_idx = JenkinsAllJobIndex(jmdb=jmdb)
+    return make_response(jsonify(alljob_idx.builds_active_between(
+                                    start_time_ms=start_time_ms,
+                                    end_time_ms=end_time_ms)))
+
 @app.route('/jenkins_job_parameters', methods=methods)
 @cross_origin()
 def jenkins_job_parameters():

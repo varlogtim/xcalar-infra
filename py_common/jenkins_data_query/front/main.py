@@ -69,7 +69,6 @@ def _get_jobs_data(*, start, end, host=None):
     logger.info("rsp {}".format(rsp))
     logger.info("rsp length: {}".format(len(rsp)))
 
-    # XXXrs - WORKING HERE - convert the start_time_ms to "YY/MM/DD HH:MM:SS"
     for item in rsp['jobs']:
         start_time_ms = item.get('start_time_ms', None)
         if not start_time_ms:
