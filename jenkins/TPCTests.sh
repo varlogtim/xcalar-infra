@@ -54,7 +54,7 @@ pydir="${XLRINFRADIR}/jenkins/python"
 
 # Common arguments...
 ARGS=" --test_id=$TEST_ID --test_jdbc_path=$TEST_JDBC_PATH --jdbc_port=$JDBC_PORT"
-ARGS="$ARGS --api_port=$API_PORT"
+ARGS="$ARGS --api_port=$API_PORT --ignore-MoneyRescale"
 
 if [ $TPCDS_WORKERS -gt 0 ] || [ $TPCDS_IMD_MERGE = "true" ]; then
     if [ -z $TPCDS_JDBC_HOST ]; then

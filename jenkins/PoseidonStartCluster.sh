@@ -8,6 +8,19 @@ if test -z "$XLRINFRADIR"; then
     export XLRINFRADIR="$(cd "$DIR"/.. && pwd)"
 fi
 
+if [ ! -z "$LDAP_CONFIG_PATH" ]; then
+    localPath="$LDAP_CONFIG_PATH"
+    if [ ! -f $localPath ]; then
+        echo "LDAP_CONFIG_PATH $localPath not found"
+        localPath="$XLRINFRADIR/$LDAP_CONFIG_PATH"
+        if [ ! -f $localPath ]; then
+            echo "LDAP_CONFIG_PATH $localPath not found"
+            exit 1
+        fi
+    fi
+    echo "Using LDAP_CONFIG_PATH $localPath"
+fi
+
 source "$XLRINFRADIR/bin/clusterCmds.sh"
 initClusterCmds
 
@@ -58,6 +71,16 @@ fi
 clusterSsh "$cluster" "sudo sed -ie 's/Constants.XcMonSlaveMasterTimeout=.*/Constants.XcMonSlaveMasterTimeout=$XcMonSlaveMasterTimeout/' /etc/xcalar/default.cfg"
 clusterSsh "$cluster" "sudo sed -ie 's/Constants.XcMonMasterSlaveTimeout=.*/Constants.XcMonMasterSlaveTimeout=$XcMonMasterSlaveTimeout/' /etc/xcalar/default.cfg"
 clusterSsh "$cluster" "echo \"$FuncTestParam\" | sudo tee -a /etc/xcalar/default.cfg"
+
+if [ ! -z "$LDAP_CONFIG_PATH" ]; then
+    # localPath validated above
+    remotePath="/mnt/xcalar/config/ldapConfig.json"
+    printf -v safeString "%q" `cat $localPath`
+    node=$(getSingleNodeFromCluster "$cluster")
+    nodeSsh "$cluster" "$node" "echo $safeString | sudo tee -a $remotePath"
+    nodeSsh "$cluster" "$node" "sudo chown xcalar:xcalar $remotePath"
+    nodeSsh "$cluster" "$node" "sudo chmod 600 $remotePath"
+fi
 
 clusterSsh "$cluster" "echo \"vm.min_free_kbytes=$KernelMinFreeKbytes\" | sudo tee -a /etc/sysctl.conf"
 clusterSsh "$cluster" "sudo sysctl -p"
