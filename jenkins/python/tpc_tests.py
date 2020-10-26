@@ -67,7 +67,7 @@ def test_jdbc_cmds(*, tpctype, argsdict, imd):
     sdkSess = "{}SdkSess_{}".format(tpctype, sid)
 
     # Base part of any commands...
-    cmd = "{} --jdbc-port {} -a {}"\
+    cmd = "{} --jdbc-port {} -a {} --ignore-MoneyRescale"\
           .format(argsdict['test_jdbc_path'],
                   argsdict['jdbc_port'],
                   argsdict['api_port'])
