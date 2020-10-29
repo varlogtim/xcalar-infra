@@ -192,6 +192,16 @@ if __name__ == '__main__':
 
     subprocs = []
     for idx,cmd in enumerate(load_cmds):
+        # XXXrs - There is some brain-dead code in Qa.py that can
+        #         result in "file exists" errors when multiple
+        #         test_jdbc.py instances are launched "too quickly"
+        #         one after the other.  Attempt to mitigate here since
+        #         it takes eons to get a trivial change through
+        #         review etc. etc. etc.
+        #
+        #         I fixed the code in trunk, but still bites us on 2.3
+        #         This sleep can go away eventually but for now...
+        time.sleep(1)
         logger.debug("start load cmd: {}".format(cmd))
         p = subprocess.Popen(shlex.split(cmd))
         subprocs.append({'proc': p, 'rc': None})
@@ -207,6 +217,7 @@ if __name__ == '__main__':
 
     subprocs = []
     for idx,cmd in enumerate(test_cmds):
+        time.sleep(1) # See rant above :)
         logger.debug("start test cmd: {}".format(cmd))
         p = subprocess.Popen(shlex.split(cmd))
         subprocs.append({'proc': p, 'rc': None})
