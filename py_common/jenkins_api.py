@@ -15,6 +15,7 @@ import re
 import requests
 import subprocess
 import sys
+import time
 
 if __name__ == '__main__':
     sys.path.append(os.environ.get('XLRINFRADIR', ''))
@@ -173,22 +174,6 @@ class JenkinsBuildInfo(object):
                           .format(self.job_name, self.build_number, building))
         return not(building)
 
-    def console(self):
-        """
-        Return the timestamped console log for the job/build.
-        Timestamps will be offset seconds to three decimal precision (ms).
-        There's (apparently) no available format to dump the actual epoch
-        timestamp, so will need to construct that from build start time plus
-        offset.
-
-        http://jenkins.int.xcalar.com/job/XCETest/50096/timestamps/?appendlog
-
-        N.B.: assumes timestamp plugin in use
-        """
-        text = self.japi.rest.cmd(uri="/job/{}/{}/timestamps/?appendlog"
-                                      .format(self.job_name, self.build_number))
-        return text
-
     def parameters(self):
         parameters = {}
         actions = self.data.get('actions', None)
@@ -212,14 +197,44 @@ class JenkinsBuildInfo(object):
         return self.data.get('timestamp', None)
 
     def duration_ms(self):
+        if self.data.get('building', True):
+            # Not complete.  Manufacture a duration to NOW
+            start_ms = self.data.get('timestamp', None)
+            if start_ms is None:
+                return None
+            return int(time.time()*1000)-start_ms
+
         return self.data.get('duration', None)
 
     def end_time_ms(self):
+        if self.data.get('building', True):
+            # Not complete.  Manufacture an end time of NOW
+            return int(time.time()*1000)
+
         start = self.start_time_ms()
         dur = self.duration_ms()
         if start is None or dur is None:
             return None
         return start+dur
+
+    def result(self):
+        return self.data.get('result', None) or "PENDING"
+
+    def console(self):
+        """
+        Return the timestamped console log for the job/build.
+        Timestamps will be offset seconds to three decimal precision (ms).
+        There's (apparently) no available format to dump the actual epoch
+        timestamp, so will need to construct that from build start time plus
+        offset.
+
+        http://jenkins.int.xcalar.com/job/XCETest/50096/timestamps/?appendlog
+
+        N.B.: assumes timestamp plugin in use
+        """
+        text = self.japi.rest.cmd(uri="/job/{}/{}/timestamps/?appendlog"
+                                      .format(self.job_name, self.build_number))
+        return text
 
     def upstream(self):
         """
@@ -240,9 +255,6 @@ class JenkinsBuildInfo(object):
                 upstream.append({'job_name':cause.get('upstreamProject', None),
                                  'build_number':cause.get('upstreamBuild', None)})
         return upstream
-
-    def result(self):
-        return self.data.get('result', None)
 
     def git_branches(self):
         """
@@ -365,8 +377,8 @@ if __name__ == '__main__':
                         format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
-
     japi = JenkinsApi(host=cfg.get('JENKINS_HOST'))
+
     hosts = japi.list_hosts()
     print("All hosts: {}".format(hosts))
     jobs = japi.list_jobs()
@@ -378,7 +390,6 @@ if __name__ == '__main__':
     print("First build: {}".format(first_build))
     last_build = jji.last_build_number()
     print("Last build: {}".format(last_build))
-
 
     """
     jbi = japi.get_build_info(job_name = "SqlScaleTest",

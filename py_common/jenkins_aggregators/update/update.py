@@ -97,21 +97,23 @@ class JenkinsJobAggregators(object):
         """
         self.logger.info("process bnum: {}".format(bnum))
 
+        is_done = False
         try:
             jbi = self.japi.get_build_info(job_name=self.job_name, build_number=bnum)
-            # Don't update unless the build is known complete.
-            done = jbi.is_done()
-            if not done:
-                self.logger.info("not done")
-                return False
+            # Track whether or not the build is complete.
+            # For incomplete builds, record basic build information but do not call
+            # plug-in aggregators until the build finishes since that was the original
+            # semantic.
+            is_done = jbi.is_done()
 
         except Exception as e:
             if not test_mode:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not is_reparse:
-                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                        self.job_meta_coll.index_data(bnum=bnum, data=None)
-                        self.job_data_coll.store_data(bnum=bnum, data=None)
+                if not is_reparse and not self.job_meta_coll.schedule_retry(bnum=bnum):
+                    self.job_meta_coll.index_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
+                    self.job_data_coll.store_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
                 return False
 
             # TEST_MODE -----
@@ -152,24 +154,26 @@ class JenkinsJobAggregators(object):
                 jbi = self.japi.get_build_info(job_name=self.job_name,
                                                build_number=bnum,
                                                test_data=test_data)
-                done = jbi.is_done()
-                if not done:
-                    self.logger.info("not done")
-                    return False
+                is_done = jbi.is_done()
             except Exception as e:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not is_reparse:
-                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                        self.job_meta_coll.index_data(bnum=bnum, data=None)
-                        self.job_data_coll.store_data(bnum=bnum, data=None)
+                if not is_reparse and not self.job_meta_coll.schedule_retry(bnum=bnum):
+                    self.job_meta_coll.index_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
+                    self.job_data_coll.store_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
                 return False
 
         # Everybody gets the default aggregator
         aggregators = [JenkinsJobInfoAggregator(jenkins_host=self.jenkins_host, job_name=self.job_name)]
 
-        # Add any custom plugin(s) registered for the job.
-        if self.aggregator_plugins:
-            aggregators.extend(self.aggregator_plugins)
+        if is_done:
+            # Add any custom aggregator plugin(s) registered for the job.
+            #
+            # N.B.: We only run custom aggregators on completed builds to
+            # preserve earlier semantics.
+            if self.aggregator_plugins:
+                aggregators.extend(self.aggregator_plugins)
 
         send_log = False
         for aggregator in aggregators:
@@ -184,10 +188,11 @@ class JenkinsJobAggregators(object):
                 console_log = jbi.console()
             except Exception as e:
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not is_reparse:
-                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                        self.job_meta_coll.index_data(bnum=bnum, data=None)
-                        self.job_data_coll.store_data(bnum=bnum, data=None)
+                if not is_reparse and not self.job_meta_coll.schedule_retry(bnum=bnum):
+                    self.job_meta_coll.index_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
+                    self.job_data_coll.store_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
                 return False
 
         merged_data = {}
@@ -207,10 +212,11 @@ class JenkinsJobAggregators(object):
                 # while trying to gather build information. 
                 # Bail, and try again in a bit (if we can).
                 self.logger.exception("exception processing bnum: {}".format(bnum))
-                if not is_reparse:
-                    if not self.job_meta_coll.schedule_retry(bnum=bnum):
-                        self.job_meta_coll.index_data(bnum=bnum, data=None)
-                        self.job_data_coll.store_data(bnum=bnum, data=None)
+                if not is_reparse and not self.job_meta_coll.schedule_retry(bnum=bnum):
+                    self.job_meta_coll.index_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
+                    self.job_data_coll.store_data(bnum=bnum, data=None,
+                                                  is_done=True, is_reparse=False)
                 return False
 
             for k,v in data.items():
@@ -221,8 +227,10 @@ class JenkinsJobAggregators(object):
         if not merged_data and not is_reparse:
             self.logger.info("no data")
             # Make an entry indicating there are no data for this build.
-            self.job_meta_coll.index_data(bnum=bnum, data=None)
-            self.job_data_coll.store_data(bnum=bnum, data=None)
+            self.job_meta_coll.index_data(bnum=bnum, data=None,
+                                          is_done=is_done, is_reparse=is_reparse)
+            self.job_data_coll.store_data(bnum=bnum, data=None,
+                                          is_done=is_done, is_reparse=is_reparse)
             return False
 
         # index_data may side-effect merged_data by extracting "private" stuff
@@ -232,17 +240,18 @@ class JenkinsJobAggregators(object):
         #         might want custom post-aggregation "indexers" that
         #         are paired with the "aggregators".
         #
+
         self.job_meta_coll.index_data(bnum=bnum, data=merged_data,
-                                      is_reparse=is_reparse)
+                                      is_done=is_done, is_reparse=is_reparse)
         self.job_data_coll.store_data(bnum=bnum, data=merged_data,
-                                      is_reparse=is_reparse)
+                                      is_done=is_done, is_reparse=is_reparse)
         self.alljob_idx.index_data(job_name=self.job_name,
                                    bnum=bnum, data=merged_data,
-                                   is_reparse=is_reparse)
+                                   is_done=is_done, is_reparse=is_reparse)
 
         host_data_coll = JenkinsHostDataCollection(jmdb=jmdb, host_name=merged_data['built_on'])
         host_data_coll.store_data(job_name=self.job_name, bnum=bnum, data=merged_data,
-                                  is_reparse=is_reparse)
+                                  is_done=is_done, is_reparse=is_reparse)
         self.logger.debug("end")
         return True
 
@@ -299,8 +308,8 @@ class JenkinsJobAggregators(object):
             self.logger.error("missing first or last build for job {}".format(self.job_name))
             return
 
-        unseen = self.job_meta_coll.unseen_builds(first=jenkins_first, last=jenkins_last)
-        updated = self._do_updates(builds=unseen[:self.builds_max], force_default_job_update=force_default_job_update)
+        pending = self.job_meta_coll.pending_builds(first=jenkins_first, last=jenkins_last)
+        updated = self._do_updates(builds=pending[:self.builds_max], force_default_job_update=force_default_job_update)
 
         extra = self.builds_max - updated
 

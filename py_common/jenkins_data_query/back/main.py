@@ -203,6 +203,8 @@ def jenkins_job_parameters():
     # Find the latest build for the job in the DB and extract the parameter
     # names and return.
 
+    # N.B.: this will give latest completed job, not latest job seen which may
+    #       still be in progress, and is not yet in the "all_builds" list.
     all_builds = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb).all_builds()
     if not all_builds:
         return make_response(jsonify({}))

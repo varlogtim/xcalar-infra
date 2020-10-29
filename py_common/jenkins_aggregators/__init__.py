@@ -36,7 +36,7 @@ class JenkinsAllJobIndex(object):
         self.logger = logging.getLogger(__name__)
         self.jmdb = jmdb
 
-    def index_data(self, *, job_name, bnum, data, is_reparse=False):
+    def index_data(self, *, job_name, bnum, data, is_done, is_reparse):
         """
         Expects to find at least the following in data:
             {'parameters': jbi.parameters(),
@@ -47,6 +47,7 @@ class JenkinsAllJobIndex(object):
              'end_time_ms': jbi.end_time_ms(),
              'result': jbi.result()}
         """
+
         self.logger.debug("job_name: {} bnum: {}".format(job_name, bnum))
 
         start_time_ms = data.get('start_time_ms', None)
@@ -59,13 +60,15 @@ class JenkinsAllJobIndex(object):
             end_time_ms = start_time_ms + duration_ms
 
         built_on = data.get('built_on', None)
+        result = data['result'] or "PENDING" # XXXrs humm....
+
         job_entry = {'job_name': job_name,
                      'build_number': bnum,
                      'start_time_ms': start_time_ms,
                      'duration_ms': duration_ms,
                      'end_time_ms': end_time_ms,
                      'built_on': built_on,
-                     'result': data.get('result', None)}
+                     'result': result}
 
         self.logger.debug("job_entry: {}".format(job_entry))
 
@@ -75,10 +78,8 @@ class JenkinsAllJobIndex(object):
             coll.create_index([('job_name', pymongo.ASCENDING),
                                ('build_number', pymongo.ASCENDING)],
                               unique=True)
-            try:
-                coll.insert(job_entry)
-            except DuplicateKeyError as e:
-                self.logger.error("builds_by_time duplicate {}".format(job_entry))
+            coll.find_one_and_replace({'job_name':job_name, 'build_number': bnum},
+                                       job_entry, upsert=True)
 
         # Downstream Jobs
         coll = self.jmdb.downstream_jobs()
@@ -172,12 +173,13 @@ class JenkinsJobDataCollection(object):
     def __init__(self, *, job_name, jmdb):
         self.db = jmdb.jenkins_db()
         self.logger = logging.getLogger(__name__)
+        self.job_name = job_name
         self.coll = self.db.collection("job_{}".format(job_name))
 
     def _no_data(self, *, doc):
         return not doc or 'NODATA' in doc
 
-    def store_data(self, *, bnum, data, is_reparse=False):
+    def store_data(self, *, bnum, data, is_done, is_reparse):
         """
         Store the passed data, or no-data marker if data is None
         """
@@ -185,19 +187,19 @@ class JenkinsJobDataCollection(object):
             try:
                 self.coll.insert({'_id': bnum, 'NODATA':True})
             except DuplicateKeyError as e:
-                # Either we're "fixing" old issues with failing to store
-                # NODATA entries in the meta index all_builds, or we're
-                # potentially overwriting real data with NODATA.  Just don't.
-                self.logger.error("attempting to store NODATA at duplicate bnum {}"
-                                  .format(bnum))
+                doc = self.coll.find_one({'_id': bnum})
+                if doc and not self._no_data(doc=doc):
+                    # Either we're "fixing" old issues with failing to store
+                    # NODATA entries in the meta index all_builds, or we're
+                    # potentially overwriting "real" data with NODATA.
+                    # In either case, just don't.
+                    self.logger.error("attempting to overwrite with NODATA at {}:{}"
+                                      .format(self.job_name, bnum))
             return
 
-        if is_reparse:
-            self.coll.find_one_and_replace({'_id':bnum}, data)
-        else:
-            data['_id'] = bnum
-            self.coll.insert(data)
-            data.pop('_id')
+        data['_id'] = bnum
+        self.coll.find_one_and_replace({'_id':bnum}, data, upsert=True)
+        data.pop('_id')
 
     def get_data(self, *, bnum):
         self.logger.debug("start bnum {}".format(bnum))
@@ -221,14 +223,6 @@ class JenkinsJobDataCollection(object):
         self.logger.debug("rtn: {}".format(rtn))
         return rtn
 
-    def all_builds(self):
-        """
-        Return the list of all completed builds (builds which have an entry here)
-        """
-        builds = []
-        for doc in self.coll.find({}, projection={'_id':1}):
-            builds.append(doc['_id'])
-        return sorted(builds)
 
 class JenkinsHostDataCollection(object):
     """
@@ -246,9 +240,11 @@ class JenkinsHostDataCollection(object):
     def _no_data(self, *, doc):
         return not doc or 'NODATA' in doc
 
-    def store_data(self, *, job_name, bnum, data, is_reparse=False):
+    def store_data(self, *, job_name, bnum, data, is_done, is_reparse):
         """
-        Store the data.  Duh.
+        Store the data. :)
+
+        N.B. is_done is here for consistency, but not presently used.
         """
         if not data or is_reparse:
             return
@@ -261,18 +257,18 @@ class JenkinsHostDataCollection(object):
         if end_time_ms is None and start_time_ms is not None and duration_ms is not None:
             end_time_ms = start_time_ms + duration_ms
 
+        result = data['result'] or "PENDING" # XXXrs humm....
+
         # Only selected data items.
-        store = {}
-        store['job_name']=job_name
-        store['build_number']=bnum
-        store['start_time_ms'] = start_time_ms
-        store['duration_ms'] = duration_ms
-        store['end_time_ms'] = end_time_ms
-        store['result'] = data['result']
-        try:
-            self.coll.insert(store)
-        except DuplicateKeyError as e:
-            self.logger.error("host_{} duplicate {}".format(self.host_name, store))
+        data = {'job_name': job_name,
+                'build_number': bnum,
+                'start_time_ms': start_time_ms,
+                'duration_ms': duration_ms,
+                'end_time_ms': end_time_ms,
+                'result': result}
+
+        self.coll.find_one_and_replace({'job_name':job_name, 'build_number': bnum},
+                                       data, upsert=True)
 
 class JenkinsJobMetaCollection(object):
     """
@@ -286,11 +282,12 @@ class JenkinsJobMetaCollection(object):
     def __init__(self, *, job_name, jmdb):
         self.db = jmdb.jenkins_db()
         self.logger = logging.getLogger(__name__)
+        self.job_name = job_name
         self.coll = self.db.collection("job_{}_meta".format(job_name))
         cfg = EnvConfiguration(JenkinsJobMetaCollection.ENV_PARAMS)
         self.retry_max = cfg.get('JENKINS_AGGREGATOR_UPDATE_RETRY_MAX')
 
-    def index_data(self, *, bnum, data, is_reparse=False):
+    def index_data(self, *, bnum, data, is_done, is_reparse):
         """
         Extract certain meta-data from the data set and "index".
         This is largly for the purpose of dashboard time efficiency.
@@ -300,10 +297,17 @@ class JenkinsJobMetaCollection(object):
         is_reparse is here for consistency with other similar
         index/store methods, but is not presently used.
         """
-        # Add to all_builds list
-        self.coll.find_one_and_update({'_id': 'all_builds'},
-                                      {'$addToSet': {'builds': bnum}},
-                                      upsert = True)
+        if is_done:
+            self.logger.info("processing completed build {}:{}"
+                             .format(self.job_name, bnum))
+            # Add to all_builds list when complete
+            self.coll.find_one_and_update({'_id': 'all_builds'},
+                                          {'$addToSet': {'builds': bnum}},
+                                          upsert = True)
+
+        else:
+            self.logger.info("processing incomplete build {}:{}"
+                             .format(self.job_name, bnum))
 
         # Remove any retry entry
         self.cancel_retry(bnum=bnum)
@@ -312,6 +316,8 @@ class JenkinsJobMetaCollection(object):
         self.cancel_reparse(bnum=bnum)
 
         if not data:
+            self.logger.error("empty data for {}:{}"
+                             .format(self.job_name, bnum))
             return # Nothing more to do.
 
         # If we have branch data, add to the builds-by-branch list(s)
@@ -344,17 +350,16 @@ class JenkinsJobMetaCollection(object):
                                           {'$addToSet': {'values': val}},
                                           upsert = True)
 
-    def store_data(self, *, key, data, is_reparse=False):
+    def store_data(self, *, key, data):
         """
         Store the passed data, or delete any existing if data is None
-
-        is_reparse is here for consistency with other similar
-        index/store methods, but is not presently used.
         """
         if data is None:
             self.coll.find_one_and_delete({'_id': key})
             return
+        data['_id'] = key
         self.coll.find_one_and_replace({'_id': key}, data, upsert=True)
+        data.pop('_id')
 
     def get_data(self, *, key):
         doc = self.coll.find_one({'_id': key})
@@ -365,22 +370,26 @@ class JenkinsJobMetaCollection(object):
 
     def all_builds(self):
         """
-        Return the list of all builds for which we have indexed data.
+        Return the list of all builds for which we have final data.
+        Note that this does not include incomplete or "PENDING" builds.
+        We may have data indexed for such builds, but don't list them
+        here so we will continue to monitor status until they return a
+        final result.
         """
         doc = self.coll.find_one({'_id': 'all_builds'})
         if not doc:
             return []
         return sorted(doc.get('builds', []))
 
-    def unseen_builds(self, *, first, last):
+    def pending_builds(self, *, first, last):
         """
-        Return list of any "unseen" (no recorded data) build numbers between
+        Return list of pending (no recorded result) build numbers between
         first and last (inclusive)
         """
         build_range = set([str(i) for i in range(first, last+1)])
-        seen_builds = set(self.all_builds())
-        unseen = sorted([str(i) for i in (build_range-seen_builds)], key=nat_sort, reverse=True)
-        return unseen
+        completed_builds = set(self.all_builds())
+        return sorted([str(i) for i in (build_range-completed_builds)],
+                      key=nat_sort, reverse=True)
 
     def schedule_retry(self, *, bnum):
         """
