@@ -174,6 +174,8 @@ def _timeserie_results(*, target, from_ms, to_ms):
         target_pfx = "{} {} on {}".format(job_name, build_number, built_on)
         if result == 'SUCCESS':
             target = "{} pass".format(target_pfx)
+        elif result == 'PENDING':
+            target = "{} pending".format(target_pfx)
         elif result == 'ABORTED':
             target = "{} abort".format(target_pfx)
         elif result == 'FAILURE':
@@ -190,6 +192,9 @@ def _timeserie_results(*, target, from_ms, to_ms):
                         'datapoints':[[duration_ms, start_time_ms],
                                       [duration_ms, end_time_ms]]})
         if result == 'SUCCESS':
+            results.append({'target': "{} pass".format(build_number),
+                            'datapoints': [[duration_ms, end_time_ms]]})
+        elif result == 'PENDING':
             results.append({'target': "{} pass".format(build_number),
                             'datapoints': [[duration_ms, end_time_ms]]})
         elif result == 'ABORTED':
@@ -389,13 +394,19 @@ def _map_result(result):
     """
     Map the result string to a numeric value to allow for threshold
     coloration on Grafana.  Can then be mapped back to string.
+
+    Sadly, Grafana only allows 3 colors based on thresholds.
+    Place pending between success and aborted and the panel
+    can decide.  Failure is not an option :)
     """
     if result == 'SUCCESS':
         return 0
-    if result == 'ABORTED':
+    if result == 'PENDING':
         return 1
+    if result == 'ABORTED':
+        return 2
     # Presume failure
-    return 2
+    return 3
 
 def _job_table(*, job_names, parameter_names, from_ms, to_ms):
 

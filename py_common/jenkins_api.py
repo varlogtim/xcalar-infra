@@ -218,6 +218,10 @@ class JenkinsBuildInfo(object):
         return start+dur
 
     def result(self):
+        # Observed that Jenkins will report a result even
+        # if building is True :/
+        if self.data.get('building', True):
+            return "PENDING"
         return self.data.get('result', None) or "PENDING"
 
     def console(self):
@@ -378,7 +382,13 @@ if __name__ == '__main__':
                         handlers=[logging.StreamHandler()])
     logger = logging.getLogger(__name__)
     japi = JenkinsApi(host=cfg.get('JENKINS_HOST'))
+    job_name = "DailyTests-Trunk"
+    build_number = "545"
+    jbi = japi.get_build_info(job_name = job_name,
+                              build_number = build_number)
+    print("\tresult: {}".format(jbi.result()))
 
+    """
     hosts = japi.list_hosts()
     print("All hosts: {}".format(hosts))
     jobs = japi.list_jobs()
@@ -390,6 +400,7 @@ if __name__ == '__main__':
     print("First build: {}".format(first_build))
     last_build = jji.last_build_number()
     print("Last build: {}".format(last_build))
+    """
 
     """
     jbi = japi.get_build_info(job_name = "SqlScaleTest",
