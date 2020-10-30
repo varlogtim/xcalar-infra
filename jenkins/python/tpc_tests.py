@@ -201,7 +201,7 @@ if __name__ == '__main__':
         #
         #         I fixed the code in trunk, but still bites us on 2.3
         #         This sleep can go away eventually but for now...
-        time.sleep(1)
+        time.sleep(10)
         logger.debug("start load cmd: {}".format(cmd))
         p = subprocess.Popen(shlex.split(cmd))
         subprocs.append({'proc': p, 'rc': None})
@@ -217,7 +217,7 @@ if __name__ == '__main__':
 
     subprocs = []
     for idx,cmd in enumerate(test_cmds):
-        time.sleep(1) # See rant above :)
+        time.sleep(10) # See rant above :)
         logger.debug("start test cmd: {}".format(cmd))
         p = subprocess.Popen(shlex.split(cmd))
         subprocs.append({'proc': p, 'rc': None})
