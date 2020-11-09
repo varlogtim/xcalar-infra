@@ -3,6 +3,7 @@
 set -e
 export PERSIST_COVERAGE_ROOT="${PERSIST_COVERAGE_ROOT:-/netstore/qa/coverage}"
 export RUN_COVERAGE="${RUN_COVERAGE:-false}"
+export GEN_ASUP="${GEN_ASUP:-false}"
 export XLRDIR=`pwd`
 export PATH="$XLRDIR/bin:$PATH"
 
@@ -19,7 +20,7 @@ set -x
 
 cluster=`echo $CLUSTER | tr A-Z a-z`
 
-if [ ! -z ${DO_GEN_ASUP} ]; then
+if [ "${GEN_ASUP}" = "true" ]; then
     genSupport "$cluster"
 fi
 
