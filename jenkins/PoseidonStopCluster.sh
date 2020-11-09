@@ -19,6 +19,10 @@ set -x
 
 cluster=`echo $CLUSTER | tr A-Z a-z`
 
+if [ ! -z ${DO_GEN_ASUP} ]; then
+    genSupport "$cluster"
+fi
+
 # Collect coverage data if present
 if [ "$RUN_COVERAGE" = "true" ]; then
     set +e
