@@ -1071,9 +1071,14 @@ Resources:
                   - '*'
               - Effect: Allow
                 Action:
-                  - s3:GetBucket*
+                Resource: 'arn:aws:s3:::*'
+              - Effect: Allow
+                Action:
                   - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
                   - s3:HeadBucket
+                  - s3:GetEncryptionConfiguration
+                  - s3:GetBucketLocation
                 Resource:
                   - !Sub
                     - 'arn:aws:s3:::${Bucket}'
@@ -1081,35 +1086,15 @@ Resources:
                   - !Sub 'arn:aws:s3:::${WorkBucket}'
               - Effect: Allow
                 Action:
-                  - s3:PutObject
-                  - s3:PutObjectAcl
-                Condition:
-                  StringEquals:
-                    s3:x-amz-acl: 'bucket-owner-full-control'
-                Resource:
-                  - !Sub
-                    - 'arn:aws:s3:::${Bucket}/*'
-                    - Bucket: !If [CreateNewS3, !Ref S3Bucket, !Ref ExistingS3]
-                  - !Sub 'arn:aws:s3:::${WorkBucket}/*'
-{%- if enableLifecycle %}
-                  - !Sub
-                    - 'arn:aws:s3:::${LogBucket}/logs/${AccountId}/${StackName}/*'
-                    - LogBucket: !ImportValue sharedinf-logbucket
-                      AccountId: !Ref AWS::AccountId
-                      StackName: !Ref AWS::StackName
-{%- endif %}
-              - Effect: Allow
-                Action:
-                  - s3:ListMultipartUploads
+                  - s3:ListMultipartUploadParts
                   - s3:AbortMultipartUpload
-                  - s3:CreateMultipartUpload
-                  - s3:CompleteMultipartUpload
                   - s3:GetObject
+                  - s3:GetObjectAcl
+                  - s3:GetObjectVersion
                   - s3:HeadObject
                   - s3:DeleteObject
-                  - s3:ListObjects
-                  - s3:ListObjectsV2
-                  - s3:ListParts
+                  - s3:PutObject
+                  - s3:PutObjectAcl
                 Resource:
                   - !Sub
                     - 'arn:aws:s3:::${Bucket}/*'
