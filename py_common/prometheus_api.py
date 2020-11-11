@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 import json
-import numpy
 import os
-import pprint
 import requests
 import sys
 import time
@@ -46,7 +44,18 @@ class PrometheusAPI(object):
 
         returns = []
 
-        cpu_metrics = ['cpu_avg_user', 'cpu_avg_system', 'cpu_avg_idle']
+        # XXXrs - FUTURE
+        #   - want cpu min/max
+        #   - want memory min/max/avg
+
+        cpu_metrics = ['cpu_avg_idle',
+                       'cpu_avg_iowait',
+                       'cpu_avg_irq',
+                       'cpu_avg_nice',
+                       'cpu_avg_softirq',
+                       'cpu_avg_steal',
+                       'cpu_avg_system',
+                       'cpu_avg_user']
 
         rtn = {}
         for metric in cpu_metrics:

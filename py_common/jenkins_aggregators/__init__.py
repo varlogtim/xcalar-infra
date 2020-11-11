@@ -23,6 +23,7 @@ if __name__ == '__main__':
 from py_common.env_configuration import EnvConfiguration
 from py_common.jenkins_api import JenkinsApi
 from py_common.mongo import MongoDB, JenkinsMongoDB
+from py_common.prometheus_api import PrometheusAPI
 from py_common.sorts import nat_sort
 
 
@@ -617,13 +618,14 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
             self.logger.error("no build info passed, so return empty")
             return rtn
 
+        build_host = jbi.built_on()
         try:
             # This is the "standard" set of job data.
             # Note that the JenkinsAllJobIndex class counts
             # on what's here.
             rtn = {'parameters': jbi.parameters(),
                    'git_branches': jbi.git_branches(),
-                   'built_on': jbi.built_on(),
+                   'built_on': build_host,
                    'start_time_ms': jbi.start_time_ms(),
                    'duration_ms': jbi.duration_ms(),
                    'end_time_ms': jbi.end_time_ms(),
@@ -635,6 +637,21 @@ class JenkinsJobInfoAggregator(JenkinsAggregatorBase):
         except Exception as e:
             self.logger.exception("failed to get build info")
             raise JenkinsAggregatorDataUpdateTemporaryError("try again") from None
+
+        if build_host is not None:
+            try:
+                start_time_s = int(jbi.start_time_ms()/1000)
+                end_time_s = int(jbi.end_time_ms()/1000)
+                if end_time_s - start_time_s > 60:
+                    host_metrics = PrometheusAPI().host_metrics(
+                                        host = build_host,
+                                        start_time_s = start_time_s,
+                                        end_time_s = end_time_s)
+                    rtn['host_metrics'] = host_metrics
+                else:
+                    self.logger.info("skipping host metrics, test duration too short")
+            except Exception as e:
+                self.logger.exception("failed to get host metrics")
 
         self.logger.debug("rtn: {}".format(rtn))
         return rtn
