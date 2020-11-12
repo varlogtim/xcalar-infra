@@ -65,7 +65,8 @@ fi
 if [ -z "$IMAGE" ]; then
     case "$DOMAIN" in
         *.demo.xcalar.cloud | demo.xcalar.cloud) IMAGE=certbot/dns-route53; AWS_ACCOUNT=aws-xcalar-trials;;
-        *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53 ;;
+        *.test.xcalar.cloud | test.xcalar.cloud) IMAGE=certbot/dns-route53 ; AWS_ACCOUNT=aws-test;;
+        *.xcalar.cloud | xcalar.cloud) IMAGE=certbot/dns-route53 ; AWS_ACCOUNT=aws-pegasus;;
         *.xcalar.rocks | xcalar.rocks) IMAGE=certbot/dns-route53 ;;
         *.xcalar.io | xcalar.io) IMAGE=certbot/dns-google ;;
         *.xcalar.com | xcalar.com) IMAGE=certbot/dns-google ;;
@@ -106,6 +107,8 @@ elif [[ $IMAGE == certbot/dns-route53 ]]; then
         if [ -z "$AWS_SESSION_TOKEN" ]; then
             eval $(vault-aws-credentials-provider.sh --account $AWS_ACCOUNT --export-env --ttl 900) || exit 1
         fi
+        aws sts get-caller-identity || true
+        (set -x; sleep 20)
         set -x
         $DOCKER run $DOCKER_FLAGS \
             -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
