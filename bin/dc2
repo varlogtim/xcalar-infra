@@ -568,7 +568,7 @@ dc2_upload() {
             fi
             (cd "$GENDIR"/lambda && zip -q -9r $GENDIR/lambda.zip .)
             rm -rf "$GENDIR"/lambda
-            aws s3 cp --acl public-read lambda.zip s3://${BUCKET}/${LAMBDAKEY}
+            aws s3 cp --acl public-read $GENDIR/lambda.zip s3://${BUCKET}/${LAMBDAKEY}
         fi
     fi
 
