@@ -554,7 +554,7 @@ dc2_upload() {
         fi
     done
     if test -e "$PROJDIR"/lambda; then
-        LAMBDASUM=$(cd "$PROJDIR/lambda" && sha256sum $(ls ./*.py requirements.txt 2>/dev/null || true) | tee "$GENDIR/lambda.sha256" | sha256sum - | cut -d' ' -f1 | tee $GENDIR/lambdasum.sha256)
+        LAMBDASUM=$(cd "$PROJDIR/lambda" && sha256sum $(ls -- *.py requirements.txt 2>/dev/null | /usr/bin/env LANG=C sort || true) | tee "$GENDIR/lambda.sha256" | sha256sum - | cut -d' ' -f1 | tee $GENDIR/lambdasum.sha256)
         LAMBDAKEY="${PREFIX}lambda/${LAMBDASUM:0:2}/${LAMBDASUM:2:2}/${LAMBDASUM}.zip"
         if aws s3api head-object --bucket ${BUCKET} --key ${LAMBDAKEY} >/dev/null 2>&1; then
             :

@@ -383,11 +383,7 @@ Resources:
 {%- if forSam %}
       TemplateURL: 'stepfun{{ flavor_suffix }}.json'
 {%- else %}
-{%- if enableBaseURL %}
-      TemplateURL: !Join[ '/', [!Ref 'BaseURL', 'stepfun{{ flavor_suffix }}.json']]
-{%- else %}
       TemplateURL: '{{baseUrl}}/stepfun{{ flavor_suffix }}.json'
-{%- endif %}
 {%- endif %}
       Parameters:
         AdminUsername: !Ref AdminUsername
@@ -398,9 +394,6 @@ Resources:
         ExistingBucket: !If [BucketProvided, !Ref ExistingS3, !Ref WorkBucket]
         WorkBucket: !Ref WorkBucket
         NotificationEmail: !Ref NotificationEmail
-{%- if enableBaseURL %}
-        BaseURL: !Join ["",[!Ref 'BaseURL','/']]
-{%- endif %}
         EfsSharedRoot: !If [CreateNewShare, !Ref EfsSharedRoot, !Ref ExistingShare]
         EfsAccessPoint: !If [CreateAccessPoint, !Ref EfsAccessPoint, !Ref 'AWS::NoValue']
         LaunchTemplate: !Ref LaunchTemplate

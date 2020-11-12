@@ -957,7 +957,7 @@ main() {
                     DNS_AND_IP="$(imds /meta-data/public-hostname) $(imds /meta-data/public-ipv4)"
                 fi
             else
-                DNS_AND_IP="$(imds /meta-data/private-hostname) $(imds /meta-data/privaate-ipv4)"
+                DNS_AND_IP="$(imds /meta-data/local-hostname) $(imds /meta-data/private-ipv4)"
             fi
 
             test -d $XLRROOT/config || mkdir -p $XLRROOT/config
