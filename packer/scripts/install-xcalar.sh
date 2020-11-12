@@ -7,7 +7,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/aw
 XCE_CONFDIR="${XCE_CONFDIR:-/etc/xcalar}"
 OSID=${OSID:-$(osid)}
 
-yum localinstall -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-41.noarch.rpm || true
+yum localinstall -y http://repo.xcalar.net/rpm-deps/common/x86_64/Packages/ephemeral-disk-1.0-42.noarch.rpm || true
 EPHEMERAL=${EPHEMERAL:-/ephemeral/data}
 systemctl daemon-reload
 systemctl disable ephemeral-disk
