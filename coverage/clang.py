@@ -206,42 +206,58 @@ class ClangCoverageDir(object):
             return file_list
 
         self.logger.debug("{} exists".format(rawprof_dir))
-        size_to_files = {}
-        for fname in os.listdir(rawprof_dir):
-            file_path = os.path.join(rawprof_dir, fname)
-            size = os.stat(file_path).st_size
-            if not size:
-                self.logger.debug("{} empty, skipping...".format(file_path))
-                continue
-            size_to_files.setdefault(size, []).append(file_path)
-
-        self.logger.debug("size_to_files: {}".format(pprint.pformat(size_to_files)))
-        most_size = 0
-        most_files = []
-        for size,files in size_to_files.items():
-            if (len(most_files) < len(files)) or (len(most_files) == len(files) and most_size < size):
-                most_size = size
-                most_files = files
-
-        if not most_size:
-            return [] # XXXrs - should this be an exception?
 
         merge_files_path = os.path.join(work_dir, 'merge.files')
-        with open(merge_files_path, 'w+') as f:
-            for path in most_files:
-                f.write("{}\n".format(path))
+        tmp_profdata = os.path.join(work_dir, "tmp.profdata")
 
-        cargs = [clang_tools.llvm_profdata_path, "merge"]
-        cargs.extend(["-f", merge_files_path])
-        cargs.extend(["-o", profdata_path])
-        self.logger.debug("run: {}".format(cargs))
-        cp = subprocess.run(cargs,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT)
-        if cp.returncode:
-            raise Exception("llvm-profdata failure creating usrnode.profdata\n{}"
-                            .format(cp.stdout.decode('utf-8')))
+        # Some rawprof files will not merge due to what is reported as
+        # header corruption.  This is likely incomplete files due to
+        # some shutdown issue.  To get the maximum number of files merged
+        # without having one bad apple kill the whole merge, merge files
+        # one at a time and keep accumulating the merge results.
+        if os.path.exists(profdata_path):
+            os.remove(profdata_path)
+        for fname in os.listdir(rawprof_dir):
+            with open(merge_files_path, 'w+') as f:
+                if os.path.exists(profdata_path):
+                    # If we have a merge result, off-name and merge the
+                    # next file into it.
+                    self.logger.debug("{} exists, rename to {}"
+                                      .format(profdata_path, tmp_profdata))
+                    os.rename(profdata_path, tmp_profdata)
+                    self.logger.debug("merging {}...".format(tmp_profdata))
+                    f.write("{}\n".format(tmp_profdata))
+
+                raw_path = os.path.join(rawprof_dir, fname)
+                self.logger.debug("merging {}...".format(raw_path))
+                f.write("{}\n".format(raw_path))
+
+            cargs = [clang_tools.llvm_profdata_path, "merge"]
+            cargs.extend(["-f", merge_files_path])
+            cargs.extend(["-o", profdata_path])
+            self.logger.debug("run: {}".format(cargs))
+            cp = subprocess.run(cargs,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT)
+            if not cp.returncode:
+                self.logger.debug("success...")
+                continue
+
+            self.logger.debug("fail...")
+            if os.path.exists(tmp_profdata):
+                # On merge failure, reset by restoring the profdata file
+                # we off-named above, and start the next cycle.
+                self.logger.debug("{} exists, rename to {}"
+                                  .format(tmp_profdata, profdata_path))
+                os.rename(tmp_profdata, profdata_path)
+
+        if os.path.exists(tmp_profdata):
+            # Clean up any "intermediary" file.
+            os.remove(tmp_profdata)
+
         return [profdata_path]
+
+
 
     @classmethod
     def _create_json(cls, *, clang_tools, out_dir, bin_path, profdata_path, force):
@@ -345,6 +361,7 @@ class ClangCoverageDir(object):
                                              force=force)
         else:
             assert(profdata_files[0] == profdata_path)
+
         self.logger.debug("final instr-profile file: {}".format(profdata_path))
 
         # coverage.json
@@ -510,4 +527,9 @@ class ClangCoverageAggregator(JenkinsAggregatorBase):
 
 
 if __name__ == '__main__':
+    cfg = EnvConfiguration({"LOG_LEVEL": {"default": logging.DEBUG}})
+    logging.basicConfig(level=cfg.get("LOG_LEVEL"),
+                        format="'%(asctime)s - %(threadName)s - %(funcName)s - %(levelname)s - %(message)s",
+                        handlers=[logging.StreamHandler()])
+    logger = logging.getLogger(__name__)
     print("Compile check A-OK!")
