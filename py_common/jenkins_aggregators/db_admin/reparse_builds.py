@@ -58,6 +58,8 @@ if __name__ == '__main__':
 
     argParser.add_argument("--job", default=[], type=str, action='append', dest='jobs',
                                 help="only consider builds from this (these) job(s)", metavar="name")
+    argParser.add_argument("--bnum", default=[], type=str, action='append', dest='builds',
+                                help="only reparse these specific builds (must supply exactly one job)", metavar="number")
     argParser.add_argument("--detail", action="store_true",
                                 help="show build details")
     argParser.add_argument("--force", action="store_true",
@@ -83,6 +85,49 @@ if __name__ == '__main__':
 
     args = argParser.parse_args()
 
+    jmdb = JenkinsMongoDB()
+
+    if len(args.builds):
+        if len(args.jobs) != 1:
+            raise ValueError("If --bnum only one --job allowed")
+
+        # Re-parse only specific builds from a job
+
+        # validate the job/builds
+        job_name = args.jobs[0]
+        active_jobs = jmdb.active_jobs()
+        if job_name not in active_jobs:
+            raise ValueError("{} is not an active job".format(job_name))
+
+        meta_coll = JenkinsJobMetaCollection(job_name=job_name, jmdb=jmdb)
+        all_builds = meta_coll.all_builds()
+        for bnum in args.builds:
+            if bnum not in all_builds:
+                raise ValueError("{} is not a valid build number".format(bnum))
+
+        # See if user wants to proceed
+        if not args.force:
+            foo = input("Proceed (y/N): ")
+            if foo != 'y':
+                sys.exit(0)
+
+        print("proceeding...")
+
+        # Flag builds for re-parse
+
+        process_lock_name = "{}_process_lock".format(job_name)
+        process_lock_meta = {"reason": "locked by reparse_builds.py"}
+        process_lock = MongoDBKeepAliveLock(db=jmdb.jenkins_db(), name=process_lock_name)
+        try:
+            process_lock.lock(meta=process_lock_meta)
+        except MongoDBKALockTimeout as e:
+            raise Exception("timeout acquiring {}".format(process_lock_name))
+
+        meta_coll.reparse(builds=args.builds)
+        process_lock.unlock()
+        sys.exit(0)
+
+    # Re-parse builds selected by time period, optionally filtered by job name(s)
     tz = pytz.timezone(args.tz)
     now = datetime.datetime.now(tz=tz)
 
@@ -119,12 +164,11 @@ if __name__ == '__main__':
 
     # Find all builds between start/end times
 
-    jmdb = JenkinsMongoDB()
     alljob = JenkinsAllJobIndex(jmdb=jmdb)
     builds = alljob.builds_by_time(
-                        full=True, # want ID and collection info for removal...
-                        start_time_ms=(start_ts*1000),
-                        end_time_ms=(end_ts*1000))
+                    full=True, # want ID and collection info for removal...
+                    start_time_ms=(start_ts*1000),
+                    end_time_ms=(end_ts*1000))
 
     builds = builds['builds'] # :/
     if not builds:
@@ -132,7 +176,6 @@ if __name__ == '__main__':
         sys.exit(0)
 
     job_to_builds = {}
-
     for build in builds:
         job_name = build['job_name']
         job_to_builds.setdefault(job_name, []).append(build)
