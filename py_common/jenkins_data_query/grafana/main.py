@@ -408,6 +408,17 @@ def _map_result(result):
     # Presume failure
     return 3
 
+def _host_metrics(*, item):
+    avg_idle = "n/a"
+    avg_user = "n/a"
+    avg_system = "n/a"
+    host_metrics = item.get('host_metrics', None)
+    if host_metrics is not None:
+        avg_idle = host_metrics.get('cpu_avg_idle', "n/a")
+        avg_user = host_metrics.get('cpu_avg_user', "n/a")
+        avg_system = host_metrics.get('cpu_avg_system', "n/a")
+    return (avg_idle, avg_user, avg_system)
+
 def _job_table(*, job_names, parameter_names, from_ms, to_ms):
 
     rows = []
@@ -416,6 +427,9 @@ def _job_table(*, job_names, parameter_names, from_ms, to_ms):
                {"text":"Start Time", "type":"time"},
                {"text":"Duration (s)", "type":"number"},
                {"text":"Built On", "type": "string"},
+               {"text":"Idle%", "type": "string"},
+               {"text":"User%", "type": "string"},
+               {"text":"Sys%", "type": "string"},
                {"text":"Result", "type":"string"}]
     for name in parameter_names:
         columns.append({"text": name, "type":"string"})
@@ -429,15 +443,20 @@ def _job_table(*, job_names, parameter_names, from_ms, to_ms):
                                       projection={'start_time_ms': 1,
                                                   'duration_ms': 1,
                                                   'built_on': 1,
+                                                  'host_metrics': 1,
                                                   'result': 1,
                                                   'parameters': 1})
         for bnum,item in resp.items():
             duration_s = int(item.get('duration_ms', 0)/1000)
+            (avg_idle, avg_user, avg_system) = _host_metrics(item=item)
             vals = [job_name,
                     int(bnum),
                     item.get('start_time_ms', 0),
                     duration_s,
                     item.get('built_on', 'unknown'),
+                    avg_idle,
+                    avg_user,
+                    avg_system,
                     _map_result(item.get('result'))]
             for name in parameter_names:
                 vals.append(item.get('parameters', {}).get(name, "N/A"))
@@ -453,6 +472,9 @@ def _downstream_jobs_table(*, job_name, build_number):
                {"text":"Start Time", "type":"time"},
                {"text":"Duration (s)", "type":"number"},
                {"text":"Built On", "type": "string"},
+               {"text":"Idle%", "type": "string"},
+               {"text":"User%", "type": "string"},
+               {"text":"Sys%", "type": "string"},
                {"text":"Result", "type":"string"}]
 
     down = jdq_client.downstream(job_name=job_name, bnum=build_number)
@@ -469,16 +491,21 @@ def _downstream_jobs_table(*, job_name, build_number):
                                         projection={'duration_ms': 1,
                                                     'start_time_ms': 1,
                                                     'built_on': 1,
+                                                    'host_metrics': 1,
                                                     'result': 1})
         if bnum not in detail:
             continue
         detail = detail[bnum]
         duration_s = int(detail.get('duration_ms', 0)/1000)
+        (avg_idle, avg_user, avg_system) = _host_metrics(item=detail)
         vals = [name,
                 int(bnum),
                 detail.get('start_time_ms', 0),
                 duration_s,
                 detail.get('built_on', 'unknown'),
+                avg_idle,
+                avg_user,
+                avg_system,
                 _map_result(detail.get('result'))]
         rows.append(vals)
     return [{"columns": columns, "rows": rows, "type" : "table"}]
