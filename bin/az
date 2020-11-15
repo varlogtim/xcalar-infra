@@ -1,8 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # shellcheck disable=SC2086,SC2207,SC2206,SC2034,SC2015,SC2046
 
 set -e
+
+. os-compat.sh
 
 # Some directories may have been created as root via the
 # docker container
@@ -36,7 +38,7 @@ AWS_USE_DOCKER=${AWS_USE_DOCKER:-false}
 AWS_HOME=$HOME/.aws
 #=====
 
-PROGU=${PROG^^}
+PROGU="$(tr 'a-z' 'A-Z'  <<< ${PROG})"
 WRAP_IMAGE=${PROGU}_IMAGE
 WRAP_IMAGE_DEFAULT=${PROGU}_IMAGE_DEFAULT
 WRAP_USE_DOCKER="${PROGU}_USE_DOCKER"
@@ -44,7 +46,7 @@ WRAP_HOME=${PROGU}_HOME
 PIMAGE="${!WRAP_IMAGE:-${!WRAP_IMAGE_DEFAULT}}"
 PHOME="${!WRAP_HOME}"
 PLOG="$PHOME"/logs/"$PROG".log
-if [ "${!WRAP_USE_DOCKER}" != true ] && ALLPROG=("$(which $PROG | grep -v "$(readlink -f "${BASH_SOURCE[0]}")")"); then
+if [ "${!WRAP_USE_DOCKER}" != true ] && ALLPROG=("$(which $PROG | grep -v "$(readlink_f "${BASH_SOURCE[0]}")")"); then
     exec "${ALLPROG[0]}" "$@"
 fi
 safe_mkdir "$PHOME"

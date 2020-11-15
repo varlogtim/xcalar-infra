@@ -1,7 +1,36 @@
 #!/bin/bash
 
 # shellcheck disable=SC1091
-. infra-sh-lib
+#. infra-sh-lib
+
+warn() {(set +x
+    if test -t 2; then
+        YELLOW='\e[33m'
+        RESET='\e[0m'
+        echo >&2 '\e[33m[WARN]\e[0m' "$@"
+    else
+        echo >&2 '[WARN] ' "$@"
+    fi
+)}
+
+error() {(set +x
+    if test -t 2; then
+        RED='\e[31m'
+        RESET='\e[0m'
+        echo >&2 -e "${RED}[ERROR]${RESET} " "$@"
+    else
+        echo >&2 '[ERROR] ' "$@"
+    fi
+)}
+
+say() {
+    echo >&2 "$1"
+}
+
+die() {
+    error "$1"
+    exit 1
+}
 
 if [[ $OSTYPE =~ darwin ]]; then
     please_install() {
@@ -48,6 +77,20 @@ if [[ $OSTYPE =~ darwin ]]; then
         else
             sort "${@//-V/}"
         fi
+    }
+
+    mountpoint() {
+        if [ "$1" = -q ]; then
+            shift
+        fi
+        if ! test -d "$1"; then
+            return 1
+        fi
+        diskutil info "$1" >/dev/null
+    }
+
+    touch() {
+        gtouch "$@"
     }
 
     stat() {
