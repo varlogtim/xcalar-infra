@@ -24,7 +24,7 @@ job "registryv2" {
       distinct_hosts = true
     }
 
-    count = 1
+    count = 2
 
     restart {
       attempts = 5
@@ -35,9 +35,13 @@ job "registryv2" {
     task "registry" {
       driver = "docker"
 
+      artifact {
+        source = "http://netstore.int.xcalar.com/infra/images/registryv2-202011151431.tar"
+      }
+
       config {
-        image      = "registry:2"
-        force_pull = false
+        load  = "registryv2-202011151431.tar"
+        image = "registry:2"
 
         volumes = [
           "/netstore/infra/registry/_data:/var/lib/registry",
@@ -66,14 +70,9 @@ job "registryv2" {
 
         tags = [
           "urlprefix-registry.service.consul:9999/",
-          "urlprefix-registry.service.consul:443/ proto=https tlsskipverify=true",
-
-          #"urlprefix-registry.int.xcalar.com/",
-          #"urlprefix-registry.int.xcalar.com:443/"
-          "http",
+          "urlprefix-registry.service.consul:443/",
+          "urlprefix-registry.int.xcalar.com:443/",
         ]
-
-        #"urlprefix-registry.service.consul/",
 
         check {
           name     = "image port check"
@@ -96,7 +95,7 @@ job "registryv2" {
           name     = "debug_port check"
           type     = "tcp"
           interval = "10s"
-          timeout  = "2s"
+          timeout  = "4s"
         }
       }
 
@@ -112,61 +111,62 @@ job "registryv2" {
         change_mode = "restart"
       }
 
-      artifact {
-        source      = "https://vault.service.consul:8200/v1/xcalar_ca/ca_chain"
-        destination = "local/ca.pem"
-        mode        = "file"
-      }
+      /*
+                                                artifact {
+                                                  source      = "https://vault.service.consul:8200/v1/xcalar_ca/ca_chain"
+                                                  destination = "local/ca.pem"
+                                                  mode        = "file"
+                                                }
 
-      template {
-        destination = "local/cert.crt"
+                                                template {
+                                                  destination = "local/cert.crt"
 
-        data = <<EOH
-{{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
-{{ .Data.certificate }}
-{{ end }}
-      EOH
-      }
+                                                  data = <<EOH
+                                          {{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
+                                          {{ .Data.certificate }}
+                                          {{ end }}
+                                                EOH
+                                                }
 
-      template {
-        destination = "secrets/cert.key"
+                                                template {
+                                                  destination = "secrets/cert.key"
 
-        data = <<EOH
-{{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
-{{ .Data.private_key }}
-{{ end }}
-      EOH
-      }
+                                                  data = <<EOH
+                                          {{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
+                                          {{ .Data.private_key }}
+                                          {{ end }}
+                                                EOH
+                                                }
 
-      template {
-        data = <<EOH
-            Good morning.
-            <br />
-            <br />
-{{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
-{{ .Data.certificate }}
-            <br />
-            <br />
-{{ .Data.private_key }}
-{{ end }}
-        EOH
+                                                template {
+                                                  data = <<EOH
+                                                      Good morning.
+                                                      <br />
+                                                      <br />
+                                          {{ with secret "xcalar_ca/issue/int-xcalar-com" "common_name=registry.service.consul" "ttl=24h" }}
+                                          {{ .Data.certificate }}
+                                                      <br />
+                                                      <br />
+                                          {{ .Data.private_key }}
+                                          {{ end }}
+                                                  EOH
 
-        destination = "local/index.html"
-      }
+                                                  destination = "local/index.html"
+                                                }
 
-      template {
-        destination = "secrets/creds.env"
-        change_mode = "restart"
-        env         = true
+                                                template {
+                                                  destination = "secrets/creds.env"
+                                                  change_mode = "restart"
+                                                  env         = true
 
-        data = <<EOT
-{{ with secret "aws-xcalar/sts/xcnexus" "ttl=86400"}}
-AWS_ACCESS_KEY_ID={{ .Data.access_key }}
-AWS_SECRET_ACCESS_KEY={{ .Data.secret_key }}
-AWS_SESSION_TOKEN={{ .Data.security_token }}{{ end }}
-EOT
-      }
-
+                                                  data = <<EOT
+                                          {{ with secret "aws-xcalar/sts/xcnexus" "ttl=86400"}}
+                                          AWS_ACCESS_KEY_ID={{ .Data.access_key }}
+                                          AWS_SECRET_ACCESS_KEY={{ .Data.secret_key }}
+                                          AWS_SESSION_TOKEN={{ .Data.security_token }}{{ end }}
+                                          EOT
+                                                }
+                                          */
       template {
         destination = "local/config.yml"
         change_mode = "restart"
@@ -190,15 +190,21 @@ storage:
 redis:
   addr: {{range $i, $e := service "redis" "any"}}{{$e.Address}}:{{$e.Port}}{{end}}
   db: 15
+  dialtimeout: 10ms
+  readtimeout: 10ms
+  writetimeout: 10ms
+  pool:
+    maxidle: 16
+    maxactive: 64
+    idletimeout: 300s
 http:
   addr: :5000
-  host: https://registry.service.consul
   secret: "asekr3t"
-  tls:
-    certificate: /local/cert.crt
-    key: /secrets/cert.key
-    clientcas:
-      - /local/ca.pem
+  #tls:
+  #  certificate: /local/cert.crt
+  #  key: /secrets/cert.key
+  #  clientcas:
+  #    - /local/ca.pem
   debug:
     addr: :5001
     prometheus:
