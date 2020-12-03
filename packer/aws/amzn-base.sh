@@ -20,7 +20,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-export PORJECT=${PROJECT:-xcalar}
+export PROJECT=${PROJECT:-xcalar}
 export PRODUCT=${PRODUCT:-base-ami}
 chmod 0700 $XLRINFRADIR/packer/ssh
 chmod 0600 $XLRINFRADIR/packer/ssh/id_packer.pem

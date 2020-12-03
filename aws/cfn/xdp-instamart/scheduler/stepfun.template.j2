@@ -406,7 +406,7 @@ Resources:
         S3Key: !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Key]
       Layers:
         - !FindInMap [LambdaSourceCode, !Ref 'AWS::Region', Layer]
-      GHandler: schedule.startstep_handler
+      Handler: schedule.startstep_handler
       Description: "Launches a statemachine"
       Environment:
         Variables:
