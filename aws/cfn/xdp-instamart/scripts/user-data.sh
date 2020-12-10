@@ -745,7 +745,14 @@ main() {
             if [[ ${NFSHOST} =~ ^([0-9\.]+)$ ]] || [[ $NFS_TYPE =~ nfs ]]; then
                 NFSROOT=':/'
             fi
-            if mount -t $NFS_TYPE -o "${NFS_OPTS},timeo=30" "${NFSHOST}${NFSROOT}" $EFSMNT; then
+
+            if [[ $NFS_OPTS =~ accesspoint ]]; then
+                if mount -t $NFS_TYPE -o "${NFS_OPTS},timeo=30" "${NFSHOST}:/" "${SHAREDIR}"; then
+                    sed -i '/ myefs$/d' /etc/fstab
+                    echo "${NFSHOST}:/ ${SHAREDIR}  $NFS_TYPE    ${NFS_OPTS},timeo=600,_netdev   0   0   # myefs" >> /etc/fstab
+                    mount -o remount "$SHAREDIR" && break
+                fi
+            elif mount -t $NFS_TYPE -o "${NFS_OPTS},timeo=30" "${NFSHOST}${NFSROOT}" $EFSMNT; then
                 if ! test -d "$EFSMNT"/cluster/${CLUSTER_NAME}; then
                     xmkdir -m 0755 -p "$EFSMNT"/cluster/${CLUSTER_NAME} || continue
                 fi
