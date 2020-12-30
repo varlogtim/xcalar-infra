@@ -60,12 +60,26 @@ Parameters:
   AssociatePublicIpAddress:
     Description: |
       Associate a Public IP address with the cluster.  Only valid in a Public Subnet!
-      Setting this to true in a Private Subnet, will result in an unreachable cluster
+      Setting this to true in a Private Subnet will result in an unreachable cluster
+      This must be set to false to create a cluster without Public IP addresses.
     Default: {% if createVpc %}'true'{% else %}'false'{% endif %}
     AllowedValues:
       - 'false'
       - 'true'
     Type: String
+{%- if not createVpc %}
+  VmPublicIpAddress:
+    Description: |
+      Use Public IP addresses instead of private VPC Endpoints to communicate with AWS Services. Only valid on a Public Subnet!
+      When true in a Public Subnet, this assigns a Public IP address to each cluster VM.
+      Setting this to true in a Private Subnet will result in an unreachable cluster.
+      This must be set to false to create a cluster without Public IP addresses.
+    Default: 'false'
+    AllowedValues:
+      - 'false'
+      - 'true'
+    Type: String
+{%- endif %}
   SpotInstances:
     Description: Purchase instances on the spot market
     Default: 'false'
@@ -220,6 +234,7 @@ Metadata:
 {%- else %}
           - VpcId
           - Subnet
+          - VmPublicIpAddress
 {%- endif %}
           - AssociatePublicIpAddress
       - Label:
@@ -306,6 +321,10 @@ Metadata:
         default: 'KMS ARN used for reading encrypted objects (Optional)'
       AssociatePublicIpAddress:
         default: "Associate Public IP with Cluster (Only valid in a public subnet)"
+{%- if not createVpc %}
+      VmPublicIpAddress:
+        default: "Associate Public IP with each Cluster Node to avoid use of private VPC endpoints to communicate with AWS services (Only valid in a public subnet)"
+{%- endif %}
       RootSize:
         default: 'Disk Size (GB)'
       CNAME:
@@ -1217,7 +1236,11 @@ Resources:
           - !Ref 'AWS::NoValue'
         NetworkInterfaces:
           - Description: Primary interface
-            AssociatePublicIpAddress: false
+{%- if createVpc %}
+            AssociatePublicIpAddress: true
+{% else %}
+            AssociatePublicIpAddress: !Ref VmPublicIpAddress
+{% endif %}
             DeleteOnTermination: true
             DeviceIndex: 0
             SubnetId: !Ref 'Subnet'
